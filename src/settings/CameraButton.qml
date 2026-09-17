@@ -12,8 +12,8 @@ MouseArea {
     property real size: Theme.itemSizeSmall
     property int verticalCenterOffset
 
-    width: Theme.itemSizeExtraLarge
-    height: Theme.itemSizeExtraLarge
+    width: parent ? Math.min(parent.width, parent.height) : Theme.itemSizeExtraLarge
+    height: width
 
     Rectangle {
         id: backgroundCircle

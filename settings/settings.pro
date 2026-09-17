@@ -4,14 +4,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 TEMPLATE = aux
-TARGET  = jollacamerasettingsplugin
+TARGET  = rawfishsettingsplugin
 TARGET = $$qtLibraryTarget($$TARGET)
 
-settingsqml.path = /usr/share/jolla-settings/pages/jolla-camera
+settingsqml.path = /usr/share/jolla-settings/pages/rawfish
 settingsqml.files = SettingsPage.qml
 
 plugin_entry.path = /usr/share/jolla-settings/entries
-plugin_entry.files = jolla-camera.json
+plugin_entry.files = rawfish.json
 
 DEFINES += \
         DEPLOYMENT_PATH=\"\\\"\"$${TARGETPATH}/\"\\\"\"

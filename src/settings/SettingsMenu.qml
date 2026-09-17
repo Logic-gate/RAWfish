@@ -14,6 +14,7 @@ Column {
     property alias delegate: repeater.delegate
     property Item currentItem
     property MouseArea pressedItem
+    property string caption
     readonly property Item highlightItem: pressedItem && pressedItem.pressed
             ? pressedItem
             : currentItem
@@ -29,7 +30,20 @@ Column {
     }
 
     width: Screen.width / 4
+    height: implicitHeight
     visible: active
+
+    Label {
+        width: parent.width
+        height: caption.length > 0 ? implicitHeight + Theme.paddingSmall : 0
+        visible: caption.length > 0
+        horizontalAlignment: Text.AlignHCenter
+        truncationMode: TruncationMode.Fade
+        color: Theme.lightPrimaryColor
+        opacity: Theme.opacityHigh
+        font.pixelSize: Theme.fontSizeTiny
+        text: caption
+    }
 
     Repeater {
         id: repeater

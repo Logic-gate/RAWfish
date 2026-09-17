@@ -13,7 +13,7 @@ import Nemo.Configuration 1.0
 import Nemo.Notifications 1.0
 import org.nemomobile.systemsettings 1.0
 import Sailfish.Silica 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 
 import "../settings"
 
@@ -24,6 +24,7 @@ SettingsOverlay {
     property var captureView
     property var camera
     property Item focusArea
+    readonly property real camera2MaximumZoom: 4.0
 
     property int _recordingDuration: clock.enabled ? ((clock.time - _startTime) / 1000) : 0
     property int _recSecsRemaining: {
@@ -121,17 +122,14 @@ SettingsOverlay {
         var prevStatus = previousStoragePathStatus.value
         if (Settings.storagePathStatus == Settings.Unavailable) {
             if (prevStatus != Settings.storagePathStatus) {
-                //% "The selected storage is unavailable. Device memory will be used instead"
-                notification.publishMessage(qsTrId("camera-me-storage-unavailable"))
+                notification.publishMessage("The selected storage is unavailable. Device memory will be used instead")
             }
         } else if (Settings.storagePathStatus == Settings.Available) {
             if (prevStatus == Settings.Unavailable || prevStatus == Settings.Mounting) {
-                //% "Using memory card"
-                notification.publishMessage(qsTrId("camera-me-using-memory-card"))
+                notification.publishMessage("Using memory card")
             }
         } else if (Settings.storagePathStatus == Settings.Mounting) {
-            //% "Busy mounting the memory card. Device memory will be used instead"
-            notification.publishMessage(qsTrId("camera-me-storage-mounting"))
+            notification.publishMessage("Busy mounting the memory card. Device memory will be used instead")
         }
         previousStoragePathStatus.value = Settings.storagePathStatus
 
@@ -159,19 +157,29 @@ SettingsOverlay {
     showCommonControls: !captureView.recording
     isPortrait: captureView.isPortrait
     topButtonRowHeight: Screen.sizeCategory >= Screen.Large ? Theme.itemSizeLarge : Theme.itemSizeSmall
-    deviceToggleEnabled: !captureView.captureBusy
+    deviceToggleEnabled: !captureView.captureUiBlocked
 
     onPinchStarted: {
         // We're not getting notifications when the maximumDigitalZoom changes,
         // so update the value here.
-        zoomIndicator.maximumZoom = camera.maximumDigitalZoom
+        zoomIndicator.maximumZoom = captureView._camera2ViewfinderActive
+                ? camera2MaximumZoom : camera.maximumDigitalZoom
     }
 
     onPinchUpdated: {
-        camera.digitalZoom = Math.max(1, Math.min(
-                    camera.digitalZoom + ((camera.maximumDigitalZoom - 1)
-                                          * ((pinch.scale / Math.abs(pinch.previousScale) - 1))),
-                    camera.maximumDigitalZoom))
+        var maximumZoom = captureView._camera2ViewfinderActive
+                ? camera2MaximumZoom : camera.maximumDigitalZoom
+        var currentZoom = captureView._camera2ViewfinderActive
+                ? captureView.camera2Zoom : camera.digitalZoom
+        var nextZoom = Math.max(1, Math.min(
+                    currentZoom + ((maximumZoom - 1)
+                                   * ((pinch.scale / Math.abs(pinch.previousScale) - 1))),
+                    maximumZoom))
+        if (captureView._camera2ViewfinderActive) {
+            captureView.camera2Zoom = nextZoom
+        } else {
+            camera.digitalZoom = nextZoom
+        }
         zoomIndicator.show()
     }
 
@@ -187,30 +195,34 @@ SettingsOverlay {
 
     onClicked: {
         if (!captureView._captureOnFocus && captureView.touchFocusSupported) {
-            // Translate and rotate the touch point into focusArea's space.
             var focusPoint
-            switch ((360 - captureView.viewfinderOrientation) % 360) {
+            if (captureView._camera2ViewfinderActive) {
+                focusPoint = focusArea.mapFromItem(settingsOverlay, mouse.x, mouse.y)
+            } else {
+                // Translate and rotate the touch point into focusArea's space.
+                switch ((360 - captureView.viewfinderOrientation) % 360) {
 
-            case 90:
-                focusPoint = Qt.point(
-                            mouse.y - ((height - focusArea.width) / 2) - captureView.viewfinderOffset,
-                            width - mouse.x);
-                break;
-            case 180:
-                focusPoint = Qt.point(
-                            width - mouse.x - ((width - focusArea.width) / 2) + captureView.viewfinderOffset,
-                            height - mouse.y);
-                break;
-            case 270:
-                focusPoint = Qt.point(
-                            height - mouse.y - ((height - focusArea.width) / 2) + captureView.viewfinderOffset,
-                            mouse.x);
-                break;
-            default:
-                focusPoint = Qt.point(
-                            mouse.x - ((width - focusArea.width) / 2) - captureView.viewfinderOffset,
-                            mouse.y);
-                break;
+                case 90:
+                    focusPoint = Qt.point(
+                                mouse.y - ((height - focusArea.width) / 2) - captureView.viewfinderOffset,
+                                width - mouse.x);
+                    break;
+                case 180:
+                    focusPoint = Qt.point(
+                                width - mouse.x - ((width - focusArea.width) / 2) + captureView.viewfinderOffset,
+                                height - mouse.y);
+                    break;
+                case 270:
+                    focusPoint = Qt.point(
+                                height - mouse.y - ((height - focusArea.width) / 2) + captureView.viewfinderOffset,
+                                mouse.x);
+                    break;
+                default:
+                    focusPoint = Qt.point(
+                                mouse.x - ((width - focusArea.width) / 2) - captureView.viewfinderOffset,
+                                mouse.y);
+                    break;
+                }
             }
 
             // Normalize the focus point.
@@ -241,10 +253,13 @@ SettingsOverlay {
         size: Theme.iconSizeMedium
         anchors.centerIn: parent
         background.visible: icon.opacity < 1.0
-        enabled: captureView._canCapture
-                    && !captureView._captureOnFocus
+        enabled: !captureView._captureOnFocus
 
-        onPressed: camera.lockAutoFocus()
+        onPressed: {
+            if (!captureView._camera2ViewfinderActive) {
+                camera.lockAutoFocus()
+            }
+        }
         onReleased: {
             if (containsMouse) {
                 captureView._triggerCapture()
@@ -296,6 +311,17 @@ SettingsOverlay {
         }
     }
 
+    BusyIndicator {
+        anchors.centerIn: parent
+        size: BusyIndicatorSize.Large
+        running: captureView.captureUiBlocked
+                 && camera.captureMode == Camera.CaptureStillImage
+                 && !(captureView._camera2ViewfinderActive
+                      && Settings.mode.camera2CaptureFormat === "jpeg")
+        visible: running
+        z: 10
+    }
+
     Label {
         id: timerLabel
 
@@ -328,18 +354,14 @@ SettingsOverlay {
         text: {
             if (captureView.recording) {
                 if (_recSecsRemaining >= 60) {
-                    //% "Recording stops in %n min"
-                    return qsTrId("camera-la-rec-remain_min_countdown", Math.floor(_recSecsRemaining/60))
+                    return "Recording stops in " + Math.floor(_recSecsRemaining/60) + " min"
                 } else {
-                    //% "Recording stops in %n sec"
-                    return qsTrId("camera-la-rec-remain_sec_countdown", _recSecsRemaining)
+                    return "Recording stops in " + _recSecsRemaining + " sec"
                 }
             } else if (_recSecsRemaining == 0) {
-                //% "Storage full"
-                return qsTrId("camera-la-storage_full")
+                return "Storage full"
             } else {
-                //% "%n min estimated recording time left"
-                return qsTrId("camera-la-video_rec_remain", Math.floor(_recSecsRemaining/60))
+                return Math.floor(_recSecsRemaining/60) + " min estimated recording time left"
             }
         }
         font.pixelSize: Theme.fontSizeExtraSmall
@@ -377,7 +399,8 @@ SettingsOverlay {
         anchors.horizontalCenterOffset: isPortrait ? 0 : captureView.viewfinderOffset
 
         visible: Settings.global.viewfinderGrid != "none"
-                 && camera.cameraStatus == Camera.ActiveStatus
+                 && (camera.cameraStatus == Camera.ActiveStatus
+                     || captureView._camera2ViewfinderActive)
 
         width: gridWidth / 3
         height: gridHeight / 3
@@ -425,8 +448,11 @@ SettingsOverlay {
             horizontalCenter: parent.horizontalCenter
         }
 
-        zoom: camera.digitalZoom
-        maximumZoom: camera.maximumDigitalZoom
+        zoom: captureView._camera2ViewfinderActive
+              ? captureView.camera2Zoom : camera.digitalZoom
+        maximumZoom: captureView._camera2ViewfinderActive
+                     ? settingsOverlay.camera2MaximumZoom
+                     : camera.maximumDigitalZoom
     }
 
     Notification {
@@ -445,6 +471,6 @@ SettingsOverlay {
 
     ConfigurationValue {
         id: previousStoragePathStatus
-        key: "/apps/jolla-camera/previousStoragePathStatus"
+        key: "/apps/rawfish/previousStoragePathStatus"
     }
 }

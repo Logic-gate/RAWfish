@@ -5,7 +5,7 @@
 
 import QtQuick 2.1
 import Sailfish.Silica 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 
 GalleryView {
     id: root
@@ -20,9 +20,7 @@ GalleryView {
     }
 
     ViewPlaceholder {
-        //: Placeholder text for an empty camera reel view
-        //% "Captured photos and videos will appear here when you take some"
-        text: qsTrId("camera-la-no-photos")
+        text: "Captured photos and videos will appear here when you take some"
         enabled: model.count === 0 && model.populated
     }
 }

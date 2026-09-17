@@ -6,7 +6,7 @@
 import QtQuick 2.0
 import QtQuick.Window 2.1
 import Sailfish.Silica 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 import Nemo.FileManager 1.0
 import Nemo.DBus 2.0
 
@@ -42,11 +42,8 @@ GalleryView {
     }
 
     ViewPlaceholder {
-        //: Placeholder text for an empty camera reel view
-        //% "New photos and videos you take will appear here"
-        text: qsTrId("camera-la-no_photos_lockscreen")
-        //% "Unlock the device to access older photos and videos"
-        hintText: qsTrId("camera-la-unlock_device_to_access_photos_and_videos")
+        text: "New photos and videos you take will appear here"
+        hintText: "Unlock the device to access older photos and videos"
         enabled: count == 0
     }
 

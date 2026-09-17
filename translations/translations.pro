@@ -5,8 +5,8 @@
 
 TEMPLATE = aux
 
-TS_FILE = $$OUT_PWD/jolla-camera.ts
-EE_QM = $$OUT_PWD/jolla-camera_eng_en.qm
+TS_FILE = $$OUT_PWD/rawfish.ts
+EE_QM = $$OUT_PWD/rawfish_eng_en.qm
 
 ts.commands += lupdate $$IN_PWD/.. -ts $$TS_FILE
 ts.CONFIG += no_check_exist no_link

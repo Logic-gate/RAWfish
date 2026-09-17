@@ -4,27 +4,33 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 TEMPLATE = lib
-TARGET  = jollacameraplugin
+TARGET  = vividcameraplugin
 TARGET = $$qtLibraryTarget($$TARGET)
 
-MODULENAME = com/jolla/camera
+MODULENAME = com/vivid/camera
 TARGETPATH = $$[QT_INSTALL_QML]/$$MODULENAME
 
 QT += gui-private qml quick multimedia
 CONFIG += plugin link_pkgconfig c++14
+QMAKE_CXXFLAGS += -pthread
+LIBS += -pthread
 
-PKGCONFIG += mlite5 systemsettings
+PKGCONFIG += mlite5 systemsettings libtiff-4
 
 SOURCES += \
+        camera2preview.cpp \
         cameraplugin.cpp \
         capturemodel.cpp \
         declarativecameraextensions.cpp \
+        imageadjustments.cpp \
         declarativesettings.cpp \
         cameraconfigs.cpp
 
 HEADERS += \
+        camera2preview.h \
         capturemodel.h \
         declarativecameraextensions.h \
+        imageadjustments.h \
         declarativesettings.h \
         cameraconfigs.h
 

@@ -4,13 +4,21 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-Name:       jolla-camera
-Summary:    Jolla Camera application
-Version:    1.3.0
+Name:       rawfish
+Summary:    RAWfish application
+Version:    1.3.1
 Release:    1
 License:    BSD-3-Clause
-URL:        https://github.com/sailfishos/jolla-camera
+URL:        https://github.com/sailfishos/rawfish
 Source0:    %{name}-%{version}.tar.bz2
+
+# libsfoscamera2.so is an Android/Bionic library loaded through libhybris from
+# /usr/libexec/droid-hybris. Its NDK dependencies are provided by the Android
+# compatibility image, not by Sailfish RPM packages.
+%global __requires_exclude_from ^.*/usr/libexec/droid-hybris/system/lib64/libsfoscamera2\\.so$
+%global __provides_exclude_from ^.*/usr/libexec/droid-hybris/system/lib64/libsfoscamera2\\.so$
+%global __requires_exclude ^(libandroid\\.so.*|libcamera2ndk\\.so.*|libmediandk\\.so.*|libnativewindow\\.so.*|liblog\\.so.*|libdl_android\\.so.*)$
+
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Gui)
 BuildRequires:  pkgconfig(Qt5Qml)
@@ -20,6 +28,7 @@ BuildRequires:  pkgconfig(Qt5Multimedia)
 BuildRequires:  pkgconfig(Qt5Test)
 BuildRequires:  pkgconfig(Qt5Multimedia)
 BuildRequires:  pkgconfig(qdeclarative5-boostable)
+BuildRequires:  pkgconfig(libtiff-4)
 BuildRequires:  pkgconfig(mlite5) >= 0.2.5
 BuildRequires:  pkgconfig(systemsettings) >= 0.2.13
 BuildRequires:  qt5-qttools
@@ -45,7 +54,6 @@ Requires:  libkeepalive >= 1.7.0
 Requires:  sailfish-components-media-qt5 >= 0.0.18
 Requires:  sailfish-components-gallery-qt5 >= 1.1.10
 Requires:  sailfish-policy >= 0.2.59
-Requires:  jolla-settings
 Requires:  jolla-settings-system >= 1.0.70
 Requires:  libngf-qt5-declarative
 Requires:  qr-filter-qml-plugin
@@ -55,73 +63,47 @@ Requires:  gstreamer1.0-plugins-bad
 Requires:  dconf
 Requires:  sailjail-launch-approval
 Requires:  mapplauncherd-booster-silica-qt5-media
-Provides:  jolla-camera-settings > 1.2.30
-Obsoletes: jolla-camera-settings <= 1.2.30
-Provides:  jolla-camera-lockscreen > 1.2.30
-Obsoletes: jolla-camera-lockscreen <= 1.2.30
 
 %{_oneshot_requires_post}
 
 %description
-The Jolla Camera application.
-
-%package ts-devel
-Summary:   Translation source for Jolla Camera
-
-%description ts-devel
-Translation source for Jolla Camera.
-
-%package tests
-Summary:    Unit tests for Jolla Camera
-Requires:   %{name} = %{version}-%{release}
-Requires:   qt5-qtdeclarative-import-qttest
-Requires:   qt5-qtdeclarative-devel-tools
-
-%description tests
-This package contains QML unit tests for Jolla Camera application.
+The RAWfish application.
 
 %prep
 %setup -q -n %{name}-%{version}
 
 %build
 
-%qmake5 %{name}.pro
+%qmake5 rawfish.pro
 %make_build
 
 %install
 %qmake5_install
-chmod +x %{buildroot}/opt/tests/jolla-camera/auto/run-tests.sh
-chmod +x %{buildroot}/%{_oneshotdir}/*
 
 %post
 %{_bindir}/add-oneshot dconf-update || :
-%{_bindir}/add-oneshot --new-users camera-enable-hints || :
 
 %files
 %license LICENSES/BSD-3-Clause.txt
-%{_datadir}/applications/jolla-camera.desktop
-%{_datadir}/applications/jolla-camera-viewfinder.desktop
-# Define directory ownership explicitly as part of files in the datadir
-# belongs to jolla-camera-lockscreen.
-%dir %{_datadir}/jolla-camera
-%{_datadir}/jolla-camera/camera.qml
-%{_datadir}/jolla-camera/pages
-%{_datadir}/jolla-camera/cover
-%{_bindir}/jolla-camera
-%{_datadir}/translations/jolla-camera_eng_en.qm
-%{_datadir}/dbus-1/services/com.jolla.camera.service
-%{_libdir}/qt5/qml/com/jolla/camera
-%{_sysconfdir}/dconf/db/vendor.d/00-jolla-camera.txt
-%{_oneshotdir}/camera-enable-hints
-%{_userunitdir}/user-session.target.d/50-jolla-camera.conf
-%{_bindir}/jolla-camera-lockscreen
-%{_datadir}/applications/jolla-camera-lockscreen.desktop
-%{_datadir}/jolla-camera/lockscreen.qml
-%{_datadir}/jolla-camera/LockedGalleryView.qml
-%{_datadir}/jolla-settings
-
-%files ts-devel
-%{_datadir}/translations/source/jolla-camera.ts
-
-%files tests
-/opt/tests/jolla-camera
+%{_datadir}/applications/rawfish.desktop
+%{_datadir}/icons/hicolor/86x86/apps/rawfish-sfos.png
+%dir %{_datadir}/rawfish
+%{_datadir}/rawfish/camera.qml
+%{_datadir}/rawfish/pages
+%{_datadir}/rawfish/cover
+%{_bindir}/rawfish
+%{_datadir}/dbus-1/services/com.rawfish.camera.service
+%dir %{_datadir}/jolla-settings
+%dir %{_datadir}/jolla-settings/pages
+%dir %{_datadir}/jolla-settings/pages/rawfish
+%{_datadir}/jolla-settings/pages/rawfish/SettingsPage.qml
+%dir %{_datadir}/jolla-settings/entries
+%{_datadir}/jolla-settings/entries/rawfish.json
+%{_libdir}/qt5/qml/com/vivid/camera
+%dir %{_libexecdir}/rawfish
+%{_libexecdir}/rawfish/sfos-camera2-probe
+%dir %{_libexecdir}/droid-hybris
+%dir %{_libexecdir}/droid-hybris/system
+%dir %{_libexecdir}/droid-hybris/system/lib64
+%{_libexecdir}/droid-hybris/system/lib64/libsfoscamera2.so
+%{_sysconfdir}/dconf/db/vendor.d/00-rawfish.txt

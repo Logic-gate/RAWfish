@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 TEMPLATE = app
-TARGET = jolla-camera
+TARGET = rawfish
 TARGETPATH = /usr/bin
 
 QT += qml quick
@@ -19,35 +19,33 @@ OTHER_FILES += \
         pages \
         pages/*.qml \
         pages/gallery/*.qml \
-        dconf/00-jolla-camera.txt
+        icons/rawfish-sfos.png \
+        dconf/00-rawfish.txt
 
 target.path = $$TARGETPATH
 
 desktop.path = /usr/share/applications
 desktop.files = \
-            jolla-camera.desktop \
-            jolla-camera-lockscreen.desktop \
-            jolla-camera-viewfinder.desktop
+            rawfish.desktop
+
+icons.path = /usr/share/icons/hicolor/86x86/apps
+icons.files = icons/rawfish-sfos.png
 
 DEPLOYMENT_PATH = /usr/share/$$TARGET
 DEFINES *= DEPLOYMENT_PATH=\"\\\"\"$${DEPLOYMENT_PATH}/\"\\\"\"
 qml.path = $$DEPLOYMENT_PATH
 qml.files = *.qml cover pages
 
-service.files = com.jolla.camera.service
+service.files = com.rawfish.camera.service
 service.path  = /usr/share/dbus-1/services
 
 oneshot.files = camera-enable-hints
 oneshot.path  = /usr/lib/oneshot.d
 
-schema.files = dconf/00-jolla-camera.txt
+schema.files = dconf/00-rawfish.txt
 schema.path  = /etc/dconf/db/vendor.d/
 
-INSTALLS += target desktop qml service schema oneshot
-
-usersession.path = /usr/lib/systemd/user/user-session.target.d
-usersession.files += 50-jolla-camera.conf
-INSTALLS += usersession
+INSTALLS += target desktop icons qml service schema
 
 packagesExist(qdeclarative5-boostable) {
     message("Building with qdeclarative-boostable support")

@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 [D-BUS Service]
-Name=com.jolla.camera
-Exec=/usr/bin/invoker -s -n -d 5 --type=silica-media,silica-qt5 -A -- /usr/bin/jolla-camera
+Name=com.rawfish.camera
+Exec=/usr/bin/rawfish

@@ -6,7 +6,7 @@
 
 import QtQuick 2.0
 import Sailfish.Silica 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 import Nemo.DBus 2.0
 
 CameraPage {
@@ -51,8 +51,8 @@ CameraPage {
     }
 
     DBusAdaptor {
-        iface: "com.jolla.camera.ui"
-        service: "com.jolla.camera"
+        iface: "com.rawfish.camera.ui"
+        service: "com.rawfish.camera"
         path: "/"
 
         signal showViewfinder(variant args)

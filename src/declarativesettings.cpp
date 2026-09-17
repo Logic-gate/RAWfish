@@ -24,8 +24,8 @@
 DeclarativeSettings::DeclarativeSettings(QObject *parent)
     : QObject(parent)
     , m_partitionManager(new PartitionManager(this))
-    , m_storagePath(QStringLiteral("/apps/jolla-camera/storagePath"))
-    , m_minSpaceForRecording(QStringLiteral("/apps/jolla-camera/minSpaceForRecording"))
+    , m_storagePath(QStringLiteral("/apps/rawfish/storagePath"))
+    , m_minSpaceForRecording(QStringLiteral("/apps/rawfish/minSpaceForRecording"))
     , m_storagePathStatus(NotSet)
     , m_storageMaxFileSize(0)
 {
@@ -159,10 +159,10 @@ void DeclarativeSettings::verifyStoragePath()
     }
 
     if (m_storagePathStatus == Available && !path.isEmpty()) {
-        m_photoDirectory = path + QStringLiteral("/Pictures/Camera");
+        m_photoDirectory = path + QStringLiteral("/Pictures/RAWfish");
         m_videoDirectory = path + QStringLiteral("/Videos/Camera");
     } else {
-        m_photoDirectory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + QLatin1String("/Camera");
+        m_photoDirectory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + QLatin1String("/RAWfish");
         m_videoDirectory = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation) + QLatin1String("/Camera");
         QVector<Partition> partitions = m_partitionManager->partitions(Partition::User | Partition::Mass);
         auto it = std::find_if(partitions.begin(), partitions.end(), [path](const Partition &partition) {
@@ -248,7 +248,8 @@ void DeclarativeSettings::verifyCapturePrefix()
     const QDateTime currentDate = QDateTime::currentDateTime();
     if (m_prefixDate != currentDate) {
         m_prefixDate = currentDate;
-        m_prefix = QLocale::c().toString(currentDate, QLatin1String("yyyyMMdd_HHmmss"));
+        m_prefix = QLatin1String("RAWfish_")
+                + QLocale::c().toString(currentDate, QLatin1String("yyyyMMdd_HHmmss"));
     }
 }
 

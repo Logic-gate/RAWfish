@@ -12,6 +12,7 @@
 #include <qqml.h>
 
 #include "capturemodel.h"
+#include "camera2preview.h"
 #include "declarativecameraextensions.h"
 #include "declarativesettings.h"
 #include "cameraconfigs.h"
@@ -41,7 +42,7 @@ public:
 class CameraPlugin : public QQmlExtensionPlugin
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "com.jolla.camera")
+    Q_PLUGIN_METADATA(IID "com.vivid.camera")
 
 public:
 
@@ -49,24 +50,25 @@ public:
     {
         Q_UNUSED(uri)
         Q_UNUSED(engine)
-        Q_ASSERT(QLatin1String(uri) == QLatin1String("com.jolla.camera"));
+        Q_ASSERT(QLatin1String(uri) == QLatin1String("com.vivid.camera"));
 
         AppTranslator *engineeringEnglish = new AppTranslator(engine);
         AppTranslator *translator = new AppTranslator(engine);
-        engineeringEnglish->load("jolla-camera_eng_en", "/usr/share/translations");
-        translator->load(QLocale(), "jolla-camera", "-", "/usr/share/translations");
+        engineeringEnglish->load("rawfish_eng_en", "/usr/share/translations");
+        translator->load(QLocale(), "rawfish", "-", "/usr/share/translations");
     }
 
     virtual void registerTypes(const char *uri)
     {
         Q_UNUSED(uri)
-        Q_ASSERT(QLatin1String(uri) == QLatin1String("com.jolla.camera"));
+        Q_ASSERT(QLatin1String(uri) == QLatin1String("com.vivid.camera"));
 
-        qmlRegisterType<CaptureModel>("com.jolla.camera", 1, 0, "CaptureModel");
-        qmlRegisterType<DeclarativeCameraExtensions>("com.jolla.camera", 1, 0, "CameraExtensions");
-        qmlRegisterType<DeclarativeSettings>("com.jolla.camera", 1, 0, "SettingsBase");
-        qmlRegisterSingletonType<DeclarativeSettings>("com.jolla.camera", 1, 0, "Settings", DeclarativeSettings::factory);
-        qmlRegisterSingletonType<CameraConfigs>("com.jolla.camera", 1, 0, "CameraConfigs", singletonFactory<CameraConfigs>);
+        qmlRegisterType<CaptureModel>("com.vivid.camera", 1, 0, "CaptureModel");
+        qmlRegisterType<Camera2Preview>("com.vivid.camera", 1, 0, "Camera2Preview");
+        qmlRegisterType<DeclarativeCameraExtensions>("com.vivid.camera", 1, 0, "CameraExtensions");
+        qmlRegisterType<DeclarativeSettings>("com.vivid.camera", 1, 0, "SettingsBase");
+        qmlRegisterSingletonType<DeclarativeSettings>("com.vivid.camera", 1, 0, "Settings", DeclarativeSettings::factory);
+        qmlRegisterSingletonType<CameraConfigs>("com.vivid.camera", 1, 0, "CameraConfigs", singletonFactory<CameraConfigs>);
     }
 };
 

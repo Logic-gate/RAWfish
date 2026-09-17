@@ -13,15 +13,17 @@ MouseArea {
 
     property string property
     property QtObject settings
+    property real itemHeight: width
+    property bool hideWhenOffscreen: true
 
     property bool selected: settings[property] == value
 
     width: parent.width
-    height: width
+    height: itemHeight
 
     // Only show setting if it fits the screen also on landscape
     // E.g. the layout only supports showing maximum of 6 items on 5" HD screen
-    visible: y + height < Screen.width
+    visible: !hideWhenOffscreen || y + height < Screen.width
 
     onSelectedChanged: {
         if (selected) {

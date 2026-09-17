@@ -8,9 +8,9 @@ TEMPLATE = subdirs
 OTHER_FILES += auto/*
 
 auto.files = auto/*
-auto.path = /opt/tests/jolla-camera/auto
+auto.path = /opt/tests/rawfish/auto
 
 definition.files = test-definition/tests.xml
-definition.path = /opt/tests/jolla-camera/test-definition
+definition.path = /opt/tests/rawfish/test-definition
 
 INSTALLS += auto definition

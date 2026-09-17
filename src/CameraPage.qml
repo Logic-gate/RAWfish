@@ -10,7 +10,7 @@ import Nemo.KeepAlive 1.2
 import Sailfish.Silica 1.0
 import Sailfish.Media 1.0
 import Sailfish.Policy 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 import com.jolla.settings.system 1.0
 import "capture"
 import "gallery"
@@ -18,7 +18,9 @@ import "gallery"
 Page {
     id: page
 
-    property alias viewfinder: captureView.viewfinder
+    property QtObject camera2Viewfinder
+    property QtObject videoViewfinder
+    property real camera2TopInset: 0
     property bool galleryActive
     property url galleryView
     readonly property bool captureModeActive: switcherView.currentIndex === 1
@@ -67,7 +69,7 @@ Page {
         readonly property bool transitioning: moving || returnToCaptureModeTimeout.running
 
         function resetZoom() {
-            captureView.camera.digitalZoom = 1.0
+            captureView.resetZoom()
         }
 
         function returnToCaptureMode() {
@@ -138,6 +140,9 @@ Page {
 
                 active: true
 
+                viewfinder: page.videoViewfinder
+                camera2Viewfinder: page.camera2Viewfinder
+                camera2TopInset: page.camera2TopInset
                 orientation: page.orientation
                 pageRotation: page.rotation
                 captureModel: page.captureModel
@@ -165,12 +170,14 @@ Page {
                 Binding {
                     target: captureView.viewfinder
                     property: "y"
-                    value: !captureView.isPortrait
-                           ? captureView._viewfinderPosition
-                             + (page.orientation == Orientation.Landscape
-                                ? captureView.viewfinderOffset : -captureView.viewfinderOffset)
-                           : (page.orientation == Orientation.Portrait ? captureView.viewfinderOffset
-                                                                       : -captureView.viewfinderOffset)
+                    value: captureView._camera2ViewfinderActive
+                           ? 0
+                           : !captureView.isPortrait
+                             ? captureView._viewfinderPosition
+                               + (page.orientation == Orientation.Landscape
+                                  ? captureView.viewfinderOffset : -captureView.viewfinderOffset)
+                             : (page.orientation == Orientation.Portrait ? captureView.viewfinderOffset
+                                                                         : -captureView.viewfinderOffset)
                 }
             }
         }
@@ -198,7 +205,7 @@ Page {
 
     DisabledByMdmView {
         //% "Camera"
-        activity: qsTrId("sailfish_browser-la-camera");
+        activity: "Camera";
         enabled: !AccessPolicy.cameraEnabled
     }
 

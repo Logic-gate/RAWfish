@@ -54,8 +54,7 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     view->engine()->setBaseUrl(QUrl::fromLocalFile(path));
     view->setSource(path + QLatin1String("camera.qml"));
     CAMERA_STARTUP_MARK("app", startupTimer, "camera.qml loaded status=%d", view->status());
-    //% "Camera"
-    view->setTitle(qtTrId("jolla-camera-ap-name"));
+    view->setTitle(QStringLiteral("RAWfish"));
 
     if (app->arguments().contains("-desktop")) {
         view->resize(480, 854);

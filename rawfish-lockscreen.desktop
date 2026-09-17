@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2016 - 2021 Jolla Ltd.
+# SPDX-FileCopyrightText: 2025 Jolla Mobile Ltd
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+[Desktop Entry]
+Type=Application
+NoDisplay=true
+Name=RAWfish
+Icon=rawfish-sfos
+Exec=/usr/bin/invoker --type=silica-media,silica-qt5 -A -- /usr/bin/rawfish-lockscreen
+Comment=RAWfish
+
+[X-Sailjail]
+ApplicationName=rawfish-lockscreen
+OrganizationName=com.rawfish
+DataDirectory=rawfish
+Permissions=Camera;Audio;Microphone;Pictures;Videos;MediaIndexing;Location;Privileged;RemovableMedia

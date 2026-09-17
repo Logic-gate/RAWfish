@@ -34,7 +34,7 @@ Page {
             PageHeader {
                 id: header
                 //% "QR-code"
-                title: qsTrId("jolla-camera-la-qr_code_header")
+                title: "QR code"
             }
 
             Item {
@@ -62,7 +62,7 @@ Page {
                 id: button
 
                 //% "Copy"
-                text: qsTrId("jolla-camera-la-qr_code_copy")
+                text: "Copy"
                 preferredWidth: Screen.sizeCategory < Screen.Large && isPortrait
                                                     ? parent.width - Theme.horizontalPageMargin*2
                                                     : Theme.buttonWidthLarge

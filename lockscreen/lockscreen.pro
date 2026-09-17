@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 TEMPLATE = app
-TARGET = jolla-camera-lockscreen
+TARGET = rawfish-lockscreen
 TARGETPATH = /usr/bin
 
 QT += qml quick
@@ -17,7 +17,7 @@ OTHER_FILES += \
 
 target.path = $$TARGETPATH
 
-DEPLOYMENT_PATH = /usr/share/jolla-camera
+DEPLOYMENT_PATH = /usr/share/rawfish
 DEFINES *= DEPLOYMENT_PATH=\"\\\"\"$${DEPLOYMENT_PATH}/\"\\\"\"
 qml.path = $$DEPLOYMENT_PATH
 qml.files = *.qml

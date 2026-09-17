@@ -5,14 +5,13 @@
 
 [Desktop Entry]
 Type=Application
-Name=Camera
-X-MeeGo-Logical-Id=jolla-camera-ap-name
-X-MeeGo-Translation-Catalog=jolla-camera
-Icon=icon-launcher-camera
-Exec=/usr/bin/invoker --type=silica-media,silica-qt5 -A -- /usr/bin/jolla-camera
-Comment=Jolla Camera
+Name=RAWfish
+Icon=rawfish-sfos
+Exec=/usr/bin/rawfish
+Comment=RAWfish
 
 [X-Sailjail]
-ApplicationName=camera
-OrganizationName=com.jolla
+ApplicationName=rawfish
+OrganizationName=com.rawfish
+DataDirectory=rawfish
 Permissions=Camera;Audio;Microphone;Pictures;Videos;MediaIndexing;Location;Privileged;Ambience;RemovableMedia

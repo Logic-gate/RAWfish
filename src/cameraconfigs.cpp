@@ -33,14 +33,21 @@ bool CameraConfigs::ready() const
 void CameraConfigs::setCamera(QObject * camera)
 {
     m_qmlCamera = camera;
-    QCamera *qCamera = camera->property("mediaObject").value<QCamera *>();
+    QCamera *qCamera = camera ? camera->property("mediaObject").value<QCamera *>() : nullptr;
 
     if (m_camera != qCamera) {
+        if (m_camera) {
+            disconnect(m_camera, nullptr, this, nullptr);
+        }
+
         m_camera = qCamera;
 
-        connect(m_camera, &QCamera::statusChanged, this, &CameraConfigs::handleStatus);
-        connect(m_camera, &QCamera::stateChanged, this, &CameraConfigs::handleState);
-        connect(m_camera, &QCamera::captureModeChanged, this, &CameraConfigs::handleCaptureMode);
+        if (m_camera) {
+            connect(m_camera, &QCamera::statusChanged, this, &CameraConfigs::handleStatus);
+            connect(m_camera, &QCamera::stateChanged, this, &CameraConfigs::handleState);
+            connect(m_camera, &QCamera::captureModeChanged, this, &CameraConfigs::handleCaptureMode);
+        }
+
         m_ready = false;
         handleStatus();
 
@@ -72,14 +79,18 @@ void CameraConfigs::handleStatus()
                 m_supportedViewfinderResolutions.append(resolution);
             }
 
-            QObject *qmlCapture = qvariant_cast<QObject *>(m_qmlCamera->property("imageCapture"));
-            QList<QCameraImageCapture *> captures = qmlCapture->findChildren<QCameraImageCapture *>();
+            QObject *qmlCapture = m_qmlCamera
+                    ? qvariant_cast<QObject *>(m_qmlCamera->property("imageCapture"))
+                    : nullptr;
+            QList<QCameraImageCapture *> captures = qmlCapture
+                    ? qmlCapture->findChildren<QCameraImageCapture *>()
+                    : QList<QCameraImageCapture *>();
             if (captures.count() > 0) {
                 QCameraImageCapture *capture = captures[0];
                 m_supportedImageResolutions.clear();
 
                 QSize maxImageResolution;
-                QVariant value(MDConfItem("/apps/jolla-camera/maxImageResolution").value());
+                QVariant value(MDConfItem("/apps/rawfish/maxImageResolution").value());
                 if (!value.isNull()) {
                     QStringList values = value.toString().split('x');
                     if (values.size() == 2) {
@@ -95,14 +106,18 @@ void CameraConfigs::handleStatus()
                 }
             }
 
-            QObject *qmlRecorder = qvariant_cast<QObject *>(m_qmlCamera->property("videoRecorder"));
-            QList<QMediaRecorder *> recorders = qmlRecorder->findChildren<QMediaRecorder *>();
+            QObject *qmlRecorder = m_qmlCamera
+                    ? qvariant_cast<QObject *>(m_qmlCamera->property("videoRecorder"))
+                    : nullptr;
+            QList<QMediaRecorder *> recorders = qmlRecorder
+                    ? qmlRecorder->findChildren<QMediaRecorder *>()
+                    : QList<QMediaRecorder *>();
             if (recorders.count() > 0) {
                 QMediaRecorder *recorder = recorders[0];
                 m_supportedVideoResolutions.clear();
 
                 QSize maxVideoResolution;
-                QVariant value(MDConfItem("/apps/jolla-camera/maxVideoResolution").value());
+                QVariant value(MDConfItem("/apps/rawfish/maxVideoResolution").value());
                 if (!value.isNull()) {
                     QStringList values = value.toString().split('x');
                     if (values.size() == 2) {
@@ -154,9 +169,9 @@ void CameraConfigs::handleStatus()
                 QCameraInfo cameraInfo(*m_camera);
                 QVariant value;
                 if (cameraInfo.position() == QCamera::FrontFace) {
-                    value = MDConfItem("/apps/jolla-camera/secondary/image/exposureModeValues").value();
+                    value = MDConfItem("/apps/rawfish/secondary/image/exposureModeValues").value();
                 } else {
-                    value = MDConfItem("/apps/jolla-camera/primary/image/exposureModeValues").value();
+                    value = MDConfItem("/apps/rawfish/primary/image/exposureModeValues").value();
                 }
                 if (!value.isNull()) {
                     QList<QVariant> values = value.toList();

@@ -5,7 +5,7 @@
 
 import QtQuick 2.0
 import Sailfish.Silica 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 
 Loader {
     anchors.fill: parent
@@ -16,8 +16,7 @@ Loader {
             anchors.fill: parent
 
             InteractionHintLabel {
-                //% "Swipe down to access camera settings"
-                text: qsTrId("camera-la-camera_settings_hint")
+                text: "Swipe down to access camera settings"
                 anchors.bottom: parent.bottom
                 opacity: touchInteractionHint.running ? 1.0 : 0.0
                 Behavior on opacity { FadeAnimation { duration: 800 } }
@@ -28,12 +27,20 @@ Loader {
             }
             TouchInteractionHint {
                 id: touchInteractionHint
+                property bool started
 
                 direction: TouchInteraction.Down
                 loops: 3
                 alwaysRunToEnd: true
                 distance: Theme.itemSizeMedium
                 color: Theme.lightPrimaryColor
+                onRunningChanged: {
+                    if (running) {
+                        started = true
+                    } else if (started) {
+                        counter.increase()
+                    }
+                }
 
                 Component.onCompleted: restart()
             }
@@ -42,8 +49,7 @@ Loader {
     FirstTimeUseCounter {
         id: counter
 
-        limit: 3
-        defaultValue: 1 // display hint twice for existing users
-        key: "/sailfish/camera/camera_mode_hint_count"
+        limit: 2
+        key: "/apps/rawfish/cameraModeHintCount"
     }
 }

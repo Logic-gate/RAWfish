@@ -48,6 +48,12 @@ template <class Function> void runAsync(const Function &function)
     QThreadPool::globalInstance()->start(new AsyncFunction<Function>(function));
 }
 
+QByteArray cameraSortName(const QByteArray &fileName)
+{
+    const QByteArray prefix = QByteArrayLiteral("RAWfish_");
+    return fileName.startsWith(prefix) ? fileName.mid(prefix.size()) : fileName;
+}
+
 class InvokableEvent : public QEvent
 {
 public:
@@ -609,13 +615,15 @@ void CaptureModel::insertCapture(
 
 bool CaptureModel::compare(const Capture &left, const Capture &right)
 {
-    return left.fileName > right.fileName;
+    const QByteArray leftName = cameraSortName(left.fileName);
+    const QByteArray rightName = cameraSortName(right.fileName);
+    return leftName == rightName ? left.fileName > right.fileName : leftName > rightName;
 }
 
 bool CaptureModel::isCameraFile(const QByteArray &fileName) const
 {
     static const QRegularExpression cameraFileRegEx = [] {
-        QRegularExpression regex("\\A\\d{8}_\\d{6}(?:_\\d+)?.(?:jpg|mp4)\\z");
+        QRegularExpression regex("\\A(?:RAWfish_)?\\d{8}_\\d{6}(?:_\\d+)?.(?:jpg|mp4)\\z");
 
         regex.optimize();
 

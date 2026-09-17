@@ -6,7 +6,7 @@
 import QtQuick 2.0
 import QtMultimedia 5.6
 import Nemo.Configuration 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 
 SettingsBase {
     property alias mode: modeSettings
@@ -15,12 +15,33 @@ SettingsBase {
     property string deviceId: global.deviceId
 
     readonly property int aspectRatio: mode.aspectRatio
+    readonly property int exposureCompensationDefault: 0
     property var viewfinderGridValues: [ "none", "thirds" ]
 
     readonly property var settingsDefaults: ({
                                                  "iso": 0,
                                                  "timer": 0,
                                                  "viewfinderGrid": "none",
+                                                 "camera2CaptureFormat": "jpeg",
+                                                 "rawCaptureSpeedMode": "balanced",
+                                                 "rawCaptureSize": "4096x3072",
+                                                 "rawCaptureFocusMode": "auto",
+                                                 "rawCaptureFocusDistance": "0",
+                                                 "rawCaptureTimeout": 30,
+                                                 "rawCaptureFocusTimeout": 3,
+                                                 "rawCaptureFocusFailure": "capture",
+                                                 "rawCaptureExposure": "1.0",
+                                                 "rawCaptureIso": 0,
+                                                 "rawCaptureShutterNs": "0",
+                                                 "rawCaptureAperture": 0,
+                                                 "rawCaptureNoiseReduction": 0,
+                                                 "rawCaptureJpegQuality": 92,
+                                                 "rawCaptureRotation": 90,
+                                                 "rawCaptureScene": "manual",
+                                                 "rawCaptureProgressiveJpeg": false,
+                                                 "rawCaptureColorTemperature": 0,
+                                                 "rawCaptureColorTint": 0,
+                                                 "camera2Viewfinder": true,
                                                  "exposureMode": Camera.ExposureManual,
                                                  "flash": ((globalSettings.captureMode == "image")
                                                            && (globalSettings.position === Camera.BackFace)
@@ -30,6 +51,27 @@ SettingsBase {
     readonly property bool defaultSettings: modeSettings.iso === settingsDefaults["iso"]
                                             && modeSettings.timer === settingsDefaults["timer"]
                                             && modeSettings.viewfinderGrid === settingsDefaults["viewfinderGrid"]
+                                            && modeSettings.camera2CaptureFormat === settingsDefaults["camera2CaptureFormat"]
+                                            && modeSettings.rawCaptureSpeedMode === settingsDefaults["rawCaptureSpeedMode"]
+                                            && modeSettings.rawCaptureSize === settingsDefaults["rawCaptureSize"]
+                                            && modeSettings.rawCaptureFocusMode === settingsDefaults["rawCaptureFocusMode"]
+                                            && modeSettings.rawCaptureFocusDistance === settingsDefaults["rawCaptureFocusDistance"]
+                                            && modeSettings.rawCaptureTimeout === settingsDefaults["rawCaptureTimeout"]
+                                            && modeSettings.rawCaptureFocusTimeout === settingsDefaults["rawCaptureFocusTimeout"]
+                                            && modeSettings.rawCaptureFocusFailure === settingsDefaults["rawCaptureFocusFailure"]
+                                            && modeSettings.rawCaptureExposure === settingsDefaults["rawCaptureExposure"]
+                                            && modeSettings.rawCaptureIso === settingsDefaults["rawCaptureIso"]
+                                            && modeSettings.rawCaptureShutterNs === settingsDefaults["rawCaptureShutterNs"]
+                                            && modeSettings.rawCaptureAperture === settingsDefaults["rawCaptureAperture"]
+                                            && modeSettings.rawCaptureNoiseReduction === settingsDefaults["rawCaptureNoiseReduction"]
+                                            && modeSettings.rawCaptureJpegQuality === settingsDefaults["rawCaptureJpegQuality"]
+                                            && modeSettings.rawCaptureRotation === settingsDefaults["rawCaptureRotation"]
+                                            && modeSettings.rawCaptureScene === settingsDefaults["rawCaptureScene"]
+                                            && modeSettings.rawCaptureProgressiveJpeg === settingsDefaults["rawCaptureProgressiveJpeg"]
+                                            && modeSettings.rawCaptureColorTemperature === settingsDefaults["rawCaptureColorTemperature"]
+                                            && modeSettings.rawCaptureColorTint === settingsDefaults["rawCaptureColorTint"]
+                                            && modeSettings.camera2Viewfinder === settingsDefaults["camera2Viewfinder"]
+                                            && globalSettings.exposureCompensation === exposureCompensationDefault
                                             && modeSettings.exposureMode === settingsDefaults["exposureMode"]
                                             && modeSettings.flash == settingsDefaults["flash"]
 
@@ -40,6 +82,8 @@ SettingsBase {
             _singleValue.key = basePath + "/" + i
             _singleValue.value = settingsDefaults[i]
         }
+        _singleValue.key = globalSettings.path + "/exposureCompensation"
+        _singleValue.value = exposureCompensationDefault
     }
 
     property ConfigurationValue _singleValue: ConfigurationValue {}
@@ -47,7 +91,7 @@ SettingsBase {
     property ConfigurationGroup _global: ConfigurationGroup {
         id: globalSettings
 
-        path: "/apps/jolla-camera"
+        path: "/apps/rawfish"
 
         // Note! don't touch this for changing between cameras, see cameraDevice on root
         property string deviceId
@@ -72,16 +116,26 @@ SettingsBase {
         property int videoBitRate: 12000000
 
         property bool saveLocationInfo
+        property string rawCaptureSaveFormat: saveRawCaptureFiles ? "raw16" : "none"
+        property bool saveRawCaptureFiles: true
 
         property bool qrFilterEnabled: false
         property bool colorFiltersEnabled: false
         property bool colorFiltersAllowed: true
 
-        property int exposureCompensation: 0
+        property int exposureCompensation: exposureCompensationDefault
         property int whiteBalance: CameraImageProcessing.WhiteBalanceAuto
 
         property var exposureCompensationValues: [ 4, 3, 2, 1, 0, -1, -2, -3, -4 ]
         property string viewfinderGrid: "none"
+
+        onPositionChanged: {
+            normalizeCamera2Settings()
+        }
+
+        Component.onCompleted: {
+            exposureCompensation = exposureCompensationDefault
+        }
 
         ConfigurationGroup {
             id: modeSettings
@@ -97,8 +151,36 @@ SettingsBase {
             property int meteringMode: Camera.MeteringMatrix
             property int timer: 0
             property int aspectRatio: -1
+            property string camera2CaptureFormat: "jpeg"
+            property string rawCaptureSpeedMode: "balanced"
+            property string rawCaptureSize: "4096x3072"
+            property string rawCaptureFocusMode: "auto"
+            property string rawCaptureFocusDistance: "0"
+            property int rawCaptureTimeout: 30
+            property int rawCaptureFocusTimeout: 3
+            property string rawCaptureFocusFailure: "capture"
+            property string rawCaptureExposure: "1.0"
+            property int rawCaptureIso: 0
+            property string rawCaptureShutterNs: "0"
+            property int rawCaptureAperture: 0
+            property int rawCaptureNoiseReduction: 0
+            property int rawCaptureJpegQuality: 92
+            property int rawCaptureRotation: 90
+            property string rawCaptureScene: "manual"
+            property bool rawCaptureProgressiveJpeg: false
+            property int rawCaptureColorTemperature: 0
+            property int rawCaptureColorTint: 0
+            property bool camera2Viewfinder: true
+
+            onCamera2CaptureFormatChanged: normalizeCamera2Settings()
 
             Component.onCompleted: {
+                rawCaptureIso = settingsDefaults["rawCaptureIso"]
+                rawCaptureShutterNs = settingsDefaults["rawCaptureShutterNs"]
+                if (rawCaptureScene === "none") {
+                    rawCaptureScene = "manual"
+                }
+                normalizeCamera2Settings()
                 if (aspectRatio === -1) {
                     if (globalSettings.captureMode === "image") {
                         aspectRatio = CameraConfigs.AspectRatio_4_3
@@ -140,10 +222,264 @@ SettingsBase {
 
     function timerText(timer) {
         return timer > 0
-                ? //% "%1 second delay"
-                  qsTrId("camera_settings-la-timer-seconds-delay").arg(timer)
-                : //% "No delay"
-                  qsTrId("camera_settings-la-timer-no-delay")
+                ? timer + " second delay"
+                : "No delay"
+    }
+
+    function rawCaptureSizeText(size) {
+        return "Size " + size
+    }
+
+    function camera2SizeModel(format) {
+        if (format === "raw") {
+            return [ "4096x3072", "3264x2448", "3072x1728", "2560x1920",
+                     "1920x1080" ]
+        }
+        return [ "8192x6144", "4096x3072", "4096x2304", "3264x2448",
+                 "3072x1728", "2560x1920", "1920x1080", "1600x1200",
+                 "1280x720", "640x480" ]
+    }
+
+    function camera2SceneModel() {
+        return [ "manual", "auto", "action", "portrait", "landscape",
+                 "sport", "night", "night-portrait", "theatre", "beach",
+                 "snow", "sunset", "steady-photo", "fireworks", "party",
+                 "candlelight", "barcode", "hdr" ]
+    }
+
+    function camera2NoiseReductionModel() {
+        return [ 0, 1, 2, 3, 4 ]
+    }
+
+    function normalizeCamera2Settings() {
+        var sizes = camera2SizeModel(modeSettings.camera2CaptureFormat)
+        if (sizes.indexOf(modeSettings.rawCaptureSize) < 0) {
+            modeSettings.rawCaptureSize = sizes[0]
+        }
+        if (camera2SpeedModel().indexOf(modeSettings.rawCaptureSpeedMode) < 0) {
+            modeSettings.rawCaptureSpeedMode = settingsDefaults["rawCaptureSpeedMode"]
+        }
+        if (modeSettings.rawCaptureIso === undefined ||
+                modeSettings.rawCaptureIso === null) {
+            modeSettings.rawCaptureIso = settingsDefaults["rawCaptureIso"]
+        }
+        if (!modeSettings.rawCaptureShutterNs) {
+            modeSettings.rawCaptureShutterNs = settingsDefaults["rawCaptureShutterNs"]
+        }
+        var isoModel = camera2IsoModel()
+        var isoIndex = isoModel.indexOf(modeSettings.rawCaptureIso)
+        if (isoIndex < 0) {
+            isoIndex = isoModel.indexOf(parseInt(modeSettings.rawCaptureIso))
+        }
+        modeSettings.rawCaptureIso = isoIndex >= 0
+                ? isoModel[isoIndex] : settingsDefaults["rawCaptureIso"]
+        var shutterModel = camera2ShutterModel()
+        var shutterIndex = shutterModel.indexOf(String(modeSettings.rawCaptureShutterNs))
+        if (shutterIndex < 0) {
+            shutterIndex = shutterModel.indexOf(modeSettings.rawCaptureShutterNs)
+        }
+        modeSettings.rawCaptureShutterNs = shutterIndex >= 0
+                ? shutterModel[shutterIndex] : settingsDefaults["rawCaptureShutterNs"]
+        if (camera2FocusDistanceModel().indexOf(modeSettings.rawCaptureFocusDistance) < 0) {
+            modeSettings.rawCaptureFocusDistance = settingsDefaults["rawCaptureFocusDistance"]
+        }
+        if (camera2SceneModel().indexOf(modeSettings.rawCaptureScene) < 0) {
+            modeSettings.rawCaptureScene = "manual"
+        }
+        if (camera2NoiseReductionModel().indexOf(modeSettings.rawCaptureNoiseReduction) < 0) {
+            modeSettings.rawCaptureNoiseReduction = 0
+        }
+    }
+
+    function camera2CaptureFormatText(format) {
+        return format === "jpeg" ? "Direct JPEG" : "RAW render"
+    }
+
+    function camera2SpeedModel() {
+        return [ "fast", "balanced", "quality" ]
+    }
+
+    function rawCaptureSpeedText(mode) {
+        return "Speed " + rawCaptureSpeedLabel(mode)
+    }
+
+    function rawCaptureSpeedLabel(mode) {
+        switch (mode) {
+        case "fast": return "Fast"
+        case "quality": return "Quality"
+        default: return "Balanced"
+        }
+    }
+
+    function rawCaptureFocusModeText(mode) {
+        switch (mode) {
+        case "auto": return "Focus auto"
+        case "continuous": return "Focus continuous"
+        case "manual": return "Focus manual"
+        case "infinity": return "Focus infinity"
+        case "none": return "Focus none"
+        default: return "Focus " + mode
+        }
+    }
+
+    function rawCaptureFocusDistanceText(distance) {
+        return "Focus " + rawCaptureFocusDistanceLabel(distance)
+    }
+
+    function rawCaptureFocusDistanceLabel(distance) {
+        var diopters = parseFloat(distance)
+        if (!diopters || diopters <= 0) {
+            return "Infinity"
+        }
+
+        var meters = 1.0 / diopters
+        return meters >= 1.0
+                ? meters.toFixed(meters >= 10 ? 0 : 1) + " m"
+                : Math.round(meters * 100) + " cm"
+    }
+
+    function camera2FocusDistanceModel() {
+        return [ "0", "0.25", "0.5", "0.75", "1", "1.5", "2", "3",
+                 "4", "5", "7.5", "10", "15", "20" ]
+    }
+
+    function rawCaptureTimeoutText(timeout) {
+        return "Capture " + timeout + " s"
+    }
+
+    function rawCaptureFocusTimeoutText(timeout) {
+        return "AF " + timeout + " s"
+    }
+
+    function rawCaptureFocusFailureText(policy) {
+        return policy === "abort" ? "AF abort" : "AF capture"
+    }
+
+    function rawCaptureExposureText(exposure) {
+        return "Exposure x" + exposure
+    }
+
+    function rawCaptureIsoText(iso) {
+        return iso > 0 ? "ISO " + iso : "ISO auto"
+    }
+
+    function rawCaptureShutterText(shutterNs) {
+        return "Shutter " + rawCaptureShutterLabel(shutterNs)
+    }
+
+    function rawCaptureShutterLabel(shutterNs) {
+        switch (shutterNs) {
+        case "100000": return "1/10000"
+        case "250000": return "1/4000"
+        case "500000": return "1/2000"
+        case "1000000": return "1/1000"
+        case "2000000": return "1/500"
+        case "4000000": return "1/250"
+        case "8333333": return "1/120"
+        case "16666667": return "1/60"
+        case "33333333": return "1/30"
+        case "66666667": return "1/15"
+        case "125000000": return "1/8"
+        case "250000000": return "1/4"
+        case "400000000": return "0.4s"
+        case "500000000": return "1/2"
+        case "1000000000": return "1s"
+        case "2000000000": return "2s"
+        case "4000000000": return "4s"
+        case "8000000000": return "8s"
+        case "16000000000": return "16s"
+        default:
+            var ns = parseInt(shutterNs)
+            if (ns > 0) {
+                return ns < 1000000000
+                        ? "1/" + Math.round(1000000000 / ns)
+                        : (ns / 1000000000).toFixed(ns % 1000000000 === 0 ? 0 : 1) + "s"
+            }
+            return "auto"
+        }
+    }
+
+    function camera2IsoModel() {
+        return [ 0, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 19200 ]
+    }
+
+    function camera2ShutterModel() {
+        var model = [ "0", "100000", "250000", "500000", "1000000",
+                      "2000000", "4000000", "8333333", "16666667",
+                      "33333333", "66666667", "125000000", "250000000" ]
+        model.push("500000000", "1000000000", "2000000000", "4000000000",
+                   "8000000000", "16000000000")
+        return model
+    }
+
+    function rawCaptureApertureText(aperture) {
+        return aperture > 0 ? "Aperture f/" + rawCaptureApertureLabel(aperture)
+                            : "Aperture auto"
+    }
+
+    function rawCaptureApertureLabel(aperture) {
+        return aperture > 0 ? (aperture / 10).toFixed(1) : "Auto"
+    }
+
+    function rawCaptureNoiseReductionText(mode) {
+        return "Noise " + rawCaptureNoiseReductionLabel(mode)
+    }
+
+    function rawCaptureNoiseReductionLabel(mode) {
+        switch (mode) {
+        case 1: return "Fast"
+        case 2: return "High"
+        case 3: return "Minimal"
+        case 4: return "ZSL"
+        default: return "Off"
+        }
+    }
+
+    function rawCaptureJpegQualityText(quality) {
+        return "JPEG " + quality
+    }
+
+    function rawCaptureRotationText(rotation) {
+        return rotation === 0 ? "Rotate 0" : "Rotate " + rotation
+    }
+
+    function rawCaptureSceneText(scene) {
+        return "Scene " + rawCaptureSceneLabel(scene)
+    }
+
+    function rawCaptureSceneLabel(scene) {
+        switch (scene) {
+        case "portrait": return "Portrait"
+        case "landscape": return "Landscape"
+        case "sport": return "Sport"
+        case "night": return "Night"
+        case "auto": return "Auto"
+        case "action": return "Action"
+        case "night-portrait": return "Night portrait"
+        case "theatre": return "Theatre"
+        case "beach": return "Beach"
+        case "snow": return "Snow"
+        case "sunset": return "Sunset"
+        case "steady-photo": return "Steady photo"
+        case "fireworks": return "Fireworks"
+        case "party": return "Party"
+        case "candlelight": return "Candlelight"
+        case "barcode": return "Barcode"
+        case "hdr": return "HDR"
+        default: return "Manual"
+        }
+    }
+
+    function rawCaptureProgressiveJpegText(enabled) {
+        return enabled ? "Progressive JPEG" : "Standard JPEG"
+    }
+
+    function rawCaptureColorTemperatureText(temperature) {
+        return temperature > 0 ? "WB " + temperature + " K" : "Auto WB"
+    }
+
+    function rawCaptureColorTintText(tint) {
+        return tint === 0 ? "Tint 0" : "Tint " + tint
     }
 
     function colorFiltersIcon(enabled) {
@@ -152,20 +488,15 @@ SettingsBase {
 
     function colorFiltersEnabledText(enabled) {
         return enabled
-                ? //% "Color filters on"
-                  qsTrId("camera_settings-la-color-filters-on")
-                : //% "Color filters off"
-                  qsTrId("camera_settings-la-color-filters-off")
+                ? "Color filters on"
+                : "Color filters off"
     }
 
     function isoText(iso) {
         if (iso == 0) {
-            //% "Light sensitivity • Automatic"
-            return qsTrId("camera_settings-la-light-sensitivity-auto")
+            return "Light sensitivity - Automatic"
         } else {
-            //: %1 replaced with iso value
-            //% "Light sensitivity • ISO %1"
-            return qsTrId("camera_settings-la-light-sensitivity-iso_value").arg(iso)
+            return "Light sensitivity - ISO " + iso
         }
     }
 
@@ -191,21 +522,11 @@ SettingsBase {
 
     function exposureModeText(exposureMode) {
         switch (exposureMode) {
-        //: "Automatic exposure mode"
-        //% "Automatic exposure"
-        case Camera.ExposureManual:         return qsTrId("camera_settings-la-exposure-automatic")
-        //: "Portrait exposure mode"
-        //% "Portrait exposure"
-        case Camera.ExposurePortrait:       return qsTrId("camera_settings-la-exposure-portrait")
-        //: "Night exposure mode"
-        //% "Night exposure"
-        case Camera.ExposureNight:          return qsTrId("camera_settings-la-exposure-night")
-        //: "Sports exposure mode"
-        //% "Sports exposure"
-        case Camera.ExposureSports:         return qsTrId("camera_settings-la-exposure-sports")
-        //: "HDR exposure mode"
-        //% "HDR exposure"
-        case Camera.ExposureHDR:            return qsTrId("camera_settings-la-exposure-hdr")
+        case Camera.ExposureManual:         return "Automatic exposure"
+        case Camera.ExposurePortrait:       return "Portrait exposure"
+        case Camera.ExposureNight:          return "Night exposure"
+        case Camera.ExposureSports:         return "Sports exposure"
+        case Camera.ExposureHDR:            return "HDR exposure"
         default:
             return "" // not supported
         }
@@ -226,21 +547,11 @@ SettingsBase {
 
     function flashText(flash) {
         switch (flash) {
-        //: "Automatic camera flash mode"
-        //% "Flash automatic"
-        case Camera.FlashAuto:       return qsTrId("camera_settings-la-flash-auto")
-        //: "Camera flash disabled"
-        //% "Flash disabled"
-        case Camera.FlashOff:   return qsTrId("camera_settings-la-flash-off")
-        //: "Camera flash enabled"
-        //% "Flash enabled"
-        case Camera.FlashOn:      return qsTrId("camera_settings-la-flash-on")
-        //: "Camera flash in torch mode"
-        //% "Flash on"
-        case Camera.FlashTorch:   return qsTrId("camera_settings-la-flash-torch")
-        //: "Camera flash with red eye reduction"
-        //% "Flash red eye"
-        case Camera.FlashRedEyeReduction: return qsTrId("camera_settings-la-flash-redeye")
+        case Camera.FlashAuto:       return "Flash automatic"
+        case Camera.FlashOff:        return "Flash disabled"
+        case Camera.FlashOn:         return "Flash enabled"
+        case Camera.FlashTorch:      return "Flash on"
+        case Camera.FlashRedEyeReduction: return "Flash red eye"
         default:
             return "" // not supported
         }
@@ -262,27 +573,13 @@ SettingsBase {
 
     function whiteBalanceText(balance) {
         switch (balance) {
-        //: "Automatic white balance"
-        //% "Automatic"
-        case CameraImageProcessing.WhiteBalanceAuto:        return qsTrId("camera_settings-la-wb-automatic")
-        //: "Sunny white balance"
-        //% "Sunny"
-        case CameraImageProcessing.WhiteBalanceSunlight:    return qsTrId("camera_settings-la-wb-sunny")
-        //: "Cloudy white balance"
-        //% "Cloudy"
-        case CameraImageProcessing.WhiteBalanceCloudy:      return qsTrId("camera_settings-la-wb-cloudy")
-        //: "Shade white balance"
-        //% "Shade"
-        case CameraImageProcessing.WhiteBalanceShade:       return qsTrId("camera_settings-la-wb-shade")
-        //: "Sunset white balance"
-        //% "Sunset"
-        case CameraImageProcessing.WhiteBalanceSunset:      return qsTrId("camera_settings-la-wb-sunset")
-        //: "Fluorecent white balance"
-        //% "Fluorecent"
-        case CameraImageProcessing.WhiteBalanceFluorescent: return qsTrId("camera_settings-la-wb-fluorecent")
-        //: "Tungsten white balance"
-        //% "Tungsten"
-        case CameraImageProcessing.WhiteBalanceTungsten:    return qsTrId("camera_settings-la-wb-tungsten")
+        case CameraImageProcessing.WhiteBalanceAuto:        return "Automatic"
+        case CameraImageProcessing.WhiteBalanceSunlight:    return "Sunny"
+        case CameraImageProcessing.WhiteBalanceCloudy:      return "Cloudy"
+        case CameraImageProcessing.WhiteBalanceShade:       return "Shade"
+        case CameraImageProcessing.WhiteBalanceSunset:      return "Sunset"
+        case CameraImageProcessing.WhiteBalanceFluorescent: return "Fluorescent"
+        case CameraImageProcessing.WhiteBalanceTungsten:    return "Tungsten"
         default:
             return "" // not supported
         }
@@ -291,32 +588,23 @@ SettingsBase {
     function colorFilterText(filter) {
         switch (filter) {
         case CameraImageProcessing.ColorFilterNone:
-            //% "Normal"
-            return qsTrId("camera_settings-la-colorfilter_normal")
+            return "Normal"
         case CameraImageProcessing.ColorFilterGrayscale:
-            //% "Grayscale"
-            return qsTrId("camera_settings-la-colorfilter_grayscale")
+            return "Grayscale"
         case CameraImageProcessing.ColorFilterNegative:
-            //% "Negative"
-            return qsTrId("camera_settings-la-colorfilter_negative")
+            return "Negative"
         case CameraImageProcessing.ColorFilterSolarize:
-            //% "Solarize"
-            return qsTrId("camera_settings-la-colorfilter_solarize")
+            return "Solarize"
         case CameraImageProcessing.ColorFilterSepia:
-            //% "Sepia"
-            return qsTrId("camera_settings-la-colorfilter_sepia")
+            return "Sepia"
         case CameraImageProcessing.ColorFilterPosterize:
-            //% "Posterize"
-            return qsTrId("camera_settings-la-colorfilter_posterize")
+            return "Posterize"
         case CameraImageProcessing.ColorFilterWhiteboard:
-            //% "Whiteboard"
-            return qsTrId("camera_settings-la-colorfilter_whiteboard")
+            return "Whiteboard"
         case CameraImageProcessing.ColorFilterBlackboard:
-            //% "Blackboard"
-            return qsTrId("camera_settings-la-colorfilter_blackboard")
+            return "Blackboard"
         case CameraImageProcessing.ColorFilterAqua:
-            //% "Aqua"
-            return qsTrId("camera_settings-la-colorfilter_aqua")
+            return "Aqua"
         default:
             return "" // not supported
         }
@@ -333,11 +621,9 @@ SettingsBase {
     function viewfinderGridText(grid) {
         switch (grid) {
         case "none":
-            //% "No grid"
-            return qsTrId("camera_settings-la-no_grid")
+            return "No grid"
         case "thirds":
-            //% "Thirds grid"
-            return qsTrId("camera_settings-la-thirds_grid")
+            return "Thirds grid"
         default: return ""
         }
     }

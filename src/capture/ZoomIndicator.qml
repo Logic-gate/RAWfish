@@ -38,9 +38,7 @@ Item {
         color: indicator.color
         font.pixelSize: minimumLabel.font.pixelSize
         font.bold: minimumLabel.font.bold
-        //: Title for current zoom position
-        //% "Zoom"
-        text: qsTrId("jolla-camera-la-zoom")
+        text: "Zoom"
     }
 
     Rectangle {
@@ -84,9 +82,7 @@ Item {
         color: indicator.color
         font.pixelSize: Theme.fontSizeExtraSmall
         font.bold: true
-        //: Abbreviated text for minimum extent of the zoom indicator
-        //% "min"
-        text: qsTrId("jolla-camera-la-zoom_min")
+        text: "min"
     }
 
     Label {
@@ -100,9 +96,7 @@ Item {
         color: indicator.color
         font.pixelSize: minimumLabel.font.pixelSize
         font.bold: minimumLabel.font.bold
-        //: Abbreviated text for maximum extent of the zoom indicator
-        //% "max"
-        text: qsTrId("jolla-camera-la-zoom_max")
+        text: "max"
     }
 
     PauseAnimation {

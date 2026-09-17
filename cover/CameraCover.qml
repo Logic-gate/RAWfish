@@ -6,13 +6,15 @@
 import QtQuick 2.4
 import QtMultimedia 5.0
 import Sailfish.Silica 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 import Nemo.Thumbnailer 1.0
 
 CoverBackground {
     id: cover
 
-    property int coverIndex: galleryActive ? galleryIndex : 0
+    property int coverIndex: galleryActive ? galleryIndex
+                                           : (captureModel && captureModel.count > 0
+                                              ? captureModel.count - 1 : 0)
 
     onCoverIndexChanged: {
         repositionTimer.restart()

@@ -7,11 +7,8 @@ TEMPLATE = subdirs
 
 SUBDIRS = \
         application.pro \
-        lockscreen \
-        quickactions \
         src \
-        settings \
-        translations \
-        tests
+        settings/settings.pro \
+        sfos-camera2-bridge/bridge.pro
 
 OTHER_FILES = rpm/*.spec

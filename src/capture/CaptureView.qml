@@ -12,7 +12,7 @@ import Nemo.Notifications 1.0
 import org.nemomobile.systemsettings 1.0
 import Sailfish.Silica 1.0
 import Sailfish.Policy 1.0
-import com.jolla.camera 1.0
+import com.vivid.camera 1.0
 
 import "../settings"
 
@@ -41,17 +41,23 @@ FocusScope {
 
     property alias camera: camera
     property QtObject viewfinder
+    property QtObject camera2Viewfinder
+    property real camera2TopInset: 0
 
     readonly property bool recording: active && camera.videoRecorder.recorderState == CameraRecorder.RecordingState
 
     property bool _unload
 
-    property bool touchFocusSupported: (camera.focus.focusMode == Camera.FocusAuto
+    property bool touchFocusSupported: ((_camera2ViewfinderActive
+                                         && (Settings.mode.rawCaptureFocusMode === "auto"
+                                             || Settings.mode.rawCaptureFocusMode === "continuous"))
+                                        || camera.focus.focusMode == Camera.FocusAuto
                                         || camera.focus.focusMode == Camera.FocusContinuous)
                                        && camera.captureMode != Camera.CaptureVideo
 
     // not bound to focusTimer.running, restarting timer shouldn't exit tap focus mode temporarily and lose focus state
     property bool tapFocusActive
+    property var _camera2FocusPoint: Qt.point(0.5, 0.5)
     property bool _captureOnFocus
     property real _captureCountdown
 
@@ -71,7 +77,11 @@ FocusScope {
     readonly property bool _canCapture: {
         switch (camera.captureMode) {
             case Camera.CaptureStillImage: 
-                return camera.imageCapture.ready
+                return captureView._camera2ViewfinderActive
+                       ? extensions.rawImageCaptureAvailable
+                         && !captureView._camera2CapturePending
+                         && !captureView._camera2CaptureRunning
+                       : camera.imageCapture.ready
             case Camera.CaptureVideo:
                 return camera.videoRecorder.recorderStatus >= CameraRecorder.LoadedStatus 
                     && captureOverlay != null && captureOverlay._recSecsRemaining > 0
@@ -82,6 +92,14 @@ FocusScope {
 
     property bool _captureQueued
     property bool captureBusy
+    property real camera2Zoom: 1.0
+    property bool _camera2CapturePending
+    property bool _camera2CaptureRunning
+    property bool _camera2LiveJpegCaptureRunning
+    property bool _qtFallbackCapturePending
+    property string _camera2CaptureTargetPath
+    property string _camera2CaptureCameraId
+    property double _camera2CaptureStartedMs: 0
     onCaptureBusyChanged: {
         if (!captureBusy && _captureQueued) {
             _captureQueued = false
@@ -89,10 +107,13 @@ FocusScope {
         }
     }
 
-    property bool handleVolumeKeys: camera.imageCapture.ready
+    property bool handleVolumeKeys: (captureView._camera2ViewfinderActive
+                                     ? captureView._canCapture
+                                     : camera.imageCapture.ready)
                                     && keysResource.acquired
                                     && camera.captureMode == Camera.CaptureStillImage
                                     && !captureView._captureOnFocus
+                                    && !captureView.captureUiBlocked
     property bool captureOnVolumeRelease
 
     onHandleVolumeKeysChanged: {
@@ -103,8 +124,38 @@ FocusScope {
     readonly property bool _mirrorViewfinder: camera.position === Camera.FrontFace
     readonly property bool _horizontalMirror: _mirrorViewfinder && camera.orientation % 180 == 0
     readonly property bool _verticalMirror: _mirrorViewfinder && camera.orientation % 180 != 0
+    readonly property real _viewfinderAspectRatio: camera.viewfinder.resolution.height > 0
+                                                 ? camera.viewfinder.resolution.width
+                                                   / camera.viewfinder.resolution.height
+                                                 : 4 / 3
+    readonly property real _camera2PreviewWidth: Math.max(1, isPortrait
+                                                          ? width
+                                                          : width - Math.round(width * 0.40))
+    readonly property real _camera2PreviewHeight: Math.max(1, isPortrait
+                                                           ? height - Math.round(height * 0.40)
+                                                             - camera2TopInset
+                                                           : height - camera2TopInset)
 
     readonly property bool _applicationActive: Qt.application.state == Qt.ApplicationActive
+    readonly property bool _camera2ViewfinderActive: Settings.global.captureMode === "image"
+                                                     && effectiveActive
+    readonly property bool camera2CaptureAvailable: extensions.rawImageCaptureAvailable
+    readonly property bool _liveJpegCapture: _camera2ViewfinderActive
+                                            && Settings.mode.camera2CaptureFormat === "jpeg"
+                                            && Settings.mode.rawCaptureSpeedMode !== "quality"
+    readonly property bool _warmJpegReady: _liveJpegCapture
+                                           && camera2Viewfinder
+                                           && camera2Viewfinder.jpegCaptureReady === true
+    readonly property bool _liveRawCapture: _camera2ViewfinderActive
+                                           && Settings.mode.camera2CaptureFormat === "raw"
+                                           && Settings.mode.rawCaptureSpeedMode !== "quality"
+    readonly property bool _warmRawReady: _liveRawCapture
+                                          && camera2Viewfinder
+                                          && camera2Viewfinder.rawCaptureReady === true
+    readonly property bool _manualCamera2Focus: _camera2ViewfinderActive
+                                                && Settings.mode.rawCaptureFocusMode === "manual"
+    readonly property bool captureUiBlocked: captureBusy
+                                             && !_camera2LiveJpegCaptureRunning
 
     readonly property string deviceId: Settings.deviceId
 
@@ -139,8 +190,14 @@ FocusScope {
 
     function setFocusPoint(point) {
         focusTimer.restart()
-        camera.unlock()
         tapFocusActive = true
+        if (_camera2ViewfinderActive && camera2Viewfinder
+                && typeof camera2Viewfinder.setFocusPoint === "function") {
+            _camera2FocusPoint = point
+            camera2Viewfinder.setFocusPoint(point.x, point.y)
+            return
+        }
+        camera.unlock()
         camera.focus.customFocusPoint = point
         camera.searchAndLock()
     }
@@ -148,12 +205,78 @@ FocusScope {
     function _resetFocus() {
         focusTimer.running = false
         tapFocusActive = false
+        _camera2FocusPoint = Qt.point(0.5, 0.5)
+        if (_camera2ViewfinderActive && camera2Viewfinder
+                && typeof camera2Viewfinder.clearFocusPoint === "function") {
+            camera2Viewfinder.clearFocusPoint()
+        }
         camera.unlock()
+    }
+
+    function resetZoom() {
+        camera2Zoom = 1.0
+        camera.digitalZoom = 1.0
+    }
+
+    function _changeManualFocusDistance(step) {
+        var model = Settings.camera2FocusDistanceModel()
+        var index = model.indexOf(Settings.mode.rawCaptureFocusDistance)
+        if (index < 0) {
+            index = 0
+        }
+        Settings.mode.rawCaptureFocusDistance = model[(index + step + model.length)
+                                                       % model.length]
+    }
+
+    function _captureSidecarPath(suffix) {
+        var path = _camera2CaptureTargetPath
+        var dot = path.lastIndexOf(".")
+        return (dot >= 0 ? path.substring(0, dot) : path) + suffix
+    }
+
+    function _warmJpegState() {
+        return "live=" + _liveJpegCapture
+                + " ready=" + _warmJpegReady
+                + " running=" + (camera2Viewfinder ? camera2Viewfinder.running : "no-camera2")
+                + " enabled=" + (camera2Viewfinder ? camera2Viewfinder.jpegCaptureEnabled : "no-camera2")
+                + " jpegReady=" + (camera2Viewfinder ? camera2Viewfinder.jpegCaptureReady : "no-camera2")
+                + " rawReady=" + (camera2Viewfinder ? camera2Viewfinder.rawCaptureReady : "no-camera2")
+                + " error=" + (camera2Viewfinder ? camera2Viewfinder.errorString : "no-camera2")
+    }
+
+    function _captureState() {
+        return "canCapture=" + _canCapture
+                + " busy=" + captureBusy
+                + " blocked=" + captureUiBlocked
+                + " pending=" + _camera2CapturePending
+                + " running=" + _camera2CaptureRunning
+                + " rawAvailable=" + extensions.rawImageCaptureAvailable
+                + " cameraStatus=" + camera.cameraStatus
+                + " " + _warmJpegState()
+    }
+
+    function _recoverStaleCamera2CaptureState() {
+        if (!_camera2CaptureRunning || _camera2LiveJpegCaptureRunning) {
+            return false
+        }
+
+        camera2CaptureWatchdog.stop()
+        _camera2CapturePending = false
+        _camera2CaptureRunning = false
+        _camera2LiveJpegCaptureRunning = false
+        _captureQueued = false
+        _unload = false
+        captureBusy = false
+        if (_camera2ViewfinderActive) {
+            window.camera2CaptureBusy = false
+        }
+        return true
     }
 
     function _triggerCapture() {
         // avoid duplicate capture if volume key and some other key trigger (e.g. shutter)
         captureOnVolumeRelease = false
+        _recoverStaleCamera2CaptureState()
 
         if (captureTimer.running) {
             captureTimer.reset()
@@ -171,6 +294,8 @@ FocusScope {
                 microphoneWarningNotification.publishIfNeeded()
                 camera.record()
             }
+        } else {
+            console.warn("Capture not ready:", _captureState())
         }
     }
 
@@ -241,10 +366,20 @@ FocusScope {
         }
 
         urgency: Notification.Critical
-        //: %1 is an operating system name without the OS suffix
-        //% "Camera audio won't be recorded, microphone disabled by %1 Device Manager"
-        body: qsTrId("jolla-camera-la-microphone_disallowed_by_policy")
-            .arg(aboutSettings.baseOperatingSystemName)
+        body: "Camera audio won't be recorded, microphone disabled by "
+              + aboutSettings.baseOperatingSystemName + " Device Manager"
+    }
+
+    Notification {
+        id: camera2CaptureErrorNotification
+
+        function publishMessage(message) {
+            camera2CaptureErrorNotification.previewBody = message
+            camera2CaptureErrorNotification.publish()
+        }
+
+        isTransient: true
+        urgency: Notification.Critical
     }
 
     onEffectiveIsoChanged: {
@@ -294,8 +429,11 @@ FocusScope {
 
     Timer {
         interval: 1000
-        running: captureView._unload && (camera.cameraStatus === Camera.UnloadedStatus
-                                         || camera.cameraStatus === Camera.CameraError)
+        running: captureView._unload
+                 && !captureView._camera2CapturePending
+                 && !captureView._camera2CaptureRunning
+                 && (camera.cameraStatus === Camera.UnloadedStatus
+                     || camera.cameraStatus === Camera.CameraError)
         onTriggered: {
             captureView._unload = false
         }
@@ -403,6 +541,11 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: Settings.mode
+        onRawCaptureFocusModeChanged: captureView._resetFocus()
+    }
+
     Camera {
         id: camera
 
@@ -442,6 +585,162 @@ FocusScope {
             recordStartEvent.play()
         }
 
+        function _captureWithQtMultimedia() {
+            camera.imageCapture.captureToLocation(Settings.photoCapturePath('jpg'))
+        }
+
+        function _finishCamera2ImageCapture(path, mimeType) {
+            shutterEvent.play()
+            captureView._camera2CaptureRunning = false
+            captureView._camera2LiveJpegCaptureRunning = false
+            captureView._unload = false
+            captureView._captureQueued = false
+            captureBusy = false
+            if (captureView._camera2ViewfinderActive) {
+                window.camera2CaptureBusy = false
+            }
+
+            if (captureModel) {
+                captureModel.appendCapture(Qt.resolvedUrl(path), mimeType)
+            }
+
+            Settings.completePhoto(Qt.resolvedUrl(path))
+            captureView.captured()
+            camera2CaptureWatchdog.stop()
+        }
+
+        function _failCamera2ImageCapture(error) {
+            console.warn("Camera2 image capture failed:", error)
+            camera2CaptureErrorNotification.publishMessage(error)
+            captureView._camera2CapturePending = false
+            captureView._camera2CaptureRunning = false
+            captureView._camera2LiveJpegCaptureRunning = false
+            captureView._captureQueued = false
+            captureView._unload = false
+            captureBusy = false
+            if (captureView._camera2ViewfinderActive) {
+                window.camera2CaptureBusy = false
+            }
+            camera2CaptureWatchdog.stop()
+        }
+
+        function _startColdCamera2JpegCapture() {
+            if (captureView._camera2ViewfinderActive) {
+                window.camera2CaptureBusy = true
+            }
+            return extensions.captureJpegImage(captureView._camera2CaptureTargetPath,
+                                               captureView._camera2CaptureCameraId,
+                                               Settings.mode.rawCaptureSize,
+                                               Settings.mode.rawCaptureTimeout,
+                                               Settings.mode.rawCaptureJpegQuality,
+                                               Settings.mode.rawCaptureRotation,
+                                               Settings.mode.rawCaptureExposure,
+                                               Settings.mode.rawCaptureScene,
+                                               Settings.mode.rawCaptureIso,
+                                               Settings.mode.rawCaptureShutterNs,
+                                               Settings.mode.rawCaptureAperture,
+                                               Settings.mode.rawCaptureNoiseReduction,
+                                               captureView.camera2Zoom)
+        }
+
+        function _retryColdCamera2JpegCapture(error) {
+            if (!captureView._camera2LiveJpegCaptureRunning
+                    || Settings.mode.camera2CaptureFormat !== "jpeg") {
+                return false
+            }
+            _failCamera2ImageCapture(error)
+            return true
+        }
+
+        function _startCamera2ImageCapture() {
+            if (!captureView._camera2CapturePending || captureView._camera2CaptureRunning) {
+                return
+            }
+
+            captureView._camera2CapturePending = false
+            var captureStarted
+            var liveJpegCapture = captureView._liveJpegCapture
+            var captureSize = Settings.mode.rawCaptureSize
+            if (Settings.mode.camera2CaptureFormat === "jpeg") {
+                if (captureView._warmJpegReady) {
+                    try {
+                        captureStarted = camera2Viewfinder.captureJpeg(captureView._camera2CaptureTargetPath)
+                    } catch (error) {
+                        _failCamera2ImageCapture("Camera2 warm JPEG exception: " + error)
+                        return
+                    }
+                    captureView._camera2LiveJpegCaptureRunning = captureStarted
+                    if (!captureStarted) {
+                        _failCamera2ImageCapture("Camera2 warm JPEG preview is not running")
+                        return
+                    }
+                    camera2CaptureWatchdog.restart()
+                    captureView._camera2CaptureRunning = true
+                } else if (liveJpegCapture) {
+                    _failCamera2ImageCapture("Warm JPEG not ready: "
+                                             + captureView._captureState())
+                    return
+                } else if (!liveJpegCapture) {
+                    captureView._camera2LiveJpegCaptureRunning = false
+                    captureView._camera2CaptureRunning = true
+                    captureStarted = _startColdCamera2JpegCapture()
+                }
+            } else {
+                captureView._camera2CaptureRunning = true
+                if (captureView._warmRawReady) {
+                    captureStarted = camera2Viewfinder.captureRaw(
+                                captureView._captureSidecarPath(".warm.raw16"),
+                                captureView._captureSidecarPath(".warm.json"))
+                    if (!captureStarted) {
+                        _failCamera2ImageCapture("Camera2 warm RAW preview is not running")
+                        return
+                    }
+                    camera2CaptureWatchdog.restart()
+                    return
+                }
+                var rawFocusMode = Settings.mode.rawCaptureFocusMode
+                var rawFocusTimeout = Settings.mode.rawCaptureFocusTimeout
+                if (Settings.mode.rawCaptureSpeedMode === "fast" &&
+                        rawFocusMode !== "manual" && rawFocusMode !== "infinity") {
+                    rawFocusMode = "none"
+                } else if (Settings.mode.rawCaptureSpeedMode === "balanced" &&
+                           (rawFocusMode === "auto" || rawFocusMode === "continuous")) {
+                    rawFocusTimeout = Math.min(rawFocusTimeout, 1)
+                }
+                captureStarted = extensions.captureRawImage(captureView._camera2CaptureTargetPath,
+                                            captureView._camera2CaptureCameraId,
+                                            captureSize,
+                                            Settings.mode.rawCaptureTimeout,
+                                            rawFocusMode,
+                                            Settings.mode.rawCaptureFocusDistance,
+                                            rawFocusTimeout,
+                                            Settings.mode.rawCaptureFocusFailure,
+                                            Settings.mode.rawCaptureExposure,
+                                            Settings.mode.rawCaptureJpegQuality,
+                                            Settings.mode.rawCaptureRotation,
+                                            Settings.global.rawCaptureSaveFormat,
+                                            Settings.mode.rawCaptureScene,
+                                            Settings.mode.rawCaptureColorTemperature,
+                                            Settings.mode.rawCaptureColorTint,
+                                            Settings.mode.rawCaptureProgressiveJpeg,
+                                            Settings.mode.rawCaptureIso,
+                                            Settings.mode.rawCaptureShutterNs,
+                                            Settings.mode.rawCaptureAperture,
+                                            Settings.mode.rawCaptureNoiseReduction,
+                                            captureView.camera2Zoom)
+            }
+            if (!captureStarted) {
+                captureView._captureQueued = false
+                captureView._camera2CaptureRunning = false
+                captureView._camera2LiveJpegCaptureRunning = false
+                captureView._unload = false
+                captureBusy = false
+                if (captureView._camera2ViewfinderActive) {
+                    window.camera2CaptureBusy = false
+                }
+            }
+        }
+
         function _completeCapture() {
             if (captureBusy) {
                 _captureQueued = true
@@ -449,9 +748,37 @@ FocusScope {
             }
 
             captureBusy = true
+            captureView._camera2CaptureStartedMs = Date.now()
+            console.log("capture-timing qml shutter t=0 format="
+                        + Settings.mode.camera2CaptureFormat
+                        + " speed=" + Settings.mode.rawCaptureSpeedMode)
+            if (captureView._liveJpegCapture) {
+                console.log("capture-timing qml warm-state "
+                            + captureView._warmJpegState())
+            }
+            var liveJpegCapture = captureView._liveJpegCapture
+            var liveWarmCapture = liveJpegCapture || captureView._liveRawCapture
+            if (captureView._camera2ViewfinderActive && !liveWarmCapture) {
+                captureView._unload = true
+                window.camera2CaptureBusy = true
+                console.log("capture-timing qml unload-request t="
+                            + (Date.now() - captureView._camera2CaptureStartedMs))
+            }
             captureOverlay.writeMetaData()
 
-            camera.imageCapture.captureToLocation(Settings.photoCapturePath('jpg'))
+            if (extensions.rawImageCaptureAvailable) {
+                captureView._camera2CaptureTargetPath = Settings.photoCapturePath('jpg')
+                captureView._camera2CaptureCameraId = "0"
+                captureView._camera2CapturePending = true
+                captureView._unload = !liveWarmCapture
+                if (liveWarmCapture) {
+                    _startCamera2ImageCapture()
+                } else if (camera.cameraStatus === Camera.UnloadedStatus) {
+                    camera2CaptureStartTimer.restart()
+                }
+            } else {
+                _captureWithQtMultimedia()
+            }
 
             if (focusTimer.running) {
                 focusTimer.restart()
@@ -513,7 +840,9 @@ FocusScope {
         }
 
         cameraState: {
-            if (captureView.effectiveActive && !captureView._unload) {
+            if (captureView._camera2ViewfinderActive) {
+                return Camera.UnloadedState
+            } else if (captureView.effectiveActive && !captureView._unload) {
                 if (CameraConfigs.ready) {
                     return Camera.ActiveState
                 } else {
@@ -525,7 +854,8 @@ FocusScope {
         }
 
         onCameraStateChanged: {
-            if (cameraState == Camera.ActiveState && captureOverlay) {
+            if ((cameraState == Camera.ActiveState || captureView._camera2ViewfinderActive)
+                    && captureOverlay) {
                 captureView.loaded()
             }
         }
@@ -533,9 +863,21 @@ FocusScope {
         onCameraStatusChanged: {
             if (camera.cameraStatus === Camera.ActiveStatus) {
                 reactivateTimer.retryCounter = 0
+                if (captureView._qtFallbackCapturePending) {
+                    captureView._qtFallbackCapturePending = false
+                    _captureWithQtMultimedia()
+                }
             } else {
-                _captureQueued = false
-                captureBusy = false
+                if (!captureView._camera2CapturePending
+                        && !captureView._camera2CaptureRunning
+                        && !captureView._qtFallbackCapturePending) {
+                    _captureQueued = false
+                    captureView._camera2LiveJpegCaptureRunning = false
+                    captureBusy = false
+                }
+                if (captureView._camera2CapturePending && camera.cameraStatus === Camera.UnloadedStatus) {
+                    camera2CaptureStartTimer.restart()
+                }
             }
 
             var backCameras = []
@@ -692,12 +1034,150 @@ FocusScope {
 
     CameraExtensions {
         id: extensions
+
+        onRawImageCaptured: {
+            camera._finishCamera2ImageCapture(path, mimeType)
+        }
+
+        onRawImageCaptureFailed: {
+            camera._failCamera2ImageCapture(error)
+        }
+    }
+
+    Connections {
+        target: captureView.camera2Viewfinder
+        ignoreUnknownSignals: true
+
+        onImageCaptured: {
+            camera._finishCamera2ImageCapture(path, mimeType)
+        }
+
+        onRawImageReady: {
+            extensions.processRawImage(captureView._camera2CaptureTargetPath,
+                                       rawPath,
+                                       metadataPath,
+                                       Settings.mode.rawCaptureExposure,
+                                       Settings.mode.rawCaptureJpegQuality,
+                                       Settings.mode.rawCaptureRotation,
+                                       Settings.global.rawCaptureSaveFormat,
+                                       Settings.mode.rawCaptureColorTemperature,
+                                       Settings.mode.rawCaptureColorTint,
+                                       Settings.mode.rawCaptureProgressiveJpeg)
+        }
+
+        onImageCaptureFailed: {
+            if (!camera._retryColdCamera2JpegCapture(error)) {
+                camera._failCamera2ImageCapture(error)
+            }
+        }
+    }
+
+    Timer {
+        id: camera2CaptureStartTimer
+
+        interval: 250
+        repeat: false
+        onTriggered: {
+            console.log("capture-timing qml start-timer-fired t="
+                        + (Date.now() - captureView._camera2CaptureStartedMs))
+            camera._startCamera2ImageCapture()
+        }
+    }
+
+    Timer {
+        id: camera2CaptureWatchdog
+
+        interval: captureView._camera2LiveJpegCaptureRunning
+                  ? 5000 : Math.max(1000, Settings.mode.rawCaptureTimeout * 1000)
+        repeat: false
+        onTriggered: {
+            if (captureView._camera2CaptureRunning) {
+                camera._failCamera2ImageCapture(
+                            "Warm JPEG timed out after "
+                            + (Date.now() - captureView._camera2CaptureStartedMs)
+                            + "ms: " + captureView._captureState())
+            }
+        }
     }
 
     Binding {
         target: captureView.viewfinder
         property: "source"
         value: camera
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "zoom"
+        value: captureView.camera2Zoom
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "focusMode"
+        value: Settings.mode.rawCaptureFocusMode
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "focusDistance"
+        value: parseFloat(Settings.mode.rawCaptureFocusDistance)
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "exposureCompensation"
+        value: Settings.global.exposureCompensation
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "sensorSensitivity"
+        value: Settings.mode.rawCaptureIso
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "exposureTime"
+        value: Settings.mode.rawCaptureShutterNs
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "aperture"
+        value: Settings.mode.rawCaptureAperture
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "noiseReduction"
+        value: Settings.mode.rawCaptureNoiseReduction
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "renderExposure"
+        value: parseFloat(Settings.mode.rawCaptureExposure)
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "sceneMode"
+        value: Settings.mode.rawCaptureScene
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "colorTemperature"
+        value: Settings.mode.camera2CaptureFormat === "raw"
+               ? Settings.mode.rawCaptureColorTemperature : 0
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "colorTint"
+        value: Settings.mode.camera2CaptureFormat === "raw"
+               ? Settings.mode.rawCaptureColorTint : 0
     }
 
     Rectangle {
@@ -826,7 +1306,8 @@ FocusScope {
                 })
                 overlayFadeIn.start()
                 overlayIncubator = null
-                if (camera.cameraState == Camera.ActiveState && captureOverlay) {
+                if ((camera.cameraState == Camera.ActiveState || captureView._camera2ViewfinderActive)
+                        && captureOverlay) {
                     captureView.loaded()
                 }
             } else if (status == Component.Error) {
@@ -847,32 +1328,54 @@ FocusScope {
     Item {
         id: focusArea
 
-        width: Screen.width
-               * camera.viewfinder.resolution.width
-               / camera.viewfinder.resolution.height
-        height: Screen.width
+        width: captureView._camera2ViewfinderActive
+               ? captureView._camera2PreviewWidth
+               : Screen.width * captureView._viewfinderAspectRatio
+        height: captureView._camera2ViewfinderActive
+                ? captureView._camera2PreviewHeight
+                : Screen.width
 
-        rotation: -captureView.viewfinderOrientation
+        rotation: captureView._camera2ViewfinderActive
+                  ? 0 : -captureView.viewfinderOrientation
         anchors {
             centerIn: parent
-            verticalCenterOffset: isPortrait ? viewfinderOffset : 0
-            horizontalCenterOffset: isPortrait ? 0 : viewfinderOffset
+            verticalCenterOffset: (captureView._camera2ViewfinderActive
+                                   ? captureView.camera2TopInset + focusArea.height / 2
+                                     - parent.height / 2
+                                   : (isPortrait ? viewfinderOffset : 0))
+            horizontalCenterOffset: captureView._camera2ViewfinderActive
+                                    ? focusArea.width / 2 - parent.width / 2
+                                    : (isPortrait ? 0 : viewfinderOffset)
         }
         opacity: captureOverlay ? 1.0 - captureOverlay.settingsOpacity : 1.0
 
         Repeater {
-            model: camera.focus.focusZones
+            model: captureView._camera2ViewfinderActive
+                   ? (captureView.tapFocusActive ? 1 : 0)
+                   : camera.focus.focusZones
             delegate: Item {
-                x: focusArea.width * (captureView._horizontalMirror
-                                      ? 1 - area.x - area.width
-                                      : area.x)
-                y: focusArea.height * (captureView._verticalMirror
-                                      ? 1 - area.y - area.height
-                                      : area.y)
-                width: focusArea.width * area.width
-                height: focusArea.height * area.height
+                readonly property bool camera2FocusZone: captureView._camera2ViewfinderActive
+                readonly property var zoneArea: camera2FocusZone
+                                                ? Qt.rect(Math.max(0, Math.min(0.85, captureView._camera2FocusPoint.x - 0.075)),
+                                                          Math.max(0, Math.min(0.85, captureView._camera2FocusPoint.y - 0.075)),
+                                                          0.15, 0.15)
+                                                : area
+                readonly property int zoneStatus: camera2FocusZone
+                                                  ? Camera.FocusAreaFocused
+                                                  : status
 
-                visible: status != Camera.FocusAreaUnused && camera.focus.focusPointMode == Camera.FocusPointCustom
+                x: focusArea.width * (captureView._horizontalMirror
+                                      ? 1 - zoneArea.x - zoneArea.width
+                                      : zoneArea.x)
+                y: focusArea.height * (captureView._verticalMirror
+                                      ? 1 - zoneArea.y - zoneArea.height
+                                      : zoneArea.y)
+                width: focusArea.width * zoneArea.width
+                height: focusArea.height * zoneArea.height
+
+                visible: camera2FocusZone
+                         || (zoneStatus != Camera.FocusAreaUnused
+                             && camera.focus.focusPointMode == Camera.FocusPointCustom)
 
                 Rectangle {
                     width: Math.min(parent.width, parent.height)
@@ -881,7 +1384,7 @@ FocusScope {
                     radius: width / 2
                     border {
                         width: Math.round(Theme.pixelRatio * 2)
-                        color: status == Camera.FocusAreaFocused
+                        color: zoneStatus == Camera.FocusAreaFocused
                                ? (Theme.colorScheme == Theme.LightOnDark
                                   ? Theme.highlightColor
                                   : Theme.highlightFromColor(Theme.highlightColor, Theme.LightOnDark))
@@ -908,14 +1411,22 @@ FocusScope {
 
     Keys.onVolumeDownPressed: {
         if (handleVolumeKeys && !event.isAutoRepeat) {
-            camera.lockAutoFocus()
-            captureOnVolumeRelease = true
+            if (_manualCamera2Focus) {
+                _changeManualFocusDistance(-1)
+            } else {
+                camera.lockAutoFocus()
+                captureOnVolumeRelease = true
+            }
         }
     }
     Keys.onVolumeUpPressed: {
         if (handleVolumeKeys && !event.isAutoRepeat) {
-            camera.lockAutoFocus()
-            captureOnVolumeRelease = true
+            if (_manualCamera2Focus) {
+                _changeManualFocusDistance(1)
+            } else {
+                camera.lockAutoFocus()
+                captureOnVolumeRelease = true
+            }
         }
     }
 
@@ -963,7 +1474,8 @@ FocusScope {
     Permissions {
         enabled: captureView.activeFocus
                     && camera.captureMode == Camera.CaptureStillImage
-                    && camera.cameraState == Camera.ActiveState
+                    && (camera.cameraState == Camera.ActiveState
+                        || captureView._camera2ViewfinderActive)
         autoRelease: true
         applicationClass: "camera"
 
