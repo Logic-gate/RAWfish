@@ -9,7 +9,7 @@ Summary:    RAWfish application
 Version:    1.3.1
 Release:    1
 License:    BSD-3-Clause
-URL:        https://github.com/sailfishos/rawfish
+URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2
 
 # libsfoscamera2.so is an Android/Bionic library loaded through libhybris from

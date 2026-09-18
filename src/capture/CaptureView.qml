@@ -591,6 +591,7 @@ FocusScope {
 
         function _finishCamera2ImageCapture(path, mimeType) {
             shutterEvent.play()
+            flashAnimation.start()
             captureView._camera2CaptureRunning = false
             captureView._camera2LiveJpegCaptureRunning = false
             captureView._unload = false
