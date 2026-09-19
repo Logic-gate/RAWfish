@@ -1,0 +1,92 @@
+name: Build RPM
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ANDROID_NDK_VERSION: '27.2.12479018'
+      SAILFISH_IMAGE: coderus/sailfishos-platform-sdk@sha256:31ba115546972af3630f4690acc204a4e09701358ae39be1883ca70e0eadda86
+      SAILFISH_TARGET: SailfishOS-5.1.0.11-aarch64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Build Android Camera2 bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+          export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          sh sfos-camera2-bridge/scripts/build-android.sh
+          test -s sfos-camera2-bridge/build/android/libsfoscamera2.so
+
+      - name: Build and verify Sailfish RPM
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p RPMS
+          chmod a+w RPMS
+          docker run --rm --privileged \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -e SAILFISH_TARGET \
+            "$SAILFISH_IMAGE" /bin/bash -euc '
+              mkdir -p "$HOME/rawfish-build"
+              cd "$HOME/rawfish-build"
+              cp -a /workspace/. .
+              test -s sfos-camera2-bridge/build/android/libsfoscamera2.so
+              mb2 -t "$SAILFISH_TARGET" build
+              found=0
+              for package in RPMS/rawfish-[0-9]*.aarch64.rpm; do
+                test -f "$package" || continue
+                rpm -qpl "$package" > /tmp/rawfish-files.txt
+                grep -Fx /usr/bin/rawfish /tmp/rawfish-files.txt
+                grep -Fx /usr/libexec/rawfish/sfos-camera2-probe /tmp/rawfish-files.txt
+                grep -Fx /usr/libexec/droid-hybris/system/lib64/libsfoscamera2.so /tmp/rawfish-files.txt
+                found=1
+              done
+              test "$found" -eq 1
+              cp RPMS/*.rpm /workspace/RPMS/
+            '
+
+      - name: Upload RPM artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: RAWfish-SailfishOS-5.1.0.11-aarch64-${{ github.run_number }}
+          path: RPMS/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" RPMS/*.rpm \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "RAWfish ${GITHUB_REF_NAME}" \
+            --notes "RAWfish ${GITHUB_REF_NAME}"
