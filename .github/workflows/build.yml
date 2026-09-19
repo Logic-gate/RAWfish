@@ -26,13 +26,13 @@ jobs:
       SAILFISH_TARGET: SailfishOS-5.1.0.11-aarch64
     steps:
       - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        uses: android-actions/setup-android@v4
 
       - name: Build Android Camera2 bridge
         shell: bash
