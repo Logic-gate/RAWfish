@@ -143,12 +143,14 @@ FocusScope {
     readonly property bool _liveJpegCapture: _camera2ViewfinderActive
                                             && Settings.mode.camera2CaptureFormat === "jpeg"
                                             && Settings.mode.rawCaptureSpeedMode !== "quality"
+                                            && camera2Viewfinder
     readonly property bool _warmJpegReady: _liveJpegCapture
                                            && camera2Viewfinder
                                            && camera2Viewfinder.jpegCaptureReady === true
     readonly property bool _liveRawCapture: _camera2ViewfinderActive
                                            && Settings.mode.camera2CaptureFormat === "raw"
                                            && Settings.mode.rawCaptureSpeedMode !== "quality"
+                                           && camera2Viewfinder
     readonly property bool _warmRawReady: _liveRawCapture
                                           && camera2Viewfinder
                                           && camera2Viewfinder.rawCaptureReady === true
@@ -759,22 +761,22 @@ FocusScope {
             }
             var liveJpegCapture = captureView._liveJpegCapture
             var liveWarmCapture = liveJpegCapture || captureView._liveRawCapture
-            if (captureView._camera2ViewfinderActive && !liveWarmCapture) {
-                captureView._unload = true
-                window.camera2CaptureBusy = true
-                console.log("capture-timing qml unload-request t="
-                            + (Date.now() - captureView._camera2CaptureStartedMs))
-            }
             captureOverlay.writeMetaData()
 
             if (extensions.rawImageCaptureAvailable) {
                 captureView._camera2CaptureTargetPath = Settings.photoCapturePath('jpg')
                 captureView._camera2CaptureCameraId = "0"
                 captureView._camera2CapturePending = true
-                captureView._unload = !liveWarmCapture
+                captureView._unload = false
                 if (liveWarmCapture) {
                     _startCamera2ImageCapture()
+                } else if (captureView._camera2ViewfinderActive
+                           && Settings.mode.rawCaptureSpeedMode !== "quality") {
+                    camera._failCamera2ImageCapture("Warm capture not ready: "
+                                                    + captureView._captureState())
                 } else if (camera.cameraStatus === Camera.UnloadedStatus) {
+                    captureView._unload = true
+                    window.camera2CaptureBusy = true
                     camera2CaptureStartTimer.restart()
                 }
             } else {

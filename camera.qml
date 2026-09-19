@@ -55,11 +55,15 @@ ApplicationWindow {
         id: videoOutput
 
         z: -1
-        width: window.width
-        height: window.width < window.height
+        width: camera2Preview.active
+               ? camera2Preview.width
+               : window.width
+        height: camera2Preview.active
+                ? camera2Preview.height
+                : window.width < window.height
                 ? window.height - Math.round(window.height * 0.34)
                 : window.height
-        visible: pageStack.depth < 2 && !galleryActive
+        visible: pageStack.depth < 2 && !galleryActive && !camera2Preview.active
 
         Behavior on y {
             enabled: !galleryVisible

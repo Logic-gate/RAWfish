@@ -7,7 +7,7 @@
 Name:       rawfish
 Summary:    RAWfish application
 Version:    1.3.1
-Release:    1
+Release:    2
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2

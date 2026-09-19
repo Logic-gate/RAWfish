@@ -16,9 +16,11 @@
 #include <QSGTexture>
 #include <QStringList>
 #include <QTransform>
+#include <QVariantMap>
 #include <QtGlobal>
 
 #include <climits>
+#include <cmath>
 #include <thread>
 
 namespace {
@@ -52,6 +54,13 @@ QSize sizeFromString(const QString &value)
     const int width = parts.at(0).toInt(&widthOk);
     const int height = parts.at(1).toInt(&heightOk);
     return widthOk && heightOk ? QSize(width, height) : QSize();
+}
+
+qreal exposureNsFromText(const QString &value)
+{
+    bool ok = false;
+    const qlonglong exposure = value.toLongLong(&ok);
+    return ok && exposure > 0 ? qreal(exposure) : 0.0;
 }
 
 }
@@ -511,6 +520,13 @@ QString Camera2Preview::errorString() const
     return m_errorString;
 }
 
+/**
+ * @brief Uploads the latest bridge RGB frame into the Qt scene graph.
+ *
+ * The bridge already converts YUV420 to RGB888. This stage keeps texture
+ * filtering linear so preview scaling does not add extra nearest-neighbor
+ * aliasing on top of the bridge conversion.
+ */
 QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
                                          UpdatePaintNodeData *)
 {
@@ -625,10 +641,14 @@ bool Camera2Preview::captureJpeg(const QString &path)
                                           / m_captureTimer.interval());
         const QByteArray command = QByteArrayLiteral("capture-jpeg ")
                 + QFile::encodeName(path) + QByteArrayLiteral("\n");
+        sendSettings(true);
+        m_restorePreviewSettingsAfterCapture = true;
         if (m_process->write(command) >= 0) {
             m_captureTimer.start();
             return true;
         }
+        m_restorePreviewSettingsAfterCapture = false;
+        sendSettings(false);
         m_pendingCapturePath.clear();
         m_pendingCaptureFinalPath.clear();
         m_pendingRawCapture = false;
@@ -673,10 +693,14 @@ bool Camera2Preview::captureRaw(const QString &rawPath,
     const QByteArray command = QByteArrayLiteral("capture-raw ")
             + QFile::encodeName(rawPath) + QByteArrayLiteral(" ")
             + QFile::encodeName(metadataPath) + QByteArrayLiteral("\n");
+    sendSettings(true);
+    m_restorePreviewSettingsAfterCapture = true;
     if (m_process->write(command) >= 0) {
         m_captureTimer.start();
         return true;
     }
+    m_restorePreviewSettingsAfterCapture = false;
+    sendSettings(false);
 
     m_pendingCapturePath.clear();
     m_pendingCaptureFinalPath.clear();
@@ -722,6 +746,10 @@ void Camera2Preview::finishPreviewCapture(const QString &path, bool success,
                                           const QString &error)
 {
     m_previewCaptureRunning = false;
+    if (m_restorePreviewSettingsAfterCapture) {
+        m_restorePreviewSettingsAfterCapture = false;
+        sendSettings(false);
+    }
     if (success) {
         savePreviewMetadata(path, m_frame.size());
         emit imageCaptured(path, QStringLiteral("image/jpeg"));
@@ -828,6 +856,7 @@ void Camera2Preview::processFinished(int, QProcess::ExitStatus)
         m_pendingCaptureSize = -1;
         m_pendingCaptureStablePolls = 0;
         m_previewCaptureRunning = false;
+        m_restorePreviewSettingsAfterCapture = false;
         emit imageCaptureFailed(QStringLiteral("Camera2 preview stopped during capture"));
     }
     if (m_active) {
@@ -852,6 +881,10 @@ void Camera2Preview::checkCaptureResult()
             m_pendingCaptureSize = -1;
             m_pendingCaptureStablePolls = 0;
             m_previewCaptureRunning = false;
+            if (m_restorePreviewSettingsAfterCapture) {
+                m_restorePreviewSettingsAfterCapture = false;
+                sendSettings(false);
+            }
             emit imageCaptureFailed(QStringLiteral("Camera2 capture timed out"));
         }
         return;
@@ -923,6 +956,10 @@ void Camera2Preview::checkCaptureResult()
         m_pendingCaptureSize = -1;
         m_pendingCaptureStablePolls = 0;
         m_previewCaptureRunning = false;
+        if (m_restorePreviewSettingsAfterCapture) {
+            m_restorePreviewSettingsAfterCapture = false;
+            sendSettings(false);
+        }
         emit imageCaptureFailed(QStringLiteral("Camera2 JPEG capture timed out"));
     }
 }
@@ -1023,9 +1060,18 @@ void Camera2Preview::stop()
 
 void Camera2Preview::sendSettings()
 {
+    sendSettings(false);
+}
+
+void Camera2Preview::sendSettings(bool captureExposure)
+{
     if (!m_process || m_process->state() != QProcess::Running) {
         return;
     }
+
+    const int sensorSensitivity = captureExposure ? m_sensorSensitivity : 0;
+    const QString exposureTime = captureExposure ? m_exposureTime
+                                                 : QStringLiteral("0");
 
     m_process->write(QStringLiteral("settings %1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11\n")
                      .arg(m_focusMode)
@@ -1034,8 +1080,8 @@ void Camera2Preview::sendSettings()
                      .arg(m_sceneMode)
                      .arg(m_colorTemperature)
                      .arg(m_colorTint)
-                     .arg(m_sensorSensitivity)
-                     .arg(m_exposureTime)
+                     .arg(sensorSensitivity)
+                     .arg(exposureTime)
                      .arg(m_aperture)
                      .arg(m_noiseReduction)
                      .arg(m_zoom, 0, 'f', 4)
@@ -1130,21 +1176,38 @@ void Camera2Preview::updateHistogram(const QImage &frame)
         return;
     }
 
-    int bins[HistogramBins] = {};
+    int redBins[HistogramBins] = {};
+    int greenBins[HistogramBins] = {};
+    int blueBins[HistogramBins] = {};
+    const qreal isoGain = m_sensorSensitivity > 0 && m_liveSensorSensitivity > 0
+            ? qreal(m_sensorSensitivity) / qreal(m_liveSensorSensitivity) : 1.0;
+    const qreal captureExposure = exposureNsFromText(m_exposureTime);
+    const qreal previewExposure = exposureNsFromText(m_liveExposureTime);
+    const qreal shutterGain = captureExposure > 0.0 && previewExposure > 0.0
+            ? captureExposure / previewExposure : 1.0;
+    const qreal gain = isoGain * shutterGain;
     const int step = qMax(1, qMin(frame.width(), frame.height()) / 160);
     for (int y = 0; y < frame.height(); y += step) {
         const uchar *line = frame.constScanLine(y);
         for (int x = 0; x < frame.width(); x += step) {
             const uchar *pixel = line + x * 3;
-            const int luma = (77 * pixel[0] + 150 * pixel[1] + 29 * pixel[2]) >> 8;
-            ++bins[qBound(0, luma * HistogramBins / 256, HistogramBins - 1)];
+            const int red = qBound(0, int(std::round(pixel[0] * gain)), 255);
+            const int green = qBound(0, int(std::round(pixel[1] * gain)), 255);
+            const int blue = qBound(0, int(std::round(pixel[2] * gain)), 255);
+            ++redBins[qBound(0, red * HistogramBins / 256, HistogramBins - 1)];
+            ++greenBins[qBound(0, green * HistogramBins / 256, HistogramBins - 1)];
+            ++blueBins[qBound(0, blue * HistogramBins / 256, HistogramBins - 1)];
         }
     }
 
     QVariantList histogram;
     histogram.reserve(HistogramBins);
     for (int index = 0; index < HistogramBins; ++index) {
-        histogram.append(bins[index]);
+        QVariantMap bin;
+        bin.insert(QStringLiteral("r"), redBins[index]);
+        bin.insert(QStringLiteral("g"), greenBins[index]);
+        bin.insert(QStringLiteral("b"), blueBins[index]);
+        histogram.append(bin);
     }
 
     if (m_histogram != histogram) {
@@ -1213,6 +1276,10 @@ void Camera2Preview::parseCaptureResult(const QMap<QString, QString> &fields)
     m_pendingCaptureSize = -1;
     m_pendingCaptureStablePolls = 0;
     m_previewCaptureRunning = false;
+    if (m_restorePreviewSettingsAfterCapture) {
+        m_restorePreviewSettingsAfterCapture = false;
+        sendSettings(false);
+    }
 
     if (status == QLatin1String("ok")) {
         if (rawCapture) {

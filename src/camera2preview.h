@@ -216,6 +216,7 @@ private:
     void parseCaptureResult(const QMap<QString, QString> &fields);
     void updateHistogram(const QImage &frame);
     void sendSettings();
+    void sendSettings(bool captureExposure);
     void setErrorString(const QString &errorString);
     QString helperPath() const;
 
@@ -261,6 +262,7 @@ private:
     int m_pendingCaptureStablePolls = 0;
     int m_capturePollsRemaining = 0;
     bool m_pendingRawCapture = false;
+    bool m_restorePreviewSettingsAfterCapture = false;
     QTimer m_captureTimer;
     QProcess *m_process = nullptr;
 };
