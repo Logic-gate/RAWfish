@@ -22,3 +22,4 @@ git_check.sh
 .sfdk
 logs_jp2/
 RPM/
+*.rpm

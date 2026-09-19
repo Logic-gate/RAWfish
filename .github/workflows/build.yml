@@ -8,6 +8,17 @@ on:
       - 'v*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish RPMs to a GitHub Release
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: Release tag. Defaults to v<version>-<release>.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -34,6 +45,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Read package version
+        id: package
+        shell: bash
+        env:
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag || '' }}
+        run: |
+          set -euo pipefail
+          version="$(awk '$1 == "Version:" { print $2; exit }' rpm/rawfish.spec)"
+          release="$(awk '$1 == "Release:" { print $2; exit }' rpm/rawfish.spec)"
+          test -n "$version"
+          test -n "$release"
+          tag="${INPUT_RELEASE_TAG:-v${version}-${release}}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "RPM version: ${version}-${release}"
+
       - name: Build Android Camera2 bridge
         shell: bash
         run: |
@@ -45,6 +73,9 @@ jobs:
 
       - name: Build and verify Sailfish RPM
         shell: bash
+        env:
+          RPM_VERSION: ${{ steps.package.outputs.version }}
+          RPM_RELEASE: ${{ steps.package.outputs.release }}
         run: |
           set -euo pipefail
           mkdir -p RPMS
@@ -52,6 +83,8 @@ jobs:
           docker run --rm --privileged \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -e SAILFISH_TARGET \
+            -e RPM_VERSION \
+            -e RPM_RELEASE \
             "$SAILFISH_IMAGE" /bin/bash -euc '
               mkdir -p "$HOME/rawfish-build"
               cd "$HOME/rawfish-build"
@@ -61,6 +94,7 @@ jobs:
               found=0
               for package in RPMS/rawfish-[0-9]*.aarch64.rpm; do
                 test -f "$package" || continue
+                test "$(basename "$package")" = "rawfish-${RPM_VERSION}-${RPM_RELEASE}.aarch64.rpm"
                 rpm -qpl "$package" > /tmp/rawfish-files.txt
                 grep -Fx /usr/bin/rawfish /tmp/rawfish-files.txt
                 grep -Fx /usr/libexec/rawfish/sfos-camera2-probe /tmp/rawfish-files.txt
@@ -72,21 +106,32 @@ jobs:
             '
 
       - name: Upload RPM artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v7
         with:
-          name: RAWfish-SailfishOS-5.1.0.11-aarch64-${{ github.run_number }}
+          name: rawfish-${{ steps.package.outputs.version }}-${{ steps.package.outputs.release }}.aarch64
           path: RPMS/*.rpm
           if-no-files-found: error
           retention-days: 14
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.publish_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" RPMS/*.rpm \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "RAWfish ${GITHUB_REF_NAME}" \
-            --notes "RAWfish ${GITHUB_REF_NAME}"
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            tag="${{ steps.package.outputs.tag }}"
+          fi
+          if gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "$tag" RPMS/*.rpm \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+          else
+            gh release create "$tag" RPMS/*.rpm \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "RAWfish $tag" \
+              --notes "RAWfish $tag"
+          fi
