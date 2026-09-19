@@ -28,7 +28,7 @@ desktop.path = /usr/share/applications
 desktop.files = \
             rawfish.desktop
 
-icons.path = /usr/share/icons/hicolor/86x86/apps
+icons.path = /usr/share/icons/hicolor/500x500/apps
 icons.files = icons/rawfish-sfos.png
 
 DEPLOYMENT_PATH = /usr/share/$$TARGET

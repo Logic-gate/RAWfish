@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 Name:       rawfish
-Summary:    RAWfish application
+Summary:    Camera application
 Version:    1.3.1
 Release:    2
 License:    BSD-3-Clause
@@ -55,7 +55,7 @@ Requires:  sailfish-components-media-qt5 >= 0.0.18
 Requires:  sailfish-components-gallery-qt5 >= 1.1.10
 Requires:  sailfish-policy >= 0.2.59
 Requires:  jolla-settings-system >= 1.0.70
-Requires:  libngf-qt5-declarative
+Requires:  qml(Nemo.Ngf)
 Requires:  qr-filter-qml-plugin
 Requires:  sailfish-content-graphics >= 1.2.2
 Requires:  gstreamer1.0-plugins-good
@@ -86,7 +86,7 @@ The RAWfish application.
 %files
 %license LICENSES/BSD-3-Clause.txt
 %{_datadir}/applications/rawfish.desktop
-%{_datadir}/icons/hicolor/86x86/apps/rawfish-sfos.png
+%{_datadir}/icons/hicolor/500x500/apps/rawfish-sfos.png
 %dir %{_datadir}/rawfish
 %{_datadir}/rawfish/camera.qml
 %{_datadir}/rawfish/pages
@@ -107,3 +107,7 @@ The RAWfish application.
 %dir %{_libexecdir}/droid-hybris/system/lib64
 %{_libexecdir}/droid-hybris/system/lib64/libsfoscamera2.so
 %{_sysconfdir}/dconf/db/vendor.d/00-rawfish.txt
+
+%changelog
+* Sat Sep 19 2026 RAWfish Contributors <@logic-gate:roshan.jp> - 1.3.1-2
+- Package RAWfish release 2.
