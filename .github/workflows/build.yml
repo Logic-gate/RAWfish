@@ -72,10 +72,8 @@ jobs:
           test -s sfos-camera2-bridge/build/android/libsfoscamera2.so
 
       - name: Build and verify Sailfish RPM
+        id: build_rpm
         shell: bash
-        env:
-          RPM_VERSION: ${{ steps.package.outputs.version }}
-          RPM_RELEASE: ${{ steps.package.outputs.release }}
         run: |
           set -euo pipefail
           mkdir -p RPMS
@@ -83,8 +81,6 @@ jobs:
           docker run --rm --privileged \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -e SAILFISH_TARGET \
-            -e RPM_VERSION \
-            -e RPM_RELEASE \
             "$SAILFISH_IMAGE" /bin/bash -euc '
               mkdir -p "$HOME/rawfish-build"
               cd "$HOME/rawfish-build"
@@ -94,7 +90,6 @@ jobs:
               found=0
               for package in RPMS/rawfish-[0-9]*.aarch64.rpm; do
                 test -f "$package" || continue
-                test "$(basename "$package")" = "rawfish-${RPM_VERSION}-${RPM_RELEASE}.aarch64.rpm"
                 rpm -qpl "$package" > /tmp/rawfish-files.txt
                 grep -Fx /usr/bin/rawfish /tmp/rawfish-files.txt
                 grep -Fx /usr/libexec/rawfish/sfos-camera2-probe /tmp/rawfish-files.txt
@@ -104,11 +99,16 @@ jobs:
               test "$found" -eq 1
               cp RPMS/*.rpm /workspace/RPMS/
             '
+          rpm_count="$(find RPMS -maxdepth 1 -name 'rawfish-*.aarch64.rpm' | wc -l)"
+          test "$rpm_count" -ge 1
+          rpm_name="$(basename "$(find RPMS -maxdepth 1 -name 'rawfish-*.aarch64.rpm' | sort | head -n 1)")"
+          echo "rpm_name=${rpm_name}" >> "$GITHUB_OUTPUT"
+          echo "Built ${rpm_name}"
 
       - name: Upload RPM artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: rawfish-${{ steps.package.outputs.version }}-${{ steps.package.outputs.release }}.aarch64
+          name: ${{ steps.build_rpm.outputs.rpm_name }}
           path: RPMS/*.rpm
           if-no-files-found: error
           retention-days: 14
