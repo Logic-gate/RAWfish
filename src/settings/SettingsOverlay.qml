@@ -362,22 +362,28 @@ PinchArea {
 
                             var peak = 1
                             for (var index = 0; index < values.length; ++index) {
-                                peak = Math.max(peak, values[index])
+                                peak = Math.max(peak, values[index].r,
+                                                values[index].g, values[index].b)
                             }
 
-                            var barWidth = width / values.length
-                            for (index = 0; index < values.length; ++index) {
-                                var barHeight = Math.max(1, values[index] / peak * height)
-                                context.fillStyle = index === 0
-                                        ? Qt.rgba(0.25, 0.55, 1.0, 0.55)
-                                        : index === values.length - 1
-                                          ? Qt.rgba(1.0, 0.35, 0.25, 0.55)
-                                          : Qt.rgba(1, 1, 1, 0.30)
-                                context.fillRect(index * barWidth,
-                                                 height - barHeight,
-                                                 Math.max(1, barWidth - 1),
-                                                 barHeight)
+                            function drawChannel(key, color) {
+                                context.beginPath()
+                                context.moveTo(0, height)
+                                for (var i = 0; i < values.length; ++i) {
+                                    var x = values.length === 1 ? 0
+                                            : i * width / (values.length - 1)
+                                    var y = height - values[i][key] / peak * height
+                                    context.lineTo(x, y)
+                                }
+                                context.lineTo(width, height)
+                                context.closePath()
+                                context.fillStyle = color
+                                context.fill()
                             }
+
+                            drawChannel("r", Qt.rgba(1.0, 0.2, 0.15, 0.32))
+                            drawChannel("g", Qt.rgba(0.2, 1.0, 0.35, 0.28))
+                            drawChannel("b", Qt.rgba(0.25, 0.55, 1.0, 0.32))
                         }
 
                         Connections {

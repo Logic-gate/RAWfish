@@ -171,7 +171,7 @@ Page {
                     target: captureView.viewfinder
                     property: "y"
                     value: captureView._camera2ViewfinderActive
-                           ? 0
+                           ? captureView.camera2TopInset
                            : !captureView.isPortrait
                              ? captureView._viewfinderPosition
                                + (page.orientation == Orientation.Landscape

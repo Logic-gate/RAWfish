@@ -377,8 +377,18 @@ bool sfos_camera2_set_manual_sensor(const ACameraMetadata *metadata,
         exposure_time_ns = 16666667;
     }
 
-    bool ok = sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE,
+    bool ok = sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_MODE,
+                                          ACAMERA_CONTROL_MODE_OFF) &&
+              sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE,
                                           ACAMERA_CONTROL_AE_MODE_OFF);
+    if (sfos_camera2_metadata_has_i32(
+            metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
+            ACAMERA_CONTROL_CAPTURE_INTENT)) {
+        ok = sfos_camera2_set_request_u8(request,
+                                         ACAMERA_CONTROL_CAPTURE_INTENT,
+                                         ACAMERA_CONTROL_CAPTURE_INTENT_MANUAL) &&
+             ok;
+    }
     int32_t sensitivity_range[2] = { sensitivity, sensitivity };
     if (sfos_camera2_copy_i32_array(
             metadata, ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE,
@@ -395,6 +405,26 @@ bool sfos_camera2_set_manual_sensor(const ACameraMetadata *metadata,
         } else if (exposure_time_ns > exposure_range[1]) {
             exposure_time_ns = exposure_range[1];
         }
+    }
+
+    int64_t frame_duration_ns = exposure_time_ns + 1000000;
+    int64_t max_frame_duration_ns = sfos_camera2_first_i64(
+        metadata, ACAMERA_SENSOR_INFO_MAX_FRAME_DURATION, 0);
+    if (max_frame_duration_ns > 0 &&
+            frame_duration_ns > max_frame_duration_ns) {
+        frame_duration_ns = max_frame_duration_ns;
+    }
+
+    if (frame_duration_ns < exposure_time_ns) {
+        frame_duration_ns = exposure_time_ns;
+    }
+
+    if (sfos_camera2_metadata_has_i32(
+            metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
+            ACAMERA_SENSOR_FRAME_DURATION)) {
+        ok = sfos_camera2_set_request_i64(
+                 request, ACAMERA_SENSOR_FRAME_DURATION,
+                 frame_duration_ns) && ok;
     }
 
     return sfos_camera2_set_request_i32(

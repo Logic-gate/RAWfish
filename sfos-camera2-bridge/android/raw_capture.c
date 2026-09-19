@@ -689,6 +689,15 @@ static void capture_completed(void *opaque, ACameraCaptureSession *session,
         result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
     destination->sensitivity = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_SENSITIVITY, -1);
+    fprintf(stderr,
+            "capture-exposure raw requested_iso=%d requested_shutter=%lld "
+            "actual_iso=%d actual_shutter=%lld actual_frame=%lld\n",
+            context->sensor_sensitivity,
+            (long long)context->exposure_time_ns,
+            destination->sensitivity,
+            (long long)destination->exposure_time_ns,
+            (long long)sfos_camera2_first_i64(
+                result, ACAMERA_SENSOR_FRAME_DURATION, -1));
     destination->dynamic_white_level = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_DYNAMIC_WHITE_LEVEL, -1);
     destination->af_mode = sfos_camera2_first_u8(

@@ -51,6 +51,11 @@ struct jpeg_context {
     int64_t capture_submit_ms;
     int64_t image_available_ms;
     int64_t file_written_ms;
+    int32_t requested_sensitivity;
+    int64_t requested_exposure_time_ns;
+    int32_t actual_sensitivity;
+    int64_t actual_exposure_time_ns;
+    int64_t actual_frame_duration_ns;
 };
 
 static void jpeg_device_disconnected(void *opaque, ACameraDevice *device)
@@ -108,6 +113,34 @@ static void jpeg_image_available(void *opaque, AImageReader *reader)
                               memory_order_release);
     }
     AImage_delete(image);
+}
+
+static void jpeg_capture_completed(void *opaque,
+                                   ACameraCaptureSession *session,
+                                   ACaptureRequest *request,
+                                   const ACameraMetadata *result)
+{
+    (void)session;
+    (void)request;
+    struct jpeg_context *context = opaque;
+    if (!context || !result) {
+        return;
+    }
+
+    context->actual_sensitivity = sfos_camera2_first_i32(
+        result, ACAMERA_SENSOR_SENSITIVITY, -1);
+    context->actual_exposure_time_ns = sfos_camera2_first_i64(
+        result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
+    context->actual_frame_duration_ns = sfos_camera2_first_i64(
+        result, ACAMERA_SENSOR_FRAME_DURATION, -1);
+    fprintf(stderr,
+            "capture-exposure jpeg requested_iso=%d requested_shutter=%lld "
+            "actual_iso=%d actual_shutter=%lld actual_frame=%lld\n",
+            context->requested_sensitivity,
+            (long long)context->requested_exposure_time_ns,
+            context->actual_sensitivity,
+            (long long)context->actual_exposure_time_ns,
+            (long long)context->actual_frame_duration_ns);
 }
 
 static void jpeg_status_json(char *out, size_t out_size, bool success,
@@ -184,6 +217,8 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_capture_jpeg(
     context.height = height;
     context.jpeg_path = jpeg_path;
     context.started_ms = sfos_camera2_now_ms();
+    context.requested_sensitivity = sensor_sensitivity;
+    context.requested_exposure_time_ns = exposure_time_ns;
 
     if (!camera_id || !*camera_id || width <= 0 || height <= 0 ||
             !jpeg_path || !*jpeg_path || timeout_ms < 1000 ||
@@ -320,9 +355,19 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_capture_jpeg(
     }
     context.session_ms = sfos_camera2_now_ms() - context.started_ms;
 
+    ACameraCaptureSession_captureCallbacks capture_callbacks = {
+        .context = &context,
+        .onCaptureStarted = NULL,
+        .onCaptureProgressed = NULL,
+        .onCaptureCompleted = jpeg_capture_completed,
+        .onCaptureFailed = NULL,
+        .onCaptureSequenceCompleted = NULL,
+        .onCaptureSequenceAborted = NULL,
+        .onCaptureBufferLost = NULL,
+    };
     ACaptureRequest *requests[] = { request };
     camera_status = ACameraCaptureSession_capture(
-        session, NULL, 1, requests, NULL);
+        session, &capture_callbacks, 1, requests, NULL);
     atomic_store_explicit(&context.status.last_camera_status, camera_status,
                           memory_order_release);
     if (camera_status != ACAMERA_OK) {

@@ -637,6 +637,57 @@ static void preview_write_le32(unsigned char *target, uint32_t value)
     target[3] = (unsigned char)((value >> 24) & 0xff);
 }
 
+/**
+ * @brief Samples one YUV420 chroma plane with a small bilinear filter.
+ *
+ * Camera2 YUV420 chroma planes are half-resolution. Using a single nearest
+ * chroma sample for every 2x2 luma block makes colored edges shimmer when the
+ * app scales the preview again, so odd luma rows/columns blend toward the next
+ * chroma sample while edges clamp to the valid plane area.
+ */
+static int preview_sample_chroma(const uint8_t *plane, int length,
+                                 int row_stride, int pixel_stride,
+                                 int chroma_width, int chroma_height,
+                                 int x, int y, int *value)
+{
+    if (!plane || !value || length <= 0 || row_stride <= 0 ||
+            pixel_stride <= 0 || chroma_width <= 0 || chroma_height <= 0) {
+        return -1;
+    }
+
+    int x0 = x / 2;
+    int y0 = y / 2;
+    int x1 = x0 + 1 < chroma_width ? x0 + 1 : x0;
+    int y1 = y0 + 1 < chroma_height ? y0 + 1 : y0;
+    int fx = x & 1;
+    int fy = y & 1;
+    int w00 = (2 - fx) * (2 - fy);
+    int w10 = fx * (2 - fy);
+    int w01 = (2 - fx) * fy;
+    int w11 = fx * fy;
+    int i00 = y0 * row_stride + x0 * pixel_stride;
+    int i10 = y0 * row_stride + x1 * pixel_stride;
+    int i01 = y1 * row_stride + x0 * pixel_stride;
+    int i11 = y1 * row_stride + x1 * pixel_stride;
+
+    if (i00 < 0 || i10 < 0 || i01 < 0 || i11 < 0 ||
+            i00 >= length || i10 >= length ||
+            i01 >= length || i11 >= length) {
+        return -1;
+    }
+
+    *value = (plane[i00] * w00 + plane[i10] * w10 +
+              plane[i01] * w01 + plane[i11] * w11 + 2) / 4;
+    return 0;
+}
+
+/**
+ * @brief Converts one Camera2 YUV420 preview image to framed RGB888 output.
+ *
+ * The Sailfish side consumes the unchanged SF2P protocol: a 16-byte header
+ * followed by tightly-packed RGB888 pixels. Only chroma reconstruction happens
+ * here; final preview scaling remains in the Qt scene graph.
+ */
 static int preview_write_rgb_frame(struct preview_context *context,
                                    AImage *image)
 {
@@ -684,21 +735,27 @@ static int preview_write_rgb_frame(struct preview_context *context,
     }
 
     int result = 0;
+    const int chroma_width = (width + 1) / 2;
+    const int chroma_height = (height + 1) / 2;
     for (int y = 0; y < height; ++y) {
         unsigned char *row = frame + (size_t)y * (size_t)width * 3;
         for (int x = 0; x < width; ++x) {
             int y_index = y * row_y + x * pixel_y;
-            int uv_x = x / 2;
-            int uv_y = y / 2;
-            int u_index = uv_y * row_u + uv_x * pixel_u;
-            int v_index = uv_y * row_v + uv_x * pixel_v;
-            if (y_index >= len_y || u_index >= len_u || v_index >= len_v) {
+            int sampled_u = 0;
+            int sampled_v = 0;
+            if (y_index < 0 || y_index >= len_y ||
+                    preview_sample_chroma(plane_u, len_u, row_u, pixel_u,
+                                          chroma_width, chroma_height,
+                                          x, y, &sampled_u) != 0 ||
+                    preview_sample_chroma(plane_v, len_v, row_v, pixel_v,
+                                          chroma_width, chroma_height,
+                                          x, y, &sampled_v) != 0) {
                 result = -1;
                 goto done;
             }
             int yy = plane_y[y_index];
-            int uu = plane_u[u_index] - 128;
-            int vv = plane_v[v_index] - 128;
+            int uu = sampled_u - 128;
+            int vv = sampled_v - 128;
             row[x * 3] = preview_clip(yy + ((91881 * vv) >> 16));
             row[x * 3 + 1] = preview_clip(
                 yy - ((22554 * uu + 46802 * vv) >> 16));
@@ -862,6 +919,35 @@ static void preview_capture_completed(void *opaque,
     if (sensitivity > 0 || exposure_time > 0) {
         preview_write_metadata(context, sensitivity, exposure_time);
     }
+}
+
+static void preview_jpeg_capture_completed(void *opaque,
+                                           ACameraCaptureSession *session,
+                                           ACaptureRequest *request,
+                                           const ACameraMetadata *result)
+{
+    (void)session;
+    (void)request;
+    struct preview_context *context = opaque;
+    if (!context || !result) {
+        return;
+    }
+
+    int32_t actual_sensitivity = sfos_camera2_first_i32(
+        result, ACAMERA_SENSOR_SENSITIVITY, -1);
+    int64_t actual_exposure_time = sfos_camera2_first_i64(
+        result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
+    int64_t actual_frame_duration = sfos_camera2_first_i64(
+        result, ACAMERA_SENSOR_FRAME_DURATION, -1);
+    fprintf(stderr,
+            "capture-exposure warm-jpeg requested_iso=%d "
+            "requested_shutter=%lld actual_iso=%d actual_shutter=%lld "
+            "actual_frame=%lld\n",
+            context->sensor_sensitivity,
+            (long long)context->exposure_time_ns,
+            actual_sensitivity,
+            (long long)actual_exposure_time,
+            (long long)actual_frame_duration);
 }
 
 static void preview_jpeg_image_available(void *opaque, AImageReader *reader)
@@ -1153,6 +1239,16 @@ static void preview_raw_capture_completed(void *opaque,
         result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
     destination->sensitivity = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_SENSITIVITY, -1);
+    fprintf(stderr,
+            "capture-exposure warm-raw requested_iso=%d "
+            "requested_shutter=%lld actual_iso=%d actual_shutter=%lld "
+            "actual_frame=%lld\n",
+            context->sensor_sensitivity,
+            (long long)context->exposure_time_ns,
+            destination->sensitivity,
+            (long long)destination->exposure_time_ns,
+            (long long)sfos_camera2_first_i64(
+                result, ACAMERA_SENSOR_FRAME_DURATION, -1));
     destination->color_gains_count = sfos_camera2_copy_float_array(
         result, ACAMERA_COLOR_CORRECTION_GAINS,
         destination->color_gains, 4);
@@ -1496,7 +1592,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
         preview_configure_request(jpeg_request, &context, characteristics, 1);
     }
     if (raw_request) {
-        preview_configure_request(raw_request, &context, characteristics, 0);
+        preview_configure_request(raw_request, &context, characteristics, 1);
     }
 
     ACameraCaptureSession_stateCallbacks session_callbacks = {
@@ -1570,7 +1666,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
-                                              characteristics, 0);
+                                              characteristics, 1);
                 }
                 ACaptureRequest *requests[] = { request };
                 ACameraCaptureSession_setRepeatingRequest(
@@ -1590,7 +1686,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
-                                              characteristics, 0);
+                                              characteristics, 1);
                 }
                 ACaptureRequest *requests[] = { request };
                 ACameraCaptureSession_setRepeatingRequest(
@@ -1621,7 +1717,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
-                                              characteristics, 0);
+                                              characteristics, 1);
                 }
                 ACaptureRequest *requests[] = { request };
                 ACameraCaptureSession_setRepeatingRequest(
@@ -1636,11 +1732,26 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 context.jpeg_available_ms = 0;
                 context.jpeg_written_ms = 0;
                 fprintf(stderr, "capture-timing bridge warm-jpeg command\n");
+                fprintf(stderr,
+                        "capture-exposure warm-jpeg submit requested_iso=%d "
+                        "requested_shutter=%lld\n",
+                        context.sensor_sensitivity,
+                        (long long)context.exposure_time_ns);
                 atomic_store_explicit(&context.jpeg_status, 0,
                                       memory_order_release);
+                ACameraCaptureSession_captureCallbacks jpeg_callbacks = {
+                    .context = &context,
+                    .onCaptureStarted = NULL,
+                    .onCaptureProgressed = NULL,
+                    .onCaptureCompleted = preview_jpeg_capture_completed,
+                    .onCaptureFailed = NULL,
+                    .onCaptureSequenceCompleted = NULL,
+                    .onCaptureSequenceAborted = NULL,
+                    .onCaptureBufferLost = NULL,
+                };
                 ACaptureRequest *jpeg_requests[] = { jpeg_request };
                 camera_status_t jpeg_status = ACameraCaptureSession_capture(
-                    session, NULL, 1, jpeg_requests, NULL);
+                    session, &jpeg_callbacks, 1, jpeg_requests, NULL);
                 atomic_store_explicit(&context.status.last_camera_status,
                                       jpeg_status, memory_order_release);
                 if (jpeg_status == ACAMERA_OK) {
