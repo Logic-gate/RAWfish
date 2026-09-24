@@ -7,7 +7,7 @@
 Name:       rawfish
 Summary:    Camera application
 Version:    1.3.1
-Release:    2
+Release:    3
 License:    BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2
@@ -110,5 +110,5 @@ The RAWfish application.
 %{_sysconfdir}/dconf/db/vendor.d/00-rawfish.txt
 
 %changelog
-* Sat Sep 19 2026 RAWfish Contributors <rawfish@users.noreply.github.com> - 1.3.1-2
-- Package RAWfish release 2.
+* Thu Sep 24 2026 RAWfish Contributors <@logic-gate:roshan.jp> - 1.3.1-3
+- Package RAWfish release 3.
