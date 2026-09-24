@@ -56,9 +56,20 @@ ApplicationSettings {
 
     IconTextSwitch {
         automaticCheck: false
+        icon.source: "image://theme/icon-m-developer-mode"
+        text: "Advanced mode"
+        description: "Show RAWfish manual controls and RAW capture settings."
+        enabled: AccessPolicy.cameraEnabled
+        checked: Settings.global.advancedMode
+        onClicked: Settings.global.advancedMode = !Settings.global.advancedMode
+    }
+
+    IconTextSwitch {
+        automaticCheck: false
         icon.source: "image://theme/icon-m-qr"
         text: "Enable QR-code recognition"
         description: "Detect QR-code via camera."
+        visible: Settings.global.advancedMode || Settings.global.qrFilterEnabled
         enabled: AccessPolicy.cameraEnabled
         checked: Settings.global.qrFilterEnabled
         onClicked: Settings.global.qrFilterEnabled = !Settings.global.qrFilterEnabled
@@ -66,6 +77,7 @@ ApplicationSettings {
 
     ComboBox {
         label: "RAW capture files"
+        visible: Settings.global.advancedMode
         enabled: AccessPolicy.cameraEnabled
         currentIndex: {
             switch (Settings.global.rawCaptureSaveFormat) {

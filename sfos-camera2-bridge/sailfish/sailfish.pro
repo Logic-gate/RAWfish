@@ -3,4 +3,5 @@
 TEMPLATE = subdirs
 
 SUBDIRS = \
-    sfos-camera2-probe.pro
+    sfos-camera2-probe.pro \
+    sfos-raw16-to-jpeg.pro

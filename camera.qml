@@ -89,7 +89,8 @@ ApplicationWindow {
                 && window._applicationActive
                 && pageStack.depth < 2
                 && !galleryActive
-        visible: active
+        visible: pageStack.depth < 2 && !galleryActive
+                 && (active || window.camera2CaptureBusy)
         cameraId: Settings.global.position === Camera.FrontFace ? "1" : "0"
         previewSize: Qt.size(1280, 960)
         captureSize: Settings.mode.rawCaptureSize

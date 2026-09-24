@@ -122,7 +122,6 @@ DIST          = /usr/share/qt5/mkspecs/features/spec_pre.prf \
 		/usr/share/qt5/mkspecs/features/qt_config.prf \
 		/usr/share/qt5/mkspecs/linux-g++/qmake.conf \
 		/usr/share/qt5/mkspecs/features/spec_post.prf \
-		../../.qmake.stash \
 		/usr/share/qt5/mkspecs/features/exclusive_builds.prf \
 		/usr/share/qt5/mkspecs/features/default_pre.prf \
 		/usr/share/qt5/mkspecs/features/resolve_config.prf \
@@ -219,7 +218,6 @@ Makefile.sfos-camera2-probe: sfos-camera2-probe.pro /usr/share/qt5/mkspecs/linux
 		/usr/share/qt5/mkspecs/features/qt_config.prf \
 		/usr/share/qt5/mkspecs/linux-g++/qmake.conf \
 		/usr/share/qt5/mkspecs/features/spec_post.prf \
-		../../.qmake.stash \
 		/usr/share/qt5/mkspecs/features/exclusive_builds.prf \
 		/usr/share/qt5/mkspecs/features/default_pre.prf \
 		/usr/share/qt5/mkspecs/features/resolve_config.prf \
@@ -306,7 +304,6 @@ Makefile.sfos-camera2-probe: sfos-camera2-probe.pro /usr/share/qt5/mkspecs/linux
 /usr/share/qt5/mkspecs/features/qt_config.prf:
 /usr/share/qt5/mkspecs/linux-g++/qmake.conf:
 /usr/share/qt5/mkspecs/features/spec_post.prf:
-../../.qmake.stash:
 /usr/share/qt5/mkspecs/features/exclusive_builds.prf:
 /usr/share/qt5/mkspecs/features/default_pre.prf:
 /usr/share/qt5/mkspecs/features/resolve_config.prf:

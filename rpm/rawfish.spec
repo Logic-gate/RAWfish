@@ -8,7 +8,7 @@ Name:       rawfish
 Summary:    Camera application
 Version:    1.3.1
 Release:    2
-License:    BSD-3-Clause
+License:    BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2
 
@@ -28,7 +28,7 @@ BuildRequires:  pkgconfig(Qt5Multimedia)
 BuildRequires:  pkgconfig(Qt5Test)
 BuildRequires:  pkgconfig(Qt5Multimedia)
 BuildRequires:  pkgconfig(qdeclarative5-boostable)
-BuildRequires:  pkgconfig(libtiff-4)
+BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(mlite5) >= 0.2.5
 BuildRequires:  pkgconfig(systemsettings) >= 0.2.13
 BuildRequires:  qt5-qttools
@@ -102,6 +102,7 @@ The RAWfish application.
 %{_libdir}/qt5/qml/com/vivid/camera
 %dir %{_libexecdir}/rawfish
 %{_libexecdir}/rawfish/sfos-camera2-probe
+%{_libexecdir}/rawfish/sfos-raw16-to-jpeg
 %dir %{_libexecdir}/droid-hybris
 %dir %{_libexecdir}/droid-hybris/system
 %dir %{_libexecdir}/droid-hybris/system/lib64
@@ -109,5 +110,5 @@ The RAWfish application.
 %{_sysconfdir}/dconf/db/vendor.d/00-rawfish.txt
 
 %changelog
-* Sat Sep 19 2026 RAWfish Contributors <@logic-gate:roshan.jp> - 1.3.1-2
+* Sat Sep 19 2026 RAWfish Contributors <rawfish@users.noreply.github.com> - 1.3.1-2
 - Package RAWfish release 2.

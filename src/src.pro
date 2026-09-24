@@ -10,10 +10,8 @@ TARGET = $$qtLibraryTarget($$TARGET)
 MODULENAME = com/vivid/camera
 TARGETPATH = $$[QT_INSTALL_QML]/$$MODULENAME
 
-QT += gui-private qml quick multimedia
+QT += gui-private qml quick multimedia concurrent
 CONFIG += plugin link_pkgconfig c++14
-QMAKE_CXXFLAGS += -pthread
-LIBS += -pthread
 
 PKGCONFIG += mlite5 systemsettings libtiff-4
 

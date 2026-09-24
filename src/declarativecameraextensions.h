@@ -11,6 +11,7 @@
 #include <QProcess>
 #include <QQuickItem>
 #include <QElapsedTimer>
+#include <QFutureWatcher>
 #include <QScopedPointer>
 
 class QTemporaryDir;
@@ -33,6 +34,7 @@ public:
                                      int focusTimeoutSeconds, const QString &focusFailure,
                                      const QString &exposure, int jpegQuality,
                                      int rotationDegrees, const QString &rawSaveFormat,
+                                     const QString &rawRenderEngine,
                                      const QString &sceneMode, int colorTemperature,
                                      int colorTint, bool progressiveJpeg,
                                      int sensorSensitivity,
@@ -57,6 +59,7 @@ public:
                                      int jpegQuality,
                                      int rotationDegrees,
                                      const QString &rawSaveFormat,
+                                     const QString &rawRenderEngine,
                                      int colorTemperature,
                                      int colorTint,
                                      bool progressiveJpeg);
@@ -67,10 +70,12 @@ signals:
 
 private:
     void finishRawImageCapture(int exitCode, QProcess::ExitStatus exitStatus);
+    void finishRawImageRender();
     bool startRawImageProcess(const QString &program, const QStringList &arguments,
                               const QString &errorContext,
                               const QString &standardOutputPath = QString());
     bool renderRawImage();
+    bool renderRawImageWithFastJpegConverter();
     bool saveJsonSidecar(const QString &targetPath, const QByteArray &json);
     bool copyJsonSidecar(const QString &sourcePath, const QString &targetPath);
     bool writeDngSidecar(const QString &metadataPath, const QString &targetPath);
@@ -84,6 +89,7 @@ private:
     };
 
     QScopedPointer<QProcess> m_rawCaptureProcess;
+    QScopedPointer<QFutureWatcher<bool> > m_rawRenderWatcher;
     QScopedPointer<QTemporaryDir> m_rawCaptureDirectory;
     RawCaptureStage m_rawCaptureStage = RawCaptureIdle;
     QString m_rawCaptureTargetPath;
@@ -93,11 +99,13 @@ private:
     QString m_rawCaptureExposure;
     QByteArray m_rawCaptureStandardOutput;
     QString m_rawCaptureSaveFormat = QStringLiteral("raw16");
+    QString m_rawRenderEngine = QStringLiteral("internal");
     bool m_rawCaptureProgressiveJpeg = false;
     int m_rawCaptureJpegQuality = 92;
     int m_rawCaptureRotationDegrees = 0;
     int m_rawCaptureColorTemperature = 0;
     int m_rawCaptureColorTint = 0;
+    qint64 m_rawRenderStart = 0;
     QElapsedTimer m_rawCaptureTimer;
 };
 

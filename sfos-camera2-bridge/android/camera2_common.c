@@ -161,6 +161,21 @@ uint32_t sfos_camera2_copy_float_array(const ACameraMetadata *metadata,
     return count;
 }
 
+uint32_t sfos_camera2_copy_double_array(const ACameraMetadata *metadata,
+                                        uint32_t tag, double *destination,
+                                        uint32_t maximum)
+{
+    ACameraMetadata_const_entry entry;
+    if (!destination || maximum == 0 ||
+            ACameraMetadata_getConstEntry(metadata, tag, &entry) !=
+                ACAMERA_OK) {
+        return 0;
+    }
+    uint32_t count = entry.count < maximum ? entry.count : maximum;
+    memcpy(destination, entry.data.d, count * sizeof(*destination));
+    return count;
+}
+
 bool sfos_camera2_has_output_size(const ACameraMetadata *metadata,
                                   int32_t format, int width, int height)
 {

@@ -13,6 +13,7 @@ PinchArea {
     id: overlay
 
     property bool isPortrait
+    property int deviceRotation: 90
     property real topButtonRowHeight
     property bool showCommonControls: true // any controls from here
     property bool deviceToggleEnabled
@@ -75,6 +76,24 @@ PinchArea {
 
     onIsPortraitChanged: {
         upperHeader.pressedMenu = null
+        syncDeviceRotation()
+    }
+
+    onDeviceRotationChanged: syncDeviceRotation()
+
+    Component.onCompleted: syncDeviceRotation()
+
+    Connections {
+        target: Settings.global
+        onAdvancedModeChanged: syncDeviceRotation()
+        onCaptureModeChanged: syncDeviceRotation()
+    }
+
+    function syncDeviceRotation() {
+        if (Settings.global.captureMode === "image"
+                && Settings.mode.rawCaptureRotation !== deviceRotation) {
+            Settings.mode.rawCaptureRotation = deviceRotation
+        }
     }
 
     signal clicked(var mouse)
@@ -141,7 +160,9 @@ PinchArea {
         readonly property bool active: Settings.global.captureMode === "image"
         readonly property real controlHeight: Math.round(parent.height * 0.40)
         readonly property real controlWidth: Math.round(parent.width * 0.40)
-        readonly property real headerHeight: Theme.fontSizeTiny + Theme.paddingSmall
+        readonly property real headerHeight: Settings.global.advancedMode
+                                             ? Theme.fontSizeTiny + Theme.paddingSmall
+                                             : 0
 
         anchors {
             right: parent.right
@@ -172,6 +193,7 @@ PinchArea {
             height: Theme.fontSizeTiny
             spacing: camera2ControlGrid.columnGap
             z: 3
+            visible: Settings.global.advancedMode
 
             Label {
                 width: camera2ControlGrid.leftWidth
@@ -236,6 +258,8 @@ PinchArea {
             readonly property real isoWidth: usableWidth - leftWidth
                                              - centerWidth - speedWidth
             readonly property var camera2Viewfinder: captureView ? captureView.camera2Viewfinder : null
+            visible: Settings.global.advancedMode
+            enabled: visible
 
             function focalLengthText() {
                 var focal = camera2Viewfinder && camera2Viewfinder.focalLength
@@ -262,6 +286,38 @@ PinchArea {
                         : Settings.mode.rawCaptureIso
             }
 
+            function drawHistogram(context, width, height, values) {
+                context.clearRect(0, 0, width, height)
+                if (!values || values.length === 0) {
+                    return
+                }
+
+                var peak = 1
+                for (var index = 0; index < values.length; ++index) {
+                    peak = Math.max(peak, values[index].r,
+                                    values[index].g, values[index].b)
+                }
+
+                function drawChannel(key, color) {
+                    context.beginPath()
+                    context.moveTo(0, height)
+                    for (var i = 0; i < values.length; ++i) {
+                        var x = values.length === 1 ? 0
+                                : i * width / (values.length - 1)
+                        var y = height - values[i][key] / peak * height
+                        context.lineTo(x, y)
+                    }
+                    context.lineTo(width, height)
+                    context.closePath()
+                    context.fillStyle = color
+                    context.fill()
+                }
+
+                drawChannel("r", Qt.rgba(1.0, 0.2, 0.15, 0.32))
+                drawChannel("g", Qt.rgba(0.2, 1.0, 0.35, 0.28))
+                drawChannel("b", Qt.rgba(0.25, 0.55, 1.0, 0.32))
+            }
+
             anchors {
                 fill: parent
                 leftMargin: sideMargin
@@ -277,7 +333,9 @@ PinchArea {
 
                 Item {
                     width: parent.width
-                    height: parent.height / 3
+                    height: Settings.global.advancedMode
+                            ? parent.height / 3
+                            : parent.height
 
                     Item {
                         anchors {
@@ -303,7 +361,9 @@ PinchArea {
 
                 CycleValueButton {
                     width: parent.width
-                    height: parent.height / 3
+                    height: Settings.global.advancedMode ? parent.height / 3 : 0
+                    visible: Settings.global.advancedMode
+                    enabled: visible
                     caption: "MODE"
                     settings: Settings.mode
                     settingProperty: "camera2CaptureFormat"
@@ -314,7 +374,9 @@ PinchArea {
 
                 CycleValueButton {
                     width: parent.width
-                    height: parent.height / 3
+                    height: Settings.global.advancedMode ? parent.height / 3 : 0
+                    visible: Settings.global.advancedMode
+                    enabled: visible
                     caption: "FOCUS"
                     settings: Settings.mode
                     settingProperty: "rawCaptureFocusMode"
@@ -351,39 +413,10 @@ PinchArea {
                         opacity: 0.85
 
                         onPaint: {
-                            var context = getContext("2d")
-                            context.clearRect(0, 0, width, height)
-
-                            var values = camera2ControlGrid.camera2Viewfinder
-                                    ? camera2ControlGrid.camera2Viewfinder.histogram : []
-                            if (!values || values.length === 0) {
-                                return
-                            }
-
-                            var peak = 1
-                            for (var index = 0; index < values.length; ++index) {
-                                peak = Math.max(peak, values[index].r,
-                                                values[index].g, values[index].b)
-                            }
-
-                            function drawChannel(key, color) {
-                                context.beginPath()
-                                context.moveTo(0, height)
-                                for (var i = 0; i < values.length; ++i) {
-                                    var x = values.length === 1 ? 0
-                                            : i * width / (values.length - 1)
-                                    var y = height - values[i][key] / peak * height
-                                    context.lineTo(x, y)
-                                }
-                                context.lineTo(width, height)
-                                context.closePath()
-                                context.fillStyle = color
-                                context.fill()
-                            }
-
-                            drawChannel("r", Qt.rgba(1.0, 0.2, 0.15, 0.32))
-                            drawChannel("g", Qt.rgba(0.2, 1.0, 0.35, 0.28))
-                            drawChannel("b", Qt.rgba(0.25, 0.55, 1.0, 0.32))
+                            camera2ControlGrid.drawHistogram(
+                                        getContext("2d"), width, height,
+                                        camera2ControlGrid.camera2Viewfinder
+                                        ? camera2ControlGrid.camera2Viewfinder.histogram : [])
                         }
 
                         Connections {
@@ -421,36 +454,275 @@ PinchArea {
                 }
             }
 
-            ValueCarousel {
+            Item {
                 width: camera2ControlGrid.speedWidth
                 height: camera2ControlGrid.height
-                orientation: ListView.Vertical
-                caption: ""
-                settings: Settings.mode
-                settingProperty: "rawCaptureShutterNs"
-                currentValue: Settings.mode.rawCaptureShutterNs
-                displayValue: camera2ControlGrid.liveShutterValue()
-                model: Settings.camera2ShutterModel()
-                valueLabel: Settings.rawCaptureShutterLabel
-                selectedFontSize: Theme.fontSizeExtraLarge
-                tapered: true
-                wrap: true
+
+                ValueCarousel {
+                    anchors.fill: parent
+                    visible: Settings.global.advancedMode
+                    enabled: visible
+                    orientation: ListView.Vertical
+                    caption: ""
+                    settings: Settings.mode
+                    settingProperty: "rawCaptureShutterNs"
+                    currentValue: Settings.mode.rawCaptureShutterNs
+                    displayValue: camera2ControlGrid.liveShutterValue()
+                    model: Settings.camera2ShutterModel()
+                    valueLabel: Settings.rawCaptureShutterLabel
+                    selectedFontSize: Theme.fontSizeExtraLarge
+                    tapered: true
+                    wrap: true
+                }
+
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width - 2 * Theme.paddingSmall
+                    visible: !Settings.global.advancedMode
+                    horizontalAlignment: Text.AlignHCenter
+                    truncationMode: TruncationMode.Fade
+                    color: Theme.lightPrimaryColor
+                    font.pixelSize: Theme.fontSizeLarge
+                    font.bold: true
+                    text: Settings.rawCaptureShutterLabel(
+                              camera2ControlGrid.liveShutterValue())
+                }
             }
 
-            ValueCarousel {
+            Item {
                 width: camera2ControlGrid.isoWidth
                 height: camera2ControlGrid.height
-                orientation: ListView.Vertical
-                caption: ""
-                settings: Settings.mode
-                settingProperty: "rawCaptureIso"
-                currentValue: Settings.mode.rawCaptureIso
-                displayValue: camera2ControlGrid.liveIsoValue()
-                model: Settings.camera2IsoModel()
-                valueLabel: function(value) { return value > 0 ? value : "Auto" }
-                selectedFontSize: Theme.fontSizeExtraLarge
-                tapered: true
-                wrap: true
+
+                ValueCarousel {
+                    anchors.fill: parent
+                    visible: Settings.global.advancedMode
+                    enabled: visible
+                    orientation: ListView.Vertical
+                    caption: ""
+                    settings: Settings.mode
+                    settingProperty: "rawCaptureIso"
+                    currentValue: Settings.mode.rawCaptureIso
+                    displayValue: camera2ControlGrid.liveIsoValue()
+                    model: Settings.camera2IsoModel()
+                    valueLabel: function(value) { return value > 0 ? value : "Auto" }
+                    selectedFontSize: Theme.fontSizeExtraLarge
+                    tapered: true
+                    wrap: true
+                }
+
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width - 2 * Theme.paddingSmall
+                    visible: !Settings.global.advancedMode
+                    horizontalAlignment: Text.AlignHCenter
+                    truncationMode: TruncationMode.Fade
+                    color: Theme.lightPrimaryColor
+                    font.pixelSize: Theme.fontSizeLarge
+                    font.bold: true
+                    text: {
+                        var iso = camera2ControlGrid.liveIsoValue()
+                        return iso > 0 ? iso : "Auto"
+                    }
+                }
+            }
+        }
+
+        Item {
+            id: simpleCamera2Deck
+
+            property bool histogramCollapsed: false
+            readonly property real histogramStripHeight: Theme.itemSizeSmall
+            readonly property real histogramOpenHeight: Math.round(height * 0.34)
+            readonly property real histogramHeight: histogramCollapsed
+                                                   ? histogramStripHeight
+                                                   : histogramOpenHeight
+
+            anchors {
+                fill: parent
+                leftMargin: camera2ControlGrid.sideMargin
+                rightMargin: camera2ControlGrid.sideMargin
+                topMargin: Theme.paddingSmall
+                bottomMargin: Theme.paddingSmall
+            }
+            visible: !Settings.global.advancedMode
+            enabled: visible
+
+            Item {
+                id: simpleHistogramPanel
+
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: parent.top
+                }
+                height: simpleCamera2Deck.histogramHeight
+                clip: true
+
+                Behavior on height {
+                    NumberAnimation { duration: 180; easing.type: Easing.InOutQuad }
+                }
+
+                Canvas {
+                    id: simpleExposureHistogram
+
+                    anchors.fill: parent
+                    visible: !simpleCamera2Deck.histogramCollapsed
+                    opacity: 0.95
+
+                    onPaint: {
+                        camera2ControlGrid.drawHistogram(
+                                    getContext("2d"), width, height,
+                                    camera2ControlGrid.camera2Viewfinder
+                                    ? camera2ControlGrid.camera2Viewfinder.histogram : [])
+                    }
+
+                    Connections {
+                        target: camera2ControlGrid.camera2Viewfinder
+                        onHistogramChanged: simpleExposureHistogram.requestPaint()
+                    }
+                }
+
+                IconButton {
+                    anchors {
+                        right: parent.right
+                        verticalCenter: parent.verticalCenter
+                    }
+                    icon.source: simpleCamera2Deck.histogramCollapsed
+                                 ? "image://theme/icon-m-down"
+                                 : "image://theme/icon-m-up"
+                    onClicked: {
+                        simpleCamera2Deck.histogramCollapsed =
+                                !simpleCamera2Deck.histogramCollapsed
+                    }
+                }
+            }
+
+            Row {
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: simpleHistogramPanel.bottom
+                    bottom: parent.bottom
+                    topMargin: Theme.paddingSmall
+                }
+                spacing: camera2ControlGrid.columnGap
+
+                Column {
+                    width: camera2ControlGrid.leftWidth
+                    height: parent.height
+
+                    Label {
+                        width: parent.width
+                        height: Theme.fontSizeTiny + Theme.paddingSmall
+                        horizontalAlignment: Text.AlignHCenter
+                        color: _highlightColor
+                        opacity: Theme.opacityHigh
+                        font.pixelSize: Theme.fontSizeTiny
+                        font.bold: true
+                        text: "LENS"
+                    }
+
+                    Label {
+                        width: parent.width
+                        height: parent.height - y
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        truncationMode: TruncationMode.Fade
+                        color: Theme.lightPrimaryColor
+                        font.pixelSize: Theme.fontSizeLarge
+                        font.bold: true
+                        text: camera2ControlGrid.focalLengthText() + " MM"
+                    }
+                }
+
+                Column {
+                    width: camera2ControlGrid.centerWidth
+                    height: parent.height
+
+                    Item {
+                        width: parent.width
+                        height: Theme.fontSizeTiny + Theme.paddingSmall
+                    }
+
+                    Item {
+                        id: simpleBottomShutterAnchor
+
+                        width: parent.width
+                        height: parent.height - y
+                    }
+
+                    Item {
+                        width: Theme.itemSizeExtraLarge * 1.18
+                        height: Theme.itemSizeExtraLarge * 1.18
+                        anchors.centerIn: simpleBottomShutterAnchor
+                    }
+                }
+
+                Column {
+                    width: camera2ControlGrid.speedWidth
+                    height: parent.height
+
+                    Label {
+                        width: parent.width
+                        height: Theme.fontSizeTiny + Theme.paddingSmall
+                        horizontalAlignment: Text.AlignHCenter
+                        color: _highlightColor
+                        opacity: Theme.opacityHigh
+                        font.pixelSize: Theme.fontSizeTiny
+                        font.bold: true
+                        text: "SPEED"
+                    }
+
+                    ValueCarousel {
+                        width: parent.width
+                        height: parent.height - y
+                        enabled: false
+                        orientation: ListView.Vertical
+                        caption: ""
+                        settings: Settings.mode
+                        settingProperty: "rawCaptureShutterNs"
+                        currentValue: Settings.mode.rawCaptureShutterNs
+                        displayValue: camera2ControlGrid.liveShutterValue()
+                        model: Settings.camera2ShutterModel()
+                        valueLabel: Settings.rawCaptureShutterLabel
+                        selectedFontSize: Theme.fontSizeLarge
+                        tapered: true
+                        wrap: true
+                    }
+                }
+
+                Column {
+                    width: camera2ControlGrid.isoWidth
+                    height: parent.height
+
+                    Label {
+                        width: parent.width
+                        height: Theme.fontSizeTiny + Theme.paddingSmall
+                        horizontalAlignment: Text.AlignHCenter
+                        color: _highlightColor
+                        opacity: Theme.opacityHigh
+                        font.pixelSize: Theme.fontSizeTiny
+                        font.bold: true
+                        text: "ISO"
+                    }
+
+                    ValueCarousel {
+                        width: parent.width
+                        height: parent.height - y
+                        enabled: false
+                        orientation: ListView.Vertical
+                        caption: ""
+                        settings: Settings.mode
+                        settingProperty: "rawCaptureIso"
+                        currentValue: Settings.mode.rawCaptureIso
+                        displayValue: camera2ControlGrid.liveIsoValue()
+                        model: Settings.camera2IsoModel()
+                        valueLabel: function(value) { return value > 0 ? value : "Auto" }
+                        selectedFontSize: Theme.fontSizeLarge
+                        tapered: true
+                        wrap: true
+                    }
+                }
             }
         }
 
@@ -459,7 +731,9 @@ PinchArea {
     Item {
         id: shutterContainer
 
-        parent: camera2BottomDeck.active ? bottomShutterAnchor
+        parent: camera2BottomDeck.active
+                ? (Settings.global.advancedMode ? bottomShutterAnchor
+                                                 : simpleBottomShutterAnchor)
                                          : overlay._buttonAnchors[overlay._captureButtonLocation]
         anchors.fill: parent
     }
@@ -585,6 +859,7 @@ PinchArea {
         open: true
         opacity: _commonControlOpacity
         visible: opacity > 0.0
+                 && Settings.global.advancedMode
                  && !camera2BottomDeck.active
                  && camera.captureMode === Camera.CaptureStillImage
                  && captureView.camera2CaptureAvailable
@@ -808,12 +1083,19 @@ PinchArea {
 
             function currentItemKeys() {
                 if (camera2Still) {
+                    if (!Settings.global.advancedMode) {
+                        return simpleCamera2ItemKeys()
+                    }
                     if (rawCapture) {
                         return rawItemKeys()
                     }
                     return camera2JpegItemKeys()
                 }
                 return legacyItemKeys()
+            }
+
+            function simpleCamera2ItemKeys() {
+                return [ "timer", "advanced", "grid" ]
             }
 
             function legacyItemKeys() {
@@ -837,7 +1119,7 @@ PinchArea {
             }
 
             function rawItemKeys() {
-                var keys = [ "timer", "speed", "quality", "rotate", "timeout" ]
+                var keys = [ "timer", "advanced", "speed", "quality", "timeout" ]
                 if (camera2FocusSupported) {
                     keys.push("focus")
                 }
@@ -849,6 +1131,7 @@ PinchArea {
                 }
                 keys.push("scene")
                 keys.push("noise")
+                keys.push("render")
                 keys.push("progressive")
                 keys.push("rawExposure")
                 keys.push("wb")
@@ -858,7 +1141,7 @@ PinchArea {
             }
 
             function camera2JpegItemKeys() {
-                var keys = [ "timer", "speed", "quality", "rotate" ]
+                var keys = [ "timer", "advanced", "speed", "quality" ]
                 if (camera2FocusSupported) {
                     keys.push("focus")
                 }
@@ -879,6 +1162,7 @@ PinchArea {
                 case "exposure": return exposureSettingComponent
                 case "iso": return isoSettingComponent
                 case "filter": return filterSettingComponent
+                case "advanced": return advancedModeSettingComponent
                 case "speed": return speedSettingComponent
                 case "size": return sizeSettingComponent
                 case "quality": return qualitySettingComponent
@@ -889,6 +1173,7 @@ PinchArea {
                 case "afWait": return focusTimeoutSettingComponent
                 case "scene": return sceneSettingComponent
                 case "noise": return noiseReductionSettingComponent
+                case "render": return rawRenderEngineSettingComponent
                 case "progressive": return progressiveJpegSettingComponent
                 case "rawExposure": return rawExposureSettingComponent
                 case "wb": return whiteBalanceSettingComponent
@@ -1142,6 +1427,21 @@ PinchArea {
             }
 
             Component {
+                id: advancedModeSettingComponent
+                TextSettingMenu {
+                    width: grid.menuWidth
+                    title: Settings.global.advancedMode ? "Advanced mode on"
+                                                        : "Advanced mode off"
+                    header: upperHeader
+                    settings: Settings.global
+                    property: "advancedMode"
+                    caption: "Advanced"
+                    valueLabel: function(value) { return value ? "On" : "Off" }
+                    model: [ false, true ]
+                }
+            }
+
+            Component {
                 id: speedSettingComponent
                 TextSettingMenu {
                     width: grid.menuWidth
@@ -1280,6 +1580,20 @@ PinchArea {
                     property: "rawCaptureProgressiveJpeg"
                     valueLabel: function(value) { return value ? "Progress." : "Standard" }
                     model: [ false, true ]
+                }
+            }
+
+            Component {
+                id: rawRenderEngineSettingComponent
+                TextSettingMenu {
+                    width: grid.menuWidth
+                    title: Settings.rawRenderEngineText
+                    caption: "Renderer"
+                    header: upperHeader
+                    settings: Settings.mode
+                    property: "rawRenderEngine"
+                    valueLabel: Settings.rawRenderEngineLabel
+                    model: Settings.rawRenderEngineModel()
                 }
             }
 
@@ -1459,7 +1773,8 @@ PinchArea {
         }
         spacing: Theme.paddingSmall
         opacity: _commonControlOpacity
-        visible: opacity > 0.0 && !grid.camera2Still
+        visible: opacity > 0.0
+                 && (!grid.camera2Still || !Settings.global.advancedMode)
 
         WhiteBalanceMenu {
             id: whiteBalanceMenu
@@ -1473,6 +1788,7 @@ PinchArea {
 
             alignment: exposureSlider.alignment
             opacity: enabled ? 1.0 - settingsOpacity : 0.0
+            visible: !grid.camera2Still
             spacing: Theme.paddingMedium
         }
 
@@ -1482,6 +1798,7 @@ PinchArea {
             alignment: _overlayPosition.exposure
             enabled: !overlay.topMenuOpen && !overlay.inButtonLayout && !whiteBalanceMenu.open
             opacity: (1.0 - settingsOpacity) * (1.0 - whiteBalanceMenu.openProgress)
+            visible: !grid.camera2Still || !Settings.global.advancedMode
             height: Theme.itemSizeSmall * 5
         }
     }

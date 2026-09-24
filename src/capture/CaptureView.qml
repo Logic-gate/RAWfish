@@ -142,14 +142,12 @@ FocusScope {
     readonly property bool camera2CaptureAvailable: extensions.rawImageCaptureAvailable
     readonly property bool _liveJpegCapture: _camera2ViewfinderActive
                                             && Settings.mode.camera2CaptureFormat === "jpeg"
-                                            && Settings.mode.rawCaptureSpeedMode !== "quality"
                                             && camera2Viewfinder
     readonly property bool _warmJpegReady: _liveJpegCapture
                                            && camera2Viewfinder
                                            && camera2Viewfinder.jpegCaptureReady === true
     readonly property bool _liveRawCapture: _camera2ViewfinderActive
                                            && Settings.mode.camera2CaptureFormat === "raw"
-                                           && Settings.mode.rawCaptureSpeedMode !== "quality"
                                            && camera2Viewfinder
     readonly property bool _warmRawReady: _liveRawCapture
                                           && camera2Viewfinder
@@ -171,23 +169,38 @@ FocusScope {
         id: captureSnapshot
 
         property alias sourceItem: captureSnapshotEffect.sourceItem
+        property bool fullScreen: false
 
         visible: false
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width*captureSnapshotEffect.scale
-        height: parent.height*captureSnapshotEffect.scale
+        width: parent.width * (fullScreen ? 1.0 : captureSnapshotEffect.scale)
+        height: parent.height * (fullScreen ? 1.0 : captureSnapshotEffect.scale)
 
         ShaderEffectSource {
             id: captureSnapshotEffect
 
             hideSource: false
             live: false
-            scale: 0.4
+            scale: captureSnapshot.fullScreen ? 1.0 : 0.4
             anchors.centerIn: parent
             width: isPortrait ? captureView.width : captureView.height
             height: isPortrait ? captureView.height : captureView.width
             rotation: -captureView.pageRotation
         }
+    }
+
+    function _showCaptureSnapshot() {
+        captureSnapshot.fullScreen = true
+        captureSnapshot.sourceItem = camera2Viewfinder ? camera2Viewfinder : viewfinder
+        captureSnapshot.x = 0
+        captureSnapshotEffect.scheduleUpdate()
+        captureSnapshot.visible = true
+    }
+
+    function _hideCaptureSnapshot() {
+        captureSnapshot.visible = false
+        captureSnapshot.sourceItem = null
+        captureSnapshot.fullScreen = false
     }
 
     function setFocusPoint(point) {
@@ -234,6 +247,10 @@ FocusScope {
         var path = _camera2CaptureTargetPath
         var dot = path.lastIndexOf(".")
         return (dot >= 0 ? path.substring(0, dot) : path) + suffix
+    }
+
+    function _localFileUrl(path) {
+        return path.indexOf("file://") === 0 ? path : "file://" + path
     }
 
     function _warmJpegState() {
@@ -592,6 +609,7 @@ FocusScope {
         }
 
         function _finishCamera2ImageCapture(path, mimeType) {
+            var imageUrl = captureView._localFileUrl(path)
             shutterEvent.play()
             flashAnimation.start()
             captureView._camera2CaptureRunning = false
@@ -602,12 +620,13 @@ FocusScope {
             if (captureView._camera2ViewfinderActive) {
                 window.camera2CaptureBusy = false
             }
+            captureView._hideCaptureSnapshot()
 
             if (captureModel) {
-                captureModel.appendCapture(Qt.resolvedUrl(path), mimeType)
+                captureModel.appendCapture(imageUrl, mimeType)
             }
 
-            Settings.completePhoto(Qt.resolvedUrl(path))
+            Settings.completePhoto(imageUrl)
             captureView.captured()
             camera2CaptureWatchdog.stop()
         }
@@ -624,6 +643,7 @@ FocusScope {
             if (captureView._camera2ViewfinderActive) {
                 window.camera2CaptureBusy = false
             }
+            captureView._hideCaptureSnapshot()
             camera2CaptureWatchdog.stop()
         }
 
@@ -642,7 +662,7 @@ FocusScope {
                                                Settings.mode.rawCaptureIso,
                                                Settings.mode.rawCaptureShutterNs,
                                                Settings.mode.rawCaptureAperture,
-                                               Settings.mode.rawCaptureNoiseReduction,
+                                               Settings.camera2HalNoiseReduction(Settings.mode.rawCaptureNoiseReduction),
                                                captureView.camera2Zoom)
         }
 
@@ -722,6 +742,7 @@ FocusScope {
                                             Settings.mode.rawCaptureJpegQuality,
                                             Settings.mode.rawCaptureRotation,
                                             Settings.global.rawCaptureSaveFormat,
+                                            Settings.mode.rawRenderEngine,
                                             Settings.mode.rawCaptureScene,
                                             Settings.mode.rawCaptureColorTemperature,
                                             Settings.mode.rawCaptureColorTint,
@@ -729,7 +750,7 @@ FocusScope {
                                             Settings.mode.rawCaptureIso,
                                             Settings.mode.rawCaptureShutterNs,
                                             Settings.mode.rawCaptureAperture,
-                                            Settings.mode.rawCaptureNoiseReduction,
+                                            Settings.camera2HalNoiseReduction(Settings.mode.rawCaptureNoiseReduction),
                                             captureView.camera2Zoom)
             }
             if (!captureStarted) {
@@ -741,6 +762,7 @@ FocusScope {
                 if (captureView._camera2ViewfinderActive) {
                     window.camera2CaptureBusy = false
                 }
+                captureView._hideCaptureSnapshot()
             }
         }
 
@@ -770,14 +792,9 @@ FocusScope {
                 captureView._unload = false
                 if (liveWarmCapture) {
                     _startCamera2ImageCapture()
-                } else if (captureView._camera2ViewfinderActive
-                           && Settings.mode.rawCaptureSpeedMode !== "quality") {
+                } else if (captureView._camera2ViewfinderActive) {
                     camera._failCamera2ImageCapture("Warm capture not ready: "
                                                     + captureView._captureState())
-                } else if (camera.cameraStatus === Camera.UnloadedStatus) {
-                    captureView._unload = true
-                    window.camera2CaptureBusy = true
-                    camera2CaptureStartTimer.restart()
                 }
             } else {
                 _captureWithQtMultimedia()
@@ -1063,6 +1080,7 @@ FocusScope {
                                        Settings.mode.rawCaptureJpegQuality,
                                        Settings.mode.rawCaptureRotation,
                                        Settings.global.rawCaptureSaveFormat,
+                                       Settings.mode.rawRenderEngine,
                                        Settings.mode.rawCaptureColorTemperature,
                                        Settings.mode.rawCaptureColorTint,
                                        Settings.mode.rawCaptureProgressiveJpeg)
@@ -1154,7 +1172,7 @@ FocusScope {
     Binding {
         target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
         property: "noiseReduction"
-        value: Settings.mode.rawCaptureNoiseReduction
+        value: Settings.camera2HalNoiseReduction(Settings.mode.rawCaptureNoiseReduction)
     }
 
     Binding {
@@ -1219,6 +1237,11 @@ FocusScope {
             target: captureSnapshot
             property: "sourceItem"
             value: viewfinder
+        }
+        PropertyAction {
+            target: captureSnapshot
+            property: "fullScreen"
+            value: false
         }
         ScriptAction {
             script: captureSnapshotEffect.scheduleUpdate()

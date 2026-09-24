@@ -12,28 +12,35 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QImageReader>
 #include <QImageWriter>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
-#include <QProcessEnvironment>
 #include <QQmlInfo>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTransform>
 #include <QUrl>
 #include <QVector>
 
 #include <QtDebug>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <QQuickWindow>
 #include <qpa/qplatformnativeinterface.h>
 
 #include <tiffio.h>
 
+#ifndef TIFFTAG_NOISEPROFILE
+#define TIFFTAG_NOISEPROFILE 51041
+#endif
+
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <stdint.h>
 #include <utime.h>
 
@@ -44,6 +51,12 @@ DeclarativeCameraExtensions::DeclarativeCameraExtensions(QObject *parent)
 
 DeclarativeCameraExtensions::~DeclarativeCameraExtensions()
 {
+    if (m_rawRenderWatcher) {
+        m_rawRenderWatcher->disconnect(this);
+        if (m_rawRenderWatcher->isRunning()) {
+            m_rawRenderWatcher->waitForFinished();
+        }
+    }
     if (m_rawCaptureProcess) {
         m_rawCaptureProcess->disconnect(this);
         if (m_rawCaptureProcess->state() != QProcess::NotRunning) {
@@ -64,10 +77,43 @@ static QString rawCaptureProbePath()
             : override;
 }
 
+static QString rawFastJpegConverterPath()
+{
+    const QString override = QString::fromLocal8Bit(qgetenv("SFOS_RAW16_JPEG_CONVERTER"));
+    return override.isEmpty()
+            ? QStringLiteral("/usr/libexec/rawfish/sfos-raw16-to-jpeg")
+            : override;
+}
+
+static bool rawRenderEngineSupported(const QString &engine)
+{
+    return engine == QLatin1String("internal")
+            || engine == QLatin1String("fastjpeg");
+}
+
 static bool executableExists(const QString &path)
 {
     const QFileInfo file(path);
     return file.exists() && file.isExecutable();
+}
+
+static bool readableImageExists(const QString &path, QString *error)
+{
+    const QFileInfo file(path);
+    if (!file.isFile() || file.size() <= 0) {
+        *error = QStringLiteral("RAW JPEG output is missing or empty: %1").arg(path);
+        return false;
+    }
+
+    QImageReader reader(path);
+    if (!reader.canRead() || !reader.size().isValid()) {
+        *error = QStringLiteral("RAW JPEG output is not readable: %1 size=%2 error=%3")
+                .arg(path)
+                .arg(file.size())
+                .arg(reader.errorString());
+        return false;
+    }
+    return true;
 }
 
 static QString jsonSidecarPath(const QString &targetPath)
@@ -75,6 +121,79 @@ static QString jsonSidecarPath(const QString &targetPath)
     const QFileInfo targetInfo(targetPath);
     return targetInfo.absolutePath() + QLatin1Char('/')
             + targetInfo.completeBaseName() + QLatin1String(".json");
+}
+
+static bool writeMetadataWithRawPath(const QString &sourcePath,
+                                     const QString &destinationPath,
+                                     const QString &rawPath,
+                                     QString *error)
+{
+    QFile source(sourcePath);
+    if (!source.open(QIODevice::ReadOnly)) {
+        *error = QStringLiteral("Cannot read metadata: %1").arg(sourcePath);
+        return false;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument document = QJsonDocument::fromJson(source.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        *error = QStringLiteral("RAW metadata is not valid JSON");
+        return false;
+    }
+
+    QJsonObject object = document.object();
+    object.insert(QStringLiteral("raw_path"), rawPath);
+    document.setObject(object);
+
+    QDir().mkpath(QFileInfo(destinationPath).absolutePath());
+    QFile::remove(destinationPath);
+    QFile destination(destinationPath);
+    if (!destination.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        *error = QStringLiteral("Cannot write metadata: %1").arg(destinationPath);
+        return false;
+    }
+    destination.write(document.toJson(QJsonDocument::Indented));
+    return true;
+}
+
+static void appendRawCaptureLog(const QString &message)
+{
+    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (picturesPath.isEmpty()) {
+        picturesPath = QDir::homePath() + QLatin1String("/Pictures");
+    }
+    const QString logDirectory = picturesPath + QLatin1String("/RAWfish");
+    QDir().mkpath(logDirectory);
+    QFile file(logDirectory + QLatin1String("/rawfish-capture.log"));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+    file.write(QDateTime::currentDateTime().toString(Qt::ISODate).toUtf8());
+    file.write(" ");
+    file.write(message.toUtf8());
+    file.write("\n");
+}
+
+static QString rawPathFromMetadata(const QString &metadataPath, QString *error)
+{
+    QFile file(metadataPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        *error = QStringLiteral("Cannot read metadata: %1").arg(metadataPath);
+        return QString();
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        *error = QStringLiteral("RAW metadata is not valid JSON: %1").arg(metadataPath);
+        return QString();
+    }
+
+    const QString rawPath = document.object().value(QStringLiteral("raw_path")).toString();
+    if (rawPath.isEmpty()) {
+        *error = QStringLiteral("RAW metadata has no raw_path: %1").arg(metadataPath);
+    }
+    return rawPath;
 }
 
 bool DeclarativeCameraExtensions::rawImageCaptureAvailable() const
@@ -94,9 +213,10 @@ void DeclarativeCameraExtensions::disableNotifications(QQuickItem *item, bool di
 bool DeclarativeCameraExtensions::captureRawImage(const QString &targetPath, const QString &cameraId,
                                                   const QString &rawSize, int timeoutSeconds,
                                                   const QString &focusMode, const QString &focusDistance,
-                                                  int focusTimeoutSeconds, const QString &focusFailure,
+                                     int focusTimeoutSeconds, const QString &focusFailure,
                                      const QString &exposure, int jpegQuality,
                                      int rotationDegrees, const QString &rawSaveFormat,
+                                     const QString &rawRenderEngine,
                                      const QString &sceneMode, int colorTemperature,
                                      int colorTint, bool progressiveJpeg,
                                      int sensorSensitivity,
@@ -105,7 +225,7 @@ bool DeclarativeCameraExtensions::captureRawImage(const QString &targetPath, con
                                      int noiseReduction,
                                      qreal zoom)
 {
-    if (m_rawCaptureProcess) {
+    if (m_rawCaptureProcess || m_rawRenderWatcher) {
         emit rawImageCaptureFailed(QStringLiteral("RAW image capture is already running"));
         return false;
     }
@@ -142,6 +262,8 @@ bool DeclarativeCameraExtensions::captureRawImage(const QString &targetPath, con
     m_rawCaptureExposure = exposure.isEmpty() ? QStringLiteral("1.0") : exposure;
     m_rawCaptureSaveFormat = rawSaveFormat.isEmpty()
             ? QStringLiteral("none") : rawSaveFormat;
+    m_rawRenderEngine = rawRenderEngineSupported(rawRenderEngine)
+            ? rawRenderEngine : QStringLiteral("internal");
     m_rawCaptureProgressiveJpeg = progressiveJpeg;
     m_rawCaptureJpegQuality = qBound(1, jpegQuality, 100);
     m_rawCaptureRotationDegrees = ((rotationDegrees % 360) + 360) % 360;
@@ -212,7 +334,7 @@ bool DeclarativeCameraExtensions::captureJpegImage(const QString &targetPath, co
                                                    int noiseReduction,
                                                    qreal zoom)
 {
-    if (m_rawCaptureProcess) {
+    if (m_rawCaptureProcess || m_rawRenderWatcher) {
         emit rawImageCaptureFailed(QStringLiteral("Camera2 image capture is already running"));
         return false;
     }
@@ -287,9 +409,10 @@ bool DeclarativeCameraExtensions::processRawImage(
         const QString &targetPath, const QString &rawPath,
         const QString &metadataPath, const QString &exposure, int jpegQuality,
         int rotationDegrees, const QString &rawSaveFormat,
+        const QString &rawRenderEngine,
         int colorTemperature, int colorTint, bool progressiveJpeg)
 {
-    if (m_rawCaptureProcess) {
+    if (m_rawCaptureProcess || m_rawRenderWatcher) {
         emit rawImageCaptureFailed(QStringLiteral("Camera2 image capture is already running"));
         return false;
     }
@@ -321,6 +444,8 @@ bool DeclarativeCameraExtensions::processRawImage(
     m_rawCaptureExposure = exposure.isEmpty() ? QStringLiteral("1.0") : exposure;
     m_rawCaptureSaveFormat = rawSaveFormat.isEmpty()
             ? QStringLiteral("none") : rawSaveFormat;
+    m_rawRenderEngine = rawRenderEngineSupported(rawRenderEngine)
+            ? rawRenderEngine : QStringLiteral("internal");
     m_rawCaptureProgressiveJpeg = progressiveJpeg;
     m_rawCaptureJpegQuality = qBound(1, jpegQuality, 100);
     m_rawCaptureRotationDegrees = ((rotationDegrees % 360) + 360) % 360;
@@ -328,13 +453,29 @@ bool DeclarativeCameraExtensions::processRawImage(
     m_rawCaptureColorTint = qBound(-1000, colorTint, 1000);
     m_rawCaptureTimer.restart();
 
+    QString metadataError;
+    if (!writeMetadataWithRawPath(metadataPath,
+                                  m_rawCapturePrefix + QLatin1String(".json"),
+                                  rawPath,
+                                  &metadataError)) {
+        emit rawImageCaptureFailed(metadataError);
+        return false;
+    }
+
     preserveRawCaptureFiles();
-    if (!renderRawImage()) {
+    if (!(m_rawRenderEngine == QLatin1String("fastjpeg")
+            ? renderRawImageWithFastJpegConverter() : renderRawImage())) {
         const QString error = m_rawCaptureErrors.isEmpty()
                 ? QStringLiteral("RAW image conversion failed")
                 : m_rawCaptureErrors;
         clearRawImageCapture();
         emit rawImageCaptureFailed(error);
+        return false;
+    }
+    QString imageError;
+    if (!readableImageExists(localTargetPath, &imageError)) {
+        clearRawImageCapture();
+        emit rawImageCaptureFailed(imageError);
         return false;
     }
     if (!copyJsonSidecar(m_rawCapturePrefix + QLatin1String(".json"),
@@ -451,37 +592,60 @@ void DeclarativeCameraExtensions::finishRawImageCapture(int exitCode, QProcess::
         qDebug() << "capture-timing app raw preserve"
                  << "start" << preserveStart
                  << "end" << m_rawCaptureTimer.elapsed();
-        const qint64 renderStart = m_rawCaptureTimer.elapsed();
-        if (!renderRawImage()) {
-            const QString error = m_rawCaptureErrors.isEmpty()
-                    ? QStringLiteral("RAW image conversion failed")
-                    : m_rawCaptureErrors;
-            clearRawImageCapture();
-            emit rawImageCaptureFailed(error);
-            return;
-        }
-        qDebug() << "capture-timing app raw render"
-                 << "start" << renderStart
-                 << "end" << m_rawCaptureTimer.elapsed();
-        const QString targetPath = m_rawCaptureTargetPath;
-        if (!copyJsonSidecar(m_rawCapturePrefix + QLatin1String(".json"),
-                             targetPath)) {
-            const QString error = m_rawCaptureErrors.isEmpty()
-                    ? QStringLiteral("Could not save RAW metadata sidecar")
-                    : m_rawCaptureErrors;
-            clearRawImageCapture();
-            emit rawImageCaptureFailed(error);
-            return;
-        }
-        qDebug() << "capture-timing app raw complete"
-                 << "t" << m_rawCaptureTimer.elapsed();
-        clearRawImageCapture();
-        emit rawImageCaptured(targetPath, QStringLiteral("image/jpeg"));
+        m_rawRenderStart = m_rawCaptureTimer.elapsed();
+        m_rawRenderWatcher.reset(new QFutureWatcher<bool>);
+        connect(m_rawRenderWatcher.data(), &QFutureWatcher<bool>::finished,
+                this, &DeclarativeCameraExtensions::finishRawImageRender);
+        m_rawRenderWatcher->setFuture(QtConcurrent::run([this]() {
+            return m_rawRenderEngine == QLatin1String("fastjpeg")
+                    ? renderRawImageWithFastJpegConverter() : renderRawImage();
+        }));
         return;
     }
 
     clearRawImageCapture();
     emit rawImageCaptureFailed(QStringLiteral("RAW image capture finished in an unknown state"));
+}
+
+void DeclarativeCameraExtensions::finishRawImageRender()
+{
+    QFutureWatcher<bool> *watcher = m_rawRenderWatcher.take();
+    const bool renderOk = watcher && watcher->result();
+    if (watcher) {
+        watcher->deleteLater();
+    }
+    if (!renderOk) {
+        const QString error = m_rawCaptureErrors.isEmpty()
+                ? QStringLiteral("RAW image conversion failed")
+                : m_rawCaptureErrors;
+        clearRawImageCapture();
+        emit rawImageCaptureFailed(error);
+        return;
+    }
+
+    qDebug() << "capture-timing app raw render"
+             << "start" << m_rawRenderStart
+             << "end" << m_rawCaptureTimer.elapsed();
+    const QString targetPath = m_rawCaptureTargetPath;
+    QString imageError;
+    if (!readableImageExists(targetPath, &imageError)) {
+        clearRawImageCapture();
+        emit rawImageCaptureFailed(imageError);
+        return;
+    }
+    if (!copyJsonSidecar(m_rawCapturePrefix + QLatin1String(".json"),
+                         targetPath)) {
+        const QString error = m_rawCaptureErrors.isEmpty()
+                ? QStringLiteral("Could not save RAW metadata sidecar")
+                : m_rawCaptureErrors;
+        clearRawImageCapture();
+        emit rawImageCaptureFailed(error);
+        return;
+    }
+    qDebug() << "capture-timing app raw complete"
+             << "t" << m_rawCaptureTimer.elapsed();
+    clearRawImageCapture();
+    emit rawImageCaptured(targetPath, QStringLiteral("image/jpeg"));
 }
 
 bool DeclarativeCameraExtensions::startRawImageProcess(const QString &program,
@@ -526,9 +690,12 @@ struct RawRenderConfig {
     int height = 0;
     int rowStride = 0;
     int whiteLevel = 0;
+    int iso = 0;
     int blackLevel[4] = {0, 0, 0, 0};
     float gains[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     float matrix[9] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+    double noiseProfile[8] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    int noiseProfileCount = 0;
     float exposure = 1.0f;
     int colorTemperature = 0;
     int cfaMap = 3;
@@ -730,6 +897,14 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
         asShotNeutral[2] = jsonRationalFloat(neutral.at(2), 1.0f);
         TIFFSetField(tiff, TIFFTAG_ASSHOTNEUTRAL, 3, asShotNeutral);
     }
+    const QJsonArray noiseProfileJson = metadata.value(QStringLiteral("noise_profile")).toArray();
+    double noiseProfile[8];
+    if (noiseProfileJson.size() >= 8) {
+        for (int index = 0; index < 8; ++index) {
+            noiseProfile[index] = noiseProfileJson.at(index).toDouble();
+        }
+        TIFFSetField(tiff, TIFFTAG_NOISEPROFILE, 8, noiseProfile);
+    }
 
     QByteArray row(rowStride, Qt::Uninitialized);
     for (int y = 0; y < height; ++y) {
@@ -847,6 +1022,7 @@ bool loadRawRenderConfig(const QString &metadataPath, const QString &exposure,
     config->height = object.value(QStringLiteral("height")).toInt();
     config->rowStride = object.value(QStringLiteral("row_stride")).toInt();
     config->whiteLevel = object.value(QStringLiteral("white_level")).toInt();
+    config->iso = object.value(QStringLiteral("iso")).toInt();
     config->cfa = object.value(QStringLiteral("cfa")).toString();
     config->rawPath = object.value(QStringLiteral("raw_path")).toString();
     config->colorTemperature = object.value(QStringLiteral("color_temperature_requested_kelvin")).toInt();
@@ -860,9 +1036,14 @@ bool loadRawRenderConfig(const QString &metadataPath, const QString &exposure,
 
     const QJsonArray black = object.value(QStringLiteral("black_level_pattern")).toArray();
     const QJsonArray gains = object.value(QStringLiteral("color_correction_gains")).toArray();
+    const QJsonArray noiseProfile = object.value(QStringLiteral("noise_profile")).toArray();
     for (int index = 0; index < 4; ++index) {
         config->blackLevel[index] = int(jsonArrayFloat(black, index, 0.0f));
         config->gains[index] = jsonArrayFloat(gains, index, 1.0f);
+    }
+    config->noiseProfileCount = qMin(noiseProfile.size(), 8);
+    for (int index = 0; index < config->noiseProfileCount; ++index) {
+        config->noiseProfile[index] = noiseProfile.at(index).toDouble();
     }
     readRationalMatrix(object.value(QStringLiteral("capture_color_transform")).toArray(),
                        config->matrix);
@@ -1056,6 +1237,129 @@ bool DeclarativeCameraExtensions::renderRawImage()
     return true;
 }
 
+bool DeclarativeCameraExtensions::renderRawImageWithFastJpegConverter()
+{
+    const QString jpegConverter = rawFastJpegConverterPath();
+    if (!executableExists(jpegConverter)) {
+        m_rawCaptureErrors = QStringLiteral("RAW JPEG converter is not installed: %1")
+                .arg(jpegConverter);
+        appendRawCaptureLog(m_rawCaptureErrors);
+        return false;
+    }
+
+    const QString metadataPath = m_rawCapturePrefix + QLatin1String(".json");
+    QString metadataError;
+    const QString rawPath = rawPathFromMetadata(metadataPath, &metadataError);
+    if (!metadataError.isEmpty()) {
+        m_rawCaptureErrors = metadataError;
+        appendRawCaptureLog(m_rawCaptureErrors);
+        return false;
+    }
+    if (!QFileInfo(rawPath).isFile()) {
+        m_rawCaptureErrors = QStringLiteral("RAW16 file is missing: %1").arg(rawPath);
+        appendRawCaptureLog(QStringLiteral("%1 metadata=%2 converter=%3")
+                            .arg(m_rawCaptureErrors)
+                            .arg(metadataPath)
+                            .arg(jpegConverter));
+        return false;
+    }
+
+    const QFileInfo targetInfo(m_rawCaptureTargetPath);
+    QDir().mkpath(targetInfo.absolutePath());
+    QFile::remove(m_rawCaptureTargetPath);
+
+    const bool helperHandlesRotation = (m_rawCaptureRotationDegrees % 90) == 0;
+    QStringList arguments;
+    arguments << metadataPath
+              << m_rawCaptureTargetPath
+              << m_rawCaptureExposure
+              << QString::number(m_rawCaptureJpegQuality)
+              << (m_rawCaptureProgressiveJpeg ? QStringLiteral("1")
+                                              : QStringLiteral("0"))
+              << QString::number(helperHandlesRotation
+                                  ? m_rawCaptureRotationDegrees : 0);
+
+    QProcess process;
+    process.setProgram(jpegConverter);
+    process.setArguments(arguments);
+    process.start();
+    if (!process.waitForStarted(3000)) {
+        m_rawCaptureErrors = QStringLiteral("Could not start RAW JPEG converter: %1")
+                .arg(process.errorString());
+        appendRawCaptureLog(QStringLiteral("%1 command=%2 metadata=%3 raw=%4 output=%5")
+                            .arg(m_rawCaptureErrors)
+                            .arg(jpegConverter)
+                            .arg(metadataPath)
+                            .arg(rawPath)
+                            .arg(m_rawCaptureTargetPath));
+        return false;
+    }
+    if (!process.waitForFinished(-1) ||
+            process.exitStatus() != QProcess::NormalExit ||
+            process.exitCode() != 0) {
+        const QString errors = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+        m_rawCaptureErrors = errors.isEmpty()
+                ? QStringLiteral("RAW JPEG converter failed: %1").arg(jpegConverter)
+                : QStringLiteral("%1 failed:\n%2").arg(jpegConverter, errors);
+        appendRawCaptureLog(QStringLiteral("%1 metadata=%2 raw=%3 output=%4")
+                            .arg(m_rawCaptureErrors)
+                            .arg(metadataPath)
+                            .arg(rawPath)
+                            .arg(m_rawCaptureTargetPath));
+        return false;
+    }
+    const QString converterOutput = QString::fromLocal8Bit(
+                process.readAllStandardError()).trimmed();
+    if (!converterOutput.isEmpty()) {
+        appendRawCaptureLog(converterOutput);
+    }
+
+    if (!QFileInfo(m_rawCaptureTargetPath).isFile() ||
+            QFileInfo(m_rawCaptureTargetPath).size() <= 0) {
+        m_rawCaptureErrors = QStringLiteral("RAW JPEG converter did not create usable output");
+        appendRawCaptureLog(QStringLiteral("%1 output=%2 metadata=%3 raw=%4")
+                            .arg(m_rawCaptureErrors)
+                            .arg(m_rawCaptureTargetPath)
+                            .arg(metadataPath)
+                            .arg(rawPath));
+        return false;
+    }
+
+    if ((!helperHandlesRotation && m_rawCaptureRotationDegrees != 0) ||
+            m_rawCaptureColorTint != 0) {
+        QImage image(m_rawCaptureTargetPath);
+        if (image.isNull()) {
+            m_rawCaptureErrors = QStringLiteral("RAW JPEG converter output is not usable");
+            appendRawCaptureLog(QStringLiteral("%1 output=%2 metadata=%3 raw=%4")
+                                .arg(m_rawCaptureErrors)
+                                .arg(m_rawCaptureTargetPath)
+                                .arg(metadataPath)
+                                .arg(rawPath));
+            return false;
+        }
+        if (!helperHandlesRotation && m_rawCaptureRotationDegrees != 0) {
+            image = image.transformed(QTransform().rotate(m_rawCaptureRotationDegrees));
+        }
+        ImageAdjustments::apply(&image, 1.0, 5500, m_rawCaptureColorTint);
+
+        QImageWriter writer(m_rawCaptureTargetPath, "JPG");
+        writer.setQuality(m_rawCaptureJpegQuality);
+        if (m_rawCaptureProgressiveJpeg) {
+            writer.setProgressiveScanWrite(true);
+        }
+        if (!writer.write(image)) {
+            m_rawCaptureErrors = writer.errorString().isEmpty()
+                    ? QStringLiteral("Could not save adjusted RAW JPEG")
+                    : QStringLiteral("Could not save adjusted RAW JPEG: %1").arg(writer.errorString());
+            return false;
+        }
+    }
+
+    copyFileTimes(m_rawCapturePrefix + QLatin1String(".raw16"),
+                  m_rawCaptureTargetPath);
+    return true;
+}
+
 void DeclarativeCameraExtensions::preserveRawCaptureFiles()
 {
     const bool saveRaw16 = m_rawCaptureSaveFormat == QLatin1String("raw16")
@@ -1073,17 +1377,24 @@ void DeclarativeCameraExtensions::preserveRawCaptureFiles()
     QDir().mkpath(archiveInfo.absolutePath());
 
     if (saveRaw16) {
-        const QStringList suffixes = {
-            QStringLiteral(".raw16"),
-            QStringLiteral(".json")
-        };
-        for (const QString &suffix : suffixes) {
-            const QString source = m_rawCapturePrefix + suffix;
-            const QString destination = m_rawCaptureArchivePrefix + suffix;
-            QFile::remove(destination);
-            if (!QFile::copy(source, destination)) {
-                qWarning() << "Could not preserve RAW capture sidecar" << source << "to" << destination;
+        const QString rawSource = m_rawCapturePrefix + QLatin1String(".raw16");
+        const QString rawDestination = m_rawCaptureArchivePrefix + QLatin1String(".raw16");
+        if (QFileInfo(rawSource).absoluteFilePath() !=
+                QFileInfo(rawDestination).absoluteFilePath()) {
+            QFile::remove(rawDestination);
+            if (!QFile::copy(rawSource, rawDestination)) {
+                qWarning() << "Could not preserve RAW capture sidecar" << rawSource << "to" << rawDestination;
             }
+        }
+
+        QString metadataError;
+        const QString metadataSource = m_rawCapturePrefix + QLatin1String(".json");
+        const QString metadataDestination = m_rawCaptureArchivePrefix + QLatin1String(".json");
+        if (!writeMetadataWithRawPath(metadataSource, metadataDestination,
+                                      rawDestination, &metadataError)) {
+            qWarning() << "Could not preserve RAW metadata sidecar"
+                       << metadataSource << "to" << metadataDestination
+                       << metadataError;
         }
     }
     if (saveDng) {
@@ -1111,9 +1422,11 @@ void DeclarativeCameraExtensions::clearRawImageCapture()
     m_rawCaptureExposure.clear();
     m_rawCaptureStandardOutput.clear();
     m_rawCaptureSaveFormat = QStringLiteral("raw16");
+    m_rawRenderEngine = QStringLiteral("internal");
     m_rawCaptureProgressiveJpeg = false;
     m_rawCaptureJpegQuality = 92;
     m_rawCaptureRotationDegrees = 0;
     m_rawCaptureColorTemperature = 0;
     m_rawCaptureColorTint = 0;
+    m_rawRenderStart = 0;
 }

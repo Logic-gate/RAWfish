@@ -85,12 +85,14 @@ struct result_metadata {
     float color_gains[4];
     struct rational_value neutral_color_point[3];
     struct rational_value color_transform[9];
+    double noise_profile[8];
     int32_t vendor_awb_available_range[2];
     int32_t vendor_awb_cct;
     uint32_t dynamic_black_count;
     uint32_t color_gains_count;
     uint32_t neutral_count;
     uint32_t color_transform_count;
+    uint32_t noise_profile_count;
     uint32_t vendor_awb_available_range_count;
 };
 
@@ -720,6 +722,9 @@ static void capture_completed(void *opaque, ACameraCaptureSession *session,
     destination->color_transform_count = copy_rational(
         result, ACAMERA_COLOR_CORRECTION_TRANSFORM,
         destination->color_transform, 9);
+    destination->noise_profile_count = sfos_camera2_copy_double_array(
+        result, ACAMERA_SENSOR_NOISE_PROFILE,
+        destination->noise_profile, 8);
     destination->vendor_awb_available_range_count = sfos_camera2_copy_i32_array(
         result, MTK_3A_AWB_AVAILABLE_RANGE,
         destination->vendor_awb_available_range, 2);
@@ -865,6 +870,15 @@ static void print_float_array(FILE *file, const float *values, uint32_t count)
     fputc(']', file);
 }
 
+static void print_double_array(FILE *file, const double *values, uint32_t count)
+{
+    fputc('[', file);
+    for (uint32_t index = 0; index < count; ++index) {
+        fprintf(file, "%s%.17g", index ? "," : "", values[index]);
+    }
+    fputc(']', file);
+}
+
 static bool write_metadata_file(const char *path, const char *camera_id,
                                 const char *raw_path,
                                 const struct capture_context *context)
@@ -1004,6 +1018,9 @@ static bool write_metadata_file(const char *path, const char *camera_id,
     fputs(",\n  \"capture_color_transform\":", file);
     print_rational_array(file, result->color_transform,
                          result->color_transform_count);
+    fputs(",\n  \"noise_profile\":", file);
+    print_double_array(file, result->noise_profile,
+                       result->noise_profile_count);
     fputs(",\n  \"calibration_transform1\":", file);
     print_rational_array(file, static_data->calibration1,
                          static_data->calibration1_count);

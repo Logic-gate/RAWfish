@@ -156,6 +156,14 @@ SettingsOverlay {
 
     showCommonControls: !captureView.recording
     isPortrait: captureView.isPortrait
+    deviceRotation: {
+        switch (captureView.orientation) {
+        case Orientation.Landscape: return 0
+        case Orientation.PortraitInverted: return 270
+        case Orientation.LandscapeInverted: return 180
+        default: return 90
+        }
+    }
     topButtonRowHeight: Screen.sizeCategory >= Screen.Large ? Theme.itemSizeLarge : Theme.itemSizeSmall
     deviceToggleEnabled: !captureView.captureUiBlocked
 

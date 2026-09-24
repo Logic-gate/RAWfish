@@ -41,6 +41,10 @@ Item {
             syncTimer.restart()
         }
     }
+    onWidthChanged: syncTimer.restart()
+    onHeightChanged: syncTimer.restart()
+    onVisibleChanged: syncTimer.restart()
+    onOrientationChanged: syncTimer.restart()
     onModelChanged: syncTimer.restart()
 
     Component.onCompleted: syncTimer.restart()
@@ -87,6 +91,7 @@ Item {
             }
         }
         _syncing = true
+        list.forceLayout()
         list.currentIndex = visualIndexForModelIndex(modelIndex)
         if (list.count > 0) {
             list.positionViewAtIndex(list.currentIndex, ListView.Center)

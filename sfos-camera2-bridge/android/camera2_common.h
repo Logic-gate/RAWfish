@@ -22,6 +22,10 @@
 #define ACAMERA_CONTROL_ZOOM_RATIO ((uint32_t)0x1002f)
 #endif
 
+#ifndef ACAMERA_SENSOR_NOISE_PROFILE
+#define ACAMERA_SENSOR_NOISE_PROFILE ((uint32_t)0xe0013)
+#endif
+
 #define MTK_3A_AWB_AVAILABLE_RANGE ((uint32_t)0x8006000c)
 #define MTK_3A_AWB_VALUE ((uint32_t)0x8006000d)
 #define MTK_3A_AWB_CCT ((uint32_t)0x8006000e)
@@ -145,6 +149,17 @@ uint32_t sfos_camera2_copy_i64_array(const ACameraMetadata *metadata,
 uint32_t sfos_camera2_copy_float_array(const ACameraMetadata *metadata,
                                        uint32_t tag, float *destination,
                                        uint32_t maximum);
+
+/**
+ * @brief Copy a double metadata array.
+ *
+ * @param destination Output array.
+ * @param maximum Maximum number of values to copy.
+ * @return Number of copied values.
+ */
+uint32_t sfos_camera2_copy_double_array(const ACameraMetadata *metadata,
+                                        uint32_t tag, double *destination,
+                                        uint32_t maximum);
 
 /**
  * @brief Check whether a stream configuration advertises an exact output size.
