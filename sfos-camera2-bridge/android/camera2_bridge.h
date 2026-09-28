@@ -99,6 +99,14 @@ enum sfos_camera2_noise_reduction {
 };
 
 /**
+ * @brief RAW sensor buffer format requested for still capture.
+ */
+enum sfos_camera2_raw_format {
+    SFOS_CAMERA2_RAW_FORMAT_RAW16 = 0,
+    SFOS_CAMERA2_RAW_FORMAT_RAW10 = 1,
+};
+
+/**
  * @brief Options for RAW capture.
  *
  * Set unsupported optional values to 0. The size field must be initialized to
@@ -132,15 +140,21 @@ struct sfos_camera2_capture_options {
     int aperture;
     /**< One of enum sfos_camera2_noise_reduction, or 0 to leave default. */
     int noise_reduction;
+    /**< One of enum sfos_camera2_raw_format. Defaults to RAW16 for old callers. */
+    int raw_format;
+    /**< Normalized focus/metering point X, or < 0 to leave unset. */
+    float focus_x;
+    /**< Normalized focus/metering point Y, or < 0 to leave unset. */
+    float focus_y;
 };
 
 /**
- * @brief Capture one RAW16 frame and write JSON metadata.
+ * @brief Capture one RAW frame and write JSON metadata.
  *
  * @param camera_id Android Camera2 camera identifier.
  * @param width Requested RAW width in pixels.
  * @param height Requested RAW height in pixels.
- * @param raw_path Destination path for the RAW16 buffer.
+ * @param raw_path Destination path for the RAW buffer.
  * @param metadata_path Destination path for bridge JSON metadata.
  * @param timeout_ms Capture timeout in milliseconds.
  * @param options Optional capture controls; may be NULL.

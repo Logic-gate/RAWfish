@@ -30,6 +30,8 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#define PREVIEW_MAX_RAW_BRACKET 3
+
 enum preview_error {
     PREVIEW_INVALID_ARGUMENT = -30,
     PREVIEW_UNSUPPORTED_SIZE = -31,
@@ -51,6 +53,7 @@ struct preview_rational {
 struct preview_static_raw_metadata {
     int32_t cfa;
     int32_t white_level;
+    int64_t exposure_time_range[2];
     int32_t black_level[4];
     int32_t active_array[4];
     float focal_length;
@@ -61,7 +64,10 @@ struct preview_static_raw_metadata {
 struct preview_result_raw_metadata {
     int64_t timestamp_ns;
     int64_t exposure_time_ns;
+    int64_t frame_duration_ns;
     int32_t sensitivity;
+    int32_t control_mode;
+    int32_t scene_mode;
     float color_gains[4];
     struct preview_rational neutral_color_point[3];
     struct preview_rational color_transform[9];
@@ -86,7 +92,9 @@ struct preview_context {
     atomic_int frames_written;
     atomic_int jpeg_status;
     atomic_int raw_status;
+    atomic_int raw_bracket_status[PREVIEW_MAX_RAW_BRACKET];
     atomic_int raw_result_status;
+    atomic_int raw_bracket_result_status[PREVIEW_MAX_RAW_BRACKET];
     atomic_int raw_sequence_status;
     int width;
     int height;
@@ -107,8 +115,15 @@ struct preview_context {
     float focus_y;
     int focus_mode;
     float focus_distance;
+    int focus_hold_active;
+    float focus_hold_distance;
+    atomic_int live_af_state;
+    atomic_int live_focus_distance_micros;
     int exposure_compensation;
+    int original_scene_mode;
     int scene_mode;
+    int scene_mode_supported;
+    int hdr_scene_supported;
     int color_temperature_kelvin;
     int color_tint;
     int32_t sensor_sensitivity;
@@ -122,14 +137,28 @@ struct preview_context {
     char jpeg_path[4096];
     char raw_path[4096];
     char raw_metadata_path[4096];
+    char raw_bracket_paths[PREVIEW_MAX_RAW_BRACKET][4096];
+    char raw_bracket_metadata_paths[PREVIEW_MAX_RAW_BRACKET][4096];
+    int32_t raw_bracket_sensor_sensitivity[PREVIEW_MAX_RAW_BRACKET];
+    int64_t raw_bracket_exposure_time_ns[PREVIEW_MAX_RAW_BRACKET];
+    int raw_bracket_count;
+    atomic_int raw_bracket_next_image;
+    ACaptureRequest *raw_bracket_requests[PREVIEW_MAX_RAW_BRACKET];
     char camera_id[64];
     int32_t active_array[4];
     int max_ae_regions;
     int max_af_regions;
     int64_t jpeg_command_ms;
     int64_t jpeg_submit_ms;
+    int64_t jpeg_result_ms;
     int64_t jpeg_available_ms;
     int64_t jpeg_written_ms;
+    int64_t jpeg_hal_exposure_time_ns;
+    int64_t jpeg_hal_frame_duration_ns;
+    int32_t jpeg_hal_sensitivity;
+    int jpeg_effective_logged;
+    int32_t jpeg_control_mode;
+    int32_t jpeg_scene_mode;
     int64_t raw_command_ms;
     int64_t raw_submit_ms;
     int64_t raw_available_ms;
@@ -137,16 +166,88 @@ struct preview_context {
     int64_t raw_metadata_written_ms;
     struct preview_static_raw_metadata raw_static;
     struct preview_result_raw_metadata raw_result;
+    struct preview_result_raw_metadata raw_bracket_result[PREVIEW_MAX_RAW_BRACKET];
     struct preview_raw_image_metadata raw_image;
+    struct preview_raw_image_metadata raw_bracket_image[PREVIEW_MAX_RAW_BRACKET];
 };
+
+static bool preview_hal_exposure_suspect(int64_t hal_exposure_time_ns,
+                                         int64_t elapsed_ms)
+{
+    if (hal_exposure_time_ns <= 0 || elapsed_ms <= 0) {
+        return false;
+    }
+    return hal_exposure_time_ns > ((elapsed_ms + 100) * 1000000LL);
+}
+
+static void preview_log_warm_jpeg_effective(struct preview_context *context)
+{
+    if (!context || context->jpeg_effective_logged ||
+            context->jpeg_submit_ms <= 0 || context->jpeg_result_ms <= 0 ||
+            context->jpeg_available_ms <= 0) {
+        return;
+    }
+    context->jpeg_effective_logged = 1;
+    int64_t submit_to_image_ms = context->jpeg_available_ms -
+                                 context->jpeg_submit_ms;
+    int64_t submit_to_result_ms = context->jpeg_result_ms -
+                                  context->jpeg_submit_ms;
+    int64_t command_to_image_ms = context->jpeg_available_ms -
+                                  context->jpeg_command_ms;
+    fprintf(stderr,
+            "capture-effective warm-jpeg requested_iso=%d "
+            "requested_shutter=%lld hal_iso=%d hal_shutter=%lld "
+            "hal_frame=%lld submit_to_result_ms=%lld "
+            "submit_to_image_ms=%lld command_to_image_ms=%lld "
+            "suspect_hal_exposure=%d\n",
+            context->sensor_sensitivity,
+            (long long)context->exposure_time_ns,
+            context->jpeg_hal_sensitivity,
+            (long long)context->jpeg_hal_exposure_time_ns,
+            (long long)context->jpeg_hal_frame_duration_ns,
+            (long long)submit_to_result_ms,
+            (long long)submit_to_image_ms,
+            (long long)command_to_image_ms,
+            preview_hal_exposure_suspect(context->jpeg_hal_exposure_time_ns,
+                                         submit_to_image_ms) ? 1 : 0);
+}
+
+static void preview_log_warm_raw_effective(struct preview_context *context)
+{
+    if (!context || context->raw_available_ms <= 0 || context->raw_submit_ms <= 0) {
+        return;
+    }
+    int64_t submit_to_image_ms = context->raw_available_ms -
+                                 context->raw_submit_ms;
+    int64_t command_to_image_ms = context->raw_available_ms -
+                                  context->raw_command_ms;
+    fprintf(stderr,
+            "capture-effective warm-raw requested_iso=%d "
+            "requested_shutter=%lld hal_iso=%d hal_shutter=%lld "
+            "hal_frame=%lld submit_to_image_ms=%lld "
+            "command_to_image_ms=%lld suspect_hal_exposure=%d\n",
+            context->sensor_sensitivity,
+            (long long)context->exposure_time_ns,
+            context->raw_result.sensitivity,
+            (long long)context->raw_result.exposure_time_ns,
+            (long long)context->raw_result.frame_duration_ns,
+            (long long)submit_to_image_ms,
+            (long long)command_to_image_ms,
+            preview_hal_exposure_suspect(context->raw_result.exposure_time_ns,
+                                         submit_to_image_ms) ? 1 : 0);
+}
 
 enum preview_command_type {
     PREVIEW_COMMAND_NONE = 0,
     PREVIEW_COMMAND_FOCUS,
     PREVIEW_COMMAND_CAPTURE_JPEG,
     PREVIEW_COMMAND_CAPTURE_RAW,
+    PREVIEW_COMMAND_CAPTURE_RAW_BRACKET,
     PREVIEW_COMMAND_ZOOM,
     PREVIEW_COMMAND_SETTINGS,
+    PREVIEW_COMMAND_EXPOSURE_SETTINGS,
+    PREVIEW_COMMAND_FOCUS_HOLD,
+    PREVIEW_COMMAND_FOCUS_HOLD_RELEASE,
 };
 
 struct preview_command {
@@ -166,6 +267,11 @@ struct preview_command {
     int noise_reduction;
     char path[4096];
     char metadata_path[4096];
+    int bracket_count;
+    char bracket_paths[PREVIEW_MAX_RAW_BRACKET][4096];
+    char bracket_metadata_paths[PREVIEW_MAX_RAW_BRACKET][4096];
+    int32_t bracket_sensor_sensitivity[PREVIEW_MAX_RAW_BRACKET];
+    int64_t bracket_exposure_time_ns[PREVIEW_MAX_RAW_BRACKET];
 };
 
 struct preview_command_buffer {
@@ -243,6 +349,42 @@ static const char *preview_scene_mode_name(int scene_mode)
     }
 }
 
+static const char *preview_control_mode_name(int control_mode)
+{
+    switch (control_mode) {
+    case ACAMERA_CONTROL_MODE_OFF: return "off";
+    case ACAMERA_CONTROL_MODE_AUTO: return "auto";
+    case ACAMERA_CONTROL_MODE_USE_SCENE_MODE: return "use-scene-mode";
+#ifdef ACAMERA_CONTROL_MODE_OFF_KEEP_STATE
+    case ACAMERA_CONTROL_MODE_OFF_KEEP_STATE: return "off-keep-state";
+#endif
+    default: return "unknown";
+    }
+}
+
+static const char *preview_android_scene_mode_name(int scene_mode)
+{
+    switch (scene_mode) {
+    case ACAMERA_CONTROL_SCENE_MODE_ACTION: return "action";
+    case ACAMERA_CONTROL_SCENE_MODE_PORTRAIT: return "portrait";
+    case ACAMERA_CONTROL_SCENE_MODE_LANDSCAPE: return "landscape";
+    case ACAMERA_CONTROL_SCENE_MODE_NIGHT: return "night";
+    case ACAMERA_CONTROL_SCENE_MODE_NIGHT_PORTRAIT: return "night-portrait";
+    case ACAMERA_CONTROL_SCENE_MODE_THEATRE: return "theatre";
+    case ACAMERA_CONTROL_SCENE_MODE_BEACH: return "beach";
+    case ACAMERA_CONTROL_SCENE_MODE_SNOW: return "snow";
+    case ACAMERA_CONTROL_SCENE_MODE_SUNSET: return "sunset";
+    case ACAMERA_CONTROL_SCENE_MODE_STEADYPHOTO: return "steady-photo";
+    case ACAMERA_CONTROL_SCENE_MODE_FIREWORKS: return "fireworks";
+    case ACAMERA_CONTROL_SCENE_MODE_SPORTS: return "sport";
+    case ACAMERA_CONTROL_SCENE_MODE_PARTY: return "party";
+    case ACAMERA_CONTROL_SCENE_MODE_CANDLELIGHT: return "candlelight";
+    case ACAMERA_CONTROL_SCENE_MODE_BARCODE: return "barcode";
+    case ACAMERA_CONTROL_SCENE_MODE_HDR: return "hdr";
+    default: return "unknown";
+    }
+}
+
 static uint32_t preview_copy_rational(const ACameraMetadata *metadata,
                                       uint32_t tag,
                                       struct preview_rational *destination,
@@ -269,6 +411,8 @@ static void preview_copy_raw_static_metadata(
         metadata, ACAMERA_SENSOR_INFO_COLOR_FILTER_ARRANGEMENT, -1);
     destination->white_level = sfos_camera2_first_i32(
         metadata, ACAMERA_SENSOR_INFO_WHITE_LEVEL, -1);
+    sfos_camera2_copy_i64_array(metadata, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE,
+                                destination->exposure_time_range, 2);
     destination->focal_length = sfos_camera2_first_float(
         metadata, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, 0.0f);
     sfos_camera2_copy_i32_array(metadata, ACAMERA_SENSOR_BLACK_LEVEL_PATTERN,
@@ -391,14 +535,23 @@ static void preview_configure_request(ACaptureRequest *request,
         return;
     }
 
-    uint8_t af_mode = preview_af_mode(context, 0);
-    if (metadata && !sfos_camera2_metadata_has_u8(
-            metadata, ACAMERA_CONTROL_AF_AVAILABLE_MODES, af_mode)) {
-        af_mode = ACAMERA_CONTROL_AF_MODE_OFF;
+    if (context->focus_hold_active) {
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_MODE,
+                                    ACAMERA_CONTROL_AF_MODE_OFF);
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_TRIGGER,
+                                    ACAMERA_CONTROL_AF_TRIGGER_IDLE);
+        sfos_camera2_set_request_float(request, ACAMERA_LENS_FOCUS_DISTANCE,
+                                       context->focus_hold_distance);
+    } else {
+        uint8_t af_mode = preview_af_mode(context, 0);
+        if (metadata && !sfos_camera2_metadata_has_u8(
+                metadata, ACAMERA_CONTROL_AF_AVAILABLE_MODES, af_mode)) {
+            af_mode = ACAMERA_CONTROL_AF_MODE_OFF;
+        }
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_MODE, af_mode);
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_TRIGGER,
+                                    ACAMERA_CONTROL_AF_TRIGGER_IDLE);
     }
-    sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_MODE, af_mode);
-    sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_TRIGGER,
-                                ACAMERA_CONTROL_AF_TRIGGER_IDLE);
     sfos_camera2_set_request_i32(request,
                                  ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION,
                                  context->exposure_compensation);
@@ -410,18 +563,28 @@ static void preview_configure_request(ACaptureRequest *request,
     sfos_camera2_set_noise_reduction(metadata, request,
                                      context->noise_reduction);
 
-    if (context->focus_mode == SFOS_CAMERA2_FOCUS_MANUAL ||
-            context->focus_mode == SFOS_CAMERA2_FOCUS_INFINITY) {
+    if (!context->focus_hold_active &&
+            (context->focus_mode == SFOS_CAMERA2_FOCUS_MANUAL ||
+            context->focus_mode == SFOS_CAMERA2_FOCUS_INFINITY)) {
         float distance = context->focus_mode == SFOS_CAMERA2_FOCUS_INFINITY
                 ? 0.0f : context->focus_distance;
         sfos_camera2_set_request_float(request, ACAMERA_LENS_FOCUS_DISTANCE,
                                        distance);
     }
 
-    if (preview_focus_regions_enabled(context) &&
+    if (!context->focus_hold_active &&
+            preview_focus_regions_enabled(context) &&
             context->focus_x >= 0.0f && context->focus_y >= 0.0f) {
         preview_configure_focus_request(request, context, context->focus_x,
                                         context->focus_y, 0);
+    }
+    if (context->focus_hold_active) {
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_MODE,
+                                    ACAMERA_CONTROL_AF_MODE_OFF);
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_TRIGGER,
+                                    ACAMERA_CONTROL_AF_TRIGGER_IDLE);
+        sfos_camera2_set_request_float(request, ACAMERA_LENS_FOCUS_DISTANCE,
+                                       context->focus_hold_distance);
     }
     if (context->color_temperature_kelvin > 0) {
 #ifdef ACAMERA_COLOR_CORRECTION_COLOR_TEMPERATURE
@@ -462,6 +625,17 @@ static void preview_configure_request(ACaptureRequest *request,
     sfos_camera2_set_zoom_ratio(metadata, request, context->zoom_ratio);
 }
 
+static void preview_configure_raw_bracket_request(
+    ACaptureRequest *request, const struct preview_context *context,
+    const ACameraMetadata *metadata, int32_t sensor_sensitivity,
+    int64_t exposure_time_ns)
+{
+    struct preview_context frame_context = *context;
+    frame_context.sensor_sensitivity = sensor_sensitivity;
+    frame_context.exposure_time_ns = exposure_time_ns;
+    preview_configure_request(request, &frame_context, metadata, 1);
+}
+
 static bool preview_parse_command_line(const char *line,
                                        struct preview_command *command)
 {
@@ -476,6 +650,14 @@ static bool preview_parse_command_line(const char *line,
         command->type = PREVIEW_COMMAND_FOCUS;
         command->focus_x = -1.0f;
         command->focus_y = -1.0f;
+        return true;
+    }
+    if (!strcmp(line, "focus-hold")) {
+        command->type = PREVIEW_COMMAND_FOCUS_HOLD;
+        return true;
+    }
+    if (!strcmp(line, "focus-hold-release")) {
+        command->type = PREVIEW_COMMAND_FOCUS_HOLD_RELEASE;
         return true;
     }
     if (sscanf(line, "focus %f %f", &x, &y) == 2 &&
@@ -545,6 +727,23 @@ static bool preview_parse_command_line(const char *line,
         return true;
     }
 
+    if (sscanf(line, "exposure-settings %d %lld %d %d %f",
+               &sensor_sensitivity, &exposure_time_ns, &aperture,
+               &noise_reduction, &zoom_ratio) == 5 &&
+            sensor_sensitivity >= 0 &&
+            exposure_time_ns >= 0 &&
+            aperture >= 0 && aperture <= 255 &&
+            noise_reduction >= 0 &&
+            zoom_ratio >= 1.0f && zoom_ratio <= 100.0f) {
+        command->type = PREVIEW_COMMAND_EXPOSURE_SETTINGS;
+        command->sensor_sensitivity = sensor_sensitivity;
+        command->exposure_time_ns = exposure_time_ns;
+        command->aperture = aperture;
+        command->noise_reduction = noise_reduction;
+        command->zoom_ratio = zoom_ratio;
+        return true;
+    }
+
     char path[sizeof(command->path)];
     if (sscanf(line, "capture-jpeg %4095s", path) == 1 && path[0]) {
         command->type = PREVIEW_COMMAND_CAPTURE_JPEG;
@@ -558,6 +757,46 @@ static bool preview_parse_command_line(const char *line,
         snprintf(command->path, sizeof(command->path), "%s", path);
         snprintf(command->metadata_path, sizeof(command->metadata_path), "%s",
                  metadata_path);
+        return true;
+    }
+    if (!strncmp(line, "capture-raw-bracket ", 20)) {
+        char copy[sizeof(struct preview_command_buffer)];
+        snprintf(copy, sizeof(copy), "%s", line);
+        char *save = NULL;
+        char *token = strtok_r(copy, " ", &save);
+        token = strtok_r(NULL, " ", &save);
+        if (!token) {
+            return false;
+        }
+        int count = atoi(token);
+        if (count < 3 || count > PREVIEW_MAX_RAW_BRACKET) {
+            return false;
+        }
+        command->type = PREVIEW_COMMAND_CAPTURE_RAW_BRACKET;
+        command->bracket_count = count;
+        for (int index = 0; index < count; ++index) {
+            char *raw_path = strtok_r(NULL, " ", &save);
+            char *raw_metadata_path = strtok_r(NULL, " ", &save);
+            char *iso_text = strtok_r(NULL, " ", &save);
+            char *exposure_text = strtok_r(NULL, " ", &save);
+            if (!raw_path || !raw_metadata_path || !iso_text ||
+                    !exposure_text || !raw_path[0] ||
+                    !raw_metadata_path[0]) {
+                return false;
+            }
+            long iso = strtol(iso_text, NULL, 10);
+            long long exposure = strtoll(exposure_text, NULL, 10);
+            if (iso < 0 || exposure <= 0) {
+                return false;
+            }
+            snprintf(command->bracket_paths[index],
+                     sizeof(command->bracket_paths[index]), "%s", raw_path);
+            snprintf(command->bracket_metadata_paths[index],
+                     sizeof(command->bracket_metadata_paths[index]), "%s",
+                     raw_metadata_path);
+            command->bracket_sensor_sensitivity[index] = (int32_t)iso;
+            command->bracket_exposure_time_ns[index] = (int64_t)exposure;
+        }
         return true;
     }
     return false;
@@ -782,7 +1021,9 @@ done:
 
 static void preview_write_metadata(struct preview_context *context,
                                    int32_t sensor_sensitivity,
-                                   int64_t exposure_time_ns)
+                                   int64_t exposure_time_ns,
+                                   int32_t af_state,
+                                   float focus_distance)
 {
     if (!context || context->output_fd < 0) {
         return;
@@ -794,16 +1035,27 @@ static void preview_write_metadata(struct preview_context *context,
     long long previous_exposure = atomic_exchange_explicit(
         &context->live_exposure_time_ns, (long long)exposure_time_ns,
         memory_order_acq_rel);
+    int previous_af_state = atomic_exchange_explicit(
+        &context->live_af_state, af_state, memory_order_acq_rel);
+    int focus_distance_micros = focus_distance >= 0.0f
+            ? (int)(focus_distance * 1000000.0f) : -1;
+    int previous_focus_distance_micros = atomic_exchange_explicit(
+        &context->live_focus_distance_micros, focus_distance_micros,
+        memory_order_acq_rel);
     if (previous_sensitivity == sensor_sensitivity &&
-            previous_exposure == (long long)exposure_time_ns) {
+            previous_exposure == (long long)exposure_time_ns &&
+            previous_af_state == af_state &&
+            previous_focus_distance_micros == focus_distance_micros) {
         return;
     }
 
-    char payload[128];
+    char payload[192];
     int payload_size = snprintf(payload, sizeof(payload),
-                                "focal=%.3f iso=%d shutter=%lld\n",
+                                "focal=%.3f iso=%d shutter=%lld "
+                                "af_state=%d focus_distance=%.6f\n",
                                 context->focal_length, sensor_sensitivity,
-                                (long long)exposure_time_ns);
+                                (long long)exposure_time_ns,
+                                af_state, focus_distance);
     if (payload_size <= 0 || payload_size >= (int)sizeof(payload)) {
         return;
     }
@@ -830,7 +1082,12 @@ static void preview_write_capture_result(struct preview_context *context,
     int payload_size = snprintf(
         payload, sizeof(payload),
         "capture-status=%s path=%s code=%d width=%d height=%d bytes=%d "
-        "submit_ms=%lld available_ms=%lld written_ms=%lld\n",
+        "submit_ms=%lld available_ms=%lld written_ms=%lld "
+        "scene-requested-original=%s scene-requested=%s scene-supported=%s "
+        "hdr-scene-supported=%s hdr-scene-requested=%s hdr-scene-applied=%s "
+        "dol-supported=false dol-source=%s dol-requested=%s dol-applied=false "
+        "control-mode-applied=%s control-mode-applied-value=%d "
+        "scene-mode-applied=%s scene-mode-applied-value=%d\n",
         status, path ? path : "", code, context->jpeg_width,
         context->jpeg_height, context->jpeg_data_length,
         context->jpeg_submit_ms > 0
@@ -842,7 +1099,25 @@ static void preview_write_capture_result(struct preview_context *context,
             : -1LL,
         context->jpeg_written_ms > 0
             ? (long long)(context->jpeg_written_ms - context->jpeg_command_ms)
-            : -1LL);
+            : -1LL,
+        preview_scene_mode_name(context->original_scene_mode),
+        preview_scene_mode_name(context->scene_mode),
+        context->scene_mode_supported ? "true" : "false",
+        context->hdr_scene_supported ? "true" : "false",
+        context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+            ? "true" : "false",
+        context->jpeg_control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE &&
+                context->jpeg_scene_mode == ACAMERA_CONTROL_SCENE_MODE_HDR
+            ? "true" : "false",
+        context->hdr_scene_supported ? "scene-hdr" : "none",
+        context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+            ? "true" : "false",
+        preview_control_mode_name(context->jpeg_control_mode),
+        context->jpeg_control_mode,
+        context->jpeg_control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+            ? preview_android_scene_mode_name(context->jpeg_scene_mode) : "none",
+        context->jpeg_control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+            ? context->jpeg_scene_mode : -1);
     if (payload_size <= 0 || payload_size >= (int)sizeof(payload)) {
         return;
     }
@@ -916,8 +1191,14 @@ static void preview_capture_completed(void *opaque,
         result, ACAMERA_SENSOR_SENSITIVITY, 0);
     int64_t exposure_time = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_EXPOSURE_TIME, 0);
-    if (sensitivity > 0 || exposure_time > 0) {
-        preview_write_metadata(context, sensitivity, exposure_time);
+    int32_t af_state = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_AF_STATE, -1);
+    float focus_distance = sfos_camera2_first_float(
+        result, ACAMERA_LENS_FOCUS_DISTANCE, -1.0f);
+    if (sensitivity > 0 || exposure_time > 0 ||
+            af_state >= 0 || focus_distance >= 0.0f) {
+        preview_write_metadata(context, sensitivity, exposure_time,
+                               af_state, focus_distance);
     }
 }
 
@@ -939,6 +1220,14 @@ static void preview_jpeg_capture_completed(void *opaque,
         result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
     int64_t actual_frame_duration = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_FRAME_DURATION, -1);
+    context->jpeg_result_ms = sfos_camera2_now_ms();
+    context->jpeg_hal_sensitivity = actual_sensitivity;
+    context->jpeg_hal_exposure_time_ns = actual_exposure_time;
+    context->jpeg_hal_frame_duration_ns = actual_frame_duration;
+    context->jpeg_control_mode = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_MODE, -1);
+    context->jpeg_scene_mode = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_SCENE_MODE, -1);
     fprintf(stderr,
             "capture-exposure warm-jpeg requested_iso=%d "
             "requested_shutter=%lld actual_iso=%d actual_shutter=%lld "
@@ -948,6 +1237,7 @@ static void preview_jpeg_capture_completed(void *opaque,
             actual_sensitivity,
             (long long)actual_exposure_time,
             (long long)actual_frame_duration);
+    preview_log_warm_jpeg_effective(context);
 }
 
 static void preview_jpeg_image_available(void *opaque, AImageReader *reader)
@@ -1000,6 +1290,7 @@ static void preview_jpeg_image_available(void *opaque, AImageReader *reader)
                     (long long)(context->jpeg_written_ms -
                                 context->jpeg_command_ms));
             context->jpeg_data_length = data_length;
+            preview_log_warm_jpeg_effective(context);
             atomic_store_explicit(&context->jpeg_status, 1,
                                   memory_order_release);
             preview_write_capture_result(context, "ok", context->jpeg_path, 0);
@@ -1088,9 +1379,23 @@ static bool preview_write_raw_metadata(const char *camera_id,
             "\n  \"active_array\":[%d,%d,%d,%d],"
             "\n  \"focal_length_mm\":%.9g,"
             "\n  \"focus_mode_requested\":\"continuous\","
+            "\n  \"scene_mode_requested_original\":\"%s\","
             "\n  \"scene_mode_requested\":\"%s\","
+            "\n  \"scene_mode_supported\":%s,"
+            "\n  \"hdr_scene_supported\":%s,"
+            "\n  \"hdr_scene_requested\":%s,"
+            "\n  \"hdr_scene_applied\":%s,"
+            "\n  \"dol_supported\":false,"
+            "\n  \"dol_source\":\"%s\","
+            "\n  \"dol_requested\":%s,"
+            "\n  \"dol_applied\":false,"
+            "\n  \"control_mode_applied\":\"%s\","
+            "\n  \"control_mode_applied_value\":%d,"
+            "\n  \"scene_mode_applied\":\"%s\","
+            "\n  \"scene_mode_applied_value\":%d,"
             "\n  \"sensor_sensitivity_requested\":%d,"
             "\n  \"exposure_time_requested_ns\":%lld,"
+            "\n  \"shutter_ns_range\":[%lld,%lld],"
             "\n  \"aperture_requested\":%d,"
             "\n  \"noise_reduction_requested\":%d,"
             "\n  \"color_temperature_requested_kelvin\":%d,"
@@ -1110,9 +1415,29 @@ static bool preview_write_raw_metadata(const char *camera_id,
             static_data->active_array[0], static_data->active_array[1],
             static_data->active_array[2], static_data->active_array[3],
             static_data->focal_length,
+            preview_scene_mode_name(context->original_scene_mode),
             preview_scene_mode_name(context->scene_mode),
+            context->scene_mode_supported ? "true" : "false",
+            context->hdr_scene_supported ? "true" : "false",
+            context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+            result->control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE &&
+                    result->scene_mode == ACAMERA_CONTROL_SCENE_MODE_HDR
+                ? "true" : "false",
+            context->hdr_scene_supported ? "scene-hdr" : "none",
+            context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+            preview_control_mode_name(result->control_mode),
+            result->control_mode,
+            result->control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? preview_android_scene_mode_name(result->scene_mode) : "none",
+            result->control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? result->scene_mode : -1,
             context->sensor_sensitivity,
-            (long long)context->exposure_time_ns, context->aperture,
+            (long long)context->exposure_time_ns,
+            (long long)static_data->exposure_time_range[0],
+            (long long)static_data->exposure_time_range[1],
+            context->aperture,
             context->noise_reduction, context->color_temperature_kelvin,
             context->color_tint,
             (long long)(context->raw_submit_ms - context->raw_command_ms),
@@ -1148,8 +1473,18 @@ static bool preview_write_raw_metadata(const char *camera_id,
 static void preview_raw_image_available(void *opaque, AImageReader *reader)
 {
     struct preview_context *context = opaque;
-    if (atomic_load_explicit(&context->raw_status,
-                             memory_order_acquire) != 0) {
+    int bracket_index = -1;
+    if (context->raw_bracket_count > 0) {
+        bracket_index = atomic_fetch_add_explicit(
+            &context->raw_bracket_next_image, 1, memory_order_acq_rel);
+        if (bracket_index < 0 || bracket_index >= context->raw_bracket_count ||
+                atomic_load_explicit(
+                    &context->raw_bracket_status[bracket_index],
+                    memory_order_acquire) != 0) {
+            return;
+        }
+    } else if (atomic_load_explicit(&context->raw_status,
+                                    memory_order_acquire) != 0) {
         return;
     }
 
@@ -1158,68 +1493,113 @@ static void preview_raw_image_available(void *opaque, AImageReader *reader)
     atomic_store_explicit(&context->status.last_media_status, status,
                           memory_order_release);
     if (status != AMEDIA_OK || !image) {
-        atomic_store_explicit(&context->raw_status, -1, memory_order_release);
-        preview_write_capture_result(context, "error", context->raw_path,
-                                     PREVIEW_READER_ERROR);
+        if (bracket_index >= 0) {
+            atomic_store_explicit(
+                &context->raw_bracket_status[bracket_index], -1,
+                memory_order_release);
+            preview_write_capture_result(
+                context, "error",
+                context->raw_bracket_metadata_paths[bracket_index],
+                PREVIEW_READER_ERROR);
+        } else {
+            atomic_store_explicit(&context->raw_status, -1,
+                                  memory_order_release);
+            preview_write_capture_result(context, "error", context->raw_path,
+                                         PREVIEW_READER_ERROR);
+        }
         return;
     }
 
     uint8_t *data = NULL;
     int data_length = 0;
     int raw_status = 1;
+    struct preview_raw_image_metadata *image_metadata =
+        bracket_index >= 0 ? &context->raw_bracket_image[bracket_index]
+                           : &context->raw_image;
+    struct preview_result_raw_metadata *result_metadata =
+        bracket_index >= 0 ? &context->raw_bracket_result[bracket_index]
+                           : &context->raw_result;
+    atomic_int *result_status =
+        bracket_index >= 0 ? &context->raw_bracket_result_status[bracket_index]
+                           : &context->raw_result_status;
+    const char *raw_path = bracket_index >= 0
+        ? context->raw_bracket_paths[bracket_index] : context->raw_path;
+    const char *metadata_path = bracket_index >= 0
+        ? context->raw_bracket_metadata_paths[bracket_index]
+        : context->raw_metadata_path;
     context->raw_available_ms = sfos_camera2_now_ms();
-    if (AImage_getWidth(image, &context->raw_image.width) != AMEDIA_OK ||
-            AImage_getHeight(image, &context->raw_image.height) != AMEDIA_OK ||
-            AImage_getFormat(image, &context->raw_image.format) != AMEDIA_OK ||
-            AImage_getNumberOfPlanes(image, &context->raw_image.planes) !=
+    if (AImage_getWidth(image, &image_metadata->width) != AMEDIA_OK ||
+            AImage_getHeight(image, &image_metadata->height) != AMEDIA_OK ||
+            AImage_getFormat(image, &image_metadata->format) != AMEDIA_OK ||
+            AImage_getNumberOfPlanes(image, &image_metadata->planes) !=
                 AMEDIA_OK ||
-            AImage_getTimestamp(image, &context->raw_image.timestamp_ns) !=
+            AImage_getTimestamp(image, &image_metadata->timestamp_ns) !=
                 AMEDIA_OK ||
-            context->raw_image.format != AIMAGE_FORMAT_RAW16 ||
-            context->raw_image.planes != 1 ||
+            image_metadata->format != AIMAGE_FORMAT_RAW16 ||
+            image_metadata->planes != 1 ||
             AImage_getPlanePixelStride(
-                image, 0, &context->raw_image.pixel_stride) != AMEDIA_OK ||
+                image, 0, &image_metadata->pixel_stride) != AMEDIA_OK ||
             AImage_getPlaneRowStride(
-                image, 0, &context->raw_image.row_stride) != AMEDIA_OK ||
+                image, 0, &image_metadata->row_stride) != AMEDIA_OK ||
             AImage_getPlaneData(image, 0, &data, &data_length) != AMEDIA_OK ||
             !data || data_length <= 0) {
         raw_status = -2;
     }
-    context->raw_image.data_length = data_length;
+    image_metadata->data_length = data_length;
     if (raw_status > 0 &&
-            sfos_camera2_write_file(context->raw_path, data,
-                                    (size_t)data_length) != 0) {
+            sfos_camera2_write_file(raw_path, data, (size_t)data_length) != 0) {
         raw_status = -3;
     }
     if (raw_status > 0) {
         context->raw_written_ms = sfos_camera2_now_ms();
     } else {
-        unlink(context->raw_path);
+        unlink(raw_path);
     }
     AImage_delete(image);
 
     int64_t metadata_deadline = sfos_camera2_now_ms() + 500;
     while (raw_status > 0 &&
-            atomic_load_explicit(&context->raw_result_status,
-                                 memory_order_acquire) == 0 &&
+            atomic_load_explicit(result_status, memory_order_acquire) == 0 &&
             sfos_camera2_now_ms() < metadata_deadline) {
         sfos_camera2_sleep_10_ms();
     }
     if (raw_status > 0 &&
-            atomic_load_explicit(&context->raw_result_status,
-                                 memory_order_acquire) <= 0) {
+            atomic_load_explicit(result_status, memory_order_acquire) <= 0) {
         raw_status = -5;
     }
     if (raw_status > 0) {
         context->raw_metadata_written_ms = sfos_camera2_now_ms();
-        if (!preview_write_raw_metadata(context->camera_id, context)) {
+        struct preview_context metadata_context = *context;
+        snprintf(metadata_context.raw_path, sizeof(metadata_context.raw_path),
+                 "%s", raw_path);
+        snprintf(metadata_context.raw_metadata_path,
+                 sizeof(metadata_context.raw_metadata_path), "%s",
+                 metadata_path);
+        metadata_context.raw_image = *image_metadata;
+        metadata_context.raw_result = *result_metadata;
+        if (bracket_index >= 0) {
+            metadata_context.sensor_sensitivity =
+                context->raw_bracket_sensor_sensitivity[bracket_index];
+            metadata_context.exposure_time_ns =
+                context->raw_bracket_exposure_time_ns[bracket_index];
+        }
+        if (!preview_write_raw_metadata(context->camera_id,
+                                        &metadata_context)) {
             raw_status = -4;
         }
     }
-    atomic_store_explicit(&context->raw_status, raw_status,
-                          memory_order_release);
+    if (raw_status > 0 && bracket_index < 0) {
+        preview_log_warm_raw_effective(context);
+    }
+    if (bracket_index >= 0) {
+        atomic_store_explicit(&context->raw_bracket_status[bracket_index],
+                              raw_status, memory_order_release);
+    } else {
+        atomic_store_explicit(&context->raw_status, raw_status,
+                              memory_order_release);
+    }
     preview_write_capture_result(context, raw_status > 0 ? "ok" : "error",
-                                 context->raw_metadata_path,
+                                 metadata_path,
                                  raw_status > 0 ? 0 : PREVIEW_WRITE_ERROR);
 }
 
@@ -1229,16 +1609,30 @@ static void preview_raw_capture_completed(void *opaque,
                                           const ACameraMetadata *result)
 {
     (void)session;
-    (void)request;
     struct preview_context *context = opaque;
-    struct preview_result_raw_metadata *destination = &context->raw_result;
+    int bracket_index = -1;
+    for (int index = 0; index < context->raw_bracket_count; ++index) {
+        if (context->raw_bracket_requests[index] == request) {
+            bracket_index = index;
+            break;
+        }
+    }
+    struct preview_result_raw_metadata *destination =
+        bracket_index >= 0 ? &context->raw_bracket_result[bracket_index]
+                           : &context->raw_result;
     memset(destination, 0, sizeof(*destination));
     destination->timestamp_ns = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_TIMESTAMP, -1);
     destination->exposure_time_ns = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
+    destination->frame_duration_ns = sfos_camera2_first_i64(
+        result, ACAMERA_SENSOR_FRAME_DURATION, -1);
     destination->sensitivity = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_SENSITIVITY, -1);
+    destination->control_mode = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_MODE, -1);
+    destination->scene_mode = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_SCENE_MODE, -1);
     fprintf(stderr,
             "capture-exposure warm-raw requested_iso=%d "
             "requested_shutter=%lld actual_iso=%d actual_shutter=%lld "
@@ -1247,8 +1641,7 @@ static void preview_raw_capture_completed(void *opaque,
             (long long)context->exposure_time_ns,
             destination->sensitivity,
             (long long)destination->exposure_time_ns,
-            (long long)sfos_camera2_first_i64(
-                result, ACAMERA_SENSOR_FRAME_DURATION, -1));
+            (long long)destination->frame_duration_ns);
     destination->color_gains_count = sfos_camera2_copy_float_array(
         result, ACAMERA_COLOR_CORRECTION_GAINS,
         destination->color_gains, 4);
@@ -1258,8 +1651,14 @@ static void preview_raw_capture_completed(void *opaque,
     destination->color_transform_count = preview_copy_rational(
         result, ACAMERA_COLOR_CORRECTION_TRANSFORM,
         destination->color_transform, 9);
-    atomic_store_explicit(&context->raw_result_status, 1,
-                          memory_order_release);
+    if (bracket_index >= 0) {
+        atomic_store_explicit(
+            &context->raw_bracket_result_status[bracket_index], 1,
+            memory_order_release);
+    } else {
+        atomic_store_explicit(&context->raw_result_status, 1,
+                              memory_order_release);
+    }
 }
 
 static void preview_status_json(char *out, size_t out_size, bool success,
@@ -1345,6 +1744,12 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     atomic_init(&context.raw_status, -1);
     atomic_init(&context.raw_result_status, -1);
     atomic_init(&context.raw_sequence_status, -1);
+    atomic_init(&context.raw_bracket_next_image, 0);
+    for (int index = 0; index < PREVIEW_MAX_RAW_BRACKET; ++index) {
+        atomic_init(&context.raw_bracket_status[index], -1);
+        atomic_init(&context.raw_bracket_result_status[index], -1);
+        context.raw_bracket_requests[index] = NULL;
+    }
     atomic_init(&context.live_sensor_sensitivity, -1);
     atomic_init(&context.live_exposure_time_ns, -1);
     context.width = width;
@@ -1366,7 +1771,12 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     context.focus_mode = SFOS_CAMERA2_FOCUS_CONTINUOUS;
     context.focus_distance = 0.0f;
     context.exposure_compensation = 0;
+    context.original_scene_mode = SFOS_CAMERA2_SCENE_NONE;
     context.scene_mode = SFOS_CAMERA2_SCENE_NONE;
+    context.scene_mode_supported = 1;
+    context.hdr_scene_supported = 0;
+    context.jpeg_control_mode = -1;
+    context.jpeg_scene_mode = -1;
     context.color_temperature_kelvin = 0;
     context.color_tint = 0;
     context.sensor_sensitivity = 0;
@@ -1433,12 +1843,18 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     preview_copy_raw_static_metadata(&context.raw_static, characteristics);
     context.focal_length = sfos_camera2_first_float(
         characteristics, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, 0.0f);
+    atomic_store_explicit(&context.live_af_state, -1, memory_order_release);
+    atomic_store_explicit(&context.live_focus_distance_micros, -1,
+                          memory_order_release);
 	    context.vendor_awb_value_supported = sfos_camera2_metadata_has_i32(
         characteristics, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
         (int32_t)MTK_3A_AWB_VALUE);
     context.awb_off_supported = sfos_camera2_metadata_has_u8(
         characteristics, ACAMERA_CONTROL_AWB_AVAILABLE_MODES,
         ACAMERA_CONTROL_AWB_MODE_OFF);
+    context.hdr_scene_supported = sfos_camera2_metadata_has_u8(
+        characteristics, ACAMERA_CONTROL_AVAILABLE_SCENE_MODES,
+        ACAMERA_CONTROL_SCENE_MODE_HDR);
 
     media_status_t media_status = AImageReader_new(
         width, height, AIMAGE_FORMAT_YUV_420_888, 4, &reader);
@@ -1651,6 +2067,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
         preview_read_command_data(control_fd, &command_buffer);
         while (preview_pop_command(&command_buffer, &command)) {
             if (command.type == PREVIEW_COMMAND_FOCUS) {
+                context.focus_hold_active = 0;
                 context.focus_x = command.focus_x;
                 context.focus_y = command.focus_y;
                 preview_configure_request(request, &context, characteristics,
@@ -1695,9 +2112,11 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 context.focus_mode = command.focus_mode;
                 context.focus_distance = command.focus_distance;
                 context.exposure_compensation = command.exposure_compensation;
-                context.scene_mode =
+                context.original_scene_mode = command.scene_mode;
+                context.scene_mode_supported =
                     sfos_camera2_scene_mode_supported(characteristics,
-                                                      command.scene_mode)
+                                                      command.scene_mode);
+                context.scene_mode = context.scene_mode_supported
                     ? command.scene_mode : SFOS_CAMERA2_SCENE_NONE;
                 context.color_temperature_kelvin =
                     command.color_temperature_kelvin;
@@ -1722,6 +2141,71 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 ACaptureRequest *requests[] = { request };
                 ACameraCaptureSession_setRepeatingRequest(
                     session, &preview_callbacks, 1, requests, NULL);
+            } else if (command.type == PREVIEW_COMMAND_EXPOSURE_SETTINGS) {
+                context.sensor_sensitivity = command.sensor_sensitivity;
+                context.exposure_time_ns = command.exposure_time_ns;
+                context.aperture = command.aperture;
+                context.noise_reduction = command.noise_reduction;
+                context.zoom_ratio = command.zoom_ratio;
+                preview_configure_request(request, &context, characteristics,
+                                          0);
+                if (jpeg_request) {
+                    preview_configure_request(jpeg_request, &context,
+                                              characteristics, 1);
+                }
+                if (raw_request) {
+                    preview_configure_request(raw_request, &context,
+                                              characteristics, 1);
+                }
+                ACaptureRequest *requests[] = { request };
+                ACameraCaptureSession_setRepeatingRequest(
+                    session, &preview_callbacks, 1, requests, NULL);
+            } else if (command.type == PREVIEW_COMMAND_FOCUS_HOLD) {
+                int focus_distance_micros = atomic_load_explicit(
+                    &context.live_focus_distance_micros,
+                    memory_order_acquire);
+                if (focus_distance_micros >= 0) {
+                    context.focus_hold_distance =
+                        (float)focus_distance_micros / 1000000.0f;
+                    context.focus_hold_active = 1;
+                    fprintf(stderr,
+                            "capture-focus hold distance=%.6f af_state=%d\n",
+                            context.focus_hold_distance,
+                            atomic_load_explicit(&context.live_af_state,
+                                                 memory_order_acquire));
+                } else {
+                    context.focus_hold_active = 0;
+                    fprintf(stderr,
+                            "capture-focus hold skipped: no lens distance\n");
+                }
+                preview_configure_request(request, &context, characteristics,
+                                          0);
+                if (jpeg_request) {
+                    preview_configure_request(jpeg_request, &context,
+                                              characteristics, 1);
+                }
+                if (raw_request) {
+                    preview_configure_request(raw_request, &context,
+                                              characteristics, 1);
+                }
+                ACaptureRequest *requests[] = { request };
+                ACameraCaptureSession_setRepeatingRequest(
+                    session, &preview_callbacks, 1, requests, NULL);
+            } else if (command.type == PREVIEW_COMMAND_FOCUS_HOLD_RELEASE) {
+                context.focus_hold_active = 0;
+                preview_configure_request(request, &context, characteristics,
+                                          0);
+                if (jpeg_request) {
+                    preview_configure_request(jpeg_request, &context,
+                                              characteristics, 1);
+                }
+                if (raw_request) {
+                    preview_configure_request(raw_request, &context,
+                                              characteristics, 1);
+                }
+                ACaptureRequest *requests[] = { request };
+                ACameraCaptureSession_setRepeatingRequest(
+                    session, &preview_callbacks, 1, requests, NULL);
             } else if (command.type == PREVIEW_COMMAND_CAPTURE_JPEG &&
                     jpeg_request) {
                 snprintf(context.jpeg_path, sizeof(context.jpeg_path), "%s",
@@ -1729,8 +2213,13 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 context.jpeg_data_length = 0;
                 context.jpeg_command_ms = sfos_camera2_now_ms();
                 context.jpeg_submit_ms = 0;
+                context.jpeg_result_ms = 0;
                 context.jpeg_available_ms = 0;
                 context.jpeg_written_ms = 0;
+                context.jpeg_hal_exposure_time_ns = -1;
+                context.jpeg_hal_frame_duration_ns = -1;
+                context.jpeg_hal_sensitivity = -1;
+                context.jpeg_effective_logged = 0;
                 fprintf(stderr, "capture-timing bridge warm-jpeg command\n");
                 fprintf(stderr,
                         "capture-exposure warm-jpeg submit requested_iso=%d "
@@ -1772,6 +2261,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 }
             } else if (command.type == PREVIEW_COMMAND_CAPTURE_RAW &&
                     raw_request) {
+                context.raw_bracket_count = 0;
                 snprintf(context.raw_path, sizeof(context.raw_path), "%s",
                          command.path);
                 snprintf(context.raw_metadata_path,
@@ -1813,6 +2303,121 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                     preview_write_capture_result(&context, "error",
                                                  context.raw_metadata_path,
                                                  raw_status);
+                }
+            } else if (command.type == PREVIEW_COMMAND_CAPTURE_RAW_BRACKET &&
+                    raw_target && command.bracket_count >= 3 &&
+                    command.bracket_count <= PREVIEW_MAX_RAW_BRACKET) {
+                for (int index = 0; index < PREVIEW_MAX_RAW_BRACKET; ++index) {
+                    if (context.raw_bracket_requests[index]) {
+                        ACaptureRequest_free(
+                            context.raw_bracket_requests[index]);
+                        context.raw_bracket_requests[index] = NULL;
+                    }
+                }
+                context.raw_bracket_count = command.bracket_count;
+                atomic_store_explicit(&context.raw_bracket_next_image, 0,
+                                      memory_order_release);
+                context.raw_command_ms = sfos_camera2_now_ms();
+                context.raw_submit_ms = 0;
+                context.raw_available_ms = 0;
+                context.raw_written_ms = 0;
+                context.raw_metadata_written_ms = 0;
+                bool request_error = false;
+                for (int index = 0; index < command.bracket_count; ++index) {
+                    snprintf(context.raw_bracket_paths[index],
+                             sizeof(context.raw_bracket_paths[index]), "%s",
+                             command.bracket_paths[index]);
+                    snprintf(context.raw_bracket_metadata_paths[index],
+                             sizeof(context.raw_bracket_metadata_paths[index]),
+                             "%s", command.bracket_metadata_paths[index]);
+                    context.raw_bracket_sensor_sensitivity[index] =
+                        command.bracket_sensor_sensitivity[index];
+                    context.raw_bracket_exposure_time_ns[index] =
+                        command.bracket_exposure_time_ns[index];
+                    memset(&context.raw_bracket_image[index], 0,
+                           sizeof(context.raw_bracket_image[index]));
+                    memset(&context.raw_bracket_result[index], 0,
+                           sizeof(context.raw_bracket_result[index]));
+                    atomic_store_explicit(
+                        &context.raw_bracket_status[index], 0,
+                        memory_order_release);
+                    atomic_store_explicit(
+                        &context.raw_bracket_result_status[index], 0,
+                        memory_order_release);
+                    camera_status_t create_status =
+                        ACameraDevice_createCaptureRequest(
+                            device, TEMPLATE_STILL_CAPTURE,
+                            &context.raw_bracket_requests[index]);
+                    if (create_status != ACAMERA_OK ||
+                            !context.raw_bracket_requests[index] ||
+                            ACaptureRequest_addTarget(
+                                context.raw_bracket_requests[index],
+                                raw_target) != ACAMERA_OK) {
+                        request_error = true;
+                        atomic_store_explicit(
+                            &context.raw_bracket_status[index], -1,
+                            memory_order_release);
+                        preview_write_capture_result(
+                            &context, "error",
+                            context.raw_bracket_metadata_paths[index],
+                            create_status);
+                        break;
+                    }
+                    preview_configure_raw_bracket_request(
+                        context.raw_bracket_requests[index], &context,
+                        characteristics,
+                        context.raw_bracket_sensor_sensitivity[index],
+                        context.raw_bracket_exposure_time_ns[index]);
+                    fprintf(stderr,
+                            "capture-exposure warm-raw-bracket index=%d "
+                            "requested_iso=%d requested_shutter=%lld\n",
+                            index,
+                            context.raw_bracket_sensor_sensitivity[index],
+                            (long long)
+                                context.raw_bracket_exposure_time_ns[index]);
+                }
+                if (!request_error) {
+                    ACameraCaptureSession_captureCallbacks raw_callbacks = {
+                        .context = &context,
+                        .onCaptureStarted = NULL,
+                        .onCaptureProgressed = NULL,
+                        .onCaptureCompleted = preview_raw_capture_completed,
+                        .onCaptureFailed = NULL,
+                        .onCaptureSequenceCompleted = NULL,
+                        .onCaptureSequenceAborted = NULL,
+                        .onCaptureBufferLost = NULL,
+                    };
+                    ACaptureRequest *requests[PREVIEW_MAX_RAW_BRACKET] = {
+                        NULL, NULL, NULL
+                    };
+                    for (int index = 0; index < command.bracket_count;
+                            ++index) {
+                        requests[index] = context.raw_bracket_requests[index];
+                    }
+                    camera_status_t raw_status =
+                        ACameraCaptureSession_capture(
+                            session, &raw_callbacks, command.bracket_count,
+                            requests, NULL);
+                    atomic_store_explicit(
+                        &context.status.last_camera_status, raw_status,
+                        memory_order_release);
+                    if (raw_status == ACAMERA_OK) {
+                        context.raw_submit_ms = sfos_camera2_now_ms();
+                    } else {
+                        for (int index = 0; index < command.bracket_count;
+                                ++index) {
+                            atomic_store_explicit(
+                                &context.raw_bracket_status[index], -1,
+                                memory_order_release);
+                            preview_write_capture_result(
+                                &context, "error",
+                                context.raw_bracket_metadata_paths[index],
+                                raw_status);
+                        }
+                        context.raw_bracket_count = 0;
+                    }
+                } else {
+                    context.raw_bracket_count = 0;
                 }
             }
         }
@@ -1870,6 +2475,11 @@ cleanup:
     }
     if (raw_request) {
         ACaptureRequest_free(raw_request);
+    }
+    for (int index = 0; index < PREVIEW_MAX_RAW_BRACKET; ++index) {
+        if (context.raw_bracket_requests[index]) {
+            ACaptureRequest_free(context.raw_bracket_requests[index]);
+        }
     }
     if (reader) {
         AImageReader_setImageListener(reader, NULL);

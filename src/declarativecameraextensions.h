@@ -13,6 +13,9 @@
 #include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QScopedPointer>
+#include <QStringList>
+#include <QVariantList>
+#include <QJsonObject>
 
 class QTemporaryDir;
 
@@ -28,6 +31,39 @@ public:
     bool rawImageCaptureAvailable() const;
 
     Q_INVOKABLE void disableNotifications(QQuickItem *item, bool disable);
+    Q_INVOKABLE QString camera2DeviceConfigDir() const;
+    Q_INVOKABLE QString ensureCamera2GeneratedHalConfig(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2RawSizeModel(const QString &cameraId,
+                                                const QString &rawFormat);
+    Q_INVOKABLE QStringList camera2JpegSizeModel(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2CaptureFormatModel(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2LensModel(const QString &cameraId);
+    Q_INVOKABLE QString camera2LensLabel(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2FocusModeModel(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2SceneModel(const QString &cameraId);
+    Q_INVOKABLE QVariantList camera2NoiseReductionModel(const QString &cameraId);
+    Q_INVOKABLE QVariantList camera2IsoModel(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2BracketModel(const QString &cameraId);
+    Q_INVOKABLE QString camera2MaxShutterNs(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2ShutterModel(const QString &cameraId);
+    Q_INVOKABLE QStringList camera2FocusDistanceModel(const QString &cameraId);
+    Q_INVOKABLE qreal camera2MaximumZoom(const QString &cameraId);
+    Q_INVOKABLE QStringList rawCaptureExposureModel(const QString &cameraId);
+    Q_INVOKABLE QVariantList rawCaptureRotationModel(const QString &cameraId,
+                                                     const QString &mode);
+    Q_INVOKABLE QVariantList rawCaptureFocusTimeoutModel(const QString &cameraId);
+    Q_INVOKABLE QStringList rawCaptureRawFormatModel(const QString &cameraId);
+    Q_INVOKABLE bool raw10CaptureAvailable(const QString &cameraId);
+    Q_INVOKABLE QString camera2PreferredCaptureSize(const QString &cameraId,
+                                                    const QString &format);
+    Q_INVOKABLE QString camera2WarmCaptureSize(const QString &cameraId);
+    Q_INVOKABLE QString preferredCamera2CameraId(const QString &cameraId);
+    Q_INVOKABLE QString camera2CompatibilityLevel(const QString &cameraId);
+    Q_INVOKABLE QString camera2CompatibilitySummary(const QString &cameraId);
+    Q_INVOKABLE QString exportCamera2CompatibilityReport(const QString &cameraId);
+    Q_INVOKABLE void setNextCaptureBracketMetadata(int index, int count,
+                                                   qreal ev,
+                                                   const QString &baseShutterNs);
     Q_INVOKABLE bool captureRawImage(const QString &targetPath, const QString &cameraId,
                                      const QString &rawSize, int timeoutSeconds,
                                      const QString &focusMode, const QString &focusDistance,
@@ -35,13 +71,16 @@ public:
                                      const QString &exposure, int jpegQuality,
                                      int rotationDegrees, const QString &rawSaveFormat,
                                      const QString &rawRenderEngine,
+                                     const QString &rawFormat,
                                      const QString &sceneMode, int colorTemperature,
                                      int colorTint, bool progressiveJpeg,
                                      int sensorSensitivity,
                                      const QString &exposureTime,
                                      int aperture,
                                      int noiseReduction,
-                                     qreal zoom);
+                                     qreal zoom,
+                                     qreal focusX,
+                                     qreal focusY);
     Q_INVOKABLE bool captureJpegImage(const QString &targetPath, const QString &cameraId,
                                       const QString &jpegSize, int timeoutSeconds,
                                       int jpegQuality, int rotationDegrees,
@@ -63,7 +102,9 @@ public:
                                      int colorTemperature,
                                      int colorTint,
                                      bool progressiveJpeg);
-
+    Q_INVOKABLE bool combineBracketImages(const QString &targetPath,
+                                          const QVariantList &sourcePaths,
+                                          int jpegQuality);
 signals:
     void rawImageCaptured(const QString &path, const QString &mimeType);
     void rawImageCaptureFailed(const QString &error);
@@ -71,6 +112,7 @@ signals:
 private:
     void finishRawImageCapture(int exitCode, QProcess::ExitStatus exitStatus);
     void finishRawImageRender();
+    void finishBracketCombine();
     bool startRawImageProcess(const QString &program, const QStringList &arguments,
                               const QString &errorContext,
                               const QString &standardOutputPath = QString());
@@ -81,6 +123,7 @@ private:
     bool writeDngSidecar(const QString &metadataPath, const QString &targetPath);
     void preserveRawCaptureFiles();
     void clearRawImageCapture();
+    bool loadCamera2Capabilities(const QString &cameraId);
 
     enum RawCaptureStage {
         RawCaptureIdle,
@@ -90,6 +133,7 @@ private:
 
     QScopedPointer<QProcess> m_rawCaptureProcess;
     QScopedPointer<QFutureWatcher<bool> > m_rawRenderWatcher;
+    QScopedPointer<QFutureWatcher<bool> > m_bracketCombineWatcher;
     QScopedPointer<QTemporaryDir> m_rawCaptureDirectory;
     RawCaptureStage m_rawCaptureStage = RawCaptureIdle;
     QString m_rawCaptureTargetPath;
@@ -105,8 +149,36 @@ private:
     int m_rawCaptureRotationDegrees = 0;
     int m_rawCaptureColorTemperature = 0;
     int m_rawCaptureColorTint = 0;
+    int m_bracketIndex = -1;
+    int m_bracketCount = 0;
+    qreal m_bracketEv = 0.0;
+    QString m_bracketBaseShutterNs;
+    QString m_bracketCombineTargetPath;
+    QStringList m_bracketCombineSourcePaths;
+    int m_bracketCombineJpegQuality = 92;
     qint64 m_rawRenderStart = 0;
     QElapsedTimer m_rawCaptureTimer;
+    bool m_camera2CapabilitiesLoaded = false;
+    bool m_camera2CapabilitiesValid = false;
+    QString m_camera2CapabilitiesCameraId;
+    QStringList m_camera2Raw16Sizes;
+    QStringList m_camera2Raw10Sizes;
+    QStringList m_camera2JpegSizes;
+    QStringList m_camera2PreviewSizes;
+    QStringList m_camera2FocusModes;
+    QStringList m_camera2Scenes;
+    QVariantList m_camera2NoiseReductionModes;
+    bool m_camera2ManualExposureSupported = false;
+    bool m_camera2ManualBracketingSupported = false;
+    qint64 m_camera2HalMaxShutterNs = 0;
+    qint64 m_camera2MaxShutterNs = 0;
+    QJsonObject m_camera2DeviceProfile;
+    QString m_camera2DeviceProfileId;
+    QString m_camera2DeviceProfileSource;
+    QByteArray m_camera2ProbeJson;
+    QByteArray m_camera2ProbeErrors;
+    QJsonObject m_camera2SelectedCamera;
+    qint64 m_camera2OverrideProfileMtime = 0;
 };
 
 #endif

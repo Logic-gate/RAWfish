@@ -20,6 +20,7 @@ SOURCES += \
         cameraplugin.cpp \
         capturemodel.cpp \
         declarativecameraextensions.cpp \
+        exifutils.cpp \
         imageadjustments.cpp \
         declarativesettings.cpp \
         cameraconfigs.cpp
@@ -28,6 +29,7 @@ HEADERS += \
         camera2preview.h \
         capturemodel.h \
         declarativecameraextensions.h \
+        exifutils.h \
         imageadjustments.h \
         declarativesettings.h \
         cameraconfigs.h

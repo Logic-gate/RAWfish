@@ -39,6 +39,7 @@ enum jpeg_error {
 
 struct jpeg_context {
     struct sfos_camera2_status status;
+    atomic_int result_status;
     int width;
     int height;
     int data_length;
@@ -53,10 +54,118 @@ struct jpeg_context {
     int64_t file_written_ms;
     int32_t requested_sensitivity;
     int64_t requested_exposure_time_ns;
+    int64_t exposure_time_range[2];
+    int32_t requested_orientation_degrees;
+    int32_t requested_aperture;
+    int32_t requested_scene_mode_original;
+    int32_t requested_scene_mode;
+    int32_t scene_mode_supported;
+    int32_t hdr_scene_supported;
+    int32_t control_mode_applied;
+    int32_t scene_mode_applied;
+    float focal_length;
     int32_t actual_sensitivity;
     int64_t actual_exposure_time_ns;
     int64_t actual_frame_duration_ns;
 };
+
+static bool jpeg_hal_exposure_suspect(int64_t hal_exposure_time_ns,
+                                      int64_t elapsed_ms)
+{
+    if (hal_exposure_time_ns <= 0 || elapsed_ms <= 0) {
+        return false;
+    }
+    return hal_exposure_time_ns > ((elapsed_ms + 100) * 1000000LL);
+}
+
+static void jpeg_log_effective_capture(const struct jpeg_context *context)
+{
+    if (!context || context->capture_submit_ms <= 0 ||
+            context->image_available_ms <= 0) {
+        return;
+    }
+    int64_t submit_to_image_ms = context->image_available_ms -
+                                 context->capture_submit_ms;
+    int64_t submit_to_file_ms = context->file_written_ms > 0
+        ? context->file_written_ms - context->capture_submit_ms : -1;
+    fprintf(stderr,
+            "capture-effective jpeg requested_iso=%d "
+            "requested_shutter=%lld hal_iso=%d hal_shutter=%lld "
+            "hal_frame=%lld submit_to_image_ms=%lld "
+            "submit_to_file_ms=%lld suspect_hal_exposure=%d\n",
+            context->requested_sensitivity,
+            (long long)context->requested_exposure_time_ns,
+            context->actual_sensitivity,
+            (long long)context->actual_exposure_time_ns,
+            (long long)context->actual_frame_duration_ns,
+            (long long)submit_to_image_ms,
+            (long long)submit_to_file_ms,
+            jpeg_hal_exposure_suspect(context->actual_exposure_time_ns,
+                                      submit_to_image_ms) ? 1 : 0);
+}
+
+static const char *jpeg_scene_mode_name(int scene_mode)
+{
+    switch (scene_mode) {
+    case SFOS_CAMERA2_SCENE_PORTRAIT: return "portrait";
+    case SFOS_CAMERA2_SCENE_LANDSCAPE: return "landscape";
+    case SFOS_CAMERA2_SCENE_SPORT: return "sport";
+    case SFOS_CAMERA2_SCENE_NIGHT: return "night";
+    case SFOS_CAMERA2_SCENE_AUTO: return "auto";
+    case SFOS_CAMERA2_SCENE_ACTION: return "action";
+    case SFOS_CAMERA2_SCENE_NIGHT_PORTRAIT: return "night-portrait";
+    case SFOS_CAMERA2_SCENE_THEATRE: return "theatre";
+    case SFOS_CAMERA2_SCENE_BEACH: return "beach";
+    case SFOS_CAMERA2_SCENE_SNOW: return "snow";
+    case SFOS_CAMERA2_SCENE_SUNSET: return "sunset";
+    case SFOS_CAMERA2_SCENE_STEADY_PHOTO: return "steady-photo";
+    case SFOS_CAMERA2_SCENE_FIREWORKS: return "fireworks";
+    case SFOS_CAMERA2_SCENE_PARTY: return "party";
+    case SFOS_CAMERA2_SCENE_CANDLELIGHT: return "candlelight";
+    case SFOS_CAMERA2_SCENE_BARCODE: return "barcode";
+    case SFOS_CAMERA2_SCENE_BACKLIGHT: return "backlight";
+    case SFOS_CAMERA2_SCENE_FLOWERS: return "flowers";
+    case SFOS_CAMERA2_SCENE_AR: return "ar";
+    case SFOS_CAMERA2_SCENE_HDR: return "hdr";
+    default: return "manual";
+    }
+}
+
+static const char *jpeg_control_mode_name(int control_mode)
+{
+    switch (control_mode) {
+    case ACAMERA_CONTROL_MODE_OFF: return "off";
+    case ACAMERA_CONTROL_MODE_AUTO: return "auto";
+    case ACAMERA_CONTROL_MODE_USE_SCENE_MODE: return "use-scene-mode";
+#ifdef ACAMERA_CONTROL_MODE_OFF_KEEP_STATE
+    case ACAMERA_CONTROL_MODE_OFF_KEEP_STATE: return "off-keep-state";
+#endif
+    default: return "unknown";
+    }
+}
+
+static const char *jpeg_android_scene_mode_name(int scene_mode)
+{
+    switch (scene_mode) {
+    case ACAMERA_CONTROL_SCENE_MODE_ACTION: return "action";
+    case ACAMERA_CONTROL_SCENE_MODE_PORTRAIT: return "portrait";
+    case ACAMERA_CONTROL_SCENE_MODE_LANDSCAPE: return "landscape";
+    case ACAMERA_CONTROL_SCENE_MODE_NIGHT: return "night";
+    case ACAMERA_CONTROL_SCENE_MODE_NIGHT_PORTRAIT: return "night-portrait";
+    case ACAMERA_CONTROL_SCENE_MODE_THEATRE: return "theatre";
+    case ACAMERA_CONTROL_SCENE_MODE_BEACH: return "beach";
+    case ACAMERA_CONTROL_SCENE_MODE_SNOW: return "snow";
+    case ACAMERA_CONTROL_SCENE_MODE_SUNSET: return "sunset";
+    case ACAMERA_CONTROL_SCENE_MODE_STEADYPHOTO: return "steady-photo";
+    case ACAMERA_CONTROL_SCENE_MODE_FIREWORKS: return "fireworks";
+    case ACAMERA_CONTROL_SCENE_MODE_SPORTS: return "sport";
+    case ACAMERA_CONTROL_SCENE_MODE_PARTY: return "party";
+    case ACAMERA_CONTROL_SCENE_MODE_CANDLELIGHT: return "candlelight";
+    case ACAMERA_CONTROL_SCENE_MODE_BARCODE: return "barcode";
+    case ACAMERA_CONTROL_SCENE_MODE_HDR: return "hdr";
+    default: return "unknown";
+    }
+}
 
 static void jpeg_device_disconnected(void *opaque, ACameraDevice *device)
 {
@@ -133,6 +242,11 @@ static void jpeg_capture_completed(void *opaque,
         result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
     context->actual_frame_duration_ns = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_FRAME_DURATION, -1);
+    context->control_mode_applied = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_MODE, -1);
+    context->scene_mode_applied = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_SCENE_MODE, -1);
+    atomic_store_explicit(&context->result_status, 1, memory_order_release);
     fprintf(stderr,
             "capture-exposure jpeg requested_iso=%d requested_shutter=%lld "
             "actual_iso=%d actual_shutter=%lld actual_frame=%lld\n",
@@ -154,6 +268,36 @@ static void jpeg_status_json(char *out, size_t out_size, bool success,
              "{\"status\":\"%s\",\"stage\":\"%s\",\"code\":%d,"
              "\"jpeg_path\":\"%s\",\"width\":%d,\"height\":%d,"
              "\"data_length\":%d,"
+             "\"sensor_sensitivity_requested\":%d,"
+             "\"exposure_time_requested_ns\":%lld,"
+             "\"shutter_ns_range\":[%lld,%lld],"
+             "\"jpeg_orientation\":%d,"
+             "\"aperture_requested\":%d,"
+             "\"focal_length_mm\":%.9g,"
+             "\"iso\":%d,\"exposure_time_ns\":%lld,"
+             "\"frame_duration_ns\":%lld,"
+             "\"scene_mode_requested_original\":\"%s\","
+             "\"scene_mode_requested\":\"%s\","
+             "\"scene_mode_supported\":%s,"
+             "\"hdr_scene_supported\":%s,"
+             "\"hdr_scene_requested\":%s,"
+             "\"hdr_scene_applied\":%s,"
+             "\"dol_supported\":false,"
+             "\"dol_source\":\"%s\","
+             "\"dol_requested\":%s,"
+             "\"dol_applied\":false,"
+             "\"control_mode_applied\":\"%s\","
+             "\"control_mode_applied_value\":%d,"
+             "\"scene_mode_applied\":\"%s\","
+             "\"scene_mode_applied_value\":%d,"
+             "\"scene\":{\"requested_original\":\"%s\","
+             "\"requested\":\"%s\",\"supported\":%s,"
+             "\"hdr_supported\":%s,\"hdr_requested\":%s,"
+             "\"hdr_applied\":%s,"
+             "\"control_mode_applied\":\"%s\","
+             "\"control_mode_applied_value\":%d,"
+             "\"scene_mode_applied\":\"%s\","
+             "\"scene_mode_applied_value\":%d},"
              "\"timing_ms\":{\"characteristics\":%lld,"
              "\"reader\":%lld,\"camera_open\":%lld,"
              "\"session\":%lld,\"capture_submit\":%lld,"
@@ -166,6 +310,49 @@ static void jpeg_status_json(char *out, size_t out_size, bool success,
              context && context->jpeg_path ? context->jpeg_path : "",
              context ? context->width : 0, context ? context->height : 0,
              context ? context->data_length : 0,
+             context ? context->requested_sensitivity : 0,
+             context ? (long long)context->requested_exposure_time_ns : 0,
+             context ? (long long)context->exposure_time_range[0] : 0,
+             context ? (long long)context->exposure_time_range[1] : 0,
+             context ? context->requested_orientation_degrees : 0,
+             context ? context->requested_aperture : 0,
+             context ? context->focal_length : 0.0f,
+             context ? context->actual_sensitivity : 0,
+             context ? (long long)context->actual_exposure_time_ns : 0,
+             context ? (long long)context->actual_frame_duration_ns : 0,
+             context ? jpeg_scene_mode_name(context->requested_scene_mode_original) : "manual",
+             context ? jpeg_scene_mode_name(context->requested_scene_mode) : "manual",
+             context && context->scene_mode_supported ? "true" : "false",
+             context && context->hdr_scene_supported ? "true" : "false",
+             context && context->requested_scene_mode_original == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+             context && context->control_mode_applied == ACAMERA_CONTROL_MODE_USE_SCENE_MODE &&
+                     context->scene_mode_applied == ACAMERA_CONTROL_SCENE_MODE_HDR
+                ? "true" : "false",
+             context && context->hdr_scene_supported ? "scene-hdr" : "none",
+             context && context->requested_scene_mode_original == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+             context ? jpeg_control_mode_name(context->control_mode_applied) : "unknown",
+             context ? context->control_mode_applied : -1,
+             context && context->control_mode_applied == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? jpeg_android_scene_mode_name(context->scene_mode_applied) : "none",
+             context && context->control_mode_applied == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? context->scene_mode_applied : -1,
+             context ? jpeg_scene_mode_name(context->requested_scene_mode_original) : "manual",
+             context ? jpeg_scene_mode_name(context->requested_scene_mode) : "manual",
+             context && context->scene_mode_supported ? "true" : "false",
+             context && context->hdr_scene_supported ? "true" : "false",
+             context && context->requested_scene_mode_original == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+             context && context->control_mode_applied == ACAMERA_CONTROL_MODE_USE_SCENE_MODE &&
+                     context->scene_mode_applied == ACAMERA_CONTROL_SCENE_MODE_HDR
+                ? "true" : "false",
+             context ? jpeg_control_mode_name(context->control_mode_applied) : "unknown",
+             context ? context->control_mode_applied : -1,
+             context && context->control_mode_applied == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? jpeg_android_scene_mode_name(context->scene_mode_applied) : "none",
+             context && context->control_mode_applied == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? context->scene_mode_applied : -1,
              context ? (long long)context->characteristics_ms : 0,
              context ? (long long)context->reader_ms : 0,
              context ? (long long)context->camera_open_ms : 0,
@@ -219,6 +406,16 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_capture_jpeg(
     context.started_ms = sfos_camera2_now_ms();
     context.requested_sensitivity = sensor_sensitivity;
     context.requested_exposure_time_ns = exposure_time_ns;
+    context.exposure_time_range[0] = 0;
+    context.exposure_time_range[1] = 0;
+    context.requested_orientation_degrees = orientation_degrees;
+    context.requested_aperture = aperture;
+    context.requested_scene_mode_original = scene_mode;
+    context.requested_scene_mode = scene_mode;
+    context.scene_mode_supported = 1;
+    context.hdr_scene_supported = 0;
+    context.control_mode_applied = -1;
+    context.scene_mode_applied = -1;
 
     if (!camera_id || !*camera_id || width <= 0 || height <= 0 ||
             !jpeg_path || !*jpeg_path || timeout_ms < 1000 ||
@@ -251,15 +448,26 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_capture_jpeg(
         goto cleanup;
     }
     context.characteristics_ms = sfos_camera2_now_ms() - context.started_ms;
+    context.focal_length = sfos_camera2_first_float(
+        characteristics, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, 0.0f);
+    sfos_camera2_copy_i64_array(
+        characteristics, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE,
+        context.exposure_time_range, 2);
     if (!sfos_camera2_has_output_size(
             characteristics, AIMAGE_FORMAT_JPEG, width, height)) {
         result_code = JPEG_UNSUPPORTED_SIZE;
         stage = "jpeg_size";
         goto cleanup;
     }
-    if (!sfos_camera2_scene_mode_supported(characteristics, scene_mode)) {
+    context.scene_mode_supported =
+        sfos_camera2_scene_mode_supported(characteristics, scene_mode);
+    context.hdr_scene_supported = sfos_camera2_metadata_has_u8(
+        characteristics, ACAMERA_CONTROL_AVAILABLE_SCENE_MODES,
+        ACAMERA_CONTROL_SCENE_MODE_HDR);
+    if (!context.scene_mode_supported) {
         scene_mode = SFOS_CAMERA2_SCENE_NONE;
     }
+    context.requested_scene_mode = scene_mode;
 
     media_status_t media_status = AImageReader_new(
         width, height, AIMAGE_FORMAT_JPEG, 2, &reader);
@@ -397,6 +605,13 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_capture_jpeg(
         stage = "image_wait";
         goto cleanup;
     }
+    int64_t result_deadline = sfos_camera2_now_ms() + 500;
+    while (atomic_load_explicit(&context.result_status,
+                                memory_order_acquire) == 0 &&
+            sfos_camera2_now_ms() < result_deadline) {
+        sfos_camera2_sleep_10_ms();
+    }
+    jpeg_log_effective_capture(&context);
 
 cleanup:
     jpeg_status_json(out, out_size, result_code == 0, stage, result_code,

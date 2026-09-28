@@ -10,6 +10,7 @@ Item {
     id: header
 
     property Item pressedMenu
+    property real labelVerticalOffset: 0
     readonly property Item highlightItem: pressedMenu
                 ? pressedMenu.highlightItem
                 : null
@@ -19,7 +20,10 @@ Item {
     Label {
         id: label
 
-        anchors.centerIn: parent
+        anchors {
+            centerIn: parent
+            verticalCenterOffset: header.labelVerticalOffset
+        }
 
         font.pixelSize: Screen.sizeCategory >= Screen.Large ? Theme.fontSizeSmall : Theme.fontSizeExtraSmall
         font.bold: Screen.sizeCategory < Screen.Large

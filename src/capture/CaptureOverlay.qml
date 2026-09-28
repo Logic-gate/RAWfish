@@ -24,7 +24,7 @@ SettingsOverlay {
     property var captureView
     property var camera
     property Item focusArea
-    readonly property real camera2MaximumZoom: 4.0
+    readonly property real camera2MaximumZoom: Settings.camera2MaximumZoom()
 
     property int _recordingDuration: clock.enabled ? ((clock.time - _startTime) / 1000) : 0
     property int _recSecsRemaining: {
@@ -78,9 +78,7 @@ SettingsOverlay {
     }
 
     function writeMetaData() {
-        captureView.captureOrientation = camera.position === Camera.FrontFace
-                       ? (720 + camera.orientation - _pictureRotation) % 360
-                       : (720 + camera.orientation + _pictureRotation) % 360
+        captureView.captureOrientation = deviceRotation
 
         // Camera documentation says dateTimeOriginal should be used but at the moment CameraBinMetaData uses only
         // date property (which the documentation doesn't even list)

@@ -14,6 +14,11 @@ import com.jolla.settings 1.0
 import com.jolla.settings.system 1.0
 
 ApplicationSettings {
+    property string camera2CompatibilityReportPath
+    property string camera2GeneratedHalConfigPath
+
+    CameraExtensions { id: camera2Compatibility }
+
     function aspectRatioName(aspectRatio) {
         if (aspectRatio === CameraConfigs.AspectRatio_16_9) {
             return "16:9"
@@ -64,6 +69,83 @@ ApplicationSettings {
         onClicked: Settings.global.advancedMode = !Settings.global.advancedMode
     }
 
+    SectionHeader {
+        text: "RAWfish compatibility"
+        visible: Settings.global.advancedMode
+    }
+
+    Label {
+        x: Theme.horizontalPageMargin
+        width: parent.width - 2 * x
+        visible: Settings.global.advancedMode
+        wrapMode: Text.Wrap
+        color: Theme.secondaryColor
+        font.pixelSize: Theme.fontSizeSmall
+        text: camera2Compatibility.camera2CompatibilitySummary(Settings.deviceId)
+    }
+
+    Button {
+        visible: Settings.global.advancedMode
+        enabled: AccessPolicy.cameraEnabled
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Export compatibility report"
+        onClicked: {
+            camera2CompatibilityReportPath =
+                    camera2Compatibility.exportCamera2CompatibilityReport(
+                        Settings.deviceId)
+        }
+    }
+
+    Label {
+        x: Theme.horizontalPageMargin
+        width: parent.width - 2 * x
+        visible: Settings.global.advancedMode && camera2CompatibilityReportPath !== ""
+        wrapMode: Text.Wrap
+        color: Theme.highlightColor
+        font.pixelSize: Theme.fontSizeExtraSmall
+        text: "Saved " + camera2CompatibilityReportPath
+    }
+
+    Item {
+        width: 1
+        height: Theme.paddingLarge
+        visible: Settings.global.advancedMode
+    }
+
+    Label {
+        x: Theme.horizontalPageMargin
+        width: parent.width - 2 * x
+        visible: Settings.global.advancedMode
+        wrapMode: Text.Wrap
+        color: Theme.secondaryColor
+        font.pixelSize: Theme.fontSizeExtraSmall
+        text: "Config " + camera2Compatibility.camera2DeviceConfigDir()
+    }
+
+    Button {
+        visible: Settings.global.advancedMode
+        enabled: AccessPolicy.cameraEnabled
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Generate HAL config"
+        onClicked: {
+            camera2GeneratedHalConfigPath =
+                    camera2Compatibility.ensureCamera2GeneratedHalConfig(
+                        Settings.deviceId)
+        }
+    }
+
+    Label {
+        x: Theme.horizontalPageMargin
+        width: parent.width - 2 * x
+        visible: Settings.global.advancedMode && camera2GeneratedHalConfigPath !== ""
+        wrapMode: Text.Wrap
+        color: Theme.highlightColor
+        font.pixelSize: Theme.fontSizeExtraSmall
+        text: camera2GeneratedHalConfigPath.indexOf("/") === 0
+              ? "Saved " + camera2GeneratedHalConfigPath
+              : camera2GeneratedHalConfigPath
+    }
+
     IconTextSwitch {
         automaticCheck: false
         icon.source: "image://theme/icon-m-qr"
@@ -94,7 +176,7 @@ ApplicationSettings {
                 onClicked: Settings.global.rawCaptureSaveFormat = "none"
             }
             MenuItem {
-                text: "RAW16 + JSON"
+                text: "RAW + JSON"
                 onClicked: Settings.global.rawCaptureSaveFormat = "raw16"
             }
             MenuItem {
@@ -102,7 +184,7 @@ ApplicationSettings {
                 onClicked: Settings.global.rawCaptureSaveFormat = "dng"
             }
             MenuItem {
-                text: "RAW16 + JSON + DNG"
+                text: "RAW + JSON + DNG"
                 onClicked: Settings.global.rawCaptureSaveFormat = "both"
             }
         }

@@ -7,7 +7,7 @@ import Sailfish.Silica 1.0
 import com.vivid.camera 1.0
 
 ExpandingMenu {
-    model: [ "jpeg", "raw" ]
+    model: Settings.camera2CaptureFormatModel()
     delegate: MouseArea {
         id: menuItem
 

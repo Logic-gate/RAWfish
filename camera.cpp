@@ -48,6 +48,8 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     QScopedPointer<QGuiApplication> app(new QGuiApplication(argc, argv));
     QScopedPointer<QQuickView> view(new QQuickView);
 #endif
+    app->setOrganizationName(QStringLiteral("com.rawfish"));
+    app->setApplicationName(QStringLiteral("rawfish"));
 
     QString path(QLatin1String(DEPLOYMENT_PATH));
 

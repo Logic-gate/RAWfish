@@ -1,9 +1,9 @@
 /**
  * @file raw_capture.c
- * @brief Camera2 RAW16 still capture implementation.
+ * @brief Camera2 RAW still capture implementation.
  *
  * Creates Camera2 still/preview requests, waits for optional autofocus, captures
- * a RAW16 buffer, and writes JSON metadata needed by RAWfish conversion/DNG
+ * a RAW16 or RAW10 buffer, and writes JSON metadata needed by RAWfish conversion/DNG
  * paths.
  */
 
@@ -53,6 +53,7 @@ struct rational_value {
 struct static_metadata {
     int32_t cfa;
     int32_t white_level;
+    int64_t exposure_time_range[2];
     int32_t black_level[4];
     int32_t active_array[4];
     float focal_length;
@@ -75,7 +76,10 @@ struct static_metadata {
 struct result_metadata {
     int64_t timestamp_ns;
     int64_t exposure_time_ns;
+    int64_t frame_duration_ns;
     int32_t sensitivity;
+    int32_t control_mode;
+    int32_t scene_mode;
     int32_t dynamic_white_level;
     int32_t af_mode;
     int32_t af_state;
@@ -126,14 +130,23 @@ struct capture_context {
     float requested_focus_distance;
     int focus_timeout_ms;
     int capture_on_focus_failure;
+    int original_scene_mode;
     int scene_mode;
+    int scene_mode_supported;
+    int hdr_scene_supported;
     int color_temperature_kelvin;
     int color_tint;
     int32_t sensor_sensitivity;
     int64_t exposure_time_ns;
     int aperture;
     int noise_reduction;
+    int raw_format;
+    int image_format;
     float zoom_ratio;
+    float focus_x;
+    float focus_y;
+    int max_ae_regions;
+    int max_af_regions;
     int vendor_awb_value_requested;
     int vendor_awb_value_supported;
     int awb_off_supported;
@@ -156,6 +169,41 @@ struct capture_context {
     struct result_metadata result_data;
     struct image_metadata image_data;
 };
+
+static bool raw_hal_exposure_suspect(int64_t hal_exposure_time_ns,
+                                     int64_t elapsed_ms)
+{
+    if (hal_exposure_time_ns <= 0 || elapsed_ms <= 0) {
+        return false;
+    }
+    return hal_exposure_time_ns > ((elapsed_ms + 100) * 1000000LL);
+}
+
+static void raw_log_effective_capture(const struct capture_context *context)
+{
+    if (!context || context->capture_submit_ms <= 0 ||
+            context->image_available_ms <= 0) {
+        return;
+    }
+    int64_t submit_to_image_ms = context->image_available_ms -
+                                 context->capture_submit_ms;
+    int64_t submit_to_done_ms = context->capture_done_ms > 0
+        ? context->capture_done_ms - context->capture_submit_ms : -1;
+    fprintf(stderr,
+            "capture-effective raw requested_iso=%d "
+            "requested_shutter=%lld hal_iso=%d hal_shutter=%lld "
+            "hal_frame=%lld submit_to_image_ms=%lld "
+            "submit_to_done_ms=%lld suspect_hal_exposure=%d\n",
+            context->sensor_sensitivity,
+            (long long)context->exposure_time_ns,
+            context->result_data.sensitivity,
+            (long long)context->result_data.exposure_time_ns,
+            (long long)context->result_data.frame_duration_ns,
+            (long long)submit_to_image_ms,
+            (long long)submit_to_done_ms,
+            raw_hal_exposure_suspect(context->result_data.exposure_time_ns,
+                                     submit_to_image_ms) ? 1 : 0);
+}
 
 static bool wait_for_nonzero(atomic_int *value, atomic_int *device_error,
                              int timeout_ms)
@@ -244,6 +292,8 @@ static void copy_static_metadata(struct static_metadata *destination,
         metadata, ACAMERA_SENSOR_INFO_COLOR_FILTER_ARRANGEMENT, -1);
     destination->white_level = sfos_camera2_first_i32(
         metadata, ACAMERA_SENSOR_INFO_WHITE_LEVEL, -1);
+    sfos_camera2_copy_i64_array(metadata, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE,
+                                destination->exposure_time_range, 2);
     destination->minimum_focus_distance = sfos_camera2_first_float(
         metadata, ACAMERA_LENS_INFO_MINIMUM_FOCUS_DISTANCE, 0.0f);
     destination->focal_length = sfos_camera2_first_float(
@@ -422,6 +472,42 @@ static const char *scene_mode_name(int scene_mode)
     }
 }
 
+static const char *control_mode_name(int control_mode)
+{
+    switch (control_mode) {
+    case ACAMERA_CONTROL_MODE_OFF: return "off";
+    case ACAMERA_CONTROL_MODE_AUTO: return "auto";
+    case ACAMERA_CONTROL_MODE_USE_SCENE_MODE: return "use-scene-mode";
+#ifdef ACAMERA_CONTROL_MODE_OFF_KEEP_STATE
+    case ACAMERA_CONTROL_MODE_OFF_KEEP_STATE: return "off-keep-state";
+#endif
+    default: return "unknown";
+    }
+}
+
+static const char *android_scene_mode_name(int scene_mode)
+{
+    switch (scene_mode) {
+    case ACAMERA_CONTROL_SCENE_MODE_ACTION: return "action";
+    case ACAMERA_CONTROL_SCENE_MODE_PORTRAIT: return "portrait";
+    case ACAMERA_CONTROL_SCENE_MODE_LANDSCAPE: return "landscape";
+    case ACAMERA_CONTROL_SCENE_MODE_NIGHT: return "night";
+    case ACAMERA_CONTROL_SCENE_MODE_NIGHT_PORTRAIT: return "night-portrait";
+    case ACAMERA_CONTROL_SCENE_MODE_THEATRE: return "theatre";
+    case ACAMERA_CONTROL_SCENE_MODE_BEACH: return "beach";
+    case ACAMERA_CONTROL_SCENE_MODE_SNOW: return "snow";
+    case ACAMERA_CONTROL_SCENE_MODE_SUNSET: return "sunset";
+    case ACAMERA_CONTROL_SCENE_MODE_STEADYPHOTO: return "steady-photo";
+    case ACAMERA_CONTROL_SCENE_MODE_FIREWORKS: return "fireworks";
+    case ACAMERA_CONTROL_SCENE_MODE_SPORTS: return "sport";
+    case ACAMERA_CONTROL_SCENE_MODE_PARTY: return "party";
+    case ACAMERA_CONTROL_SCENE_MODE_CANDLELIGHT: return "candlelight";
+    case ACAMERA_CONTROL_SCENE_MODE_BARCODE: return "barcode";
+    case ACAMERA_CONTROL_SCENE_MODE_HDR: return "hdr";
+    default: return "unknown";
+    }
+}
+
 static bool focus_mode_supported(const ACameraMetadata *metadata, int mode)
 {
     uint8_t required;
@@ -489,14 +575,76 @@ static bool configure_option_request(ACaptureRequest *request,
            configure_color_request(request, context);
 }
 
-static bool configure_focus_request(ACaptureRequest *request, int focus_mode,
-                                    float focus_distance, bool trigger_start)
+static void read_metering_capabilities(const ACameraMetadata *metadata,
+                                       struct capture_context *context)
+{
+    ACameraMetadata_const_entry entry;
+    context->max_ae_regions = 0;
+    context->max_af_regions = 0;
+    if (ACameraMetadata_getConstEntry(
+            metadata, ACAMERA_CONTROL_MAX_REGIONS, &entry) == ACAMERA_OK &&
+            entry.count >= 3) {
+        context->max_ae_regions = entry.data.i32[0];
+        context->max_af_regions = entry.data.i32[2];
+    }
+}
+
+static bool configure_focus_regions(ACaptureRequest *request,
+                                    const struct capture_context *context)
+{
+    if (context->focus_x < 0.0f || context->focus_y < 0.0f ||
+            (context->focus_mode != SFOS_CAMERA2_FOCUS_AUTO &&
+             context->focus_mode != SFOS_CAMERA2_FOCUS_CONTINUOUS)) {
+        return true;
+    }
+
+    int32_t left = context->static_data.active_array[0];
+    int32_t top = context->static_data.active_array[1];
+    int32_t right = context->static_data.active_array[2];
+    int32_t bottom = context->static_data.active_array[3];
+    int32_t width = right - left;
+    int32_t height = bottom - top;
+    if (width <= 0 || height <= 0) {
+        return true;
+    }
+
+    int32_t box = width < height ? width / 8 : height / 8;
+    if (box < 64) {
+        box = 64;
+    }
+    int32_t cx = left + (int32_t)(context->focus_x * width);
+    int32_t cy = top + (int32_t)(context->focus_y * height);
+    int32_t region[5] = {
+        sfos_camera2_clamp_i32(cx - box / 2, left, right - 1),
+        sfos_camera2_clamp_i32(cy - box / 2, top, bottom - 1),
+        sfos_camera2_clamp_i32(cx + box / 2, left + 1, right),
+        sfos_camera2_clamp_i32(cy + box / 2, top + 1, bottom),
+        1000,
+    };
+    if (context->max_af_regions > 0 &&
+            ACaptureRequest_setEntry_i32(
+                request, ACAMERA_CONTROL_AF_REGIONS, 5, region) !=
+                    ACAMERA_OK) {
+        return false;
+    }
+    if (context->max_ae_regions > 0 &&
+            ACaptureRequest_setEntry_i32(
+                request, ACAMERA_CONTROL_AE_REGIONS, 5, region) !=
+                    ACAMERA_OK) {
+        return false;
+    }
+    return true;
+}
+
+static bool configure_focus_request(ACaptureRequest *request,
+                                    const struct capture_context *context,
+                                    bool trigger_start)
 {
     uint8_t af_mode;
     uint8_t af_trigger = trigger_start ? ACAMERA_CONTROL_AF_TRIGGER_START :
                                         ACAMERA_CONTROL_AF_TRIGGER_IDLE;
 
-    switch (focus_mode) {
+    switch (context->focus_mode) {
     case SFOS_CAMERA2_FOCUS_AUTO:
         af_mode = ACAMERA_CONTROL_AF_MODE_AUTO;
         break;
@@ -518,8 +666,12 @@ static bool configure_focus_request(ACaptureRequest *request, int focus_mode,
                                          af_trigger)) {
         return false;
     }
-    if (focus_mode == SFOS_CAMERA2_FOCUS_MANUAL ||
-            focus_mode == SFOS_CAMERA2_FOCUS_INFINITY) {
+    if (!configure_focus_regions(request, context)) {
+        return false;
+    }
+    if (context->focus_mode == SFOS_CAMERA2_FOCUS_MANUAL ||
+            context->focus_mode == SFOS_CAMERA2_FOCUS_INFINITY) {
+        float focus_distance = context->requested_focus_distance;
         return ACaptureRequest_setEntry_float(
                    request, ACAMERA_LENS_FOCUS_DISTANCE, 1,
                    &focus_distance) == ACAMERA_OK;
@@ -583,6 +735,28 @@ static void session_active(void *opaque, ACameraCaptureSession *session)
     atomic_store_explicit(&context->session_active, 1, memory_order_release);
 }
 
+/**
+ * @brief Human readable RAW format name for metadata.
+ */
+static const char *raw_format_name(int image_format)
+{
+    switch (image_format) {
+    case AIMAGE_FORMAT_RAW10:
+        return "RAW10";
+    case AIMAGE_FORMAT_RAW16:
+    default:
+        return "RAW16";
+    }
+}
+
+/**
+ * @brief Bits stored by one unpacked sensor sample.
+ */
+static int raw_bits_per_sample(int image_format)
+{
+    return image_format == AIMAGE_FORMAT_RAW10 ? 10 : 16;
+}
+
 static void raw_image_available(void *opaque, AImageReader *reader)
 {
     struct capture_context *context = opaque;
@@ -610,7 +784,7 @@ static void raw_image_available(void *opaque, AImageReader *reader)
                                      &context->image_data.planes) != AMEDIA_OK ||
             AImage_getTimestamp(image,
                                 &context->image_data.timestamp_ns) != AMEDIA_OK ||
-            context->image_data.format != AIMAGE_FORMAT_RAW16 ||
+            context->image_data.format != context->image_format ||
             context->image_data.planes != 1 ||
             AImage_getPlanePixelStride(
                 image, 0, &context->image_data.pixel_stride) != AMEDIA_OK ||
@@ -689,8 +863,14 @@ static void capture_completed(void *opaque, ACameraCaptureSession *session,
         result, ACAMERA_SENSOR_TIMESTAMP, -1);
     destination->exposure_time_ns = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_EXPOSURE_TIME, -1);
+    destination->frame_duration_ns = sfos_camera2_first_i64(
+        result, ACAMERA_SENSOR_FRAME_DURATION, -1);
     destination->sensitivity = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_SENSITIVITY, -1);
+    destination->control_mode = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_MODE, -1);
+    destination->scene_mode = sfos_camera2_first_u8(
+        result, ACAMERA_CONTROL_SCENE_MODE, -1);
     fprintf(stderr,
             "capture-exposure raw requested_iso=%d requested_shutter=%lld "
             "actual_iso=%d actual_shutter=%lld actual_frame=%lld\n",
@@ -698,8 +878,7 @@ static void capture_completed(void *opaque, ACameraCaptureSession *session,
             (long long)context->exposure_time_ns,
             destination->sensitivity,
             (long long)destination->exposure_time_ns,
-            (long long)sfos_camera2_first_i64(
-                result, ACAMERA_SENSOR_FRAME_DURATION, -1));
+            (long long)destination->frame_duration_ns);
     destination->dynamic_white_level = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_DYNAMIC_WHITE_LEVEL, -1);
     destination->af_mode = sfos_camera2_first_u8(
@@ -898,7 +1077,8 @@ static bool write_metadata_file(const char *path, const char *camera_id,
     fputs(",\n  \"raw_path\":", file);
     print_json_string(file, raw_path);
     fprintf(file,
-            ",\n  \"format\":\"RAW16\",\n  \"format_value\":%d,"
+            ",\n  \"format\":\"%s\",\n  \"format_value\":%d,"
+            "\n  \"bits_per_sample\":%d,\n  \"packed\":%s,"
             "\n  \"width\":%d,\n  \"height\":%d,"
             "\n  \"planes\":%d,\n  \"pixel_stride\":%d,"
             "\n  \"row_stride\":%d,\n  \"data_length\":%d,"
@@ -910,7 +1090,10 @@ static bool write_metadata_file(const char *path, const char *camera_id,
             "\n  \"dynamic_white_level\":%d,"
             "\n  \"black_level_pattern\":[%d,%d,%d,%d],"
             "\n  \"active_array\":[%d,%d,%d,%d],",
-            image->format, image->width, image->height, image->planes,
+            raw_format_name(image->format), image->format,
+            raw_bits_per_sample(image->format),
+            image->format == AIMAGE_FORMAT_RAW10 ? "true" : "false",
+            image->width, image->height, image->planes,
             image->pixel_stride, image->row_stride, image->data_length,
             (long long)image->timestamp_ns,
             (long long)result->timestamp_ns,
@@ -924,6 +1107,7 @@ static bool write_metadata_file(const char *path, const char *camera_id,
     fprintf(file,
             "\n  \"focus_mode_requested\":\"%s\","
             "\n  \"focal_length_mm\":%.9g,"
+            "\n  \"focus_point_requested\":[%.6g,%.6g],"
             "\n  \"focus_distance_requested_diopters\":%.9g,"
             "\n  \"minimum_focus_distance_diopters\":%.9g,"
             "\n  \"focus_distance_calibration\":\"%s\","
@@ -931,9 +1115,23 @@ static bool write_metadata_file(const char *path, const char *camera_id,
             "\n  \"focus_timed_out\":%s,"
             "\n  \"focus_result_count\":%d,"
             "\n  \"focus_preview_size\":[%d,%d],"
+            "\n  \"scene_mode_requested_original\":\"%s\","
             "\n  \"scene_mode_requested\":\"%s\","
+            "\n  \"scene_mode_supported\":%s,"
+            "\n  \"hdr_scene_supported\":%s,"
+            "\n  \"hdr_scene_requested\":%s,"
+            "\n  \"hdr_scene_applied\":%s,"
+            "\n  \"dol_supported\":false,"
+            "\n  \"dol_source\":\"%s\","
+            "\n  \"dol_requested\":%s,"
+            "\n  \"dol_applied\":false,"
+            "\n  \"control_mode_applied\":\"%s\","
+            "\n  \"control_mode_applied_value\":%d,"
+            "\n  \"scene_mode_applied\":\"%s\","
+            "\n  \"scene_mode_applied_value\":%d,"
             "\n  \"sensor_sensitivity_requested\":%d,"
             "\n  \"exposure_time_requested_ns\":%lld,"
+            "\n  \"shutter_ns_range\":[%lld,%lld],"
             "\n  \"aperture_requested\":%d,"
             "\n  \"noise_reduction_requested\":%d,"
             "\n  \"color_temperature_requested_kelvin\":%d,"
@@ -950,6 +1148,7 @@ static bool write_metadata_file(const char *path, const char *camera_id,
             "\n  \"lens_aperture\":%.9g,",
             focus_mode_name(context->focus_mode),
             static_data->focal_length,
+            context->focus_x, context->focus_y,
             context->requested_focus_distance,
             static_data->minimum_focus_distance,
             focus_calibration_name(static_data->focus_distance_calibration),
@@ -959,9 +1158,27 @@ static bool write_metadata_file(const char *path, const char *camera_id,
             atomic_load_explicit(&context->af_result_count,
                                  memory_order_acquire),
             context->preview_width, context->preview_height,
+            scene_mode_name(context->original_scene_mode),
             scene_mode_name(context->scene_mode),
+            context->scene_mode_supported ? "true" : "false",
+            context->hdr_scene_supported ? "true" : "false",
+            context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+            result->control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE &&
+                    result->scene_mode == ACAMERA_CONTROL_SCENE_MODE_HDR
+                ? "true" : "false",
+            context->hdr_scene_supported ? "scene-hdr" : "none",
+            context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+            control_mode_name(result->control_mode), result->control_mode,
+            result->control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? android_scene_mode_name(result->scene_mode) : "none",
+            result->control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? result->scene_mode : -1,
             context->sensor_sensitivity,
             (long long)context->exposure_time_ns,
+            (long long)static_data->exposure_time_range[0],
+            (long long)static_data->exposure_time_range[1],
             context->aperture,
             context->noise_reduction,
             context->color_temperature_kelvin,
@@ -1092,6 +1309,16 @@ static void status_json(char *out, size_t out_size, bool success,
              "\"iso\":%d,\"exposure_time_ns\":%lld},"
              "\"aperture\":{\"requested\":%d},"
              "\"noise_reduction\":{\"requested\":%d},"
+             "\"scene\":{\"requested_original\":\"%s\","
+             "\"requested\":\"%s\",\"supported\":%s,"
+             "\"hdr_supported\":%s,\"hdr_requested\":%s,"
+             "\"hdr_applied\":%s,"
+             "\"dol_supported\":false,\"dol_source\":\"%s\","
+             "\"dol_requested\":%s,\"dol_applied\":false,"
+             "\"control_mode_applied\":\"%s\","
+             "\"control_mode_applied_value\":%d,"
+             "\"scene_mode_applied\":\"%s\","
+             "\"scene_mode_applied_value\":%d},"
 	             "\"diagnostics\":{\"camera_status\":%d,"
              "\"media_status\":%d,\"device_error\":%d,"
              "\"session_ready\":%d,\"session_active\":%d,"
@@ -1126,6 +1353,25 @@ static void status_json(char *out, size_t out_size, bool success,
              (long long)context->result_data.exposure_time_ns,
              context->aperture,
              context->noise_reduction,
+             scene_mode_name(context->original_scene_mode),
+             scene_mode_name(context->scene_mode),
+             context->scene_mode_supported ? "true" : "false",
+             context->hdr_scene_supported ? "true" : "false",
+             context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+             context->result_data.control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE &&
+                     context->result_data.scene_mode == ACAMERA_CONTROL_SCENE_MODE_HDR
+                ? "true" : "false",
+             context->hdr_scene_supported ? "scene-hdr" : "none",
+             context->original_scene_mode == SFOS_CAMERA2_SCENE_HDR
+                ? "true" : "false",
+             control_mode_name(context->result_data.control_mode),
+             context->result_data.control_mode,
+             context->result_data.control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? android_scene_mode_name(context->result_data.scene_mode)
+                : "none",
+             context->result_data.control_mode == ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                ? context->result_data.scene_mode : -1,
 	             atomic_load_explicit(&context->last_camera_status,
                                   memory_order_acquire),
              atomic_load_explicit(&context->last_media_status,
@@ -1165,7 +1411,7 @@ static void remember_media_status(struct capture_context *context,
 }
 
 /**
- * @brief Capture a RAW16 still image and write bridge metadata.
+ * @brief Capture a RAW still image and write bridge metadata.
  *
  * Performs optional focus, preview warm-up, still capture, metadata collection,
  * and diagnostic status reporting for the exported RAW capture APIs.
@@ -1177,7 +1423,8 @@ static int capture_raw_internal(
     int capture_on_focus_failure, int scene_mode,
     int color_temperature_kelvin, int color_tint, int32_t sensor_sensitivity,
     int64_t exposure_time_ns, int aperture, int noise_reduction,
-    float zoom_ratio, char *out, size_t out_size)
+    int raw_format, float zoom_ratio, float focus_x, float focus_y,
+    char *out, size_t out_size)
 {
     int result_code = 0;
     const char *stage = "complete";
@@ -1211,8 +1458,12 @@ static int capture_raw_internal(
             exposure_time_ns < 0 ||
             aperture < 0 || aperture > 255 ||
             noise_reduction < 0 ||
+            raw_format < SFOS_CAMERA2_RAW_FORMAT_RAW16 ||
+            raw_format > SFOS_CAMERA2_RAW_FORMAT_RAW10 ||
             focus_distance_diopters < 0.0f ||
             focus_distance_diopters != focus_distance_diopters ||
+            focus_x != focus_x || focus_y != focus_y ||
+            focus_x > 1.0f || focus_y > 1.0f ||
             !out || out_size < 2 ||
             strlen(raw_path) >= sizeof(((struct capture_context *)0)->raw_path)) {
         status_json(out, out_size, false, "arguments",
@@ -1241,15 +1492,22 @@ static int capture_raw_internal(
     context.requested_focus_distance =
         focus_mode == SFOS_CAMERA2_FOCUS_INFINITY ? 0.0f :
                                                     focus_distance_diopters;
+    context.focus_x = focus_x >= 0.0f && focus_y >= 0.0f ? focus_x : -1.0f;
+    context.focus_y = focus_x >= 0.0f && focus_y >= 0.0f ? focus_y : -1.0f;
     context.focus_timeout_ms = focus_timeout_ms;
     context.capture_on_focus_failure = capture_on_focus_failure != 0;
+    context.original_scene_mode = scene_mode;
     context.scene_mode = scene_mode;
+    context.scene_mode_supported = 1;
     context.color_temperature_kelvin = color_temperature_kelvin;
     context.color_tint = color_tint;
     context.sensor_sensitivity = sensor_sensitivity;
     context.exposure_time_ns = exposure_time_ns;
     context.aperture = aperture;
     context.noise_reduction = noise_reduction;
+    context.raw_format = raw_format;
+    context.image_format = raw_format == SFOS_CAMERA2_RAW_FORMAT_RAW10
+            ? AIMAGE_FORMAT_RAW10 : AIMAGE_FORMAT_RAW16;
     context.zoom_ratio = zoom_ratio < 1.0f ? 1.0f : zoom_ratio;
     context.vendor_awb_value_requested = color_temperature_kelvin;
     if (context.vendor_awb_value_requested > 0 &&
@@ -1275,12 +1533,13 @@ static int capture_raw_internal(
         goto cleanup;
     }
     if (!sfos_camera2_has_output_size(
-            characteristics, AIMAGE_FORMAT_RAW16, width, height)) {
+            characteristics, context.image_format, width, height)) {
         result_code = CAPTURE_UNSUPPORTED_SIZE;
         stage = "raw_size";
         goto cleanup;
     }
     copy_static_metadata(&context.static_data, characteristics);
+    read_metering_capabilities(characteristics, &context);
     context.characteristics_ms = sfos_camera2_now_ms() - context.started_ms;
     if (!focus_mode_supported(characteristics, focus_mode)) {
         focus_mode = SFOS_CAMERA2_FOCUS_NONE;
@@ -1292,8 +1551,12 @@ static int capture_raw_internal(
     context.awb_off_supported = sfos_camera2_metadata_has_u8(
         characteristics, ACAMERA_CONTROL_AWB_AVAILABLE_MODES,
         ACAMERA_CONTROL_AWB_MODE_OFF);
-    if (!sfos_camera2_scene_mode_supported(characteristics,
-                                           context.scene_mode)) {
+    context.scene_mode_supported = sfos_camera2_scene_mode_supported(
+        characteristics, context.scene_mode);
+    context.hdr_scene_supported = sfos_camera2_metadata_has_u8(
+        characteristics, ACAMERA_CONTROL_AVAILABLE_SCENE_MODES,
+        ACAMERA_CONTROL_SCENE_MODE_HDR);
+    if (!context.scene_mode_supported) {
         context.scene_mode = SFOS_CAMERA2_SCENE_NONE;
     }
     if (focus_mode == SFOS_CAMERA2_FOCUS_MANUAL &&
@@ -1314,7 +1577,7 @@ static int capture_raw_internal(
     }
 
     media_status_t media_status = AImageReader_new(
-        width, height, AIMAGE_FORMAT_RAW16, 2, &raw_reader);
+        width, height, context.image_format, 2, &raw_reader);
     remember_media_status(&context, media_status);
     if (media_status != AMEDIA_OK || !raw_reader) {
         result_code = CAPTURE_READER_ERROR;
@@ -1395,8 +1658,7 @@ static int capture_raw_internal(
         remember_camera_status(&context, camera_status);
     }
     if (camera_status == ACAMERA_OK &&
-            !configure_focus_request(still_request, focus_mode,
-                                     context.requested_focus_distance, false)) {
+            !configure_focus_request(still_request, &context, false)) {
         camera_status = ACAMERA_ERROR_INVALID_PARAMETER;
         remember_camera_status(&context, camera_status);
     }
@@ -1454,9 +1716,7 @@ static int capture_raw_internal(
             remember_camera_status(&context, camera_status);
         }
         if (camera_status == ACAMERA_OK &&
-                !configure_focus_request(
-                    preview_request, focus_mode,
-                    context.requested_focus_distance, false)) {
+                !configure_focus_request(preview_request, &context, false)) {
             camera_status = ACAMERA_ERROR_INVALID_PARAMETER;
             remember_camera_status(&context, camera_status);
         }
@@ -1482,9 +1742,7 @@ static int capture_raw_internal(
             remember_camera_status(&context, camera_status);
         }
         if (camera_status == ACAMERA_OK && trigger_request &&
-                !configure_focus_request(
-                    trigger_request, focus_mode,
-                    context.requested_focus_distance, true)) {
+                !configure_focus_request(trigger_request, &context, true)) {
             camera_status = ACAMERA_ERROR_INVALID_PARAMETER;
             remember_camera_status(&context, camera_status);
         }
@@ -1613,6 +1871,7 @@ static int capture_raw_internal(
         goto cleanup;
     }
     context.capture_done_ms = sfos_camera2_now_ms() - context.started_ms;
+    raw_log_effective_capture(&context);
     if (!write_metadata_file(metadata_path, camera_id, raw_path, &context)) {
         result_code = CAPTURE_METADATA_ERROR;
         stage = "metadata_write";
@@ -1702,6 +1961,9 @@ int sfos_camera2_capture_raw_options(
         .exposure_time_ns = 0,
         .aperture = 0,
         .noise_reduction = SFOS_CAMERA2_NOISE_REDUCTION_NONE,
+        .raw_format = SFOS_CAMERA2_RAW_FORMAT_RAW16,
+        .focus_x = -1.0f,
+        .focus_y = -1.0f,
     };
 
     if (options) {
@@ -1747,6 +2009,17 @@ int sfos_camera2_capture_raw_options(
                     sizeof(options->noise_reduction)) {
             defaults.noise_reduction = options->noise_reduction;
         }
+        if (options->size >=
+                offsetof(struct sfos_camera2_capture_options, raw_format) +
+                    sizeof(options->raw_format)) {
+            defaults.raw_format = options->raw_format;
+        }
+        if (options->size >=
+                offsetof(struct sfos_camera2_capture_options, focus_y) +
+                    sizeof(options->focus_y)) {
+            defaults.focus_x = options->focus_x;
+            defaults.focus_y = options->focus_y;
+        }
     }
 
     return capture_raw_internal(
@@ -1756,6 +2029,7 @@ int sfos_camera2_capture_raw_options(
         defaults.scene_mode, defaults.color_temperature_kelvin,
         defaults.color_tint, defaults.sensor_sensitivity,
         defaults.exposure_time_ns, defaults.aperture,
-        defaults.noise_reduction,
-        defaults.zoom_ratio, out, out_size);
+        defaults.noise_reduction, defaults.raw_format,
+        defaults.zoom_ratio, defaults.focus_x, defaults.focus_y, out,
+        out_size);
 }

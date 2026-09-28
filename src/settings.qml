@@ -13,6 +13,8 @@ SettingsBase {
     property alias global: globalSettings
     // Camera change goes here, CaptureView updates to global.deviceId
     property string deviceId: global.deviceId
+    onDeviceIdChanged: normalizeCamera2Settings()
+    property CameraExtensions camera2Capabilities: CameraExtensions {}
 
     readonly property int aspectRatio: mode.aspectRatio
     readonly property int exposureCompensationDefault: 0
@@ -35,11 +37,13 @@ SettingsBase {
                                                  "rawCaptureShutterNs": "0",
                                                  "rawCaptureAperture": 0,
                                                  "rawCaptureNoiseReduction": 0,
+                                                 "rawCaptureBracket": "off",
                                                  "rawCaptureJpegQuality": 92,
                                                  "rawCaptureRotation": 90,
                                                  "rawCaptureScene": "manual",
                                                  "rawCaptureProgressiveJpeg": false,
                                                  "rawRenderEngine": "internal",
+                                                 "rawCaptureRawFormat": "raw16",
                                                  "rawCaptureColorTemperature": 0,
                                                  "rawCaptureColorTint": 0,
                                                  "camera2Viewfinder": true,
@@ -65,11 +69,13 @@ SettingsBase {
                                             && modeSettings.rawCaptureShutterNs === settingsDefaults["rawCaptureShutterNs"]
                                             && modeSettings.rawCaptureAperture === settingsDefaults["rawCaptureAperture"]
                                             && modeSettings.rawCaptureNoiseReduction === settingsDefaults["rawCaptureNoiseReduction"]
+                                            && modeSettings.rawCaptureBracket === settingsDefaults["rawCaptureBracket"]
                                             && modeSettings.rawCaptureJpegQuality === settingsDefaults["rawCaptureJpegQuality"]
                                             && modeSettings.rawCaptureRotation === settingsDefaults["rawCaptureRotation"]
                                             && modeSettings.rawCaptureScene === settingsDefaults["rawCaptureScene"]
                                             && modeSettings.rawCaptureProgressiveJpeg === settingsDefaults["rawCaptureProgressiveJpeg"]
                                             && modeSettings.rawRenderEngine === settingsDefaults["rawRenderEngine"]
+                                            && modeSettings.rawCaptureRawFormat === settingsDefaults["rawCaptureRawFormat"]
                                             && modeSettings.rawCaptureColorTemperature === settingsDefaults["rawCaptureColorTemperature"]
                                             && modeSettings.rawCaptureColorTint === settingsDefaults["rawCaptureColorTint"]
                                             && modeSettings.camera2Viewfinder === settingsDefaults["camera2Viewfinder"]
@@ -131,11 +137,13 @@ SettingsBase {
         property int advancedRawCaptureIso: 0
         property string advancedRawCaptureShutterNs: "0"
         property int advancedRawCaptureNoiseReduction: 0
+        property string advancedRawCaptureBracket: "off"
         property int advancedRawCaptureJpegQuality: 92
         property int advancedRawCaptureRotation: 90
         property string advancedRawCaptureScene: "manual"
         property bool advancedRawCaptureProgressiveJpeg: false
         property string advancedRawRenderEngine: "internal"
+        property string advancedRawCaptureRawFormat: "raw16"
         property int advancedRawCaptureColorTemperature: 0
         property int advancedRawCaptureColorTint: 0
 
@@ -187,16 +195,19 @@ SettingsBase {
             property string rawCaptureShutterNs: "0"
             property int rawCaptureAperture: 0
             property int rawCaptureNoiseReduction: 0
+            property string rawCaptureBracket: "off"
             property int rawCaptureJpegQuality: 92
             property int rawCaptureRotation: 90
             property string rawCaptureScene: "manual"
             property bool rawCaptureProgressiveJpeg: false
             property string rawRenderEngine: "internal"
+            property string rawCaptureRawFormat: "raw16"
             property int rawCaptureColorTemperature: 0
             property int rawCaptureColorTint: 0
             property bool camera2Viewfinder: true
 
             onCamera2CaptureFormatChanged: normalizeCamera2Settings()
+            onRawCaptureRawFormatChanged: normalizeCamera2Settings()
 
             Component.onCompleted: {
                 rawCaptureIso = settingsDefaults["rawCaptureIso"]
@@ -228,11 +239,13 @@ SettingsBase {
             modeSettings.rawCaptureIso = globalSettings.advancedRawCaptureIso
             modeSettings.rawCaptureShutterNs = globalSettings.advancedRawCaptureShutterNs
             modeSettings.rawCaptureNoiseReduction = globalSettings.advancedRawCaptureNoiseReduction
+            modeSettings.rawCaptureBracket = globalSettings.advancedRawCaptureBracket
             modeSettings.rawCaptureJpegQuality = globalSettings.advancedRawCaptureJpegQuality
             modeSettings.rawCaptureRotation = globalSettings.advancedRawCaptureRotation
             modeSettings.rawCaptureScene = globalSettings.advancedRawCaptureScene
             modeSettings.rawCaptureProgressiveJpeg = globalSettings.advancedRawCaptureProgressiveJpeg
             modeSettings.rawRenderEngine = globalSettings.advancedRawRenderEngine
+            modeSettings.rawCaptureRawFormat = globalSettings.advancedRawCaptureRawFormat
             modeSettings.rawCaptureColorTemperature = globalSettings.advancedRawCaptureColorTemperature
             modeSettings.rawCaptureColorTint = globalSettings.advancedRawCaptureColorTint
         } else {
@@ -246,11 +259,13 @@ SettingsBase {
             globalSettings.advancedRawCaptureIso = modeSettings.rawCaptureIso
             globalSettings.advancedRawCaptureShutterNs = modeSettings.rawCaptureShutterNs
             globalSettings.advancedRawCaptureNoiseReduction = modeSettings.rawCaptureNoiseReduction
+            globalSettings.advancedRawCaptureBracket = modeSettings.rawCaptureBracket
             globalSettings.advancedRawCaptureJpegQuality = modeSettings.rawCaptureJpegQuality
             globalSettings.advancedRawCaptureRotation = modeSettings.rawCaptureRotation
             globalSettings.advancedRawCaptureScene = modeSettings.rawCaptureScene
             globalSettings.advancedRawCaptureProgressiveJpeg = modeSettings.rawCaptureProgressiveJpeg
             globalSettings.advancedRawRenderEngine = modeSettings.rawRenderEngine
+            globalSettings.advancedRawCaptureRawFormat = modeSettings.rawCaptureRawFormat
             globalSettings.advancedRawCaptureColorTemperature = modeSettings.rawCaptureColorTemperature
             globalSettings.advancedRawCaptureColorTint = modeSettings.rawCaptureColorTint
             modeSettings.camera2CaptureFormat = settingsDefaults["camera2CaptureFormat"]
@@ -263,10 +278,12 @@ SettingsBase {
             modeSettings.rawCaptureIso = settingsDefaults["rawCaptureIso"]
             modeSettings.rawCaptureShutterNs = settingsDefaults["rawCaptureShutterNs"]
             modeSettings.rawCaptureNoiseReduction = settingsDefaults["rawCaptureNoiseReduction"]
+            modeSettings.rawCaptureBracket = settingsDefaults["rawCaptureBracket"]
             modeSettings.rawCaptureJpegQuality = settingsDefaults["rawCaptureJpegQuality"]
-            modeSettings.rawCaptureScene = settingsDefaults["rawCaptureScene"]
+            modeSettings.rawCaptureScene = "hdr"
             modeSettings.rawCaptureProgressiveJpeg = settingsDefaults["rawCaptureProgressiveJpeg"]
             modeSettings.rawRenderEngine = settingsDefaults["rawRenderEngine"]
+            modeSettings.rawCaptureRawFormat = settingsDefaults["rawCaptureRawFormat"]
             modeSettings.rawCaptureColorTemperature = settingsDefaults["rawCaptureColorTemperature"]
             modeSettings.rawCaptureColorTint = settingsDefaults["rawCaptureColorTint"]
         }
@@ -311,25 +328,48 @@ SettingsBase {
         return "Size " + size
     }
 
-    function camera2SizeModel(format) {
+    function camera2SizeModel(format, rawFormat) {
         if (format === "raw") {
-            return [ "4096x3072", "3264x2448", "3072x1728", "2560x1920",
-                     "1920x1080" ]
+            var rawSizes = camera2Capabilities.camera2RawSizeModel(
+                        deviceId, rawFormat || modeSettings.rawCaptureRawFormat)
+            return rawSizes.length > 0 ? rawSizes
+                                       : camera2Capabilities.camera2RawSizeModel(
+                                             deviceId, "raw16")
         }
-        return [ "8192x6144", "4096x3072", "4096x2304", "3264x2448",
-                 "3072x1728", "2560x1920", "1920x1080", "1600x1200",
-                 "1280x720", "640x480" ]
+        return camera2Capabilities.camera2JpegSizeModel(deviceId)
+    }
+
+    function camera2PreferredCaptureSize(format) {
+        return camera2Capabilities.camera2PreferredCaptureSize(
+                    deviceId, format || modeSettings.camera2CaptureFormat)
+    }
+
+    function camera2WarmCaptureSize() {
+        return camera2Capabilities.camera2WarmCaptureSize(deviceId)
     }
 
     function camera2SceneModel() {
-        return [ "manual", "auto", "action", "portrait", "landscape",
-                 "sport", "night", "night-portrait", "theatre", "beach",
-                 "snow", "sunset", "steady-photo", "fireworks", "party",
-                 "candlelight", "barcode", "hdr" ]
+        return camera2Capabilities.camera2SceneModel(deviceId)
     }
 
     function camera2NoiseReductionModel() {
-        return [ 0, 1, 2, 3, 4 ]
+        return camera2Capabilities.camera2NoiseReductionModel(deviceId)
+    }
+
+    function camera2BracketModel() {
+        return camera2Capabilities.camera2BracketModel(deviceId)
+    }
+
+    function rawCaptureBracketText(mode) {
+        return "Bracket " + rawCaptureBracketLabel(mode)
+    }
+
+    function rawCaptureBracketLabel(mode) {
+        switch (mode) {
+        case "ev2": return "-2/0/+2"
+        case "ev1": return "-1/0/+1"
+        default: return "Off"
+        }
     }
 
     function camera2HalNoiseReduction(mode) {
@@ -337,8 +377,15 @@ SettingsBase {
     }
 
     function normalizeCamera2Settings() {
+        var captureFormats = camera2CaptureFormatModel()
+        if (captureFormats.indexOf(modeSettings.camera2CaptureFormat) < 0) {
+            modeSettings.camera2CaptureFormat = captureFormats[0]
+        }
         if (!globalSettings.advancedMode) {
             modeSettings.camera2CaptureFormat = settingsDefaults["camera2CaptureFormat"]
+            if (captureFormats.indexOf(modeSettings.camera2CaptureFormat) < 0) {
+                modeSettings.camera2CaptureFormat = captureFormats[0]
+            }
             modeSettings.rawCaptureSpeedMode = settingsDefaults["rawCaptureSpeedMode"]
             modeSettings.rawCaptureFocusMode = settingsDefaults["rawCaptureFocusMode"]
             modeSettings.rawCaptureFocusDistance = settingsDefaults["rawCaptureFocusDistance"]
@@ -348,16 +395,30 @@ SettingsBase {
             modeSettings.rawCaptureIso = settingsDefaults["rawCaptureIso"]
             modeSettings.rawCaptureShutterNs = settingsDefaults["rawCaptureShutterNs"]
             modeSettings.rawCaptureNoiseReduction = settingsDefaults["rawCaptureNoiseReduction"]
+            modeSettings.rawCaptureBracket = settingsDefaults["rawCaptureBracket"]
             modeSettings.rawCaptureJpegQuality = settingsDefaults["rawCaptureJpegQuality"]
-            modeSettings.rawCaptureScene = settingsDefaults["rawCaptureScene"]
+            modeSettings.rawCaptureScene = "hdr"
             modeSettings.rawCaptureProgressiveJpeg = settingsDefaults["rawCaptureProgressiveJpeg"]
             modeSettings.rawRenderEngine = settingsDefaults["rawRenderEngine"]
+            modeSettings.rawCaptureRawFormat = settingsDefaults["rawCaptureRawFormat"]
             modeSettings.rawCaptureColorTemperature = settingsDefaults["rawCaptureColorTemperature"]
             modeSettings.rawCaptureColorTint = settingsDefaults["rawCaptureColorTint"]
         }
+        var rawFormats = rawCaptureRawFormatModel()
+        if (rawFormats.indexOf(modeSettings.rawCaptureRawFormat) < 0) {
+            modeSettings.rawCaptureRawFormat = rawFormats.length > 0
+                    ? rawFormats[0] : settingsDefaults["rawCaptureRawFormat"]
+            globalSettings.advancedRawCaptureRawFormat = modeSettings.rawCaptureRawFormat
+        }
         var sizes = camera2SizeModel(modeSettings.camera2CaptureFormat)
-        if (sizes.indexOf(modeSettings.rawCaptureSize) < 0) {
-            modeSettings.rawCaptureSize = sizes[0]
+        var preferredSize = camera2PreferredCaptureSize(modeSettings.camera2CaptureFormat)
+        if (sizes.length > 0 && sizes.indexOf(modeSettings.rawCaptureSize) < 0) {
+            modeSettings.rawCaptureSize = sizes.indexOf(preferredSize) >= 0
+                    ? preferredSize : sizes[0]
+        } else if (sizes.length > 0 &&
+                   modeSettings.rawCaptureSize === settingsDefaults["rawCaptureSize"] &&
+                   sizes.indexOf(preferredSize) >= 0) {
+            modeSettings.rawCaptureSize = preferredSize
         }
         if (camera2SpeedModel().indexOf(modeSettings.rawCaptureSpeedMode) < 0) {
             modeSettings.rawCaptureSpeedMode = settingsDefaults["rawCaptureSpeedMode"]
@@ -377,20 +438,50 @@ SettingsBase {
         modeSettings.rawCaptureIso = isoIndex >= 0
                 ? isoModel[isoIndex] : settingsDefaults["rawCaptureIso"]
         var shutterModel = camera2ShutterModel()
+        var requestedShutterNs = parseInt(modeSettings.rawCaptureShutterNs)
         var shutterIndex = shutterModel.indexOf(String(modeSettings.rawCaptureShutterNs))
         if (shutterIndex < 0) {
             shutterIndex = shutterModel.indexOf(modeSettings.rawCaptureShutterNs)
         }
-        modeSettings.rawCaptureShutterNs = shutterIndex >= 0
-                ? shutterModel[shutterIndex] : settingsDefaults["rawCaptureShutterNs"]
+        if (shutterIndex >= 0) {
+            modeSettings.rawCaptureShutterNs = shutterModel[shutterIndex]
+        } else if (requestedShutterNs > 0 && shutterModel.length > 1) {
+            modeSettings.rawCaptureShutterNs = shutterModel[shutterModel.length - 1]
+            console.log("Shutter limited to " +
+                        rawCaptureShutterLabel(modeSettings.rawCaptureShutterNs))
+        } else {
+            modeSettings.rawCaptureShutterNs = settingsDefaults["rawCaptureShutterNs"]
+        }
+        var focusModel = camera2FocusModeModel()
+        if (focusModel.indexOf(modeSettings.rawCaptureFocusMode) < 0) {
+            modeSettings.rawCaptureFocusMode = focusModel[0]
+        }
         if (camera2FocusDistanceModel().indexOf(modeSettings.rawCaptureFocusDistance) < 0) {
             modeSettings.rawCaptureFocusDistance = settingsDefaults["rawCaptureFocusDistance"]
+        }
+        var focusTimeoutModel = rawCaptureFocusTimeoutModel()
+        if (focusTimeoutModel.indexOf(modeSettings.rawCaptureFocusTimeout) < 0) {
+            modeSettings.rawCaptureFocusTimeout = focusTimeoutModel.indexOf(settingsDefaults["rawCaptureFocusTimeout"]) >= 0
+                    ? settingsDefaults["rawCaptureFocusTimeout"] : focusTimeoutModel[0]
+        }
+        var exposureModel = rawCaptureExposureModel()
+        if (exposureModel.indexOf(modeSettings.rawCaptureExposure) < 0) {
+            modeSettings.rawCaptureExposure = exposureModel.indexOf(settingsDefaults["rawCaptureExposure"]) >= 0
+                    ? settingsDefaults["rawCaptureExposure"] : exposureModel[0]
+        }
+        var rotationModel = rawCaptureRotationModel()
+        if (rotationModel.indexOf(modeSettings.rawCaptureRotation) < 0) {
+            modeSettings.rawCaptureRotation = rotationModel.indexOf(settingsDefaults["rawCaptureRotation"]) >= 0
+                    ? settingsDefaults["rawCaptureRotation"] : rotationModel[0]
         }
         if (camera2SceneModel().indexOf(modeSettings.rawCaptureScene) < 0) {
             modeSettings.rawCaptureScene = "manual"
         }
         if (camera2NoiseReductionModel().indexOf(modeSettings.rawCaptureNoiseReduction) < 0) {
             modeSettings.rawCaptureNoiseReduction = 0
+        }
+        if (camera2BracketModel().indexOf(modeSettings.rawCaptureBracket) < 0) {
+            modeSettings.rawCaptureBracket = settingsDefaults["rawCaptureBracket"]
         }
         if (rawRenderEngineModel().indexOf(modeSettings.rawRenderEngine) < 0) {
             modeSettings.rawRenderEngine = settingsDefaults["rawRenderEngine"]
@@ -399,6 +490,28 @@ SettingsBase {
 
     function camera2CaptureFormatText(format) {
         return format === "jpeg" ? "Direct JPEG" : "RAW render"
+    }
+
+    function camera2CaptureFormatModel() {
+        return camera2Capabilities.camera2CaptureFormatModel(deviceId)
+    }
+
+    function camera2LensModel() {
+        var model = camera2Capabilities.camera2LensModel(deviceId)
+        var lenses = []
+        for (var i = 0; i < model.length; ++i) {
+            if (model[i] !== globalSettings.frontFacingDeviceId) {
+                lenses.push(model[i])
+            }
+        }
+        if (lenses.length > 0) {
+            return lenses
+        }
+        return model.length > 0 ? model : [ deviceId ]
+    }
+
+    function camera2LensLabel(cameraId) {
+        return camera2Capabilities.camera2LensLabel(cameraId || deviceId)
     }
 
     function camera2SpeedModel() {
@@ -444,8 +557,11 @@ SettingsBase {
     }
 
     function camera2FocusDistanceModel() {
-        return [ "0", "0.25", "0.5", "0.75", "1", "1.5", "2", "3",
-                 "4", "5", "7.5", "10", "15", "20" ]
+        return camera2Capabilities.camera2FocusDistanceModel(deviceId)
+    }
+
+    function camera2FocusModeModel() {
+        return camera2Capabilities.camera2FocusModeModel(deviceId)
     }
 
     function rawCaptureTimeoutText(timeout) {
@@ -462,6 +578,14 @@ SettingsBase {
 
     function rawCaptureExposureText(exposure) {
         return "Exposure x" + exposure
+    }
+
+    function rawCaptureExposureModel() {
+        return camera2Capabilities.rawCaptureExposureModel(deviceId)
+    }
+
+    function rawCaptureFocusTimeoutModel() {
+        return camera2Capabilities.rawCaptureFocusTimeoutModel(deviceId)
     }
 
     function rawCaptureIsoText(iso) {
@@ -505,16 +629,15 @@ SettingsBase {
     }
 
     function camera2IsoModel() {
-        return [ 0, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 19200 ]
+        return camera2Capabilities.camera2IsoModel(deviceId)
     }
 
     function camera2ShutterModel() {
-        var model = [ "0", "100000", "250000", "500000", "1000000",
-                      "2000000", "4000000", "8333333", "16666667",
-                      "33333333", "66666667", "125000000", "250000000" ]
-        model.push("500000000", "1000000000", "2000000000", "4000000000",
-                   "8000000000", "16000000000")
-        return model
+        return camera2Capabilities.camera2ShutterModel(deviceId)
+    }
+
+    function camera2MaximumZoom() {
+        return camera2Capabilities.camera2MaximumZoom(deviceId)
     }
 
     function rawCaptureApertureText(aperture) {
@@ -546,6 +669,14 @@ SettingsBase {
 
     function rawCaptureRotationText(rotation) {
         return rotation === 0 ? "Rotate 0" : "Rotate " + rotation
+    }
+
+    function rawCaptureRotationModel(mode) {
+        var effectiveMode = mode || (!globalSettings.advancedMode
+                                     ? "simple"
+                                     : modeSettings.camera2CaptureFormat)
+        return camera2Capabilities.rawCaptureRotationModel(
+                    deviceId, effectiveMode)
     }
 
     function rawCaptureSceneText(scene) {
@@ -595,6 +726,18 @@ SettingsBase {
         case "fastjpeg": return "Fast JPEG"
         default: return "Internal"
         }
+    }
+
+    function rawCaptureRawFormatModel() {
+        return camera2Capabilities.rawCaptureRawFormatModel(deviceId)
+    }
+
+    function rawCaptureRawFormatText(format) {
+        return format === "raw10" ? "RAW10 packed" : "RAW16"
+    }
+
+    function rawCaptureRawFormatLabel(format) {
+        return format === "raw10" ? "RAW10" : "RAW16"
     }
 
     function rawCaptureColorTemperatureText(temperature) {

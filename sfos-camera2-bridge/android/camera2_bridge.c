@@ -194,6 +194,32 @@ static void append_scene_capabilities(struct json_writer *writer,
     json_appendf(writer, "]}");
 }
 
+static void append_hdr_dol_capabilities(struct json_writer *writer,
+                                        const ACameraMetadata *metadata)
+{
+    const bool hdr_scene_supported = sfos_camera2_metadata_has_u8(
+        metadata, ACAMERA_CONTROL_AVAILABLE_SCENE_MODES,
+        ACAMERA_CONTROL_SCENE_MODE_HDR);
+    const bool manual_bracketing_supported =
+        sfos_camera2_metadata_has_i32(
+            metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
+            ACAMERA_SENSOR_SENSITIVITY) &&
+        sfos_camera2_metadata_has_i32(
+            metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
+            ACAMERA_SENSOR_EXPOSURE_TIME);
+
+    json_appendf(writer,
+                 "{\"hdr_scene_supported\":%s,"
+                 "\"manual_bracketing_supported\":%s,"
+                 "\"dol_supported\":false,"
+                 "\"dol_source\":",
+                 hdr_scene_supported ? "true" : "false",
+                 manual_bracketing_supported ? "true" : "false");
+    json_string(writer, hdr_scene_supported ? "scene-hdr" : "none");
+    json_appendf(writer,
+                 ",\"vendor_probe\":\"not-available-in-ndk-bridge\"}");
+}
+
 static void append_noise_reduction_capabilities(struct json_writer *writer,
                                                 const ACameraMetadata *metadata)
 {
@@ -249,6 +275,15 @@ static void append_focus_capabilities(struct json_writer *writer,
     json_string(writer, focus_calibration_name(calibration));
     json_appendf(writer, ",\"focus_distance_calibration_value\":%d}",
                  calibration);
+}
+
+static void append_lens_capabilities(struct json_writer *writer,
+                                     const ACameraMetadata *metadata)
+{
+    float focal_length = sfos_camera2_first_float(
+        metadata, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, 0.0f);
+
+    json_appendf(writer, "{\"focal_length_mm\":%.9g}", focal_length);
 }
 
 static void append_zoom_capabilities(struct json_writer *writer,
@@ -441,11 +476,15 @@ int sfos_camera2_probe(char *out, size_t out_size)
                      "\"hardware_level\":",
                      raw_capability ? "true" : "false");
         json_string(&writer, hardware_level_name(hardware_level));
-        json_appendf(&writer, ",\"hardware_level_value\":%d,\"focus\":",
+        json_appendf(&writer, ",\"hardware_level_value\":%d,\"lens\":",
                      hardware_level);
+        append_lens_capabilities(&writer, metadata);
+        json_appendf(&writer, ",\"focus\":");
         append_focus_capabilities(&writer, metadata);
         json_appendf(&writer, ",\"scene\":");
         append_scene_capabilities(&writer, metadata);
+        json_appendf(&writer, ",\"hdr_dol\":");
+        append_hdr_dol_capabilities(&writer, metadata);
         json_appendf(&writer, ",\"zoom\":");
         append_zoom_capabilities(&writer, metadata);
         json_appendf(&writer, ",\"exposure\":");
@@ -456,6 +495,8 @@ int sfos_camera2_probe(char *out, size_t out_size)
         append_noise_reduction_capabilities(&writer, metadata);
         json_appendf(&writer, ",\"raw_outputs\":");
         append_outputs(&writer, metadata, AIMAGE_FORMAT_RAW16);
+        json_appendf(&writer, ",\"raw10_outputs\":");
+        append_outputs(&writer, metadata, AIMAGE_FORMAT_RAW10);
         json_appendf(&writer, ",\"jpeg_outputs\":");
         append_outputs(&writer, metadata, AIMAGE_FORMAT_JPEG);
         json_appendf(&writer, ",\"preview_outputs\":");

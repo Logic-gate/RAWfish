@@ -151,11 +151,32 @@ public:
     Q_INVOKABLE void clearFocusPoint();
 
     /**
+     * Holds the current Camera2 lens distance until releaseFocusHold().
+     */
+    Q_INVOKABLE void holdFocus();
+
+    /**
+     * Releases a Camera2 lens distance hold.
+     */
+    Q_INVOKABLE void releaseFocusHold();
+
+    /**
      * Captures a JPEG from the running Camera2 preview session.
      */
     Q_INVOKABLE bool captureJpeg(const QString &path);
+    Q_INVOKABLE bool captureJpegWithExposure(const QString &path,
+                                             int sensorSensitivity,
+                                             const QString &exposureTime);
     Q_INVOKABLE bool captureRaw(const QString &rawPath,
                                 const QString &metadataPath);
+    Q_INVOKABLE bool captureRawWithExposure(const QString &rawPath,
+                                            const QString &metadataPath,
+                                            int sensorSensitivity,
+                                            const QString &exposureTime);
+    Q_INVOKABLE bool captureRawBracket(const QVariantList &rawPaths,
+                                       const QVariantList &metadataPaths,
+                                       int sensorSensitivity,
+                                       const QVariantList &exposureTimes);
 
 signals:
     void activeChanged();
@@ -193,6 +214,8 @@ signals:
     void errorStringChanged();
     void imageCaptured(const QString &path, const QString &mimeType);
     void rawImageReady(const QString &rawPath, const QString &metadataPath);
+    void rawBracketReady(const QVariantList &rawPaths,
+                         const QVariantList &metadataPaths);
     void imageCaptureFailed(const QString &error);
 
 private slots:
@@ -210,13 +233,15 @@ private:
     void restart();
     void stop();
     void savePreviewJpegAsync(const QString &path);
-    void savePreviewMetadata(const QString &path, const QSize &imageSize);
+    bool savePreviewMetadata(const QString &path, const QSize &imageSize);
     void parseFrames();
     void parseMetadata(const QByteArray &payload);
     void parseCaptureResult(const QMap<QString, QString> &fields);
     void updateHistogram(const QImage &frame);
     void sendSettings();
     void sendSettings(bool captureExposure);
+    void sendExposureSettings(bool captureExposure);
+    void restorePreviewSettingsAfterCapture();
     void setErrorString(const QString &errorString);
     QString helperPath() const;
 
@@ -255,6 +280,7 @@ private:
     QString m_errorString;
     QImage m_frame;
     QByteArray m_buffer;
+    QMap<QString, QString> m_lastCaptureResultFields;
     bool m_previewCaptureRunning = false;
     QString m_pendingCapturePath;
     QString m_pendingCaptureFinalPath;
@@ -262,7 +288,15 @@ private:
     int m_pendingCaptureStablePolls = 0;
     int m_capturePollsRemaining = 0;
     bool m_pendingRawCapture = false;
+    bool m_pendingRawBracketCapture = false;
+    int m_pendingRawBracketCount = 0;
+    QVariantList m_pendingRawBracketRawPaths;
+    QVariantList m_pendingRawBracketMetadataPaths;
+    QVariantList m_completedRawBracketRawPaths;
+    QVariantList m_completedRawBracketMetadataPaths;
+    bool m_exposureOnlyCapture = false;
     bool m_restorePreviewSettingsAfterCapture = false;
+    bool m_restoreExposureOnlySettingsAfterCapture = false;
     QTimer m_captureTimer;
     QProcess *m_process = nullptr;
 };

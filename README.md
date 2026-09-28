@@ -39,6 +39,7 @@ At this point, RAWfish will not be released on OpenRepos due to outstanding issu
 
 ## Contributions and Credit Where It’s Due
 [ric9k](https://forum.sailfishos.org/u/ric9k/summary) has been instrumental in smoothing out the rough edges and providing valuable feedback.
+Tadi for Bracketing and general support
 
 ## AI Policy and Usage
 

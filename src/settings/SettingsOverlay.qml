@@ -90,8 +90,10 @@ PinchArea {
     }
 
     function syncDeviceRotation() {
+        var rotations = Settings.rawCaptureRotationModel()
         if (Settings.global.captureMode === "image"
-                && Settings.mode.rawCaptureRotation !== deviceRotation) {
+                && Settings.mode.rawCaptureRotation !== deviceRotation
+                && rotations.indexOf(deviceRotation) >= 0) {
             Settings.mode.rawCaptureRotation = deviceRotation
         }
     }
@@ -337,25 +339,19 @@ PinchArea {
                             ? parent.height / 3
                             : parent.height
 
-                    Item {
+                    CycleValueButton {
                         anchors {
                             left: parent.left
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
                         height: Theme.itemSizeMedium
-
-                        Label {
-                            anchors.centerIn: parent
-                            width: parent.width
-                            horizontalAlignment: Text.AlignHCenter
-                            color: Theme.lightPrimaryColor
-                            font {
-                                pixelSize: Theme.fontSizeLarge
-                                bold: true
-                            }
-                            text: camera2ControlGrid.focalLengthText() + " MM"
-                        }
+                        caption: ""
+                        settings: Settings
+                        settingProperty: "deviceId"
+                        currentValue: Settings.deviceId
+                        model: Settings.camera2LensModel()
+                        valueLabel: Settings.camera2LensLabel
                     }
                 }
 
@@ -368,7 +364,7 @@ PinchArea {
                     settings: Settings.mode
                     settingProperty: "camera2CaptureFormat"
                     currentValue: Settings.mode.camera2CaptureFormat
-                    model: [ "jpeg", "raw" ]
+                    model: Settings.camera2CaptureFormatModel()
                     valueLabel: function(value) { return value === "raw" ? "RAW" : "JPG" }
                 }
 
@@ -622,16 +618,15 @@ PinchArea {
                         text: "LENS"
                     }
 
-                    Label {
+                    CycleValueButton {
                         width: parent.width
                         height: parent.height - y
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        truncationMode: TruncationMode.Fade
-                        color: Theme.lightPrimaryColor
-                        font.pixelSize: Theme.fontSizeLarge
-                        font.bold: true
-                        text: camera2ControlGrid.focalLengthText() + " MM"
+                        caption: ""
+                        settings: Settings
+                        settingProperty: "deviceId"
+                        currentValue: Settings.deviceId
+                        model: Settings.camera2LensModel()
+                        valueLabel: Settings.camera2LensLabel
                     }
                 }
 
@@ -762,6 +757,7 @@ PinchArea {
                  && !!model && model.length > 1
                  && labels.length > 0
                  && Settings.deviceId !== Settings.global.frontFacingDeviceId
+                 && !camera2BottomDeck.active
                  && !inButtonLayout
         orientation: overlay.isPortrait ? Qt.Horizontal : Qt.Vertical
         enabled: camera.cameraStatus === Camera.ActiveStatus
@@ -1119,7 +1115,7 @@ PinchArea {
             }
 
             function rawItemKeys() {
-                var keys = [ "timer", "advanced", "speed", "quality", "timeout" ]
+                var keys = [ "timer", "advanced", "speed", "size", "quality", "timeout" ]
                 if (camera2FocusSupported) {
                     keys.push("focus")
                 }
@@ -1131,7 +1127,9 @@ PinchArea {
                 }
                 keys.push("scene")
                 keys.push("noise")
+                keys.push("bracket")
                 keys.push("render")
+                keys.push("rawFormat")
                 keys.push("progressive")
                 keys.push("rawExposure")
                 keys.push("wb")
@@ -1141,7 +1139,7 @@ PinchArea {
             }
 
             function camera2JpegItemKeys() {
-                var keys = [ "timer", "advanced", "speed", "quality" ]
+                var keys = [ "timer", "advanced", "speed", "size", "quality" ]
                 if (camera2FocusSupported) {
                     keys.push("focus")
                 }
@@ -1150,6 +1148,7 @@ PinchArea {
                 }
                 keys.push("scene")
                 keys.push("noise")
+                keys.push("bracket")
                 keys.push("rawExposure")
                 keys.push("grid")
                 return keys
@@ -1173,7 +1172,9 @@ PinchArea {
                 case "afWait": return focusTimeoutSettingComponent
                 case "scene": return sceneSettingComponent
                 case "noise": return noiseReductionSettingComponent
+                case "bracket": return bracketSettingComponent
                 case "render": return rawRenderEngineSettingComponent
+                case "rawFormat": return rawFormatSettingComponent
                 case "progressive": return progressiveJpegSettingComponent
                 case "rawExposure": return rawExposureSettingComponent
                 case "wb": return whiteBalanceSettingComponent
@@ -1465,7 +1466,8 @@ PinchArea {
                     property: "rawCaptureSize"
                     caption: "Size"
                     valueLabel: function(value) { return value.split("x")[0] }
-                    model: Settings.camera2SizeModel(Settings.mode.camera2CaptureFormat)
+                    model: Settings.camera2SizeModel(Settings.mode.camera2CaptureFormat,
+                                                     Settings.mode.rawCaptureRawFormat)
                 }
             }
 
@@ -1493,7 +1495,7 @@ PinchArea {
                     property: "rawCaptureRotation"
                     caption: "Rotate"
                     valueLabel: function(value) { return value + " deg" }
-                    model: [ 0, 90, 180, 270 ]
+                    model: Settings.rawCaptureRotationModel()
                 }
             }
 
@@ -1529,7 +1531,7 @@ PinchArea {
                         default: return "None"
                         }
                     }
-                    model: [ "auto", "continuous", "manual", "infinity", "none" ]
+                    model: Settings.camera2FocusModeModel()
                 }
             }
 
@@ -1557,7 +1559,7 @@ PinchArea {
                     property: "rawCaptureFocusTimeout"
                     caption: "AF wait"
                     valueLabel: function(value) { return value + " s" }
-                    model: [ 1, 3, 5, 10 ]
+                    model: Settings.rawCaptureFocusTimeoutModel()
                 }
             }
 
@@ -1598,6 +1600,20 @@ PinchArea {
             }
 
             Component {
+                id: rawFormatSettingComponent
+                TextSettingMenu {
+                    width: grid.menuWidth
+                    title: Settings.rawCaptureRawFormatText
+                    caption: "RAW"
+                    header: upperHeader
+                    settings: Settings.mode
+                    property: "rawCaptureRawFormat"
+                    valueLabel: Settings.rawCaptureRawFormatLabel
+                    model: Settings.rawCaptureRawFormatModel()
+                }
+            }
+
+            Component {
                 id: noiseReductionSettingComponent
                 TextSettingMenu {
                     width: grid.menuWidth
@@ -1612,6 +1628,20 @@ PinchArea {
             }
 
             Component {
+                id: bracketSettingComponent
+                TextSettingMenu {
+                    width: grid.menuWidth
+                    title: Settings.rawCaptureBracketText
+                    caption: "Bracket"
+                    header: upperHeader
+                    settings: Settings.mode
+                    property: "rawCaptureBracket"
+                    valueLabel: Settings.rawCaptureBracketLabel
+                    model: Settings.camera2BracketModel()
+                }
+            }
+
+            Component {
                 id: rawExposureSettingComponent
                 TextSettingMenu {
                     width: grid.menuWidth
@@ -1621,7 +1651,7 @@ PinchArea {
                     property: "rawCaptureExposure"
                     caption: "Exposure"
                     valueLabel: function(value) { return "x" + value }
-                    model: [ "0.5", "1.0", "1.5", "2.0", "4.0" ]
+                    model: Settings.rawCaptureExposureModel()
                 }
             }
 
@@ -1663,6 +1693,8 @@ PinchArea {
                 bottom: settingsPager.visible ? settingsPager.top : settingsFlickable.top
                 right: parent.right
             }
+            labelVerticalOffset: (Screen.hasCutouts && overlay.isPortrait)
+                                 ? Screen.topCutout.height + Theme.paddingSmall : 0
             height: overlay._headerHeight
             opacity: grid.opacity
         }

@@ -91,16 +91,17 @@ ApplicationWindow {
                 && !galleryActive
         visible: pageStack.depth < 2 && !galleryActive
                  && (active || window.camera2CaptureBusy)
-        cameraId: Settings.global.position === Camera.FrontFace ? "1" : "0"
+        cameraId: Settings.deviceId || (Settings.global.position === Camera.FrontFace ? "1" : "0")
         previewSize: Qt.size(1280, 960)
         captureSize: Settings.mode.rawCaptureSize
         captureTimeout: Settings.mode.rawCaptureTimeout
         jpegCaptureEnabled: Settings.mode.camera2CaptureFormat === "jpeg"
+                            && Settings.mode.rawCaptureSize === Settings.camera2WarmCaptureSize()
                             && Settings.mode.rawCaptureSpeedMode !== "quality"
         rawCaptureEnabled: Settings.mode.camera2CaptureFormat === "raw"
+                           && Settings.mode.rawCaptureSize === Settings.camera2WarmCaptureSize()
                            && Settings.mode.rawCaptureSpeedMode !== "quality"
         jpegQuality: Settings.mode.rawCaptureJpegQuality
-        jpegOrientation: Settings.mode.rawCaptureRotation
         orientation: Settings.global.position === Camera.FrontFace ? 270 : 90
         mirror: Settings.global.position === Camera.FrontFace
         fill: true

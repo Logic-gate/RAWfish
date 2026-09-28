@@ -31,7 +31,7 @@ mkdir -p "$output_dir"
 "$compiler" \
     -std=c11 -O2 -g -fPIC -fvisibility=hidden -pthread \
     -Wall -Wextra -Werror \
-    -shared -Wl,--no-undefined \
+    -shared -Wl,--no-undefined -Wl,--build-id=sha1 \
     "$project_dir/android/camera2_bridge.c" \
     "$project_dir/android/camera2_common.c" \
     "$project_dir/android/raw_capture.c" \

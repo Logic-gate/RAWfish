@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "../android/camera2_bridge.h"
@@ -48,6 +49,15 @@ typedef void (*droid_media_init_fn)(void);
 typedef void (*droid_media_deinit_fn)(void);
 
 static droid_media_deinit_fn g_droid_media_deinit = NULL;
+
+static long long monotonic_ms(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0;
+    }
+    return (long long)now.tv_sec * 1000LL + now.tv_nsec / 1000000LL;
+}
 
 static void deinit_droid_media(void)
 {
@@ -126,13 +136,59 @@ static void usage(FILE *stream, const char *program)
             "     [--iso N] [--shutter-ns N] [--aperture N]\n"
             "     [--noise-reduction MODE] [--zoom R]\n"
             "     [--force]\n\n"
+            "  %s --calibrate-shutter [--camera ID] [--size WIDTHxHEIGHT]\n"
+            "     [--iso N] [--quality N] [--timeout SECONDS]\n"
+            "     [--output-dir PATH] [--force]\n\n"
             "Without arguments, print Camera2 capabilities. Capture mode creates\n"
-            "PREFIX.raw16 and PREFIX.json. Focus modes are none (default), auto,\n"
+            "PREFIX.raw16 or PREFIX.raw10 and PREFIX.json. Focus modes are none (default), auto,\n"
             "continuous, manual, and infinity. Manual distance is in diopters.\n"
             "Noise reduction is none, bayer, ycc, temporal, fixed, extra, or a flag value.\n"
             "Color temperature/tint use bridge Camera2 request tags when present.\n"
             "Preview mode writes consecutive binary RGB888 frames.\n",
-            program, program, program, program);
+            program, program, program, program, program);
+}
+
+static long long absolute_i64(long long value)
+{
+    return value < 0 ? -value : value;
+}
+
+static const char *find_json_value(const char *json, const char *key)
+{
+    const char *found = strstr(json, key);
+    if (!found) {
+        return NULL;
+    }
+    found = strchr(found, ':');
+    if (!found) {
+        return NULL;
+    }
+    return found + 1;
+}
+
+static long long json_i64(const char *json, const char *key, long long fallback)
+{
+    const char *value = find_json_value(json, key);
+    if (!value) {
+        return fallback;
+    }
+    char *end = NULL;
+    errno = 0;
+    long long parsed = strtoll(value, &end, 10);
+    return errno || end == value ? fallback : parsed;
+}
+
+static int shutter_honored(long long requested_ns, long long observed_ms)
+{
+    if (requested_ns <= 0 || observed_ms <= 0) {
+        return 0;
+    }
+    long long requested_ms = requested_ns / 1000000LL;
+    long long tolerance_ms = requested_ms / 4;
+    if (tolerance_ms < 150) {
+        tolerance_ms = 150;
+    }
+    return absolute_i64(observed_ms - requested_ms) <= tolerance_ms;
 }
 
 static int parse_positive_int(const char *text, int *value)
@@ -217,6 +273,19 @@ static int parse_unit_float(const char *text, float *value)
     }
     *value = parsed;
     return 0;
+}
+
+static int parse_raw_format(const char *text, int *format)
+{
+    if (!strcmp(text, "raw16")) {
+        *format = SFOS_CAMERA2_RAW_FORMAT_RAW16;
+        return 0;
+    }
+    if (!strcmp(text, "raw10")) {
+        *format = SFOS_CAMERA2_RAW_FORMAT_RAW10;
+        return 0;
+    }
+    return -1;
 }
 
 static int parse_focus_mode(const char *text, int *mode)
@@ -377,9 +446,6 @@ int main(int argc, char **argv)
                 droidmedia, "_droid_media_deinit");
             if (g_droid_media_deinit) {
                 atexit(deinit_droid_media);
-            } else {
-                fprintf(stderr,
-                        "Warning: libdroidmedia has no _droid_media_deinit symbol\n");
             }
         } else {
             fprintf(stderr,
@@ -548,6 +614,148 @@ int main(int argc, char **argv)
             return 20 - result;
         }
         return 0;
+    } else if (!strcmp(argv[1], "--calibrate-shutter")) {
+        static const long long shutters[] = {
+            100000000LL,
+            1000000000LL,
+            2000000000LL,
+            4000000000LL,
+            8000000000LL,
+            16000000000LL,
+        };
+        const char *camera_id = "0";
+        const char *output_dir = "/tmp";
+        int width = 4096;
+        int height = 3072;
+        int timeout_seconds = 25;
+        int quality = 85;
+        int sensor_sensitivity = 800;
+        int force = 0;
+
+        if (!capture_jpeg) {
+            fprintf(stderr,
+                    "The installed bridge does not support direct JPEG capture. "
+                    "Install libsfoscamera2.so 0.6.0 or newer.\n");
+            return 14;
+        }
+
+        for (int index = 2; index < argc; ++index) {
+            if (!strcmp(argv[index], "--camera") && index + 1 < argc) {
+                camera_id = argv[++index];
+            } else if (!strcmp(argv[index], "--size") && index + 1 < argc) {
+                if (parse_size(argv[++index], &width, &height) != 0) {
+                    fprintf(stderr, "Invalid --size value\n");
+                    return 2;
+                }
+            } else if (!strcmp(argv[index], "--output-dir") &&
+                       index + 1 < argc) {
+                output_dir = argv[++index];
+            } else if (!strcmp(argv[index], "--timeout") && index + 1 < argc) {
+                if (parse_positive_int(argv[++index], &timeout_seconds) != 0 ||
+                        timeout_seconds > INT_MAX / 1000) {
+                    fprintf(stderr, "Invalid --timeout value\n");
+                    return 2;
+                }
+            } else if (!strcmp(argv[index], "--quality") && index + 1 < argc) {
+                if (parse_positive_int(argv[++index], &quality) != 0 ||
+                        quality > 100) {
+                    fprintf(stderr, "Invalid --quality value\n");
+                    return 2;
+                }
+            } else if (!strcmp(argv[index], "--iso") && index + 1 < argc) {
+                if (parse_nonnegative_int(argv[++index],
+                                          &sensor_sensitivity) != 0 ||
+                        sensor_sensitivity <= 0) {
+                    fprintf(stderr, "Invalid --iso value\n");
+                    return 2;
+                }
+            } else if (!strcmp(argv[index], "--force")) {
+                force = 1;
+            } else {
+                fprintf(stderr, "Unknown or incomplete option: %s\n",
+                        argv[index]);
+                usage(stderr, argv[0]);
+                return 2;
+            }
+        }
+
+        int failures = 0;
+        int capture_errors = 0;
+        printf("{\"status\":\"ok\",\"test\":\"shutter-calibration\","
+               "\"camera_id\":\"%s\",\"iso_requested\":%d,"
+               "\"width\":%d,\"height\":%d,\"results\":[\n",
+               camera_id, sensor_sensitivity, width, height);
+        for (size_t index = 0; index < sizeof(shutters) / sizeof(shutters[0]);
+                ++index) {
+            char output_path[PATH_MAX];
+            if (snprintf(output_path, sizeof(output_path),
+                         "%s/rawfish-shutter-calibration-%ld-%zu.jpg",
+                         output_dir, (long)getpid(), index) >=
+                    (int)sizeof(output_path)) {
+                fprintf(stderr, "Calibration output path is too long\n");
+                return 2;
+            }
+            if (!force && access(output_path, F_OK) == 0) {
+                fprintf(stderr,
+                        "Calibration output exists; pass --force or use "
+                        "another --output-dir\n");
+                return 3;
+            }
+
+            memset(json, 0, sizeof(json));
+            long long requested_ns = shutters[index];
+            int per_capture_timeout = timeout_seconds * 1000;
+            long long requested_timeout = requested_ns / 1000000LL + 5000;
+            if (requested_timeout > per_capture_timeout) {
+                per_capture_timeout = requested_timeout > INT_MAX
+                    ? INT_MAX : (int)requested_timeout;
+            }
+            long long started_ms = monotonic_ms();
+            result = capture_jpeg(camera_id, width, height, output_path,
+                                  per_capture_timeout, quality, 0,
+                                  SFOS_CAMERA2_SCENE_NONE,
+                                  sensor_sensitivity, requested_ns,
+                                  0, SFOS_CAMERA2_NOISE_REDUCTION_NONE, 1.0f,
+                                  json, sizeof(json));
+            long long wall_ms = monotonic_ms() - started_ms;
+            long long submit_ms = json_i64(json, "\"capture_submit\"", -1);
+            long long image_ms = json_i64(json, "\"image_available\"", -1);
+            long long observed_ms = submit_ms >= 0 && image_ms >= submit_ms
+                ? image_ms - submit_ms : wall_ms;
+            long long hal_iso = json_i64(json, "\"iso\"", -1);
+            long long hal_shutter = json_i64(json, "\"exposure_time_ns\"", -1);
+            long long hal_frame = json_i64(json, "\"frame_duration_ns\"", -1);
+            int honored = result == 0 &&
+                shutter_honored(requested_ns, observed_ms);
+
+            fprintf(stderr,
+                    "capture-calibration requested_shutter=%lld "
+                    "requested_iso=%d hal_iso=%lld hal_shutter=%lld "
+                    "hal_frame=%lld observed_ms=%lld wall_ms=%lld "
+                    "honored=%d result=%d path=%s\n",
+                    requested_ns, sensor_sensitivity, hal_iso, hal_shutter,
+                    hal_frame, observed_ms, (long long)wall_ms, honored,
+                    result, output_path);
+            printf("%s  {\"requested_shutter_ns\":%lld,"
+                   "\"requested_iso\":%d,\"hal_iso\":%lld,"
+                   "\"hal_shutter_ns\":%lld,\"hal_frame_ns\":%lld,"
+                   "\"observed_ms\":%lld,\"wall_ms\":%lld,"
+                   "\"honored\":%s,\"result\":%d,\"path\":\"%s\"}\n",
+                   index == 0 ? "" : ",\n",
+                   requested_ns, sensor_sensitivity, hal_iso, hal_shutter,
+                   hal_frame, observed_ms, (long long)wall_ms,
+                   honored ? "true" : "false", result, output_path);
+
+            if (result != 0 || !honored) {
+                ++failures;
+            }
+            if (result != 0) {
+                ++capture_errors;
+            }
+        }
+        printf("],\"failures\":%d,\"capture_errors\":%d}\n",
+               failures, capture_errors);
+        return capture_errors > 0 ? 1 : 0;
     } else if (!strcmp(argv[1], "--capture-jpeg")) {
         const char *camera_id = "0";
         const char *output_path = NULL;
@@ -684,7 +892,10 @@ int main(int argc, char **argv)
         long long exposure_time_ns = 0;
         int aperture = 0;
         int noise_reduction = SFOS_CAMERA2_NOISE_REDUCTION_NONE;
+        int raw_format = SFOS_CAMERA2_RAW_FORMAT_RAW16;
         float zoom_ratio = 1.0f;
+        float focus_x = -1.0f;
+        float focus_y = -1.0f;
         int force = 0;
 
         for (int index = 2; index < argc; ++index) {
@@ -733,6 +944,16 @@ int main(int argc, char **argv)
                 } else {
                     fprintf(stderr,
                             "--focus-failure must be capture or abort\n");
+                    return 2;
+                }
+            } else if (!strcmp(argv[index], "--focus-x") && index + 1 < argc) {
+                if (parse_unit_float(argv[++index], &focus_x) != 0) {
+                    fprintf(stderr, "Invalid --focus-x value\n");
+                    return 2;
+                }
+            } else if (!strcmp(argv[index], "--focus-y") && index + 1 < argc) {
+                if (parse_unit_float(argv[++index], &focus_y) != 0) {
+                    fprintf(stderr, "Invalid --focus-y value\n");
                     return 2;
                 }
             } else if (!strcmp(argv[index], "--scene") && index + 1 < argc) {
@@ -788,6 +1009,11 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid --zoom value\n");
                     return 2;
                 }
+            } else if (!strcmp(argv[index], "--raw-format") && index + 1 < argc) {
+                if (parse_raw_format(argv[++index], &raw_format) != 0) {
+                    fprintf(stderr, "Invalid --raw-format value\n");
+                    return 2;
+                }
             } else if (!strcmp(argv[index], "--force")) {
                 force = 1;
             } else {
@@ -801,10 +1027,16 @@ int main(int argc, char **argv)
             fprintf(stderr, "--output PREFIX is required for capture\n");
             return 2;
         }
+        if ((focus_x < 0.0f) != (focus_y < 0.0f)) {
+            fprintf(stderr, "--focus-x and --focus-y must be used together\n");
+            return 2;
+        }
 
         char raw_path[PATH_MAX];
         char metadata_path[PATH_MAX];
-        if (snprintf(raw_path, sizeof(raw_path), "%s.raw16", prefix) >=
+        const char *raw_suffix = raw_format == SFOS_CAMERA2_RAW_FORMAT_RAW10
+                ? ".raw10" : ".raw16";
+        if (snprintf(raw_path, sizeof(raw_path), "%s%s", prefix, raw_suffix) >=
                     (int)sizeof(raw_path) ||
                 snprintf(metadata_path, sizeof(metadata_path), "%s.json", prefix) >=
                     (int)sizeof(metadata_path)) {
@@ -832,6 +1064,9 @@ int main(int argc, char **argv)
             .exposure_time_ns = exposure_time_ns,
             .aperture = aperture,
             .noise_reduction = noise_reduction,
+            .raw_format = raw_format,
+            .focus_x = focus_x,
+            .focus_y = focus_y,
         };
         result = capture_options(
             camera_id, width, height, raw_path, metadata_path,

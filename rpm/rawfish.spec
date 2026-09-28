@@ -31,11 +31,13 @@ BuildRequires:  pkgconfig(qdeclarative5-boostable)
 BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(mlite5) >= 0.2.5
 BuildRequires:  pkgconfig(systemsettings) >= 0.2.13
+BuildRequires:  libtiff-devel
 BuildRequires:  qt5-qttools
 BuildRequires:  qt5-qttools-linguist
 BuildRequires:  oneshot
 
 Requires:  sailfishsilica-qt5 >= 1.1.79
+Requires:  libtiff
 Requires:  qt5-qtdeclarative-import-models2
 Requires:  qt5-qtdeclarative-import-positioning
 Requires:  qt5-qtdeclarative-import-multimedia
@@ -110,5 +112,5 @@ The RAWfish application.
 %{_sysconfdir}/dconf/db/vendor.d/00-rawfish.txt
 
 %changelog
-* Thu Sep 24 2026 RAWfish Contributors <@logic-gate:roshan.jp> - 1.3.1-3
+* Thu Sep 24 2026 RAWfish Contributors <rawfish@users.noreply.github.com> - 1.3.1-3
 - Package RAWfish release 3.
