@@ -18,20 +18,37 @@
 // towards the corners) and the associated color shift (channels darkening
 // at different rates), since each CFA phase is corrected independently.
 //
+// A calibration is specific to one device model + camera id + RAW
+// resolution (different resolutions can be different sensor crop/binning
+// modes with different vignetting, not just a resize -- see
+// calibration/README.md). The expected file name is therefore built
+// entirely from those four values -- lens_shading_<model-slug>_camera<id>_
+// <width>x<height>_<ratio>.json -- rather than searched for, so a file for
+// another device or resolution is never picked up by accident.
+//
 // Returns an empty QByteArray if no matching calibration is found, or if it
-// does not apply to this camera/resolution/CFA combination -- callers should
-// treat that as "no correction available" and continue without one.
+// does not apply to this device/camera/resolution/CFA combination --
+// callers should treat that as "no correction available" and continue
+// without one. *warning is left untouched when the file simply does not
+// exist (nothing to report); it is set when a file was found but rejected,
+// so callers can tell "no calibration here" apart from "calibration here is
+// broken" (see the calibrationDirs loop in writeTiffDng(), declarativecameraextensions.cpp).
 namespace DngLensShading
 {
 
-// calibrationDir: directory containing lens_shading_camera<id>.json files
-//                 (see tools/calibration/generate_lens_shading.py).
+// calibrationDir: directory to look for the calibration file in (see
+//                 tools/calibration/generate_lens_shading.py; callers
+//                 typically try a user-writable directory first, then the
+//                 one bundled with the app).
+// deviceModel:    phone model, as written to the DNG's TIFFTAG_MODEL (e.g.
+//                 Nemo::DeviceInfo::prettyName()).
 // cameraId:       Camera2 camera id the capture was taken with.
 // cfaPattern:     "RGGB" / "GRBG" / "GBRG" / "BGGR", as already derived by
 //                 the DNG writer for TIFFTAG_CFAPATTERN.
 // width, height:  raw (mosaiced) image dimensions of the capture being
 //                 written; must match the calibration's dimensions exactly.
 QByteArray buildOpcodeList2(const QString &calibrationDir,
+                            const QString &deviceModel,
                             const QString &cameraId,
                             const QString &cfaPattern,
                             int width,

@@ -11,12 +11,18 @@ The output JSON is consumed by the RAWfish camera plugin
 saving RAW captures, so viewers/editors correct the falloff automatically.
 
 Usage:
-    python3 generate_lens_shading.py --camera-id 0 --output \\
-        ../../src/calibration/lens_shading_camera0.json \\
-        flat1.dng flat2.dng ...
+    python3 generate_lens_shading.py flat1.dng flat2.dng ...
+
+    The device model, camera id, CFA pattern and resolution are all read
+    directly from the DNGs themselves (see read_dng_identity() below) --
+    nothing needs to be typed by hand, and the output file name is derived
+    from those same values, so it is always the exact name RAWfish itself
+    will look for (see calibration_file_name() and dnglensshading.cpp's
+    calibrationFileName(), which must produce byte-for-byte identical names).
+    Use --output-dir to write somewhere other than the current directory.
 
 Requirements:
-    pip install rawpy numpy
+    pip install rawpy numpy Pillow
 
 How it works:
     1. Each input DNG is a RAW (mosaiced) capture of an evenly lit, neutral
@@ -45,13 +51,18 @@ How it works:
        gain values are in the JSON as-is, so this is the only place that
        dosing is controlled.
 
-The calibration is only valid for the specific camera_id, sensor resolution
-and CFA pattern it was generated from. Regenerate it whenever the RAW
-capture resolution changes (e.g. a different binning mode).
+The calibration is only valid for the specific device model, camera_id,
+sensor resolution and CFA pattern it was generated from -- all four are
+baked into the output file name, which is how RAWfish finds (or refuses to
+misapply) it. Regenerate it whenever any of those change (e.g. a different
+binning mode/RAW capture resolution, or running this tool against DNGs from
+a different phone).
 """
 import argparse
 import datetime
 import json
+import math
+import re
 import sys
 
 import numpy as np
@@ -59,7 +70,21 @@ import numpy as np
 try:
     import rawpy
 except ImportError:
-    sys.exit("This tool requires rawpy: pip install rawpy numpy")
+    sys.exit("This tool requires rawpy: pip install rawpy numpy Pillow")
+
+try:
+    from PIL import Image
+except ImportError:
+    sys.exit("This tool requires Pillow (to read the DNG's Make/Model/"
+              "UniqueCameraModel tags): pip install rawpy numpy Pillow")
+
+# Standard TIFF/DNG tag ids (Pillow decodes these from their TIFF type
+# regardless of whether it has a symbolic name for the tag, so this works
+# for UniqueCameraModel too, which is DNG-private).
+TIFF_TAG_MAKE = 271
+TIFF_TAG_MODEL = 272
+TIFF_TAG_UNIQUE_CAMERA_MODEL = 50708
+UNIQUE_CAMERA_MODEL_RE = re.compile(r"Sailfish Camera2 camera (\d+)$")
 
 # Canonical phase order used throughout this tool and in the JSON output.
 PLANE_NAMES = ("R", "Gr", "Gb", "B")
@@ -83,6 +108,49 @@ def cfa_phase_names(cfa_pattern):
     if cfa_pattern not in layouts:
         raise ValueError(f"Unsupported CFA pattern: {cfa_pattern}")
     return layouts[cfa_pattern]
+
+
+def slugify(text):
+    """
+    Filesystem-safe identifier for `text` (typically a phone model). Must
+    match slugify() in src/dnglensshading.cpp byte-for-byte, since both
+    sides need to construct the exact same file name independently.
+    """
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def ratio_label(width, height):
+    """GCD-reduced aspect ratio label, e.g. "4x3", "16x9". Must match
+    ratioLabel() in src/dnglensshading.cpp."""
+    divisor = math.gcd(width, height) or 1
+    return f"{width // divisor}x{height // divisor}"
+
+
+def calibration_file_name(device_model, camera_id, width, height):
+    """Must match calibrationFileName() in src/dnglensshading.cpp."""
+    return (f"lens_shading_{slugify(device_model)}_camera{camera_id}_"
+            f"{width}x{height}_{ratio_label(width, height)}.json")
+
+
+def read_dng_identity(path):
+    """
+    Read the camera identity RAWfish itself writes into every DNG
+    (writeTiffDng() in src/declarativecameraextensions.cpp): standard
+    TIFF Model (device model, from Nemo::DeviceInfo::prettyName()) and the
+    DNG-private UniqueCameraModel ("Sailfish Camera2 camera <id>"), which is
+    where the camera id actually comes from now. Returns (model, camera_id).
+    """
+    with Image.open(path) as img:
+        tags = img.tag_v2
+        model = tags.get(TIFF_TAG_MODEL)
+        unique = tags.get(TIFF_TAG_UNIQUE_CAMERA_MODEL)
+    if not model or not str(model).strip():
+        raise ValueError(f"{path}: no Model tag -- was this DNG written by RAWfish?")
+    match = UNIQUE_CAMERA_MODEL_RE.match(str(unique) if unique else "")
+    if not match:
+        raise ValueError(f"{path}: unrecognised or missing UniqueCameraModel tag "
+                          f"({unique!r}) -- was this DNG written by RAWfish?")
+    return str(model).strip(), match.group(1)
 
 
 def detect_cfa_pattern(raw):
@@ -258,6 +326,7 @@ def apply_balance_and_strength(averaged, balance, strength):
 
 
 def process_file(path, grid_rows, grid_cols, max_gain, cfa_override):
+    device_model, camera_id = read_dng_identity(path)
     with rawpy.imread(path) as raw:
         cfa = cfa_override or detect_cfa_pattern(raw)
         names = cfa_phase_names(cfa)
@@ -272,16 +341,18 @@ def process_file(path, grid_rows, grid_cols, max_gain, cfa_override):
                 gains[name] = compute_gain_grid(
                     planes[(dy, dx)], grid_rows, grid_cols, max_gain)
                 phase_index += 1
-        return cfa, width, height, gains
+        return device_model, camera_id, cfa, width, height, gains
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dng_files", nargs="+", help="Flat-field grey card DNG captures")
-    parser.add_argument("--camera-id", required=True,
-                         help='Camera2 camera id this calibration applies to (e.g. "0")')
-    parser.add_argument("--output", required=True, help="Output calibration JSON path")
+    parser.add_argument("--output-dir", default=".",
+                         help="Directory to write the calibration JSON into "
+                              "(default: current directory). The file name itself "
+                              "is always derived from the DNGs, not chosen here -- "
+                              "see calibration_file_name().")
     parser.add_argument("--grid-rows", type=int, default=12,
                          help="Gain map grid rows per plane (default: 12)")
     parser.add_argument("--grid-cols", type=int, default=16,
@@ -307,18 +378,25 @@ def main():
         sys.exit("--strength must be between 0 and 100")
 
     per_file_gains = []
-    reference_cfa = reference_width = reference_height = None
+    reference = None  # (device_model, camera_id, cfa, width, height) of the first file
 
     for path in args.dng_files:
-        cfa, width, height, gains = process_file(
+        device_model, camera_id, cfa, width, height, gains = process_file(
             path, args.grid_rows, args.grid_cols, args.max_gain, args.cfa)
-        if reference_cfa is None:
-            reference_cfa, reference_width, reference_height = cfa, width, height
-        elif (cfa, width, height) != (reference_cfa, reference_width, reference_height):
-            sys.exit(f"{path}: CFA/resolution ({cfa}, {width}x{height}) does not match "
-                      f"the first file ({reference_cfa}, {reference_width}x{reference_height})")
+        current = (device_model, camera_id, cfa, width, height)
+        if reference is None:
+            reference = current
+        elif current != reference:
+            ref_model, ref_id, ref_cfa, ref_w, ref_h = reference
+            sys.exit(f"{path}: ({device_model}, camera {camera_id}, {cfa}, "
+                      f"{width}x{height}) does not match the first file "
+                      f"({ref_model}, camera {ref_id}, {ref_cfa}, {ref_w}x{ref_h}) -- "
+                      "all input DNGs must be the exact same device/camera/CFA/resolution")
         per_file_gains.append(gains)
-        print(f"Processed {path}: CFA={cfa}, {width}x{height}")
+        print(f"Processed {path}: {device_model}, camera {camera_id}, CFA={cfa}, "
+              f"{width}x{height}")
+
+    reference_model, reference_camera_id, reference_cfa, reference_width, reference_height = reference
 
     averaged = {}
     max_disagreement = 0.0
@@ -342,7 +420,15 @@ def main():
 
     calibration = {
         "version": 1,
-        "camera_id": args.camera_id,
+        # device_model/camera_id are provenance only (for humans reading the
+        # file) -- RAWfish itself never re-reads them back out of the JSON,
+        # it already committed to this exact file by constructing its name
+        # from those same values before opening it (see dnglensshading.cpp).
+        # cfa_pattern/image_width/image_height, in contrast, ARE re-checked
+        # against the capture at load time -- kept here as a second,
+        # independent guard, not just for the record.
+        "device_model": reference_model,
+        "camera_id": reference_camera_id,
         "cfa_pattern": reference_cfa,
         "image_width": reference_width,
         "image_height": reference_height,
@@ -358,10 +444,18 @@ def main():
                          .strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
-    with open(args.output, "w") as f:
+    file_name = calibration_file_name(reference_model, reference_camera_id,
+                                       reference_width, reference_height)
+    output_path = f"{args.output_dir.rstrip('/')}/{file_name}"
+    with open(output_path, "w") as f:
         json.dump(calibration, f, indent=2)
         f.write("\n")
-    print(f"Wrote {args.output}")
+    print(f"\nWrote {output_path}")
+    print("Copy it into either:")
+    print("  - ~/.local/share/rawfish/device-profiles/lens-shading/  "
+          "(active on this device immediately, no rebuild/repackage)")
+    print("  - src/calibration/ in the RAWfish source tree  "
+          "(bundled with the app, e.g. to contribute it upstream)")
 
 
 if __name__ == "__main__":

@@ -12,9 +12,59 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QVector>
 #include <cstring>
+#include <numeric>
+
+namespace {
+
+// Filesystem-safe identifier for a free-form string (typically a phone
+// model). Must match slugify() in tools/calibration/generate_lens_shading.py
+// byte-for-byte, since both sides need to construct the exact same file
+// name independently: lowercase, any run of characters other than a-z0-9
+// collapsed to a single '-', leading/trailing '-' trimmed.
+QString slugify(const QString &text)
+{
+    QString slug = text.toLower();
+    static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9]+"));
+    slug.replace(nonAlnum, QStringLiteral("-"));
+    while (slug.startsWith(QLatin1Char('-'))) {
+        slug.remove(0, 1);
+    }
+    while (slug.endsWith(QLatin1Char('-'))) {
+        slug.chop(1);
+    }
+    return slug;
+}
+
+// GCD-reduced aspect ratio label, e.g. "4x3", "16x9". Must match
+// ratio_label() in tools/calibration/generate_lens_shading.py.
+QString ratioLabel(int width, int height)
+{
+    const int divisor = std::gcd(width, height);
+    return QStringLiteral("%1x%2")
+            .arg(divisor > 0 ? width / divisor : width)
+            .arg(divisor > 0 ? height / divisor : height);
+}
+
+// lens_shading_<model-slug>_camera<id>_<width>x<height>_<ratio>.json --
+// entirely determined by the device/camera/resolution being written, so a
+// calibration for another phone or another resolution is structurally
+// impossible to pick up by accident, regardless of what else happens to sit
+// in the same calibration directory.
+QString calibrationFileName(const QString &deviceModel, const QString &cameraId,
+                             int width, int height)
+{
+    return QStringLiteral("lens_shading_%1_camera%2_%3x%4_%5.json")
+            .arg(slugify(deviceModel), cameraId)
+            .arg(width)
+            .arg(height)
+            .arg(ratioLabel(width, height));
+}
+
+}
 
 namespace {
 
@@ -92,12 +142,12 @@ void writeGainMapOpcode(QDataStream &stream, quint32 top, quint32 left,
 
 namespace DngLensShading {
 
-QByteArray buildOpcodeList2(const QString &calibrationDir, const QString &cameraId,
-                            const QString &cfaPattern, int width, int height,
-                            QString *warning)
+QByteArray buildOpcodeList2(const QString &calibrationDir, const QString &deviceModel,
+                            const QString &cameraId, const QString &cfaPattern,
+                            int width, int height, QString *warning)
 {
-    const QString path = calibrationDir + QLatin1String("/lens_shading_camera")
-            + cameraId + QLatin1String(".json");
+    const QString path = calibrationDir + QLatin1Char('/')
+            + calibrationFileName(deviceModel, cameraId, width, height);
     QFile file(path);
     if (!file.exists()) {
         // No calibration for this camera: not an error, just nothing to add.

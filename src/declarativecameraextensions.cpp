@@ -42,6 +42,13 @@
 
 #include <tiffio.h>
 
+// C++ counterpart of the QML DeviceInfo type already used elsewhere in this
+// app (src/capture/CaptureView.qml, for the classic-pipeline EXIF
+// cameraModel/cameraManufacturer tags). Provided by the same "systemsettings"
+// pkg-config module already linked in src.pro -- NOTE: header/class name not
+// otherwise used from C++ in this codebase yet, verify against the SDK.
+#include <deviceinfo.h>
+
 #ifndef TIFFTAG_NOISEPROFILE
 #define TIFFTAG_NOISEPROFILE 51041
 #endif
@@ -2536,6 +2543,18 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
     TIFFSetField(tiff, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tiff, 0));
     TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     TIFFSetField(tiff, TIFFTAG_SOFTWARE, software.constData());
+    // Standard DNG/EXIF Make+Model, as any camera DNG carries. Used by
+    // tools/calibration/generate_lens_shading.py to name calibration files,
+    // and by DngLensShading::buildOpcodeList2() (see below) to look one up.
+    static const DeviceInfo deviceInfo;
+    const QByteArray make = deviceInfo.manufacturer().toUtf8();
+    const QByteArray model = deviceInfo.prettyName().toUtf8();
+    if (!make.isEmpty()) {
+        TIFFSetField(tiff, TIFFTAG_MAKE, make.constData());
+    }
+    if (!model.isEmpty()) {
+        TIFFSetField(tiff, TIFFTAG_MODEL, model.constData());
+    }
     TIFFSetField(tiff, TIFFTAG_CFAREPEATPATTERNDIM, cfaRepeatPatternDim);
     TIFFSetField(tiff, TIFFTAG_CFAPATTERN, 4, cfaPattern.constData());
     TIFFSetField(tiff, TIFFTAG_DNGVERSION, dngVersion);
@@ -2577,18 +2596,37 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
     }
 
     // Per-channel vignetting/color-shading correction, if a calibration was
-    // generated for this camera (see tools/calibration/generate_lens_shading.py
-    // and calibration/README.md). Silently skipped when absent or when it
-    // does not match this capture's camera/resolution/CFA.
-    const QString calibrationDir = QStringLiteral(DEPLOYMENT_PATH "calibration");
+    // generated for this device/camera/resolution (see
+    // tools/calibration/generate_lens_shading.py and calibration/README.md).
+    // A user-supplied override -- writable without rebuilding or
+    // repackaging RAWfish -- takes priority over the calibration bundled
+    // with the app; silently skipped when neither has a matching file.
+    const QStringList calibrationDirs = {
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                + QStringLiteral("/rawfish/device-profiles/lens-shading"),
+        QStringLiteral(DEPLOYMENT_PATH "calibration"),
+    };
     const QString cameraId = metadata.value(QStringLiteral("camera_id")).toString();
-    QString lensShadingWarning;
-    const QByteArray opcodeList2 = DngLensShading::buildOpcodeList2(
-            calibrationDir, cameraId, cfa, width, height, &lensShadingWarning);
+    QByteArray opcodeList2;
+    for (const QString &calibrationDir : calibrationDirs) {
+        QString lensShadingWarning;
+        opcodeList2 = DngLensShading::buildOpcodeList2(
+                calibrationDir, QString::fromUtf8(model), cameraId, cfa, width, height,
+                &lensShadingWarning);
+        if (!opcodeList2.isEmpty()) {
+            break;
+        }
+        if (!lensShadingWarning.isEmpty()) {
+            // The file exists but is broken/mismatched: report it and stop,
+            // rather than silently falling through to the bundled default
+            // and masking what could be a mistake in the user's own override.
+            qWarning() << lensShadingWarning;
+            break;
+        }
+        // No warning and no data: no file at this path, try the next one.
+    }
     if (!opcodeList2.isEmpty()) {
         TIFFSetField(tiff, TIFFTAG_OPCODELIST2, opcodeList2.size(), opcodeList2.constData());
-    } else if (!lensShadingWarning.isEmpty()) {
-        qWarning() << lensShadingWarning;
     }
 
     QByteArray row(rowStride, Qt::Uninitialized);
