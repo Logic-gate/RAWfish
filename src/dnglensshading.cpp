@@ -16,7 +16,6 @@
 #include <QStringList>
 #include <QVector>
 #include <cstring>
-#include <numeric>
 
 namespace {
 
@@ -39,11 +38,23 @@ QString slugify(const QString &text)
     return slug;
 }
 
+// std::gcd() is C++17; this project builds as C++14 (CONFIG += c++14 in
+// src.pro), hence this by-hand Euclidean gcd instead.
+int gcd(int a, int b)
+{
+    while (b != 0) {
+        const int remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+    return a;
+}
+
 // GCD-reduced aspect ratio label, e.g. "4x3", "16x9". Must match
 // ratio_label() in tools/calibration/generate_lens_shading.py.
 QString ratioLabel(int width, int height)
 {
-    const int divisor = std::gcd(width, height);
+    const int divisor = gcd(width, height);
     return QStringLiteral("%1x%2")
             .arg(divisor > 0 ? width / divisor : width)
             .arg(divisor > 0 ? height / divisor : height);
