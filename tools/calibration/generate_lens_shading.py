@@ -73,7 +73,7 @@ except ImportError:
     sys.exit("This tool requires rawpy: pip install rawpy numpy Pillow")
 
 try:
-    from PIL import Image
+    from PIL import Image, TiffImagePlugin
 except ImportError:
     sys.exit("This tool requires Pillow (to read the DNG's Make/Model/"
               "UniqueCameraModel tags): pip install rawpy numpy Pillow")
@@ -140,10 +140,19 @@ def read_dng_identity(path):
     DNG-private UniqueCameraModel ("Sailfish Camera2 camera <id>"), which is
     where the camera id actually comes from now. Returns (model, camera_id).
     """
-    with Image.open(path) as img:
-        tags = img.tag_v2
-        model = tags.get(TIFF_TAG_MODEL)
-        unique = tags.get(TIFF_TAG_UNIQUE_CAMERA_MODEL)
+    # Parse the first IFD directly instead of going through Image.open():
+    # PIL tries to set up a pixel decoder and rejects raw CFA DNGs
+    # (PhotometricInterpretation 32803) with UnidentifiedImageError, even
+    # though the tags are perfectly readable.
+    with open(path, "rb") as fh:
+        header = fh.read(8)
+        if header[:2] not in (b"II", b"MM"):
+            raise ValueError(f"{path}: not a TIFF/DNG file")
+        ifd = TiffImagePlugin.ImageFileDirectory_v2(header)
+        fh.seek(ifd.next)
+        ifd.load(fh)
+    model = ifd.get(TIFF_TAG_MODEL)
+    unique = ifd.get(TIFF_TAG_UNIQUE_CAMERA_MODEL)
     if not model or not str(model).strip():
         raise ValueError(f"{path}: no Model tag -- was this DNG written by RAWfish?")
     match = UNIQUE_CAMERA_MODEL_RE.match(str(unique) if unique else "")
