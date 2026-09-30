@@ -2601,9 +2601,16 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
     // A user-supplied override -- writable without rebuilding or
     // repackaging RAWfish -- takes priority over the calibration bundled
     // with the app; silently skipped when neither has a matching file.
+    const QString userCalibrationDir =
+            QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                    + QStringLiteral("/rawfish/device-profiles/lens-shading");
+    // RAWfish only ever reads from here, but create it anyway (cheap,
+    // idempotent) so it exists and is discoverable in a file manager even
+    // before the user has generated and dropped an override into it --
+    // otherwise there is nothing to show them where it's supposed to go.
+    QDir().mkpath(userCalibrationDir);
     const QStringList calibrationDirs = {
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-                + QStringLiteral("/rawfish/device-profiles/lens-shading"),
+        userCalibrationDir,
         QStringLiteral(DEPLOYMENT_PATH "calibration"),
     };
     const QString cameraId = metadata.value(QStringLiteral("camera_id")).toString();

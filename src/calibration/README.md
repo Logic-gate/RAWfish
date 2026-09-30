@@ -15,17 +15,27 @@ itself.
 
 ## How it works
 
-* `lens_shading_camera<ID>.json` holds, for the Camera2 camera whose id is
-  `<ID>`, a coarse per-CFA-channel (R, Gr, Gb, B) gain grid computed from
-  photos of a flat, evenly lit, neutral grey/white target.
+* `lens_shading_<model-slug>_camera<ID>_<width>x<height>_<ratio>.json` holds
+  a coarse per-CFA-channel (R, Gr, Gb, B) gain grid, computed from photos of
+  a flat, evenly lit, neutral grey/white target, for one specific phone
+  model + Camera2 camera id + RAW resolution. All four are baked into the
+  file name (`model-slug` is the phone's model string, lowercased and
+  stripped to `[a-z0-9-]`; `ratio` is the GCD-reduced aspect ratio, e.g.
+  `4x3`), because a different resolution can be a different sensor
+  crop/binning mode with genuinely different vignetting, not just a resize
+  -- see "Limitations" below.
 * `DngLensShading::buildOpcodeList2()` (`src/dnglensshading.cpp`) turns that
   grid into the DNG `GainMap` opcodes and `writeTiffDng()`
-  (`src/declarativecameraextensions.cpp`) attaches them to every DNG saved
-  for that camera, as long as the capture's resolution and CFA pattern still
-  match the calibration.
-* If no `lens_shading_camera<ID>.json` exists for a camera, or it does not
-  match the capture (different resolution/CFA -- e.g. a binning mode
-  change), no opcode is written and DNGs are produced exactly as before.
+  (`src/declarativecameraextensions.cpp`) attaches them to every DNG saved,
+  by building that exact file name from the capture's own device
+  model/camera id/resolution and looking it up -- first in
+  `~/.local/share/rawfish/device-profiles/lens-shading/` (a user-writable
+  override, no rebuild/repackage needed), then in this directory as
+  bundled with the app.
+* If neither directory has a matching file, or the one found does not
+  match the capture's CFA pattern (checked again, independently of the
+  file name, as a second guard), no opcode is written and DNGs are
+  produced exactly as before.
 
 ## Regenerating a calibration
 
@@ -36,28 +46,35 @@ itself.
    cause of a lopsided result (see "Diagnostics" below).
 2. Capture one or more RAW DNGs of the card with RAWfish
    (Settings -> RAW capture format -> DNG, or RAW16 + JSON + DNG).
-3. Run the generator:
+3. Run the generator -- no flags needed beyond the DNGs themselves; device
+   model, camera id, resolution and CFA are all read straight from the
+   DNGs' own tags (`Model`/`UniqueCameraModel`, both written by RAWfish
+   itself), and the output file name is derived from those same values:
 
    ```
-   python3 tools/calibration/generate_lens_shading.py \
-       --camera-id 0 \
-       --output src/calibration/lens_shading_camera0.json \
-       flat1.dng flat2.dng
+   python3 tools/calibration/generate_lens_shading.py flat1.dng flat2.dng
    ```
 
-   Replace `0` with the actual Camera2 id (see `Settings -> ... -> camera_id`
-   in a capture's own `.json` sidecar, or `adb shell dumpsys media.camera`).
    Passing more than one capture reduces sensor noise in the calibration and
    the tool reports how much the independent estimates disagreed, as a
-   sanity check.
+   sanity check. All input DNGs must be from the same device model, camera
+   id, resolution and CFA pattern -- the tool refuses to mix them.
 4. Take a new DNG with that camera and confirm the `OpcodeList2` tag is now
    present (e.g. `exiftool -OpcodeList2 capture.dng`) and that a DNG-aware
    viewer shows flatter corners and less color drift than before. Or run
    `tools/calibration/verify_gain_map.py` (see below) for a quantitative
    check that doesn't depend on eyeballing a viewer.
-5. Repeat for every physical camera (main, ultrawide, tele, front, ...)
-   exposed by the device -- each has its own lens and needs its own
-   `lens_shading_camera<ID>.json`.
+5. Copy the generated file into either:
+   - `~/.local/share/rawfish/device-profiles/lens-shading/` on the device,
+     to use it immediately without rebuilding or repackaging RAWfish
+     (RAWfish creates this directory itself the first time it saves a DNG,
+     if it doesn't exist yet); or
+   - this directory in the source tree, to bundle it with the app -- e.g.
+     to contribute it upstream.
+
+   Repeat for every physical camera (main, ultrawide, tele, front, ...) and
+   every RAW resolution actually used -- each combination needs its own
+   calibration file.
 
 ## Diagnostics
 
@@ -102,11 +119,13 @@ pass them explicitly.
 
 ## Limitations
 
-* The calibration is tied to a specific RAW capture resolution and CFA
-  pattern. If the device exposes several RAW sizes (e.g. full-res vs. a
-  binned mode) per camera, generate and ship one calibration file per size
-  actually used, or accept that binned captures fall back to uncorrected
-  DNGs.
+* The calibration is tied to a specific device model + camera id + RAW
+  resolution + CFA pattern (all encoded in the file name, see above). If the
+  device exposes several RAW sizes per camera (e.g. full-res vs. a binned
+  or a different-aspect-ratio mode -- check with `generated-hal.json`, see
+  the advanced-mode "Generate HAL config" setting), generate and ship one
+  calibration file per size actually used; a size with no matching file
+  simply falls back to an uncorrected DNG.
 * This corrects optical vignetting and shading measured at one focus
   distance/aperture; it will be slightly less accurate at very different
   focus distances if the lens is not fully fixed-focus, which is a
