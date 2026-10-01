@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 Jolla Mobile Ltd
+ * SPDX-FileCopyrightText: 2026 RAWfish Contributors
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */

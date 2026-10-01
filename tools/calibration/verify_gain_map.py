@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 Jolla Mobile Ltd
+# SPDX-FileCopyrightText: 2026 RAWfish Contributors
 #
 # SPDX-License-Identifier: BSD-3-Clause
 """
-Sanity-check a lens_shading_camera<ID>.json calibration by re-applying it
+Sanity-check a lens_shading_<model>_camera<ID>_<W>x<H>_<ratio>.json calibration by re-applying it
 (in Python, independently of the C++ DNG writer) to a RAW DNG and reporting
 the residual vignetting and R/G, B/G color shift by radius.
 
@@ -14,8 +14,8 @@ make sure the two stay in agreement (this script's gain-map interpretation
 must match src/dnglensshading.cpp's).
 
 Usage:
-    python3 verify_gain_map.py --calibration ../../src/calibration/lens_shading_camera0.json check.dng
-    python3 verify_gain_map.py --calibration ../../src/calibration/lens_shading_camera0.json check1.dng check2.dng ...
+    python3 verify_gain_map.py --calibration ../../src/calibration/lens_shading_jolla-phone-2026_camera0_4096x3072_4x3.json check.dng
+    python3 verify_gain_map.py --calibration ../../src/calibration/lens_shading_jolla-phone-2026_camera0_4096x3072_4x3.json check1.dng check2.dng ...
 
 Requirements:
     pip install rawpy numpy scipy

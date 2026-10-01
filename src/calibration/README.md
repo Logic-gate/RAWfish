@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 Jolla Mobile Ltd
+SPDX-FileCopyrightText: 2026 RAWfish Contributors
 SPDX-License-Identifier: BSD-3-Clause
 -->
 
@@ -29,13 +29,14 @@ itself.
   (`src/declarativecameraextensions.cpp`) attaches them to every DNG saved,
   by building that exact file name from the capture's own device
   model/camera id/resolution and looking it up -- first in
-  `~/.local/share/rawfish/device-profiles/lens-shading/` (a user-writable
-  override, no rebuild/repackage needed), then in this directory as
-  bundled with the app.
+  the `lens-shading/` subdirectory of RAWfish's device-profiles directory
+  (normally `~/.local/share/com.rawfish/rawfish/device-profiles/`; a
+  user-writable override, no rebuild/repackage needed), then in this
+  directory as bundled with the app.
 * If neither directory has a matching file, or the one found does not
   match the capture's CFA pattern (checked again, independently of the
-  file name, as a second guard), no opcode is written and DNGs are
-  produced exactly as before.
+  file name, as a second guard), no opcode is written and the DNG is
+  saved without lens shading correction.
 
 ## Regenerating a calibration
 
@@ -45,7 +46,7 @@ itself.
    card as flat as possible -- an unevenly lit card is the most common
    cause of a lopsided result (see "Diagnostics" below).
 2. Capture one or more RAW DNGs of the card with RAWfish
-   (Settings -> RAW capture format -> DNG, or RAW16 + JSON + DNG).
+   (in the settings, choose DNG or RAW + JSON + DNG as the RAW format).
 3. Run the generator -- no flags needed beyond the DNGs themselves; device
    model, camera id, resolution and CFA are all read straight from the
    DNGs' own tags (`Model`/`UniqueCameraModel`, both written by RAWfish
@@ -65,16 +66,16 @@ itself.
    `tools/calibration/verify_gain_map.py` (see below) for a quantitative
    check that doesn't depend on eyeballing a viewer.
 5. Copy the generated file into either:
-   - `~/.local/share/rawfish/device-profiles/lens-shading/` on the device,
-     to use it immediately without rebuilding or repackaging RAWfish
-     (RAWfish creates this directory itself the first time it saves a DNG,
-     if it doesn't exist yet); or
+   - `~/.local/share/com.rawfish/rawfish/device-profiles/lens-shading/` on
+     the device, to use it immediately without rebuilding or repackaging
+     RAWfish (RAWfish creates this directory itself the first time it
+     saves a DNG, if it doesn't exist yet); or
    - this directory in the source tree, to bundle it with the app -- e.g.
      to contribute it upstream.
 
-   Repeat for every physical camera (main, ultrawide, tele, front, ...) and
-   every RAW resolution actually used -- each combination needs its own
-   calibration file.
+   At the moment only camera 0 of the Jolla Phone (2026), at 4096x3072, is
+   calibrated and bundled. Any other camera or RAW resolution needs its own
+   calibration file; without one, the DNG is saved without correction.
 
 ## Diagnostics
 
@@ -101,8 +102,7 @@ The generator prints two checks after averaging, before writing the file:
 * `--balance` (0-100, default 0) trades brightening the corners for
   darkening the centre instead. By default (0) every correction only ever
   brightens a pixel up towards the least-vignetted part of the frame, so
-  the centre is never touched -- this is the original, purely additive
-  behaviour. At 100, the single point needing the *most* correction
+  the centre is never touched. At 100, the single point needing the *most* correction
   (usually a far corner) is left unchanged and everything else, including
   the centre, is only ever darkened down towards it. Values in between
   blend the two, letting you keep the overall image from getting brighter
@@ -113,27 +113,18 @@ The generator prints two checks after averaging, before writing the file:
   for dialing back an overly strong correction without having to
   recapture the flat-field photos.
 
-Both `--balance` and `--strength` default to the original behaviour, so
-existing calibration files and command lines are unaffected unless you
-pass them explicitly.
-
 ## Limitations
 
 * The calibration is tied to a specific device model + camera id + RAW
   resolution + CFA pattern (all encoded in the file name, see above). If the
   device exposes several RAW sizes per camera (e.g. full-res vs. a binned
-  or a different-aspect-ratio mode -- check with `generated-hal.json`, see
-  the advanced-mode "Generate HAL config" setting), generate and ship one
-  calibration file per size actually used; a size with no matching file
-  simply falls back to an uncorrected DNG.
+  or a different-aspect-ratio mode), generate and ship one calibration
+  file per size actually used; a size with no matching file is saved as an
+  uncorrected DNG.
 * This corrects optical vignetting and shading measured at one focus
   distance/aperture; it will be slightly less accurate at very different
   focus distances if the lens is not fully fixed-focus, which is a
   standard limitation of static lens shading maps.
-* `--max-gain` (default 4.0) exists to avoid amplifying sensor noise in
-  very dark corners; if the generator reports it is clamping heavily on
-  your card/lighting, retake the flat with more even light rather than
-  raising the limit (see "Diagnostics" above).
 * `tools/calibration/verify_gain_map.py` accepts multiple DNG files at
   once (e.g. a glob of an entire capture session) and prints a per-file
   pass/fail summary, exiting non-zero if any file did not improve.

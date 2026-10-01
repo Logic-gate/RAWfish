@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 Jolla Mobile Ltd
+ * SPDX-FileCopyrightText: 2026 RAWfish Contributors
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -79,10 +79,10 @@ QString calibrationFileName(const QString &deviceModel, const QString &cameraId,
 
 namespace {
 
-// DNG opcode id for GainMap (DNG spec 1.4+, "Opcode List Overview" table).
+// DNG opcode id for GainMap (DNG specification, "Opcode List Overview").
 const quint32 OpcodeIdGainMap = 9;
-// Encoded as MajorMajorMinorMinor bytes, e.g. 1.3.0.0 -> 0x01030000. GainMap
-// was introduced in DNG 1.3, so opcodes are tagged with that spec version.
+// DNG version, one byte per component: 1.3.0.0 -> 0x01030000. GainMap was
+// introduced in DNG 1.3, so the opcodes are tagged with that version.
 const quint32 DngSpecVersion_1_3_0_0 = 0x01030000;
 // Bit 0 of OpcodeFlags: readers that don't understand this opcode may skip
 // it and still produce a usable (uncorrected) image, rather than rejecting
@@ -234,24 +234,20 @@ QByteArray buildOpcodeList2(const QString &calibrationDir, const QString &device
     for (int phase = 0; phase < 4; ++phase) {
         const int top = phase / 2;
         const int left = phase % 2;
-        // MapSpacingV/H are expressed as a fraction of the FULL image
-        // extent (imageBounds in Adobe's reference dng_gain_map.cpp,
-        // buf_in.height/width in darktable's rawprepare.c), not in pixels
-        // and not relative to this phase's subsampled plane -- confirmed
-        // by reading both of those implementations' actual interpolation
-        // code, not assumed. Using pixel-count spacing here (as an earlier
-        // version of this function did) made the map coordinate stay near
-        // zero across the whole image, collapsing the correction to
-        // essentially one grid sample.
+        // MapSpacingV/H are fractions of the FULL image extent (imageBounds
+        // in Adobe's reference dng_gain_map.cpp, buf_in.height/width in
+        // darktable's rawprepare.c), not pixel counts and not relative to
+        // this phase's subsampled plane. Pixel-count spacing would keep the
+        // map coordinate near zero across the whole image, collapsing the
+        // correction to a single grid sample.
         const double spacingV = gridRows > 1 ? 1.0 / double(gridRows - 1) : 1.0;
         const double spacingH = gridCols > 1 ? 1.0 / double(gridCols - 1) : 1.0;
 
-        // Bottom/Right are EXCLUSIVE bounds (equal to the full image height
-        // /width), not the inclusive last row/col index. darktable's own
-        // GainMap validator (rawprepare.c, _check_gain_maps) rejects the
-        // whole set -- silently, hiding its "flat field correction" control
-        // entirely -- unless bottom == image->height and right ==
-        // image->width exactly; verified by reading that function's source.
+        // Bottom/Right are EXCLUSIVE bounds (equal to the full image
+        // height/width), not the index of the last row/column. darktable's
+        // GainMap validator (_check_gain_maps in rawprepare.c) rejects the
+        // whole set, hiding its "flat field correction" control, unless
+        // bottom == image height and right == image width.
         writeGainMapOpcode(stream, quint32(top), quint32(left),
                            quint32(height), quint32(width),
                            quint32(gridRows), quint32(gridCols),

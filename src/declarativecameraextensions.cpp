@@ -42,11 +42,9 @@
 
 #include <tiffio.h>
 
-// C++ counterpart of the QML DeviceInfo type already used elsewhere in this
-// app (src/capture/CaptureView.qml, for the classic-pipeline EXIF
-// cameraModel/cameraManufacturer tags). Provided by the same "systemsettings"
-// pkg-config module already linked in src.pro -- NOTE: header/class name not
-// otherwise used from C++ in this codebase yet, verify against the SDK.
+// C++ counterpart of the QML DeviceInfo type used in
+// src/capture/CaptureView.qml. Provided by the "systemsettings" pkg-config
+// module already linked in src.pro.
 #include <deviceinfo.h>
 
 #ifndef TIFFTAG_NOISEPROFILE
@@ -68,9 +66,8 @@ namespace {
 // TIFFTAG_NOISEPROFILE and TIFFTAG_OPCODELIST2 are DNG-private tags that this
 // build of libtiff does not register internally (unlike e.g. COLORMATRIX1 or
 // ASSHOTNEUTRAL, which libtiff already knows about). Without registering
-// them first, TIFFSetField() silently fails ("Unknown tag") and the tag is
-// never written -- confirmed both by TIFFSetField's return value and by
-// inspecting the resulting file's IFD directly.
+// them first, TIFFSetField() fails with "Unknown tag" and the tag is never
+// written.
 const TIFFFieldInfo dngPrivateFields[] = {
     { TIFFTAG_NOISEPROFILE, TIFF_VARIABLE2, TIFF_VARIABLE2, TIFF_DOUBLE, FIELD_CUSTOM, 1, 1, const_cast<char *>("DNGNoiseProfile") },
     { TIFFTAG_OPCODELIST2, TIFF_VARIABLE2, TIFF_VARIABLE2, TIFF_UNDEFINED, FIELD_CUSTOM, 1, 1, const_cast<char *>("DNGOpcodeList2") },
@@ -2595,24 +2592,24 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
         TIFFSetField(tiff, TIFFTAG_NOISEPROFILE, 8, noiseProfile);
     }
 
-    // Per-channel vignetting/color-shading correction, if a calibration was
-    // generated for this device/camera/resolution (see
-    // tools/calibration/generate_lens_shading.py and calibration/README.md).
-    // A user-supplied override -- writable without rebuilding or
-    // repackaging RAWfish -- takes priority over the calibration bundled
-    // with the app; silently skipped when neither has a matching file.
-    const QString userCalibrationDir =
-            QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-                    + QStringLiteral("/rawfish/device-profiles/lens-shading");
-    // RAWfish only ever reads from here, but create it anyway (cheap,
-    // idempotent) so it exists and is discoverable in a file manager even
-    // before the user has generated and dropped an override into it --
-    // otherwise there is nothing to show them where it's supposed to go.
-    QDir().mkpath(userCalibrationDir);
-    const QStringList calibrationDirs = {
-        userCalibrationDir,
-        QStringLiteral(DEPLOYMENT_PATH "calibration"),
-    };
+    // Per-channel vignetting/color-shading correction, if a calibration
+    // exists for this device/camera/resolution (see
+    // tools/calibration/generate_lens_shading.py and
+    // src/calibration/README.md). A calibration in the user's device-profiles
+    // directory overrides the one bundled with the app, without rebuilding or
+    // repackaging RAWfish. If neither has a matching file, no correction is
+    // written.
+    QStringList calibrationDirs;
+    const QString profileDir = rawfishUserDeviceProfileDir();
+    if (!profileDir.isEmpty()) {
+        const QString userCalibrationDir =
+                QDir(profileDir).filePath(QStringLiteral("lens-shading"));
+        // RAWfish only reads from this directory; it is created (idempotent)
+        // so users can see where an override is expected.
+        QDir().mkpath(userCalibrationDir);
+        calibrationDirs.append(userCalibrationDir);
+    }
+    calibrationDirs.append(QStringLiteral(DEPLOYMENT_PATH "calibration"));
     const QString cameraId = metadata.value(QStringLiteral("camera_id")).toString();
     QByteArray opcodeList2;
     for (const QString &calibrationDir : calibrationDirs) {

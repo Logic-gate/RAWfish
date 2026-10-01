@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 Jolla Mobile Ltd
+# SPDX-FileCopyrightText: 2026 RAWfish Contributors
 #
 # SPDX-License-Identifier: BSD-3-Clause
 """
@@ -198,14 +198,12 @@ def sample_grid(plane, grid_rows, grid_cols, window_fraction=0.5):
     src/dnglensshading.cpp for the corresponding encoder side).
 
     Each sample averages a small local window centred on that exact
-    position (to reduce sensor noise), rather than the average of a whole
-    non-overlapping tile as an earlier version of this function did. Tile
-    averaging put the grid's edge samples at the *centre* of the outermost
-    tile rather than at the image's actual edge, which systematically
-    under-represents the true falloff right at the corners (the corner
-    pixels are always darker than the average of the wider tile they sit
-    in), so the previous encoding under-corrected the corners specifically
-    even when the middle of the frame was already well corrected.
+    position (to reduce sensor noise). Averaging whole non-overlapping tiles
+    instead would put the grid's edge samples at the *centre* of the
+    outermost tile rather than at the image's actual edge. That
+    under-represents the true falloff at the corners (corner pixels are
+    darker than the average of the wider tile they sit in) and would
+    under-correct them even when the middle of the frame is well corrected.
     """
     h, w = plane.shape
     row_centers = np.linspace(0, h - 1, grid_rows)
