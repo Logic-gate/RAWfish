@@ -539,8 +539,12 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_capture_jpeg(
     ACaptureRequest_setEntry_u8(request, ACAMERA_CONTROL_AF_MODE, 1,
                                 &af_mode);
     sfos_camera2_set_scene_mode(request, scene_mode);
-    sfos_camera2_set_manual_sensor(characteristics, request,
-                                   sensor_sensitivity, exposure_time_ns);
+    if (!sfos_camera2_set_manual_sensor(characteristics, request,
+                                       sensor_sensitivity, exposure_time_ns)) {
+        result_code = JPEG_CONFIGURATION_ERROR;
+        stage = "exposure_controls";
+        goto cleanup;
+    }
     sfos_camera2_set_aperture(characteristics, request, aperture);
     sfos_camera2_set_noise_reduction(characteristics, request,
                                      noise_reduction);

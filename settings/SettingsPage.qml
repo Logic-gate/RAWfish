@@ -14,9 +14,6 @@ import com.jolla.settings 1.0
 import com.jolla.settings.system 1.0
 
 ApplicationSettings {
-    property string camera2CompatibilityReportPath
-    property string camera2GeneratedHalConfigPath
-
     CameraExtensions { id: camera2Compatibility }
 
     function aspectRatioName(aspectRatio) {
@@ -41,6 +38,30 @@ ApplicationSettings {
 
         key: "/apps/rawfish/front/image/aspectRatio"
         defaultValue: CameraConfigs.AspectRatio_4_3
+    }
+
+    IconTextSwitch {
+        automaticCheck: false
+        text: "Estimated exposure metering"
+        description: "Use preview brightness for partial-auto exposure and the manual meter. Experimental; camera accuracy is not verified."
+        checked: Settings.global.estimatedExposureMetering
+        onClicked: Settings.global.estimatedExposureMetering = !checked
+    }
+
+    IconTextSwitch {
+        automaticCheck: false
+        text: "Show exposure status"
+        description: "Show metering, waiting and exposure-limit messages at the top of the viewfinder."
+        checked: Settings.global.showExposureStatus
+        onClicked: Settings.global.showExposureStatus = !checked
+    }
+
+    IconTextSwitch {
+        automaticCheck: false
+        text: "Experimental exposure layout"
+        description: "Widen histogram and EV, with Speed and ISO aligned to the shutter and values below. Advanced photo mode only."
+        checked: Settings.global.experimentalExposureLayout
+        onClicked: Settings.global.experimentalExposureLayout = !checked
     }
 
     LocationSettings { id: locationSettings }
@@ -82,68 +103,6 @@ ApplicationSettings {
         color: Theme.secondaryColor
         font.pixelSize: Theme.fontSizeSmall
         text: camera2Compatibility.camera2CompatibilitySummary(Settings.deviceId)
-    }
-
-    Button {
-        visible: Settings.global.advancedMode
-        enabled: AccessPolicy.cameraEnabled
-        anchors.horizontalCenter: parent.horizontalCenter
-        text: "Export compatibility report"
-        onClicked: {
-            camera2CompatibilityReportPath =
-                    camera2Compatibility.exportCamera2CompatibilityReport(
-                        Settings.deviceId)
-        }
-    }
-
-    Label {
-        x: Theme.horizontalPageMargin
-        width: parent.width - 2 * x
-        visible: Settings.global.advancedMode && camera2CompatibilityReportPath !== ""
-        wrapMode: Text.Wrap
-        color: Theme.highlightColor
-        font.pixelSize: Theme.fontSizeExtraSmall
-        text: "Saved " + camera2CompatibilityReportPath
-    }
-
-    Item {
-        width: 1
-        height: Theme.paddingLarge
-        visible: Settings.global.advancedMode
-    }
-
-    Label {
-        x: Theme.horizontalPageMargin
-        width: parent.width - 2 * x
-        visible: Settings.global.advancedMode
-        wrapMode: Text.Wrap
-        color: Theme.secondaryColor
-        font.pixelSize: Theme.fontSizeExtraSmall
-        text: "Config " + camera2Compatibility.camera2DeviceConfigDir()
-    }
-
-    Button {
-        visible: Settings.global.advancedMode
-        enabled: AccessPolicy.cameraEnabled
-        anchors.horizontalCenter: parent.horizontalCenter
-        text: "Generate HAL config"
-        onClicked: {
-            camera2GeneratedHalConfigPath =
-                    camera2Compatibility.ensureCamera2GeneratedHalConfig(
-                        Settings.deviceId)
-        }
-    }
-
-    Label {
-        x: Theme.horizontalPageMargin
-        width: parent.width - 2 * x
-        visible: Settings.global.advancedMode && camera2GeneratedHalConfigPath !== ""
-        wrapMode: Text.Wrap
-        color: Theme.highlightColor
-        font.pixelSize: Theme.fontSizeExtraSmall
-        text: camera2GeneratedHalConfigPath.indexOf("/") === 0
-              ? "Saved " + camera2GeneratedHalConfigPath
-              : camera2GeneratedHalConfigPath
     }
 
     IconTextSwitch {

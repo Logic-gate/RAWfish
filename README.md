@@ -39,7 +39,7 @@ At this point, RAWfish will not be released on OpenRepos due to outstanding issu
 
 ## Contributions and Credit Where It’s Due
 [ric9k](https://forum.sailfishos.org/u/ric9k/summary) has been instrumental in smoothing out the rough edges and providing valuable feedback.
-Tadi for Bracketing and general support
+Tadi for Bracketing([licenses/RawBracket-MIT.txt](licenses/RawBracket-MIT.txt).) and general support. 
 
 ## AI Policy and Usage
 
@@ -54,3 +54,54 @@ RAWfish retains Jolla Camera’s version numbering as it stood at the time of th
 ## Licensing 
 RAWfish retains Jolla Camera’s BSD-3-Clause license.
 
+## Photo metadata
+
+RAWfish shares one capture-metadata model across Simple and Advanced modes, using libexif for JPEG EXIF and libtiff for DNG. Available standard tags include orientation; additional capture details are stored as JSON in EXIF UserComment. GPS follows Save location. Full JSON sidecars are retained, including for bare RAW16/RAW10 files; oversized comments identify fields retained only in the sidecar. Building requires libexif-devel and libtiff-devel.
+
+## Exposure controls
+
+Simple mode uses automatic exposure with EV compensation. Advanced uses the ISO and shutter carousels’ Auto entries, with no separate mode buttons. Optional estimated metering is disabled by default under Settings → Apps → RAWfish; The manual meter is hidden when disabled.
+
+Settings → Apps → RAWfish also offers **Experimental exposure layout** (off by default). In Advanced photo mode it widens histogram/EV and places Speed and ISO at shutter-centre height, with scrollable values below. The Speed and ISO wheels are straight. Touching either shows plain floating text matching its selected value above the finger (beside it near the top edge), without a background or border. It follows the gesture, stays through inertial scrolling and fades after 250 ms at rest. Auto is labelled explicitly with the actual value underneath. Turning it off restores the standard layout without changing exposure.
+
+
+### RAW bracketing
+
+With RAW selected, **2-stop pair**, **4-stop pair** and **6-stop pair** capture
+the current exposure followed by a shorter exposure at the same ISO
+(shutter time divided by 4, 16 or 64).
+The camera's limits can reduce that separation. JPEG mode has no bracketing;
+cameras must support RAW, manual sensor controls and exposure-result metadata.
+Existing `ev1`/`ev2` preferences select the 2/4-stop pair respectively; `ev3`
+selects the 6-stop pair. Larger gaps can increase noise in recovered highlights.
+
+The background CPU renderer adapts Tadi's RawBracket algorithm: normalize
+using actual shutter/ISO, keep unclipped long-frame pixels, and recover clipped
+highlights using the short frame only when its normalized luminance is higher.
+It includes the reference's WB-neutral highlight ceiling, conservative gain
+refinement and highlight compression. The normal viewfinder and focus controls
+are unchanged. There is no alignment or deghosting; moving edges can leave
+artifacts, especially with the sequential cold-capture fallback.
+
+One merged JPEG is saved with EXIF/orientation and a JSON sidecar describing both
+exposures, actual separation, frame gap, gain refinement and merge time. Existing
+RAW/DNG saving preferences retain individual sensor frames, not a synthetic DNG.
+Missing or mismatched exposure/colour metadata causes a capture error rather than
+an incorrectly normalized merge. MIT attribution is in
+[licenses/RawBracket-MIT.txt](licenses/RawBracket-MIT.txt).
+
+Non-build capture-control checks: `node tests/bracket.js`. The native numerical
+and RAW10/RAW16 integration tests are in `tests/rawbracket.pro`; compile/run them
+when building. Device validation should cover range-limited pairs, motion,
+colour/highlight recovery, portrait/landscape orientation, cancellation, and
+preview restoration after both warm bursts and cold captures.
+
+For CPU/shader parity, build the small adapter in `tests/rawbracketpixels.pro`,
+then run `python3 tests/bracket_reference.py /path/to/rawbracket_pixels` with
+`numpy`, `moderngl` and EGL available. It compares 24 synthetic Bayer/WB/gain
+cases against the sibling RawBracket checkout's production shader.
+
+The capture-command parser has standalone C regression tests in
+`sfos-camera2-bridge/tests/preview_commands.c` (build instructions in that file).
+Diagnostics log `capture-command received` and `capture-command submitted`;
+RAW bracket timeouts include the number of frames received out of two.

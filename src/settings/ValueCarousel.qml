@@ -7,6 +7,8 @@ import Sailfish.Silica 1.0
 Item {
     id: root
 
+    property bool writeThrough: true
+    signal valueSelected(var value)
     property QtObject settings
     property string settingProperty
     property var model: []
@@ -21,6 +23,10 @@ Item {
     property bool _changingSetting
     property bool _userMoving
     property bool tapered: false
+    // Maximum rightward arc displacement as a fraction of the wheel width.
+    property real curvature: 0
+    property bool selectionAtTop: false
+    property real rowHeight: 0
     property int selectedFontSize: Theme.fontSizeLarge
     readonly property int recenterMargin: model ? model.length * 2 : 0
     property var currentValue: settings && settingProperty.length > 0
@@ -41,11 +47,22 @@ Item {
             syncTimer.restart()
         }
     }
-    onWidthChanged: syncTimer.restart()
-    onHeightChanged: syncTimer.restart()
+    onWidthChanged: syncLayout()
+    onHeightChanged: syncLayout()
     onVisibleChanged: syncTimer.restart()
     onOrientationChanged: syncTimer.restart()
     onModelChanged: syncTimer.restart()
+    onSelectionAtTopChanged: syncLayout()
+    onRowHeightChanged: syncLayout()
+
+    function syncLayout() {
+        // Resizing or toggling the experiment must not commit an in-flight gesture.
+        _userMoving = false
+        _syncing = true
+        list.cancelFlick()
+        _syncing = false
+        syncTimer.restart()
+    }
 
     Component.onCompleted: syncTimer.restart()
 
@@ -84,7 +101,7 @@ Item {
         var modelIndex = indexForValue(currentValue)
         if (modelIndex < 0) {
             modelIndex = 0
-            if (settings && settingProperty.length > 0) {
+            if (writeThrough && enabled && settings && settingProperty.length > 0) {
                 _changingSetting = true
                 settings[settingProperty] = model[0]
                 _changingSetting = false
@@ -94,7 +111,7 @@ Item {
         list.forceLayout()
         list.currentIndex = visualIndexForModelIndex(modelIndex)
         if (list.count > 0) {
-            list.positionViewAtIndex(list.currentIndex, ListView.Center)
+            list.positionViewAtIndex(list.currentIndex, (root.selectionAtTop && list.vertical ? ListView.Beginning : ListView.Center))
         }
         _syncing = false
     }
@@ -110,6 +127,15 @@ Item {
         return wrap && model.length > 1 ? baseIndex + index : index
     }
 
+    function rejectSelection() {
+        // Clear the gesture before stopping flicking: movement-ended must not commit again.
+        _userMoving = false
+        _syncing = true
+        list.cancelFlick()
+        syncFromValue()
+        _syncing = false
+    }
+
     function commitVisualIndex(index) {
         if (!settings || settingProperty.length === 0 || !model
                 || model.length === 0 || index < 0) {
@@ -117,7 +143,9 @@ Item {
         }
 
         _changingSetting = true
-        settings[settingProperty] = model[modelIndexForVisualIndex(index)]
+        var value = model[modelIndexForVisualIndex(index)]
+        if (writeThrough) settings[settingProperty] = value
+        valueSelected(value)
         _changingSetting = false
     }
 
@@ -159,10 +187,10 @@ Item {
         readonly property real itemWidth: vertical ? width
                                                    : Math.max(Theme.itemSizeMedium,
                                                               Math.round(root.width / 3))
-        readonly property real itemHeight: vertical ? Math.max(Theme.fontSizeLarge * 1.6,
-                                                               Math.round(height / 7))
+        readonly property real itemHeight: vertical ? (root.rowHeight > 0 ? root.rowHeight
+                                                    : Math.max(Theme.fontSizeLarge * 1.6, Math.round(height / 7)))
                                                     : height
-        readonly property real sideMargin: vertical ? Math.max(0, height / 2 - itemHeight / 2)
+        readonly property real sideMargin: vertical ? (root.selectionAtTop ? 0 : Math.max(0, height / 2 - itemHeight / 2))
                                                     : Math.max(0, width / 2 - itemWidth / 2)
 
         anchors {
@@ -210,7 +238,7 @@ Item {
                 _syncing = true
                 currentIndex = root.visualIndexForModelIndex(
                             root.modelIndexForVisualIndex(currentIndex))
-                positionViewAtIndex(currentIndex, ListView.Center)
+                positionViewAtIndex(currentIndex, (root.selectionAtTop && list.vertical ? ListView.Beginning : ListView.Center))
                 _syncing = false
             }
         }
@@ -228,6 +256,17 @@ Item {
         delegate: MouseArea {
             id: item
 
+            readonly property real curveOffset: {
+                if (!list.vertical || root.curvature <= 0) return 0
+                var selectionCenter = root.selectionAtTop ? list.itemHeight / 2 : list.height / 2
+                var halfHeight = list.height - selectionCenter
+                var sagitta = Math.min(list.width * root.curvature, halfHeight)
+                if (halfHeight <= 0 || sagitta <= 0) return 0
+                var radius = (halfHeight * halfHeight + sagitta * sagitta) / (2 * sagitta)
+                // Follow the visible position continuously, including during a flick.
+                var distance = Math.min(halfHeight, Math.abs(y + height / 2 - list.contentY - selectionCenter))
+                return distance * distance / (radius + Math.sqrt(Math.max(0, radius * radius - distance * distance)))
+            }
             readonly property bool selected: root.modelIndexForVisualIndex(index)
                                              === root.selectedModelIndex
             readonly property real centerDistance: root.tapered
@@ -247,13 +286,14 @@ Item {
             height: list.itemHeight
             onClicked: {
                 list.currentIndex = index
-                list.positionViewAtIndex(index, ListView.Center)
+                list.positionViewAtIndex(index, (root.selectionAtTop && list.vertical ? ListView.Beginning : ListView.Center))
                 root.commitVisualIndex(index)
             }
 
             Label {
                 anchors.centerIn: parent
-                width: parent.width - 2 * Theme.paddingSmall
+                anchors.horizontalCenterOffset: item.curveOffset
+                width: Math.max(0, parent.width - 2 * Theme.paddingSmall - 2 * item.curveOffset)
                 horizontalAlignment: Text.AlignHCenter
                 truncationMode: TruncationMode.Fade
                 color: item.selected ? root.highlightColor : Theme.lightPrimaryColor
@@ -272,4 +312,5 @@ Item {
             }
         }
     }
+
 }

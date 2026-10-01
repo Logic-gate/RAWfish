@@ -20,6 +20,7 @@
 #include <media/NdkImageReader.h>
 
 #include <errno.h>
+#include <math.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -30,7 +31,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#define PREVIEW_MAX_RAW_BRACKET 3
+#include "preview_commands.h"
 
 enum preview_error {
     PREVIEW_INVALID_ARGUMENT = -30,
@@ -62,6 +63,7 @@ struct preview_static_raw_metadata {
 };
 
 struct preview_result_raw_metadata {
+    char physical_camera_id[128];
     int64_t timestamp_ns;
     int64_t exposure_time_ns;
     int64_t frame_duration_ns;
@@ -87,7 +89,20 @@ struct preview_raw_image_metadata {
     int64_t timestamp_ns;
 };
 
+// Results and images can arrive in either order. Pair them by sensor timestamp.
+#define METER_SLOTS 32
+struct meter_sample {
+    int64_t timestamp;
+    int32_t iso, ae, ae_mode, compensation, flicker;
+    int64_t shutter;
+    double luminance, clipped;
+    int have_image, have_result;
+};
+
 struct preview_context {
+    struct meter_sample meter_samples[METER_SLOTS];
+    unsigned meter_next;
+
     struct sfos_camera2_status status;
     atomic_int frames_written;
     atomic_int jpeg_status;
@@ -142,7 +157,7 @@ struct preview_context {
     int32_t raw_bracket_sensor_sensitivity[PREVIEW_MAX_RAW_BRACKET];
     int64_t raw_bracket_exposure_time_ns[PREVIEW_MAX_RAW_BRACKET];
     int raw_bracket_count;
-    atomic_int raw_bracket_next_image;
+    atomic_int raw_bracket_generation;
     ACaptureRequest *raw_bracket_requests[PREVIEW_MAX_RAW_BRACKET];
     char camera_id[64];
     int32_t active_array[4];
@@ -236,48 +251,6 @@ static void preview_log_warm_raw_effective(struct preview_context *context)
             preview_hal_exposure_suspect(context->raw_result.exposure_time_ns,
                                          submit_to_image_ms) ? 1 : 0);
 }
-
-enum preview_command_type {
-    PREVIEW_COMMAND_NONE = 0,
-    PREVIEW_COMMAND_FOCUS,
-    PREVIEW_COMMAND_CAPTURE_JPEG,
-    PREVIEW_COMMAND_CAPTURE_RAW,
-    PREVIEW_COMMAND_CAPTURE_RAW_BRACKET,
-    PREVIEW_COMMAND_ZOOM,
-    PREVIEW_COMMAND_SETTINGS,
-    PREVIEW_COMMAND_EXPOSURE_SETTINGS,
-    PREVIEW_COMMAND_FOCUS_HOLD,
-    PREVIEW_COMMAND_FOCUS_HOLD_RELEASE,
-};
-
-struct preview_command {
-    enum preview_command_type type;
-    float focus_x;
-    float focus_y;
-    float zoom_ratio;
-    int focus_mode;
-    float focus_distance;
-    int exposure_compensation;
-    int scene_mode;
-    int color_temperature_kelvin;
-    int color_tint;
-    int32_t sensor_sensitivity;
-    int64_t exposure_time_ns;
-    int aperture;
-    int noise_reduction;
-    char path[4096];
-    char metadata_path[4096];
-    int bracket_count;
-    char bracket_paths[PREVIEW_MAX_RAW_BRACKET][4096];
-    char bracket_metadata_paths[PREVIEW_MAX_RAW_BRACKET][4096];
-    int32_t bracket_sensor_sensitivity[PREVIEW_MAX_RAW_BRACKET];
-    int64_t bracket_exposure_time_ns[PREVIEW_MAX_RAW_BRACKET];
-};
-
-struct preview_command_buffer {
-    char data[8192];
-    size_t length;
-};
 
 static bool preview_parse_scene_mode(const char *text, int *mode)
 {
@@ -552,13 +525,18 @@ static void preview_configure_request(ACaptureRequest *request,
         sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_TRIGGER,
                                     ACAMERA_CONTROL_AF_TRIGGER_IDLE);
     }
-    sfos_camera2_set_request_i32(request,
-                                 ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION,
-                                 context->exposure_compensation);
+    int32_t ev_range[2] = {0, 0};
+    if (metadata) sfos_camera2_copy_i32_array(metadata, ACAMERA_CONTROL_AE_COMPENSATION_RANGE, ev_range, 2);
+    sfos_camera2_set_request_i32(request, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION,
+        sfos_camera2_clamp_i32(context->exposure_compensation, ev_range[0], ev_range[1]));
     sfos_camera2_set_scene_mode(request, context->scene_mode);
     sfos_camera2_set_manual_sensor(metadata, request,
                                    context->sensor_sensitivity,
                                    context->exposure_time_ns);
+    if (context->sensor_sensitivity == 0 && context->exposure_time_ns == 0) {
+        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_CAPTURE_INTENT,
+            still ? ACAMERA_CONTROL_CAPTURE_INTENT_STILL_CAPTURE : ACAMERA_CONTROL_CAPTURE_INTENT_PREVIEW);
+    }
     sfos_camera2_set_aperture(metadata, request, context->aperture);
     sfos_camera2_set_noise_reduction(metadata, request,
                                      context->noise_reduction);
@@ -631,6 +609,10 @@ static void preview_configure_raw_bracket_request(
     int64_t exposure_time_ns)
 {
     struct preview_context frame_context = *context;
+    frame_context.scene_mode = SFOS_CAMERA2_SCENE_MANUAL; // AE_OFF pair, no vendor HDR scene processing.
+    frame_context.color_temperature_kelvin = 0;
+    frame_context.color_tint = 0;
+    frame_context.exposure_compensation = 0;
     frame_context.sensor_sensitivity = sensor_sensitivity;
     frame_context.exposure_time_ns = exposure_time_ns;
     preview_configure_request(request, &frame_context, metadata, 1);
@@ -744,62 +726,7 @@ static bool preview_parse_command_line(const char *line,
         return true;
     }
 
-    char path[sizeof(command->path)];
-    if (sscanf(line, "capture-jpeg %4095s", path) == 1 && path[0]) {
-        command->type = PREVIEW_COMMAND_CAPTURE_JPEG;
-        snprintf(command->path, sizeof(command->path), "%s", path);
-        return true;
-    }
-    char metadata_path[sizeof(command->metadata_path)];
-    if (sscanf(line, "capture-raw %4095s %4095s", path, metadata_path) == 2 &&
-            path[0] && metadata_path[0]) {
-        command->type = PREVIEW_COMMAND_CAPTURE_RAW;
-        snprintf(command->path, sizeof(command->path), "%s", path);
-        snprintf(command->metadata_path, sizeof(command->metadata_path), "%s",
-                 metadata_path);
-        return true;
-    }
-    if (!strncmp(line, "capture-raw-bracket ", 20)) {
-        char copy[sizeof(struct preview_command_buffer)];
-        snprintf(copy, sizeof(copy), "%s", line);
-        char *save = NULL;
-        char *token = strtok_r(copy, " ", &save);
-        token = strtok_r(NULL, " ", &save);
-        if (!token) {
-            return false;
-        }
-        int count = atoi(token);
-        if (count < 3 || count > PREVIEW_MAX_RAW_BRACKET) {
-            return false;
-        }
-        command->type = PREVIEW_COMMAND_CAPTURE_RAW_BRACKET;
-        command->bracket_count = count;
-        for (int index = 0; index < count; ++index) {
-            char *raw_path = strtok_r(NULL, " ", &save);
-            char *raw_metadata_path = strtok_r(NULL, " ", &save);
-            char *iso_text = strtok_r(NULL, " ", &save);
-            char *exposure_text = strtok_r(NULL, " ", &save);
-            if (!raw_path || !raw_metadata_path || !iso_text ||
-                    !exposure_text || !raw_path[0] ||
-                    !raw_metadata_path[0]) {
-                return false;
-            }
-            long iso = strtol(iso_text, NULL, 10);
-            long long exposure = strtoll(exposure_text, NULL, 10);
-            if (iso < 0 || exposure <= 0) {
-                return false;
-            }
-            snprintf(command->bracket_paths[index],
-                     sizeof(command->bracket_paths[index]), "%s", raw_path);
-            snprintf(command->bracket_metadata_paths[index],
-                     sizeof(command->bracket_metadata_paths[index]), "%s",
-                     raw_metadata_path);
-            command->bracket_sensor_sensitivity[index] = (int32_t)iso;
-            command->bracket_exposure_time_ns[index] = (int64_t)exposure;
-        }
-        return true;
-    }
-    return false;
+    return preview_parse_capture_command(line, command);
 }
 
 static void preview_read_command_data(int fd,
@@ -809,6 +736,20 @@ static void preview_read_command_data(int fd,
         return;
     }
 
+    // Drain the rest of an oversized line before accepting another command.
+    // Otherwise its tail could be mistaken for a fresh capture request.
+    while (buffer->discarding) {
+        char chunk[4096];
+        ssize_t bytes = read(fd, chunk, sizeof(chunk));
+        if (bytes <= 0) return;
+        char *newline = memchr(chunk, '\n', (size_t)bytes);
+        if (newline) {
+            buffer->length = (size_t)(chunk + bytes - newline - 1);
+            memcpy(buffer->data, newline + 1, buffer->length);
+            buffer->data[buffer->length] = '\0';
+            buffer->discarding = false;
+        }
+    }
     while (buffer->length < sizeof(buffer->data) - 1) {
         ssize_t bytes = read(fd, buffer->data + buffer->length,
                              sizeof(buffer->data) - buffer->length - 1);
@@ -837,14 +778,18 @@ static bool preview_pop_command(struct preview_command_buffer *buffer,
     for (;;) {
         char *newline = memchr(buffer->data, '\n', buffer->length);
         if (!newline) {
+            if (buffer->length == sizeof(buffer->data) - 1) {
+                buffer->length = 0;
+                buffer->data[0] = '\0';
+                buffer->discarding = true;
+                command->type = PREVIEW_COMMAND_CAPTURE_INVALID;
+                return true;
+            }
             return false;
         }
 
         size_t line_length = (size_t)(newline - buffer->data);
-        char line[4096];
-        if (line_length >= sizeof(line)) {
-            line_length = sizeof(line) - 1;
-        }
+        char line[sizeof(buffer->data)];
         memcpy(line, buffer->data, line_length);
         line[line_length] = '\0';
 
@@ -927,6 +872,34 @@ static int preview_sample_chroma(const uint8_t *plane, int length,
  * followed by tightly-packed RGB888 pixels. Only chroma reconstruction happens
  * here; final preview scaling remains in the Qt scene graph.
  */
+// Called under output_lock, also used to serialize SF2M and SF2P packets.
+static struct meter_sample *meter_slot(struct preview_context *context, int64_t timestamp)
+{
+    for (unsigned i = 0; i < METER_SLOTS; ++i)
+        if (context->meter_samples[i].timestamp == timestamp) return &context->meter_samples[i];
+    struct meter_sample *sample = &context->meter_samples[context->meter_next++ % METER_SLOTS];
+    memset(sample, 0, sizeof(*sample));
+    sample->timestamp = timestamp;
+    return sample;
+}
+
+static void meter_emit(struct preview_context *context, struct meter_sample *sample)
+{
+    if (!sample->have_image || !sample->have_result) return;
+    char payload[384];
+    int size = snprintf(payload, sizeof(payload),
+        "meter=1 camera=%s timestamp=%lld iso=%d shutter=%lld ae=%d ae_mode=%d ev_steps=%d flicker=%d luminance=%.9g clipped=%.6f\n",
+        context->camera_id, (long long)sample->timestamp, sample->iso, (long long)sample->shutter, sample->ae, sample->ae_mode,
+        sample->compensation, sample->flicker, sample->luminance, sample->clipped);
+    if (size > 0 && size < (int)sizeof(payload)) {
+        unsigned char header[8] = { 'S', 'F', '2', 'M' };
+        preview_write_le32(header + 4, (uint32_t)size);
+        sfos_camera2_write_all(context->output_fd, header, sizeof(header));
+        sfos_camera2_write_all(context->output_fd, payload, (size_t)size);
+    }
+    sample->have_image = sample->have_result = 0;
+}
+
 static int preview_write_rgb_frame(struct preview_context *context,
                                    AImage *image)
 {
@@ -965,6 +938,43 @@ static int preview_write_rgb_frame(struct preview_context *context,
             !plane_y || !plane_u || !plane_v || len_y <= 0 ||
             len_u <= 0 || len_v <= 0) {
         return -1;
+    }
+
+    // Centre-weighted trimmed luminance, before RGB rendering or display gain.
+    // Gamma 2.2 is an estimate for processed YUV, never a sensor-linear claim.
+    int64_t timestamp = 0;
+    if (AImage_getTimestamp(image, &timestamp) == AMEDIA_OK && timestamp > 0) {
+        unsigned bins[256] = {0};
+        unsigned total = 0, clipped = 0;
+        const int step = width / 96 > 0 ? width / 96 : 1;
+        for (int y = 0; y < height; y += step) {
+            for (int x = 0; x < width; x += step) {
+                int offset = y * row_y + x * pixel_y;
+                if (offset < 0 || offset >= len_y) continue;
+                unsigned weight = (x > width / 4 && x < width * 3 / 4 &&
+                                   y > height / 4 && y < height * 3 / 4) ? 4 : 1;
+                unsigned value = plane_y[offset];
+                bins[value] += weight;
+                total += weight;
+                if (value <= 3 || value >= 252) clipped += weight;
+            }
+        }
+        double sum = 0, count = 0;
+        unsigned cumulative = 0;
+        for (int i = 0; i < 256; ++i) {
+            unsigned begin = cumulative;
+            cumulative += bins[i];
+            unsigned low = begin > total / 10 ? begin : total / 10;
+            unsigned high = cumulative < total * 9 / 10 ? cumulative : total * 9 / 10;
+            if (high > low) { sum += (high - low) * pow(i / 255.0, 2.2); count += high - low; }
+        }
+        pthread_mutex_lock(&context->output_lock);
+        struct meter_sample *sample = meter_slot(context, timestamp);
+        sample->luminance = count > 0 ? sum / count : 0;
+        sample->clipped = total ? (double)clipped / total : 1;
+        sample->have_image = 1;
+        meter_emit(context, sample);
+        pthread_mutex_unlock(&context->output_lock);
     }
 
     const size_t frame_size = (size_t)width * (size_t)height * 3;
@@ -1187,6 +1197,21 @@ static void preview_capture_completed(void *opaque,
         return;
     }
 
+    int64_t timestamp = sfos_camera2_first_i64(result, ACAMERA_SENSOR_TIMESTAMP, 0);
+    if (timestamp > 0) {
+        pthread_mutex_lock(&context->output_lock);
+        struct meter_sample *sample = meter_slot(context, timestamp);
+        sample->iso = sfos_camera2_first_i32(result, ACAMERA_SENSOR_SENSITIVITY, 0);
+        sample->shutter = sfos_camera2_first_i64(result, ACAMERA_SENSOR_EXPOSURE_TIME, 0);
+        sample->ae = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_STATE, -1);
+        sample->ae_mode = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_MODE, -1);
+        sample->compensation = sfos_camera2_first_i32(result, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION, 0);
+        sample->flicker = sfos_camera2_first_u8(result, ACAMERA_STATISTICS_SCENE_FLICKER, 0);
+        sample->have_result = 1;
+        meter_emit(context, sample);
+        pthread_mutex_unlock(&context->output_lock);
+    }
+
     int32_t sensitivity = sfos_camera2_first_i32(
         result, ACAMERA_SENSOR_SENSITIVITY, 0);
     int64_t exposure_time = sfos_camera2_first_i64(
@@ -1363,6 +1388,8 @@ static bool preview_write_raw_metadata(const char *camera_id,
 
     fputs("{\n  \"camera_id\":", file);
     preview_print_json_string(file, camera_id);
+    fputs(",\n  \"physical_camera_id\":", file);
+    preview_print_json_string(file, result->physical_camera_id);
     fputs(",\n  \"raw_path\":", file);
     preview_print_json_string(file, context->raw_path);
     fprintf(file,
@@ -1474,26 +1501,17 @@ static void preview_raw_image_available(void *opaque, AImageReader *reader)
 {
     struct preview_context *context = opaque;
     int bracket_index = -1;
-    if (context->raw_bracket_count > 0) {
-        bracket_index = atomic_fetch_add_explicit(
-            &context->raw_bracket_next_image, 1, memory_order_acq_rel);
-        if (bracket_index < 0 || bracket_index >= context->raw_bracket_count ||
-                atomic_load_explicit(
-                    &context->raw_bracket_status[bracket_index],
-                    memory_order_acquire) != 0) {
-            return;
-        }
-    } else if (atomic_load_explicit(&context->raw_status,
-                                    memory_order_acquire) != 0) {
-        return;
-    }
+    const bool bracket = context->raw_bracket_count > 0;
+    if (!bracket && atomic_load_explicit(&context->raw_status,
+                                         memory_order_acquire) != 0) return;
 
     AImage *image = NULL;
     media_status_t status = AImageReader_acquireNextImage(reader, &image);
     atomic_store_explicit(&context->status.last_media_status, status,
                           memory_order_release);
     if (status != AMEDIA_OK || !image) {
-        if (bracket_index >= 0) {
+        if (bracket) {
+            bracket_index = 0;
             atomic_store_explicit(
                 &context->raw_bracket_status[bracket_index], -1,
                 memory_order_release);
@@ -1508,6 +1526,36 @@ static void preview_raw_image_available(void *opaque, AImageReader *reader)
                                          PREVIEW_READER_ERROR);
         }
         return;
+    }
+
+    if (bracket) {
+        int64_t timestamp = 0;
+        AImage_getTimestamp(image, &timestamp);
+        const int64_t deadline = sfos_camera2_now_ms() + 1000;
+        // Result callbacks are independent of the image-reader callback. Match
+        // by timestamp, never by arrival order; stale/duplicate images cannot
+        // consume another request's slot.
+        do {
+            for (int i = 0; i < context->raw_bracket_count; ++i) {
+                if (atomic_load_explicit(&context->raw_bracket_result_status[i],
+                                         memory_order_acquire) == 1 && timestamp > 0 &&
+                        context->raw_bracket_result[i].timestamp_ns == timestamp &&
+                        atomic_load_explicit(&context->raw_bracket_status[i],
+                                             memory_order_acquire) == 0) {
+                    bracket_index = i;
+                    break;
+                }
+            }
+            if (bracket_index >= 0) break;
+            sfos_camera2_sleep_10_ms();
+        } while (sfos_camera2_now_ms() < deadline);
+        if (bracket_index < 0) {
+            fprintf(stderr, "raw-bracket unmatched image timestamp=%lld\n", (long long)timestamp);
+            AImage_delete(image);
+            // Leave unmatched slots pending. The existing capture watchdog
+            // reports an incomplete pair if the required frame never arrives.
+            return;
+        }
     }
 
     uint8_t *data = NULL;
@@ -1567,6 +1615,8 @@ static void preview_raw_image_available(void *opaque, AImageReader *reader)
             atomic_load_explicit(result_status, memory_order_acquire) <= 0) {
         raw_status = -5;
     }
+    if (raw_status > 0 && (image_metadata->timestamp_ns <= 0 ||
+            image_metadata->timestamp_ns != result_metadata->timestamp_ns)) raw_status = -6;
     if (raw_status > 0) {
         context->raw_metadata_written_ms = sfos_camera2_now_ms();
         struct preview_context metadata_context = *context;
@@ -1578,6 +1628,8 @@ static void preview_raw_image_available(void *opaque, AImageReader *reader)
         metadata_context.raw_image = *image_metadata;
         metadata_context.raw_result = *result_metadata;
         if (bracket_index >= 0) {
+            metadata_context.scene_mode = SFOS_CAMERA2_SCENE_MANUAL;
+            metadata_context.original_scene_mode = SFOS_CAMERA2_SCENE_MANUAL;
             metadata_context.sensor_sensitivity =
                 context->raw_bracket_sensor_sensitivity[bracket_index];
             metadata_context.exposure_time_ns =
@@ -1611,16 +1663,27 @@ static void preview_raw_capture_completed(void *opaque,
     (void)session;
     struct preview_context *context = opaque;
     int bracket_index = -1;
-    for (int index = 0; index < context->raw_bracket_count; ++index) {
-        if (context->raw_bracket_requests[index] == request) {
-            bracket_index = index;
-            break;
+    ACameraMetadata_const_entry shutter, iso;
+    if (ACaptureRequest_getConstEntry(request, ACAMERA_SENSOR_EXPOSURE_TIME, &shutter) == ACAMERA_OK &&
+            shutter.count == 1 &&
+            ACaptureRequest_getConstEntry(request, ACAMERA_SENSOR_SENSITIVITY, &iso) == ACAMERA_OK && iso.count == 1) {
+        for (int index = 0; index < context->raw_bracket_count; ++index) {
+            if (context->raw_bracket_exposure_time_ns[index] == shutter.data.i64[0] &&
+                    context->raw_bracket_sensor_sensitivity[index] == iso.data.i32[0]) {
+                bracket_index = index;
+                break;
+            }
         }
     }
+    if (context->raw_bracket_count > 0 && (bracket_index < 0 ||
+            atomic_load_explicit(&context->raw_bracket_result_status[bracket_index],
+                                 memory_order_acquire) != 0)) return;
     struct preview_result_raw_metadata *destination =
         bracket_index >= 0 ? &context->raw_bracket_result[bracket_index]
                            : &context->raw_result;
     memset(destination, 0, sizeof(*destination));
+    sfos_camera2_active_physical_id(result, destination->physical_camera_id,
+                                    sizeof(destination->physical_camera_id));
     destination->timestamp_ns = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_TIMESTAMP, -1);
     destination->exposure_time_ns = sfos_camera2_first_i64(
@@ -1659,6 +1722,53 @@ static void preview_raw_capture_completed(void *opaque,
         atomic_store_explicit(&context->raw_result_status, 1,
                               memory_order_release);
     }
+}
+
+// The callback context supplies a generation on API 24, where request user
+// contexts are not available. The sequence-end callback releases it only after
+// all result/failure callbacks have returned (NDK capture callback contract).
+struct preview_bracket_capture {
+    struct preview_context *owner;
+    int generation;
+};
+
+static void preview_bracket_completed(void *opaque, ACameraCaptureSession *session,
+                                       ACaptureRequest *request, const ACameraMetadata *result)
+{
+    struct preview_bracket_capture *capture = opaque;
+    if (capture->generation != atomic_load_explicit(&capture->owner->raw_bracket_generation,
+                                                    memory_order_acquire)) return;
+    preview_raw_capture_completed(capture->owner, session, request, result);
+}
+
+static void preview_bracket_failed(void *opaque, ACameraCaptureSession *session,
+                                    ACaptureRequest *request, ACameraCaptureFailure *failure)
+{
+    (void)session; (void)request; (void)failure;
+    struct preview_bracket_capture *capture = opaque;
+    struct preview_context *context = capture->owner;
+    if (capture->generation != atomic_load_explicit(&context->raw_bracket_generation,
+                                                    memory_order_acquire)) return;
+    for (int i = 0; i < context->raw_bracket_count; ++i) {
+        atomic_store_explicit(&context->raw_bracket_result_status[i], -1, memory_order_release);
+    }
+    preview_write_capture_result(context, "error", context->raw_bracket_metadata_paths[0],
+                                 PREVIEW_READER_ERROR);
+}
+
+static void preview_bracket_sequence_end(void *opaque, ACameraCaptureSession *session,
+                                          int sequence_id, int64_t frame_number)
+{
+    (void)session; (void)sequence_id; (void)frame_number;
+    free(opaque);
+}
+
+static void preview_bracket_sequence_abort(void *opaque, ACameraCaptureSession *session,
+                                            int sequence_id)
+{
+    (void)sequence_id;
+    preview_bracket_failed(opaque, session, NULL, NULL);
+    free(opaque);
 }
 
 static void preview_status_json(char *out, size_t out_size, bool success,
@@ -1742,9 +1852,9 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     atomic_init(&context.frames_written, 0);
     atomic_init(&context.jpeg_status, -1);
     atomic_init(&context.raw_status, -1);
+    atomic_init(&context.raw_bracket_generation, 0);
     atomic_init(&context.raw_result_status, -1);
     atomic_init(&context.raw_sequence_status, -1);
-    atomic_init(&context.raw_bracket_next_image, 0);
     for (int index = 0; index < PREVIEW_MAX_RAW_BRACKET; ++index) {
         atomic_init(&context.raw_bracket_status[index], -1);
         atomic_init(&context.raw_bracket_result_status[index], -1);
@@ -2066,6 +2176,25 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
         struct preview_command command;
         preview_read_command_data(control_fd, &command_buffer);
         while (preview_pop_command(&command_buffer, &command)) {
+            if (command.type == PREVIEW_COMMAND_CAPTURE_INVALID) {
+                fprintf(stderr, "capture-command rejected reason=invalid-arguments\n");
+                preview_write_capture_result(&context, "command-error", "-", PREVIEW_INVALID_ARGUMENT);
+                continue;
+            }
+            if (command.type == PREVIEW_COMMAND_CAPTURE_RAW ||
+                    command.type == PREVIEW_COMMAND_CAPTURE_JPEG ||
+                    command.type == PREVIEW_COMMAND_CAPTURE_RAW_BRACKET) {
+                fprintf(stderr, "capture-command received type=%s frames=%d\n",
+                    command.type == PREVIEW_COMMAND_CAPTURE_RAW_BRACKET ? "raw-bracket" :
+                    command.type == PREVIEW_COMMAND_CAPTURE_RAW ? "raw" : "jpeg",
+                    command.type == PREVIEW_COMMAND_CAPTURE_RAW_BRACKET ? command.bracket_count : 1);
+                if ((command.type == PREVIEW_COMMAND_CAPTURE_RAW_BRACKET && !raw_target) ||
+                        (command.type == PREVIEW_COMMAND_CAPTURE_RAW && (!raw_target || !raw_request)) ||
+                        (command.type == PREVIEW_COMMAND_CAPTURE_JPEG && !jpeg_request)) {
+                    preview_write_capture_result(&context, "command-error", "-", PREVIEW_CONFIGURATION_ERROR);
+                    continue;
+                }
+            }
             if (command.type == PREVIEW_COMMAND_FOCUS) {
                 context.focus_hold_active = 0;
                 context.focus_x = command.focus_x;
@@ -2261,6 +2390,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 }
             } else if (command.type == PREVIEW_COMMAND_CAPTURE_RAW &&
                     raw_request) {
+                atomic_fetch_add_explicit(&context.raw_bracket_generation, 1, memory_order_acq_rel);
                 context.raw_bracket_count = 0;
                 snprintf(context.raw_path, sizeof(context.raw_path), "%s",
                          command.path);
@@ -2305,7 +2435,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                                  raw_status);
                 }
             } else if (command.type == PREVIEW_COMMAND_CAPTURE_RAW_BRACKET &&
-                    raw_target && command.bracket_count >= 3 &&
+                    raw_target && command.bracket_count == 2 &&
                     command.bracket_count <= PREVIEW_MAX_RAW_BRACKET) {
                 for (int index = 0; index < PREVIEW_MAX_RAW_BRACKET; ++index) {
                     if (context.raw_bracket_requests[index]) {
@@ -2314,9 +2444,9 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                         context.raw_bracket_requests[index] = NULL;
                     }
                 }
+                const int generation = atomic_fetch_add_explicit(
+                    &context.raw_bracket_generation, 1, memory_order_acq_rel) + 1;
                 context.raw_bracket_count = command.bracket_count;
-                atomic_store_explicit(&context.raw_bracket_next_image, 0,
-                                      memory_order_release);
                 context.raw_command_ms = sfos_camera2_now_ms();
                 context.raw_submit_ms = 0;
                 context.raw_available_ms = 0;
@@ -2368,6 +2498,13 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                         characteristics,
                         context.raw_bracket_sensor_sensitivity[index],
                         context.raw_bracket_exposure_time_ns[index]);
+                    ACameraMetadata_const_entry applied_shutter, applied_iso;
+                    if (ACaptureRequest_getConstEntry(context.raw_bracket_requests[index],
+                            ACAMERA_SENSOR_EXPOSURE_TIME, &applied_shutter) == ACAMERA_OK && applied_shutter.count)
+                        context.raw_bracket_exposure_time_ns[index] = applied_shutter.data.i64[0];
+                    if (ACaptureRequest_getConstEntry(context.raw_bracket_requests[index],
+                            ACAMERA_SENSOR_SENSITIVITY, &applied_iso) == ACAMERA_OK && applied_iso.count)
+                        context.raw_bracket_sensor_sensitivity[index] = applied_iso.data.i32[0];
                     fprintf(stderr,
                             "capture-exposure warm-raw-bracket index=%d "
                             "requested_iso=%d requested_shutter=%lld\n",
@@ -2377,14 +2514,23 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                 context.raw_bracket_exposure_time_ns[index]);
                 }
                 if (!request_error) {
+                    struct preview_bracket_capture *capture = calloc(1, sizeof(*capture));
+                    if (!capture) {
+                        preview_write_capture_result(&context, "error", context.raw_bracket_metadata_paths[0],
+                                                     PREVIEW_WRITE_ERROR);
+                        context.raw_bracket_count = 0;
+                        continue;
+                    }
+                    capture->owner = &context;
+                    capture->generation = generation;
                     ACameraCaptureSession_captureCallbacks raw_callbacks = {
-                        .context = &context,
+                        .context = capture,
                         .onCaptureStarted = NULL,
                         .onCaptureProgressed = NULL,
-                        .onCaptureCompleted = preview_raw_capture_completed,
-                        .onCaptureFailed = NULL,
-                        .onCaptureSequenceCompleted = NULL,
-                        .onCaptureSequenceAborted = NULL,
+                        .onCaptureCompleted = preview_bracket_completed,
+                        .onCaptureFailed = preview_bracket_failed,
+                        .onCaptureSequenceCompleted = preview_bracket_sequence_end,
+                        .onCaptureSequenceAborted = preview_bracket_sequence_abort,
                         .onCaptureBufferLost = NULL,
                     };
                     ACaptureRequest *requests[PREVIEW_MAX_RAW_BRACKET] = {
@@ -2401,9 +2547,12 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                     atomic_store_explicit(
                         &context.status.last_camera_status, raw_status,
                         memory_order_release);
+                    fprintf(stderr, "capture-command submitted type=raw-bracket frames=%d generation=%d status=%d\n",
+                            command.bracket_count, generation, raw_status);
                     if (raw_status == ACAMERA_OK) {
                         context.raw_submit_ms = sfos_camera2_now_ms();
                     } else {
+                        free(capture);
                         for (int index = 0; index < command.bracket_count;
                                 ++index) {
                             atomic_store_explicit(

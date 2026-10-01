@@ -326,17 +326,42 @@ static void append_exposure_capabilities(struct json_writer *writer,
         metadata, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE,
         exposure_time_range, 2);
 
+    int32_t ev_range[2] = { 0, 0 };
+    sfos_camera2_copy_i32_array(metadata, ACAMERA_CONTROL_AE_COMPENSATION_RANGE, ev_range, 2);
+    ACameraMetadata_const_entry step;
+    double ev_step = 0.0;
+    if (ACameraMetadata_getConstEntry(metadata, ACAMERA_CONTROL_AE_COMPENSATION_STEP, &step) == ACAMERA_OK &&
+            step.count && step.data.r[0].denominator != 0) {
+        ev_step = (double)step.data.r[0].numerator / step.data.r[0].denominator;
+    }
+    bool manual = iso_supported && shutter_supported && sfos_camera2_metadata_has_u8(
+        metadata, ACAMERA_REQUEST_AVAILABLE_CAPABILITIES,
+        ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR);
+    bool results = sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_RESULT_KEYS, ACAMERA_SENSOR_SENSITIVITY) &&
+        sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_RESULT_KEYS, ACAMERA_SENSOR_EXPOSURE_TIME) &&
+        sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_RESULT_KEYS, ACAMERA_SENSOR_TIMESTAMP) &&
+        sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_RESULT_KEYS, ACAMERA_CONTROL_AE_MODE) &&
+        sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_RESULT_KEYS, ACAMERA_CONTROL_AE_STATE) &&
+        sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_RESULT_KEYS, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION);
     json_appendf(writer,
-                 "{\"manual_supported\":%s,"
-                 "\"iso_supported\":%s,\"iso_range\":[%d,%d],"
-                 "\"shutter_supported\":%s,"
-                 "\"shutter_ns_range\":[%lld,%lld]}",
-                 iso_supported && shutter_supported ? "true" : "false",
-                 iso_supported ? "true" : "false",
-                 sensitivity_range[0], sensitivity_range[1],
-                 shutter_supported ? "true" : "false",
-                 (long long)exposure_time_range[0],
-                 (long long)exposure_time_range[1]);
+        "{\"manual_supported\":%s,\"iso_supported\":%s,\"iso_range\":[%d,%d],"
+        "\"shutter_supported\":%s,\"shutter_ns_range\":[%lld,%lld],"
+        "\"result_exposure_supported\":%s,\"compensation_range\":[%d,%d],\"compensation_step_ev\":%.9g,"
+        "\"max_frame_duration_ns\":%lld,\"native_priority_available\":null,\"native_priority_supported_by_bridge\":false,\"native_priority_verified\":false,"
+        "\"manual_verified\":false,\"metering_verified\":false,\"ae_modes\":[",
+        manual ? "true" : "false", iso_supported ? "true" : "false", sensitivity_range[0], sensitivity_range[1],
+        shutter_supported ? "true" : "false", (long long)exposure_time_range[0], (long long)exposure_time_range[1],
+        results ? "true" : "false", ev_range[0], ev_range[1], ev_step,
+        (long long)sfos_camera2_first_i64(metadata, ACAMERA_SENSOR_INFO_MAX_FRAME_DURATION, 0));
+    ACameraMetadata_const_entry modes;
+    if (ACameraMetadata_getConstEntry(metadata, ACAMERA_CONTROL_AE_AVAILABLE_MODES, &modes) == ACAMERA_OK) {
+        for (uint32_t i = 0; i < modes.count; ++i) json_appendf(writer, "%s%d", i ? "," : "", modes.data.u8[i]);
+    }
+    json_appendf(writer, "],\"antibanding_modes\":[");
+    if (ACameraMetadata_getConstEntry(metadata, ACAMERA_CONTROL_AE_AVAILABLE_ANTIBANDING_MODES, &modes) == ACAMERA_OK) {
+        for (uint32_t i = 0; i < modes.count; ++i) json_appendf(writer, "%s%d", i ? "," : "", modes.data.u8[i]);
+    }
+    json_appendf(writer, "]}");
 }
 
 static void append_aperture_capabilities(struct json_writer *writer,

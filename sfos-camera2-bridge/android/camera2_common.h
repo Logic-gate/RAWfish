@@ -280,4 +280,6 @@ bool sfos_camera2_set_zoom_ratio(const ACameraMetadata *metadata,
                                  ACaptureRequest *request,
                                  float zoom_ratio);
 
+void sfos_camera2_active_physical_id(const ACameraMetadata *metadata, char *out, size_t capacity);
+
 #endif

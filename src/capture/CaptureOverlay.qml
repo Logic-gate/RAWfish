@@ -25,6 +25,37 @@ SettingsOverlay {
     property var camera
     property Item focusArea
     readonly property real camera2MaximumZoom: Settings.camera2MaximumZoom()
+    currentZoom: captureView._camera2ViewfinderActive ? captureView.camera2Zoom : camera.digitalZoom
+    maximumZoom: zoomController.limit
+    zoomButtonsEnabled: zoomController.allowed && maximumZoom > 1
+    onZoomPressed: zoomController.press(direction)
+    onZoomReleased: zoomController.release()
+    onZoomCanceled: zoomController.cancel()
+    onZoomResetRequested: if (zoomController.allowed) zoomController.setDirect(1)
+
+    function cancelZoom() {
+        zoomController.cancel()
+    }
+
+    ZoomController {
+        id: zoomController
+        zoom: settingsOverlay.currentZoom
+        maximumZoom: captureView._camera2ViewfinderActive
+                     ? settingsOverlay.camera2MaximumZoom : camera.maximumDigitalZoom
+        allowed: Settings.global.advancedMode && Settings.global.captureMode === "image"
+                 && captureView.effectiveActive && !captureView.captureBusy
+                 && !captureTimer.running && !settingsOverlay._exposed
+                 && !settingsOverlay._pinchActive
+                 && !settingsOverlay.orientationTransitionRunning
+        onZoomRequested: {
+            if (captureView._camera2ViewfinderActive) {
+                captureView.camera2Zoom = value
+            } else {
+                camera.digitalZoom = value
+            }
+            zoomIndicator.show()
+        }
+    }
 
     property int _recordingDuration: clock.enabled ? ((clock.time - _startTime) / 1000) : 0
     property int _recSecsRemaining: {
@@ -75,6 +106,39 @@ SettingsOverlay {
                 // Keep device orientation at previous state
             }
         }
+    }
+
+    function captureMetadata() {
+        var metadata = {
+            capture_time_ms: Date.now(),
+            capture_mode: Settings.global.advancedMode ? "advanced" : "simple",
+            capture_format: Settings.mode.camera2CaptureFormat,
+            camera_id: captureView._camera2ResolvedCameraId,
+            capture_orientation: captureView._camera2CaptureRotation(),
+            zoom_ratio: currentZoom,
+            save_location: Settings.global.saveLocationInfo,
+            requested_settings: {}
+        }
+        var settings = ["rawCaptureSize", "rawCaptureSpeedMode", "rawCaptureFocusMode",
+                        "rawCaptureFocusDistance", "rawCaptureFocusTimeout", "rawCaptureExposure",
+                        "rawCaptureIso", "rawCaptureShutterNs", "rawCaptureAperture",
+                        "rawCaptureNoiseReduction", "rawCaptureBracket", "rawCaptureJpegQuality",
+                        "rawCaptureScene", "rawCaptureProgressiveJpeg", "rawRenderEngine",
+                        "rawCaptureRawFormat", "rawCaptureColorTemperature", "rawCaptureColorTint",
+                        "rawCaptureTimeout", "rawCaptureFocusFailure", "flash", "iso", "meteringMode", "exposureMode"]
+        for (var i = 0; i < settings.length; ++i)
+            metadata.requested_settings[settings[i]] = Settings.mode[settings[i]]
+        metadata.requested_settings.whiteBalance = Settings.global.whiteBalance
+        metadata.exposure_compensation_requested = Settings.global.exposureCompensation
+        if (metadata.save_location && positionSource.active && positionSource.position.coordinate.isValid) {
+            var position = positionSource.position
+            metadata.gps = { latitude: position.coordinate.latitude,
+                             longitude: position.coordinate.longitude }
+            if (position.coordinate.altitudeValid) metadata.gps.altitude = position.coordinate.altitude
+            if (position.timestamp && !isNaN(position.timestamp.getTime()))
+                metadata.gps.timestamp = position.timestamp.toISOString()
+        }
+        return metadata
     }
 
     function writeMetaData() {
@@ -166,6 +230,7 @@ SettingsOverlay {
     deviceToggleEnabled: !captureView.captureUiBlocked
 
     onPinchStarted: {
+        zoomController.cancel()
         // We're not getting notifications when the maximumDigitalZoom changes,
         // so update the value here.
         zoomIndicator.maximumZoom = captureView._camera2ViewfinderActive
@@ -181,12 +246,7 @@ SettingsOverlay {
                     currentZoom + ((maximumZoom - 1)
                                    * ((pinch.scale / Math.abs(pinch.previousScale) - 1))),
                     maximumZoom))
-        if (captureView._camera2ViewfinderActive) {
-            captureView.camera2Zoom = nextZoom
-        } else {
-            camera.digitalZoom = nextZoom
-        }
-        zoomIndicator.show()
+        zoomController.setDirect(nextZoom)
     }
 
     Connections {

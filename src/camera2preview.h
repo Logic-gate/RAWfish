@@ -2,6 +2,7 @@
 #define CAMERA2PREVIEW_H
 
 #include <QImage>
+#include <QJsonObject>
 #include <QMap>
 #include <QProcess>
 #include <QQuickItem>
@@ -36,6 +37,8 @@ class Camera2Preview : public QQuickItem
     Q_PROPERTY(QString exposureTime READ exposureTime WRITE setExposureTime NOTIFY exposureTimeChanged)
     Q_PROPERTY(int aperture READ aperture WRITE setAperture NOTIFY apertureChanged)
     Q_PROPERTY(int noiseReduction READ noiseReduction WRITE setNoiseReduction NOTIFY noiseReductionChanged)
+    Q_PROPERTY(bool focusPeaking READ focusPeaking WRITE setFocusPeaking NOTIFY focusPeakingChanged)
+    Q_PROPERTY(bool exposureZebras READ exposureZebras WRITE setExposureZebras NOTIFY exposureZebrasChanged)
     Q_PROPERTY(qreal renderExposure READ renderExposure WRITE setRenderExposure NOTIFY renderExposureChanged)
     Q_PROPERTY(QString sceneMode READ sceneMode WRITE setSceneMode NOTIFY sceneModeChanged)
     Q_PROPERTY(int colorTemperature READ colorTemperature WRITE setColorTemperature NOTIFY colorTemperatureChanged)
@@ -116,6 +119,10 @@ public:
     int noiseReduction() const;
     void setNoiseReduction(int noiseReduction);
 
+    bool focusPeaking() const { return m_focusPeaking; }
+    void setFocusPeaking(bool enabled);
+    bool exposureZebras() const { return m_exposureZebras; }
+    void setExposureZebras(bool enabled);
     qreal renderExposure() const;
     void setRenderExposure(qreal renderExposure);
 
@@ -139,6 +146,7 @@ public:
      * Restarts the Camera2 preview helper process.
      */
     Q_INVOKABLE void restartPreview();
+    Q_INVOKABLE void setExposurePair(int iso, const QString &shutter, int compensationSteps);
 
     /**
      * Requests Camera2 focus and metering at normalized viewfinder coordinates.
@@ -163,6 +171,7 @@ public:
     /**
      * Captures a JPEG from the running Camera2 preview session.
      */
+    Q_INVOKABLE void setCaptureMetadata(const QVariantMap &metadata);
     Q_INVOKABLE bool captureJpeg(const QString &path);
     Q_INVOKABLE bool captureJpegWithExposure(const QString &path,
                                              int sensorSensitivity,
@@ -203,6 +212,8 @@ signals:
     void exposureTimeChanged();
     void apertureChanged();
     void noiseReductionChanged();
+    void focusPeakingChanged();
+    void exposureZebrasChanged();
     void renderExposureChanged();
     void sceneModeChanged();
     void colorTemperatureChanged();
@@ -211,6 +222,7 @@ signals:
     void liveSensorSensitivityChanged();
     void liveExposureTimeChanged();
     void histogramChanged();
+    void exposureSample(const QVariantMap &sample);
     void errorStringChanged();
     void imageCaptured(const QString &path, const QString &mimeType);
     void rawImageReady(const QString &rawPath, const QString &metadataPath);
@@ -231,6 +243,7 @@ private:
                              UpdatePaintNodeData *data) override;
 
     void restart();
+    void startPreview();
     void stop();
     void savePreviewJpegAsync(const QString &path);
     bool savePreviewMetadata(const QString &path, const QSize &imageSize);
@@ -246,9 +259,10 @@ private:
     QString helperPath() const;
 
     bool m_active = false;
+    bool m_restartPending = false;
     bool m_running = false;
     QString m_cameraId = QStringLiteral("0");
-    QSize m_previewSize = QSize(640, 480);
+    QSize m_previewSize;
     QString m_captureSize = QStringLiteral("4096x3072");
     int m_captureTimeout = 30;
     bool m_jpegCaptureEnabled = false;
@@ -269,6 +283,8 @@ private:
     QString m_exposureTime = QStringLiteral("0");
     int m_aperture = 0;
     int m_noiseReduction = 0;
+    bool m_focusPeaking = false;
+    bool m_exposureZebras = false;
     qreal m_renderExposure = 1.0;
     QString m_sceneMode = QStringLiteral("manual");
     int m_colorTemperature = 0;
@@ -291,6 +307,8 @@ private:
     bool m_pendingRawBracketCapture = false;
     int m_pendingRawBracketCount = 0;
     QVariantList m_pendingRawBracketRawPaths;
+    QJsonObject m_captureMetadata;
+    QByteArray m_originalJpegExif;
     QVariantList m_pendingRawBracketMetadataPaths;
     QVariantList m_completedRawBracketRawPaths;
     QVariantList m_completedRawBracketMetadataPaths;

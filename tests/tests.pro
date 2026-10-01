@@ -5,7 +5,7 @@
 
 TEMPLATE = subdirs
 
-OTHER_FILES += auto/*
+OTHER_FILES += auto/* exifmetadata.cpp exifmetadata.pro
 
 auto.files = auto/*
 auto.path = /opt/tests/rawfish/auto

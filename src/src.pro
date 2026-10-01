@@ -13,9 +13,9 @@ TARGETPATH = $$[QT_INSTALL_QML]/$$MODULENAME
 QT += gui-private qml quick multimedia concurrent
 CONFIG += plugin link_pkgconfig c++14
 
-PKGCONFIG += mlite5 systemsettings libtiff-4
+PKGCONFIG += mlite5 systemsettings libtiff-4 libexif
 
-SOURCES += \
+SOURCES += rawbracket.cpp \
         camera2preview.cpp \
         cameraplugin.cpp \
         capturemodel.cpp \
@@ -25,7 +25,8 @@ SOURCES += \
         declarativesettings.cpp \
         cameraconfigs.cpp
 
-HEADERS += \
+HEADERS += rawbracket.h rawbracketmath.h \
+        previewsize.h previewaids.h \
         camera2preview.h \
         capturemodel.h \
         declarativecameraextensions.h \
@@ -55,7 +56,9 @@ OTHER_FILES = \
         DisabledByMdmView.qml \
         CameraPage.qml \
         capture/*.qml \
+        capture/*.js \
         gallery/*.qml \
         settings/*.qml \
+        settings/*.js \
         settings.qml \
         qmldir

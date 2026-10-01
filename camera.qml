@@ -14,6 +14,9 @@ import "pages"
 ApplicationWindow {
     id: window
 
+    // Check once per launch, in RAWfish's application identity (not system Settings).
+    Component.onCompleted: Settings.camera2Capabilities.ensureCamera2GeneratedHalConfig(Settings.deviceId)
+
     property var captureModel: null
     property bool galleryActive
     property bool galleryVisible
@@ -92,7 +95,7 @@ ApplicationWindow {
         visible: pageStack.depth < 2 && !galleryActive
                  && (active || window.camera2CaptureBusy)
         cameraId: Settings.deviceId || (Settings.global.position === Camera.FrontFace ? "1" : "0")
-        previewSize: Qt.size(1280, 960)
+        previewSize: Settings.camera2PreferredPreviewSize(cameraId)
         captureSize: Settings.mode.rawCaptureSize
         captureTimeout: Settings.mode.rawCaptureTimeout
         jpegCaptureEnabled: Settings.mode.camera2CaptureFormat === "jpeg"
@@ -102,14 +105,28 @@ ApplicationWindow {
                            && Settings.mode.rawCaptureSize === Settings.camera2WarmCaptureSize()
                            && Settings.mode.rawCaptureSpeedMode !== "quality"
         jpegQuality: Settings.mode.rawCaptureJpegQuality
-        orientation: Settings.global.position === Camera.FrontFace ? 270 : 90
-        mirror: Settings.global.position === Camera.FrontFace
+        readonly property bool frontFacing: Settings.global.frontFacingDeviceId !== ""
+                                            && cameraId === Settings.global.frontFacingDeviceId
+        orientation: Settings.camera2PreviewOrientation(
+                         cameraId, frontFacing ? 270 : 90)
+        mirror: Settings.camera2PreviewMirror(cameraId, frontFacing)
         fill: true
 
         Behavior on y {
             enabled: !galleryVisible
             NumberAnimation { duration: 150; easing.type: Easing.InOutQuad }
         }
+    }
+
+    Label {
+        anchors.centerIn: camera2Preview
+        width: camera2Preview.width - 2 * Theme.horizontalPageMargin
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.Wrap
+        visible: camera2Preview.visible && camera2Preview.active
+                 && (camera2Preview.previewSize.width <= 0
+                     || camera2Preview.previewSize.height <= 0)
+        text: qsTr("Preview unavailable")
     }
 
     QrFilter {

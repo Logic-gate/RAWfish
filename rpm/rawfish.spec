@@ -7,7 +7,7 @@
 Name:       rawfish
 Summary:    Camera application
 Version:    1.3.1
-Release:    3
+Release:    9
 License:    BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2
@@ -32,6 +32,7 @@ BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(mlite5) >= 0.2.5
 BuildRequires:  pkgconfig(systemsettings) >= 0.2.13
 BuildRequires:  libtiff-devel
+BuildRequires:  pkgconfig(libexif)
 BuildRequires:  qt5-qttools
 BuildRequires:  qt5-qttools-linguist
 BuildRequires:  oneshot
@@ -87,6 +88,7 @@ The RAWfish application.
 
 %files
 %license LICENSES/BSD-3-Clause.txt
+%license licenses/RawBracket-MIT.txt
 %{_datadir}/applications/rawfish.desktop
 %{_datadir}/icons/hicolor/500x500/apps/rawfish-sfos.png
 %dir %{_datadir}/rawfish

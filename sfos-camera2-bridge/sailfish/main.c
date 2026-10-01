@@ -121,7 +121,7 @@ static void usage(FILE *stream, const char *program)
             "     [--focus-timeout SECONDS] [--focus-failure capture|abort]\n"
             "     [--scene MODE] [--portrait]\n"
             "     [--color-temperature K] [--color-tint N]\n"
-            "     [--iso N] [--shutter-ns N] [--aperture N]\n"
+            "     [--iso N] [--shutter-ns N] [--aperture N] [--ev-steps N]\n"
             "     [--noise-reduction MODE] [--zoom R]\n"
             "     [--force]\n"
             "  %s --preview [--camera ID] [--size WIDTHxHEIGHT]\n"
@@ -133,7 +133,7 @@ static void usage(FILE *stream, const char *program)
             "     [--size WIDTHxHEIGHT] [--timeout SECONDS]\n"
             "     [--quality N] [--orientation DEGREES]\n"
             "     [--scene MODE] [--portrait]\n"
-            "     [--iso N] [--shutter-ns N] [--aperture N]\n"
+            "     [--iso N] [--shutter-ns N] [--aperture N] [--ev-steps N]\n"
             "     [--noise-reduction MODE] [--zoom R]\n"
             "     [--force]\n\n"
             "  %s --calibrate-shutter [--camera ID] [--size WIDTHxHEIGHT]\n"
@@ -470,6 +470,8 @@ int main(int argc, char **argv)
         return 12;
     }
 
+    void (*set_capture_compensation)(int) = (void (*)(int))android_dlsym(
+        bridge, "sfos_camera2_set_capture_compensation");
     probe_fn probe = (probe_fn)android_dlsym(bridge, "sfos_camera2_probe");
     capture_options_fn capture_options = (capture_options_fn)android_dlsym(
         bridge, "sfos_camera2_capture_raw_options");
@@ -841,6 +843,13 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid --noise-reduction value\n");
                     return 2;
                 }
+            } else if (!strcmp(argv[index], "--ev-steps") && index + 1 < argc) {
+                int steps = 0;
+                if (parse_int(argv[++index], &steps) != 0 || (steps != 0 && !set_capture_compensation)) {
+                    fprintf(stderr, "Exposure compensation unavailable or invalid\n");
+                    return 2;
+                }
+                if (set_capture_compensation) set_capture_compensation(steps);
             } else if (!strcmp(argv[index], "--aperture") &&
                        index + 1 < argc) {
                 if (parse_nonnegative_int(argv[++index], &aperture) != 0 ||
@@ -996,6 +1005,13 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid --noise-reduction value\n");
                     return 2;
                 }
+            } else if (!strcmp(argv[index], "--ev-steps") && index + 1 < argc) {
+                int steps = 0;
+                if (parse_int(argv[++index], &steps) != 0 || (steps != 0 && !set_capture_compensation)) {
+                    fprintf(stderr, "Exposure compensation unavailable or invalid\n");
+                    return 2;
+                }
+                if (set_capture_compensation) set_capture_compensation(steps);
             } else if (!strcmp(argv[index], "--aperture") &&
                        index + 1 < argc) {
                 if (parse_nonnegative_int(argv[++index], &aperture) != 0 ||

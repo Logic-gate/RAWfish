@@ -74,6 +74,7 @@ struct static_metadata {
 };
 
 struct result_metadata {
+    char physical_camera_id[128];
     int64_t timestamp_ns;
     int64_t exposure_time_ns;
     int64_t frame_duration_ns;
@@ -859,6 +860,8 @@ static void capture_completed(void *opaque, ACameraCaptureSession *session,
     struct result_metadata *destination = &context->result_data;
 
     memset(destination, 0, sizeof(*destination));
+    sfos_camera2_active_physical_id(result, destination->physical_camera_id,
+                                    sizeof(destination->physical_camera_id));
     destination->timestamp_ns = sfos_camera2_first_i64(
         result, ACAMERA_SENSOR_TIMESTAMP, -1);
     destination->exposure_time_ns = sfos_camera2_first_i64(
@@ -1074,6 +1077,8 @@ static bool write_metadata_file(const char *path, const char *camera_id,
 
     fputs("{\n  \"camera_id\":", file);
     print_json_string(file, camera_id);
+    fputs(",\n  \"physical_camera_id\":", file);
+    print_json_string(file, result->physical_camera_id);
     fputs(",\n  \"raw_path\":", file);
     print_json_string(file, raw_path);
     fprintf(file,

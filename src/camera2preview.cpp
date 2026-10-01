@@ -1,6 +1,7 @@
 #include "camera2preview.h"
 #include "exifutils.h"
 #include "imageadjustments.h"
+#include "previewaids.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -83,13 +84,6 @@ QSize sizeFromString(const QString &value)
     const int width = parts.at(0).toInt(&widthOk);
     const int height = parts.at(1).toInt(&heightOk);
     return widthOk && heightOk ? QSize(width, height) : QSize();
-}
-
-qreal exposureNsFromText(const QString &value)
-{
-    bool ok = false;
-    const qlonglong exposure = value.toLongLong(&ok);
-    return ok && exposure > 0 ? qreal(exposure) : 0.0;
 }
 
 bool rewriteJpegPixels(const QString &path, int rotationDegrees, qreal exposure,
@@ -185,6 +179,9 @@ void Camera2Preview::setCameraId(const QString &cameraId)
         return;
     }
     m_cameraId = effectiveId;
+    stop();
+    m_frame = QImage();
+    update();
     emit cameraIdChanged();
     restart();
 }
@@ -196,7 +193,7 @@ QSize Camera2Preview::previewSize() const
 
 void Camera2Preview::setPreviewSize(const QSize &previewSize)
 {
-    if (!previewSize.isValid() || m_previewSize == previewSize) {
+    if (m_previewSize == previewSize) {
         return;
     }
     m_previewSize = previewSize;
@@ -425,6 +422,18 @@ void Camera2Preview::setExposureCompensation(int exposureCompensation)
     sendSettings();
 }
 
+void Camera2Preview::setExposurePair(int iso, const QString &shutter, int compensationSteps)
+{
+    if ((iso > 0) != (shutter.toLongLong() > 0)) return;
+    m_sensorSensitivity = qMax(0, iso);
+    m_exposureTime = shutter;
+    m_exposureCompensation = compensationSteps;
+    emit sensorSensitivityChanged();
+    emit exposureTimeChanged();
+    emit exposureCompensationChanged();
+    sendSettings();
+}
+
 int Camera2Preview::sensorSensitivity() const
 {
     return m_sensorSensitivity;
@@ -488,6 +497,22 @@ void Camera2Preview::setNoiseReduction(int noiseReduction)
     m_noiseReduction = reduction;
     emit noiseReductionChanged();
     sendSettings();
+}
+
+void Camera2Preview::setFocusPeaking(bool enabled)
+{
+    if (m_focusPeaking == enabled) return;
+    m_focusPeaking = enabled;
+    emit focusPeakingChanged();
+    update();
+}
+
+void Camera2Preview::setExposureZebras(bool enabled)
+{
+    if (m_exposureZebras == enabled) return;
+    m_exposureZebras = enabled;
+    emit exposureZebrasChanged();
+    update();
 }
 
 qreal Camera2Preview::renderExposure() const
@@ -605,6 +630,8 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
                                 m_colorTemperature, m_colorTint);
     }
 
+    // Display-only copy: never feed overlays into metering, histogram or capture.
+    textureImage = PreviewAids::apply(textureImage, m_focusPeaking, m_exposureZebras);
     QSGTexture *texture = window()->createTextureFromImage(textureImage);
     if (!texture) {
         return nullptr;
@@ -680,6 +707,12 @@ void Camera2Preview::releaseFocusHold()
     if (m_process && m_process->state() == QProcess::Running) {
         m_process->write("focus-hold-release\n");
     }
+}
+
+void Camera2Preview::setCaptureMetadata(const QVariantMap &metadata)
+{
+    m_captureMetadata = ExifUtils::captureContext(metadata);
+    m_originalJpegExif.clear();
 }
 
 bool Camera2Preview::captureJpeg(const QString &path)
@@ -838,7 +871,7 @@ bool Camera2Preview::captureRawBracket(const QVariantList &rawPaths,
                                        const QVariantList &exposureTimes)
 {
     const int count = rawPaths.count();
-    if (count < 3 || count != metadataPaths.count() ||
+    if (count != 2 || count != metadataPaths.count() ||
             count != exposureTimes.count()) {
         setErrorString(QStringLiteral("Camera2 RAW bracket is incomplete"));
         return false;
@@ -973,7 +1006,8 @@ bool Camera2Preview::savePreviewMetadata(const QString &path,
             (m_jpegOrientation == 90 || m_jpegOrientation == 270)) {
         finalImageSize.transpose();
     }
-    QJsonObject metadata;
+    QJsonObject metadata = m_captureMetadata;
+    metadata.insert(QStringLiteral("_original_exif"), QString::fromLatin1(m_originalJpegExif.toBase64()));
     metadata.insert(QStringLiteral("status"), QStringLiteral("ok"));
     metadata.insert(QStringLiteral("capture_source"),
                     m_jpegCaptureEnabled
@@ -1067,6 +1101,15 @@ bool Camera2Preview::savePreviewMetadata(const QString &path,
     metadata.insert(QStringLiteral("live_exposure_time_ns"),
                     m_liveExposureTime);
     metadata.insert(QStringLiteral("focal_length_mm"), m_focalLength);
+    QJsonObject captureResult;
+    for (auto it = m_lastCaptureResultFields.begin(); it != m_lastCaptureResultFields.end(); ++it)
+        captureResult.insert(it.key(), it.value());
+    metadata.insert(QStringLiteral("capture_result"), captureResult);
+    const int capturedIso = m_lastCaptureResultFields.value(QStringLiteral("iso")).toInt();
+    if (capturedIso > 0) metadata.insert(QStringLiteral("iso"), capturedIso);
+    const QString capturedExposure = m_lastCaptureResultFields.value(QStringLiteral("shutter"));
+    if (capturedExposure.toLongLong() > 0) metadata.insert(QStringLiteral("exposure_time_ns"), capturedExposure);
+
 
     const QString sidecarPath = jsonSidecarPath(path);
     QDir().mkpath(QFileInfo(sidecarPath).absolutePath());
@@ -1172,6 +1215,14 @@ void Camera2Preview::checkCaptureResult()
     if (m_jpegCaptureEnabled || m_pendingRawCapture) {
         --m_capturePollsRemaining;
         if (m_capturePollsRemaining <= 0) {
+            int received = 0;
+            for (const QVariant &frame : m_completedRawBracketMetadataPaths)
+                if (!frame.toString().isEmpty()) ++received;
+            const QString timeoutError = m_pendingRawBracketCapture
+                    ? QStringLiteral("Camera2 RAW bracket timed out (%1/%2 frames received)")
+                        .arg(received).arg(m_pendingRawBracketCount)
+                    : QStringLiteral("Camera2 capture timed out");
+            qWarning() << timeoutError << "pending" << m_pendingCapturePath;
             m_captureTimer.stop();
             m_pendingCapturePath.clear();
             m_pendingCaptureFinalPath.clear();
@@ -1186,7 +1237,7 @@ void Camera2Preview::checkCaptureResult()
             m_pendingCaptureStablePolls = 0;
             m_previewCaptureRunning = false;
             restorePreviewSettingsAfterCapture();
-            emit imageCaptureFailed(QStringLiteral("Camera2 capture timed out"));
+            emit imageCaptureFailed(timeoutError);
         }
         return;
     }
@@ -1226,6 +1277,7 @@ void Camera2Preview::checkCaptureResult()
         m_pendingCaptureStablePolls = 0;
         m_previewCaptureRunning = false;
         m_captureTimer.stop();
+        m_originalJpegExif = ExifUtils::originalJpegExif(path);
         QString rewriteError;
         if (!rewriteJpegPixels(path, m_jpegOrientation, m_renderExposure,
                                m_colorTemperature, m_colorTint,
@@ -1257,9 +1309,29 @@ void Camera2Preview::checkCaptureResult()
 void Camera2Preview::restart()
 {
     stop();
+    if (m_previewSize.width() <= 0 || m_previewSize.height() <= 0) {
+        m_frame = QImage();
+        update();
+        setErrorString(QStringLiteral("Preview unavailable"));
+    }
+    if (m_restartPending)
+        return;
+    m_restartPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_restartPending = false;
+        startPreview();
+    });
+}
+
+void Camera2Preview::startPreview()
+{
     if (!m_active) {
         return;
     }
+    if (m_previewSize.width() <= 0 || m_previewSize.height() <= 0)
+        return;
+
+    qDebug() << "preview-size" << m_cameraId << m_previewSize;
 
     const QString program = helperPath();
     if (!QFileInfo(program).isExecutable()) {
@@ -1365,9 +1437,9 @@ void Camera2Preview::sendSettings(bool captureExposure)
         return;
     }
 
-    const int sensorSensitivity = captureExposure ? m_sensorSensitivity : 0;
-    const QString exposureTime = captureExposure ? m_exposureTime
-                                                 : QStringLiteral("0");
+    Q_UNUSED(captureExposure)
+    const int sensorSensitivity = m_sensorSensitivity;
+    const QString exposureTime = m_exposureTime;
 
     m_process->write(QStringLiteral("settings %1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11\n")
                      .arg(m_focusMode)
@@ -1390,9 +1462,9 @@ void Camera2Preview::sendExposureSettings(bool captureExposure)
         return;
     }
 
-    const int sensorSensitivity = captureExposure ? m_sensorSensitivity : 0;
-    const QString exposureTime = captureExposure ? m_exposureTime
-                                                 : QStringLiteral("0");
+    Q_UNUSED(captureExposure)
+    const int sensorSensitivity = m_sensorSensitivity;
+    const QString exposureTime = m_exposureTime;
 
     m_process->write(QStringLiteral("exposure-settings %1 %2 %3 %4 %5\n")
                      .arg(sensorSensitivity)
@@ -1510,13 +1582,7 @@ void Camera2Preview::updateHistogram(const QImage &frame)
     int redBins[HistogramBins] = {};
     int greenBins[HistogramBins] = {};
     int blueBins[HistogramBins] = {};
-    const qreal isoGain = m_sensorSensitivity > 0 && m_liveSensorSensitivity > 0
-            ? qreal(m_sensorSensitivity) / qreal(m_liveSensorSensitivity) : 1.0;
-    const qreal captureExposure = exposureNsFromText(m_exposureTime);
-    const qreal previewExposure = exposureNsFromText(m_liveExposureTime);
-    const qreal shutterGain = captureExposure > 0.0 && previewExposure > 0.0
-            ? captureExposure / previewExposure : 1.0;
-    const qreal gain = isoGain * shutterGain;
+    const qreal gain = 1.0; // Histogram describes the actual preview frame.
     const int step = qMax(1, qMin(frame.width(), frame.height()) / 160);
     for (int y = 0; y < frame.height(); y += step) {
         const uchar *line = frame.constScanLine(y);
@@ -1585,6 +1651,12 @@ void Camera2Preview::parseMetadata(const QByteArray &payload)
             }
         }
     }
+    if (parsedFields.value(QStringLiteral("meter")) == QLatin1String("1")) {
+        QVariantMap sample;
+        for (auto it = parsedFields.constBegin(); it != parsedFields.constEnd(); ++it)
+            sample.insert(it.key(), it.value());
+        emit exposureSample(sample);
+    }
     if (parsedFields.contains(QStringLiteral("capture-status"))) {
         parseCaptureResult(parsedFields);
     }
@@ -1597,13 +1669,17 @@ void Camera2Preview::parseCaptureResult(const QMap<QString, QString> &fields)
     }
 
     const QString status = fields.value(QStringLiteral("capture-status"));
-    const QString path = fields.value(QStringLiteral("path"), m_pendingCapturePath);
+    const bool commandError = status == QLatin1String("command-error");
+    const QString path = commandError ? m_pendingCapturePath
+                                     : fields.value(QStringLiteral("path"), m_pendingCapturePath);
     const bool rawCapture = m_pendingRawCapture;
     const bool rawBracketCapture = m_pendingRawBracketCapture;
     const QString rawPath = m_pendingCaptureFinalPath;
     m_lastCaptureResultFields = fields;
 
     if (rawBracketCapture) {
+        const int metadataIndex = m_pendingRawBracketMetadataPaths.indexOf(path);
+        if (metadataIndex < 0) return; // Stale event from a different capture.
         if (status != QLatin1String("ok")) {
             m_captureTimer.stop();
             m_pendingCapturePath.clear();
@@ -1619,11 +1695,21 @@ void Camera2Preview::parseCaptureResult(const QMap<QString, QString> &fields)
             m_pendingCaptureStablePolls = 0;
             m_previewCaptureRunning = false;
             restorePreviewSettingsAfterCapture();
-            emit imageCaptureFailed(QStringLiteral("Camera2 warm RAW bracket failed"));
+            emit imageCaptureFailed(commandError
+                    ? QStringLiteral("Camera2 rejected capture command (code %1)").arg(fields.value(QStringLiteral("code")))
+                    : QStringLiteral("Camera2 warm RAW bracket failed"));
             return;
         }
 
-        const int metadataIndex = m_pendingRawBracketMetadataPaths.indexOf(path);
+        QJsonObject frameContext = m_captureMetadata;
+        frameContext.insert(QStringLiteral("bracket_index"), metadataIndex);
+        frameContext.insert(QStringLiteral("bracket_count"), m_pendingRawBracketCount);
+        QString metadataError;
+        if (!ExifUtils::enrichSidecar(path, frameContext, &metadataError)) {
+            stop();
+            emit imageCaptureFailed(metadataError);
+            return;
+        }
         if (metadataIndex >= 0 &&
                 metadataIndex < m_pendingRawBracketRawPaths.count()) {
             m_completedRawBracketRawPaths.replace(
@@ -1678,9 +1764,15 @@ void Camera2Preview::parseCaptureResult(const QMap<QString, QString> &fields)
 
     if (status == QLatin1String("ok")) {
         if (rawCapture) {
+            QString metadataError;
+            if (!ExifUtils::enrichSidecar(path, m_captureMetadata, &metadataError)) {
+                emit imageCaptureFailed(metadataError);
+                return;
+            }
             emit rawImageReady(rawPath, path);
             return;
         }
+        m_originalJpegExif = ExifUtils::originalJpegExif(path);
         QString rewriteError;
         if (!rewriteJpegPixels(path, m_jpegOrientation, m_renderExposure,
                                m_colorTemperature, m_colorTint,
@@ -1694,7 +1786,9 @@ void Camera2Preview::parseCaptureResult(const QMap<QString, QString> &fields)
         }
         emit imageCaptured(path, QStringLiteral("image/jpeg"));
     } else {
-        emit imageCaptureFailed(QStringLiteral("Camera2 warm capture failed"));
+        emit imageCaptureFailed(commandError
+                ? QStringLiteral("Camera2 rejected capture command (code %1)").arg(fields.value(QStringLiteral("code")))
+                : QStringLiteral("Camera2 warm capture failed"));
     }
 }
 

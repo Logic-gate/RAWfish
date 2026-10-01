@@ -24,6 +24,51 @@ PinchArea {
     property alias container: container
     readonly property alias settingsOpacity: grid.opacity
     property bool orientationTransitionRunning
+    property bool zoomButtonsEnabled: false
+    readonly property var exposureControl: captureView ? captureView.exposureControl : null
+    onDeviceRotationChanged: syncDeviceRotation()
+
+    property real currentZoom: 1
+    property real maximumZoom: 1
+    signal zoomPressed(int direction)
+    signal zoomReleased()
+    signal zoomCanceled()
+    signal zoomResetRequested()
+
+    function evChoices() {
+        if (!exposureControl) return [0]
+        if (exposureControl.partial) return [-4, -3, -2, -1, 0, 1, 2, 3, 4]
+        var caps = exposureControl.capabilities
+        var step = Number(caps.compensation_step_ev)
+        var range = caps.compensation_range || [0, 0]
+        if (!(step > 0)) return [0]
+        var choices = []
+        // Store twice EV for compatibility with existing settings; fractions are supported.
+        for (var i = Math.max(range[0], Math.ceil(-2 / step)); i <= Math.min(range[1], Math.floor(2 / step)); ++i)
+            choices.push(2 * i * step)
+        return choices.length ? choices : [0]
+    }
+    function evLabel(value) { return Number((Number(value) / 2).toFixed(2)) + " EV" }
+
+    Column {
+        z: 20
+        anchors {
+            top: parent.top
+            horizontalCenter: parent.horizontalCenter
+            topMargin: Theme.paddingLarge + upperHeader.labelVerticalOffset
+        }
+        width: parent.width * 0.8
+        visible: Settings.global.showExposureStatus && overlay.exposureControl && !overlay._exposed && overlay.showCommonControls
+        Label {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            font.pixelSize: Theme.fontSizeTiny
+            text: overlay.exposureControl ? (overlay.exposureControl.limitStatus
+                  ? overlay.exposureControl.limitStatus + " · " + overlay.exposureControl.residualEv.toFixed(1) + " EV shortfall"
+                  : (overlay.exposureControl.notice || overlay.exposureControl.status)) : ""
+        }
+    }
 
     property bool _pinchActive
     property bool topMenuOpen
@@ -79,7 +124,6 @@ PinchArea {
         syncDeviceRotation()
     }
 
-    onDeviceRotationChanged: syncDeviceRotation()
 
     Component.onCompleted: syncDeviceRotation()
 
@@ -206,11 +250,11 @@ PinchArea {
                 opacity: Theme.opacityHigh
                 font.pixelSize: Theme.fontSizeTiny
                 font.bold: true
-                text: "LENS"
+                text: "CAM"
             }
 
             Label {
-                width: camera2ControlGrid.centerWidth
+                width: camera2ControlGrid.experimentalLayout ? camera2ControlGrid.exposureWidth : camera2ControlGrid.centerWidth
                 height: parent.height
                 verticalAlignment: Text.AlignVCenter
                 horizontalAlignment: Text.AlignHCenter
@@ -231,6 +275,7 @@ PinchArea {
                 font.pixelSize: Theme.fontSizeTiny
                 font.bold: true
                 text: "SPEED"
+                visible: !camera2ControlGrid.experimentalLayout
             }
 
             Label {
@@ -243,12 +288,18 @@ PinchArea {
                 font.pixelSize: Theme.fontSizeTiny
                 font.bold: true
                 text: "ISO"
+                visible: !camera2ControlGrid.experimentalLayout
             }
         }
 
         Grid {
             id: camera2ControlGrid
 
+            readonly property bool experimentalLayout: Settings.global.experimentalExposureLayout && Settings.global.advancedMode
+            readonly property real exposureWidth: centerWidth + speedWidth + isoWidth + 2 * columnGap
+            readonly property real wheelRowHeight: Math.max(Theme.fontSizeLarge * 1.6, Math.round(height / 7))
+            readonly property real wheelCenterY: shutterZoomArea.y + bottomShutterAnchor.y + bottomShutterAnchor.height / 2
+            readonly property real wheelTop: Math.max(0, wheelCenterY - wheelRowHeight / 2)
             readonly property real sideMargin: Math.max(Theme.paddingMedium,
                                                         camera2BottomDeck.width * 0.015)
             readonly property real columnGap: Math.max(1, Math.round(Theme.pixelRatio))
@@ -273,19 +324,17 @@ PinchArea {
             }
 
             function liveShutterValue() {
-                return Settings.mode.rawCaptureShutterNs == "0" &&
-                        camera2Viewfinder &&
-                        camera2Viewfinder.liveExposureTime !== "0"
-                        ? camera2Viewfinder.liveExposureTime
-                        : Settings.mode.rawCaptureShutterNs
+                if (Settings.global.advancedMode && Settings.mode.rawCaptureShutterNs !== "0")
+                    return Settings.mode.rawCaptureShutterNs
+                return overlay.exposureControl && overlay.exposureControl.fresh
+                        ? String(overlay.exposureControl.actualTime) : "—"
             }
 
             function liveIsoValue() {
-                return Settings.mode.rawCaptureIso == 0 &&
-                        camera2Viewfinder &&
-                        camera2Viewfinder.liveSensorSensitivity > 0
-                        ? camera2Viewfinder.liveSensorSensitivity
-                        : Settings.mode.rawCaptureIso
+                if (Settings.global.advancedMode && Settings.mode.rawCaptureIso > 0)
+                    return Settings.mode.rawCaptureIso
+                return overlay.exposureControl && overlay.exposureControl.fresh
+                        ? overlay.exposureControl.actualIso : "—"
             }
 
             function drawHistogram(context, width, height, values) {
@@ -339,19 +388,14 @@ PinchArea {
                             ? parent.height / 3
                             : parent.height
 
-                    CycleValueButton {
+                    CameraLensSelector {
                         anchors {
                             left: parent.left
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
                         height: Theme.itemSizeMedium
-                        caption: ""
-                        settings: Settings
-                        settingProperty: "deviceId"
-                        currentValue: Settings.deviceId
-                        model: Settings.camera2LensModel()
-                        valueLabel: Settings.camera2LensLabel
+                        captureBusy: captureView.captureBusy || !overlay.deviceToggleEnabled
                     }
                 }
 
@@ -360,7 +404,7 @@ PinchArea {
                     height: Settings.global.advancedMode ? parent.height / 3 : 0
                     visible: Settings.global.advancedMode
                     enabled: visible
-                    caption: "MODE"
+                    caption: "FORMAT"
                     settings: Settings.mode
                     settingProperty: "camera2CaptureFormat"
                     currentValue: Settings.mode.camera2CaptureFormat
@@ -371,13 +415,13 @@ PinchArea {
                 CycleValueButton {
                     width: parent.width
                     height: Settings.global.advancedMode ? parent.height / 3 : 0
-                    visible: Settings.global.advancedMode
+                    visible: Settings.global.advancedMode && model.length > 0
                     enabled: visible
                     caption: "FOCUS"
                     settings: Settings.mode
                     settingProperty: "rawCaptureFocusMode"
                     currentValue: Settings.mode.rawCaptureFocusMode
-                    model: [ "auto", "continuous", "manual", "infinity", "none" ]
+                    model: Settings.camera2SelectableFocusModeModel()
                     valueLabel: function(value) {
                         if (value === "manual") {
                             return Settings.rawCaptureFocusDistanceLabel(
@@ -397,9 +441,10 @@ PinchArea {
             Column {
                 width: camera2ControlGrid.centerWidth
                 height: camera2ControlGrid.height
+                z: 1
 
                 Item {
-                    width: parent.width
+                    width: camera2ControlGrid.experimentalLayout ? camera2ControlGrid.exposureWidth : parent.width
                     height: parent.height * 0.34
 
                     Canvas {
@@ -423,29 +468,71 @@ PinchArea {
 
                     ValueCarousel {
                         anchors.fill: parent
+                        visible: !overlay.exposureControl || !overlay.exposureControl.fullyManual
+                        enabled: visible && overlay.exposureControl && !captureView.captureBusy
+                                 && (overlay.exposureControl.partial || overlay.exposureControl.capabilities.compensation_step_ev > 0)
                         orientation: ListView.Horizontal
-                        caption: ""
                         settings: Settings.global
+                        writeThrough: false
+                        onValueSelected: Settings.global.exposureCompensation = value
                         settingProperty: "exposureCompensation"
                         currentValue: Settings.global.exposureCompensation
-                        model: [ -4, -3, -2, -1, 0, 1, 2, 3, 4 ]
-                        valueLabel: function(value) {
-                            var label = Settings.exposureText(value)
-                            return label.length > 0 ? label : "0"
-                        }
+                        displayValue: overlay.exposureControl ? overlay.exposureControl.effectiveEv * 2 : currentValue
+                        model: overlay.evChoices()
+                        valueLabel: function(value) { return overlay.evLabel(value) }
+                    }
+                    Label {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                        visible: Settings.global.estimatedExposureMetering && overlay.exposureControl && overlay.exposureControl.fullyManual
+                        text: overlay.exposureControl && overlay.exposureControl.meterValid && overlay.exposureControl.fresh
+                              ? "≈ " + overlay.exposureControl.meterEv.toFixed(1) + " EV"
+                              : "—"
                     }
                 }
 
                 Item {
+                    id: shutterZoomArea
                     width: parent.width
                     height: parent.height * 0.66
 
                     Item {
                         id: bottomShutterAnchor
 
-                        width: Theme.itemSizeExtraLarge * 1.18
-                        height: Theme.itemSizeExtraLarge * 1.18
+                        width: Math.min(parent.width, Theme.itemSizeExtraLarge * 1.18,
+                                        Math.max(0, parent.height - 2 * Theme.itemSizeSmall))
+                        height: width
                         anchors.centerIn: parent
+                    }
+
+                    Repeater {
+                        model: [1, -1]
+
+                        MouseArea {
+                            readonly property int direction: modelData
+                            width: parent.width
+                            height: (shutterZoomArea.height - bottomShutterAnchor.height) / 2
+                            y: direction > 0 ? 0 : bottomShutterAnchor.y + bottomShutterAnchor.height
+                            enabled: overlay.zoomButtonsEnabled
+                                     && (direction > 0 ? overlay.currentZoom < overlay.maximumZoom
+                                                       : overlay.currentZoom > 1)
+                            onPressed: overlay.zoomPressed(direction)
+                            onDoubleClicked: if (direction < 0) overlay.zoomResetRequested()
+                            onReleased: overlay.zoomReleased()
+                            onCanceled: overlay.zoomCanceled()
+                            onExited: if (pressed) overlay.zoomCanceled()
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: direction > 0 ? "+" : "−"
+                                font.pixelSize: Theme.fontSizeLarge
+                                color: parent.pressed ? Theme.highlightColor : Theme.primaryColor
+                                opacity: parent.enabled ? 1 : Theme.opacityLow
+                            }
+                        }
                     }
                 }
             }
@@ -455,21 +542,51 @@ PinchArea {
                 height: camera2ControlGrid.height
 
                 ValueCarousel {
-                    anchors.fill: parent
+                    id: speedWheel
+                    width: parent.width
+                    y: camera2ControlGrid.experimentalLayout ? camera2ControlGrid.wheelTop : 0
+                    height: parent.height - y
+                    selectionAtTop: camera2ControlGrid.experimentalLayout
+                    rowHeight: camera2ControlGrid.wheelRowHeight
                     visible: Settings.global.advancedMode
-                    enabled: visible
+                    enabled: visible && overlay.exposureControl && overlay.exposureControl.active && !overlay.exposureControl.busy
                     orientation: ListView.Vertical
                     caption: ""
+                    writeThrough: false
+                    onValueSelected: { if (!overlay.exposureControl.setLock("shutter", value)) rejectSelection() }
                     settings: Settings.mode
                     settingProperty: "rawCaptureShutterNs"
                     currentValue: Settings.mode.rawCaptureShutterNs
                     displayValue: camera2ControlGrid.liveShutterValue()
                     model: Settings.camera2ShutterModel()
-                    valueLabel: Settings.rawCaptureShutterLabel
+                    valueLabel: function(value) { return value === "—" ? value : Settings.rawCaptureShutterLabel(value) }
                     selectedFontSize: Theme.fontSizeExtraLarge
                     tapered: true
                     wrap: true
                 }
+
+                PreviewAidToggle {
+                    anchors { bottom: speedWheelHeader.top; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingSmall }
+                    width: parent.width
+                    visible: camera2ControlGrid.experimentalLayout
+                    enabled: visible && camera2ControlGrid.camera2Viewfinder && camera2ControlGrid.camera2Viewfinder.running
+                    text: "PEAK"
+                    checked: Settings.global.focusPeaking
+                    onClicked: Settings.global.focusPeaking = !Settings.global.focusPeaking
+                }
+
+                Label {
+                    id: speedWheelHeader
+                    visible: camera2ControlGrid.experimentalLayout
+                    anchors { bottom: speedWheel.top; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingSmall }
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: Theme.fontSizeTiny
+                    font.bold: true
+                    color: _highlightColor
+                    text: "SPEED"
+                }
+
 
                 Label {
                     anchors.centerIn: parent
@@ -490,21 +607,51 @@ PinchArea {
                 height: camera2ControlGrid.height
 
                 ValueCarousel {
-                    anchors.fill: parent
+                    id: isoWheel
+                    width: parent.width
+                    y: camera2ControlGrid.experimentalLayout ? camera2ControlGrid.wheelTop : 0
+                    height: parent.height - y
+                    selectionAtTop: camera2ControlGrid.experimentalLayout
+                    rowHeight: camera2ControlGrid.wheelRowHeight
                     visible: Settings.global.advancedMode
-                    enabled: visible
+                    enabled: visible && overlay.exposureControl && overlay.exposureControl.active && !overlay.exposureControl.busy
                     orientation: ListView.Vertical
                     caption: ""
+                    writeThrough: false
+                    onValueSelected: { if (!overlay.exposureControl.setLock("iso", value)) rejectSelection() }
                     settings: Settings.mode
                     settingProperty: "rawCaptureIso"
                     currentValue: Settings.mode.rawCaptureIso
                     displayValue: camera2ControlGrid.liveIsoValue()
                     model: Settings.camera2IsoModel()
-                    valueLabel: function(value) { return value > 0 ? value : "Auto" }
+                    valueLabel: function(value) { return value === "—" ? value : value > 0 ? value : "Auto" }
                     selectedFontSize: Theme.fontSizeExtraLarge
                     tapered: true
                     wrap: true
                 }
+
+                PreviewAidToggle {
+                    anchors { bottom: isoWheelHeader.top; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingSmall }
+                    width: parent.width
+                    visible: camera2ControlGrid.experimentalLayout
+                    enabled: visible && camera2ControlGrid.camera2Viewfinder && camera2ControlGrid.camera2Viewfinder.running
+                    text: "ZEBRA"
+                    checked: Settings.global.exposureZebras
+                    onClicked: Settings.global.exposureZebras = !Settings.global.exposureZebras
+                }
+
+                Label {
+                    id: isoWheelHeader
+                    visible: camera2ControlGrid.experimentalLayout
+                    anchors { bottom: isoWheel.top; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingSmall }
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: Theme.fontSizeTiny
+                    font.bold: true
+                    color: _highlightColor
+                    text: "ISO"
+                }
+
 
                 Label {
                     anchors.centerIn: parent
@@ -526,7 +673,7 @@ PinchArea {
         Item {
             id: simpleCamera2Deck
 
-            property bool histogramCollapsed: false
+            readonly property bool histogramCollapsed: !Settings.global.simpleHistogramVisible
             readonly property real histogramStripHeight: Theme.itemSizeSmall
             readonly property real histogramOpenHeight: Math.round(height * 0.34)
             readonly property real histogramHeight: histogramCollapsed
@@ -587,17 +734,30 @@ PinchArea {
                                  ? "image://theme/icon-m-down"
                                  : "image://theme/icon-m-up"
                     onClicked: {
-                        simpleCamera2Deck.histogramCollapsed =
-                                !simpleCamera2Deck.histogramCollapsed
+                        Settings.global.simpleHistogramVisible = !Settings.global.simpleHistogramVisible
                     }
                 }
             }
 
+            ValueCarousel {
+                id: simpleEv
+                anchors { left: parent.left; right: parent.right; top: simpleHistogramPanel.bottom }
+                height: Theme.itemSizeExtraSmall
+                enabled: overlay.exposureControl && !captureView.captureBusy
+                         && overlay.exposureControl.capabilities.compensation_step_ev > 0
+                settings: Settings.global
+                writeThrough: false
+                onValueSelected: Settings.global.exposureCompensation = value
+                settingProperty: "exposureCompensation"
+                displayValue: overlay.exposureControl ? overlay.exposureControl.effectiveEv * 2 : currentValue
+                model: overlay.evChoices()
+                valueLabel: function(value) { return overlay.evLabel(value) }
+            }
             Row {
                 anchors {
                     left: parent.left
                     right: parent.right
-                    top: simpleHistogramPanel.bottom
+                    top: simpleEv.bottom
                     bottom: parent.bottom
                     topMargin: Theme.paddingSmall
                 }
@@ -615,18 +775,13 @@ PinchArea {
                         opacity: Theme.opacityHigh
                         font.pixelSize: Theme.fontSizeTiny
                         font.bold: true
-                        text: "LENS"
+                        text: "CAM"
                     }
 
-                    CycleValueButton {
+                    CameraLensSelector {
                         width: parent.width
                         height: parent.height - y
-                        caption: ""
-                        settings: Settings
-                        settingProperty: "deviceId"
-                        currentValue: Settings.deviceId
-                        model: Settings.camera2LensModel()
-                        valueLabel: Settings.camera2LensLabel
+                        captureBusy: captureView.captureBusy || !overlay.deviceToggleEnabled
                     }
                 }
 
@@ -646,11 +801,6 @@ PinchArea {
                         height: parent.height - y
                     }
 
-                    Item {
-                        width: Theme.itemSizeExtraLarge * 1.18
-                        height: Theme.itemSizeExtraLarge * 1.18
-                        anchors.centerIn: simpleBottomShutterAnchor
-                    }
                 }
 
                 Column {
@@ -679,7 +829,7 @@ PinchArea {
                         currentValue: Settings.mode.rawCaptureShutterNs
                         displayValue: camera2ControlGrid.liveShutterValue()
                         model: Settings.camera2ShutterModel()
-                        valueLabel: Settings.rawCaptureShutterLabel
+                        valueLabel: function(value) { return value === "—" ? value : Settings.rawCaptureShutterLabel(value) }
                         selectedFontSize: Theme.fontSizeLarge
                         tapered: true
                         wrap: true
@@ -712,7 +862,7 @@ PinchArea {
                         currentValue: Settings.mode.rawCaptureIso
                         displayValue: camera2ControlGrid.liveIsoValue()
                         model: Settings.camera2IsoModel()
-                        valueLabel: function(value) { return value > 0 ? value : "Auto" }
+                        valueLabel: function(value) { return value === "—" ? value : value > 0 ? value : "Auto" }
                         selectedFontSize: Theme.fontSizeLarge
                         tapered: true
                         wrap: true
@@ -1050,7 +1200,7 @@ PinchArea {
             readonly property bool camera2Still: Settings.global.captureMode === "image"
             readonly property bool rawCapture: camera2Still
                                                && Settings.mode.camera2CaptureFormat === "raw"
-            readonly property bool camera2FocusSupported: true
+            readonly property bool camera2FocusSupported: Settings.camera2SelectableFocusModeModel().length > 0
             readonly property bool rawAutoFocus: rawCapture
                                                  && camera2FocusSupported
                                                  && (Settings.mode.rawCaptureFocusMode === "auto"
@@ -1067,6 +1217,7 @@ PinchArea {
                                                                  Math.round((width - camera2BottomDeck.width) * 0.90))
                                                       : contentWidth
             readonly property real sceneWidth: Math.min(settingsAreaWidth, menuWidth * 5 + spacing * 4)
+            readonly property real gridMaximumHeight: settingsPager.visible ? settingsPager.height : settingsFlickable.height
             readonly property var pages: pagedItemKeys()
 
             width: parent.width
@@ -1184,7 +1335,7 @@ PinchArea {
             }
 
             function itemWidthForKey(key) {
-                return key === "scene" ? sceneWidth : menuWidth
+                return ["scene", "distance", "size"].indexOf(key) >= 0 ? sceneWidth : menuWidth
             }
 
             function pagedItemKeys() {
@@ -1458,16 +1609,15 @@ PinchArea {
 
             Component {
                 id: sizeSettingComponent
-                TextSettingMenu {
-                    width: grid.menuWidth
-                    title: Settings.rawCaptureSizeText
+                GridSetting {
+                    width: grid.sceneWidth
+                    maximumHeight: grid.gridMaximumHeight
                     header: upperHeader
                     settings: Settings.mode
-                    property: "rawCaptureSize"
+                    settingProperty: "rawCaptureSize"
                     caption: "Size"
-                    valueLabel: function(value) { return value.split("x")[0] }
-                    model: Settings.camera2SizeModel(Settings.mode.camera2CaptureFormat,
-                                                     Settings.mode.rawCaptureRawFormat)
+                    valueLabel: function(value) { return value.replace("x", " × ") }
+                    model: Settings.camera2SizeModel(Settings.mode.camera2CaptureFormat, Settings.mode.rawCaptureRawFormat)
                 }
             }
 
@@ -1531,21 +1681,21 @@ PinchArea {
                         default: return "None"
                         }
                     }
-                    model: Settings.camera2FocusModeModel()
+                    model: Settings.camera2SelectableFocusModeModel()
                 }
             }
 
             Component {
                 id: focusDistanceSettingComponent
-                TextSettingMenu {
-                    width: grid.menuWidth
-                    title: Settings.rawCaptureFocusDistanceText
+                GridSetting {
+                    width: grid.sceneWidth
+                    maximumHeight: grid.gridMaximumHeight
                     header: upperHeader
                     settings: Settings.mode
-                    property: "rawCaptureFocusDistance"
+                    settingProperty: "rawCaptureFocusDistance"
                     caption: "Distance"
                     valueLabel: Settings.rawCaptureFocusDistanceLabel
-                    model: Settings.camera2FocusDistanceModel()
+                    model: Settings.camera2ManualFocusDistanceModel()
                 }
             }
 
@@ -1566,6 +1716,7 @@ PinchArea {
             Component {
                 id: sceneSettingComponent
                 SceneGridSetting {
+                    maximumHeight: grid.gridMaximumHeight
                     width: grid.sceneWidth
                     header: upperHeader
                 }

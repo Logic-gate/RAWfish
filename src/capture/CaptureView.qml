@@ -19,6 +19,16 @@ import "../settings"
 FocusScope {
     id: captureView
 
+    property alias exposureControl: exposureLogic
+    property int _captureExposureIso: 0
+    property string _captureExposureTime: "0"
+    ExposureController {
+        id: exposureLogic
+        preview: captureView.camera2Viewfinder
+        active: captureView.effectiveActive && captureView._camera2ViewfinderActive
+        busy: captureView.captureBusy
+    }
+
     property bool active
     property int orientation
     property int effectiveIso: Settings.mode.iso
@@ -101,6 +111,7 @@ FocusScope {
     property string _camera2CaptureCameraId
     property string _camera2ResolvedCameraId: Settings.deviceId ? Settings.deviceId : "0"
     property double _camera2CaptureStartedMs: 0
+    property bool _camera2BracketMerging: false
     property var _camera2BracketQueue: []
     property int _camera2BracketIndex: 0
     property string _camera2BracketBasePath
@@ -269,6 +280,7 @@ FocusScope {
     }
 
     function resetZoom() {
+        if (captureOverlay) captureOverlay.cancelZoom()
         camera2Zoom = 1.0
         camera.digitalZoom = 1.0
     }
@@ -290,9 +302,11 @@ FocusScope {
     }
 
     function _camera2BracketSteps() {
+        if (Settings.mode.camera2CaptureFormat === "jpeg") return []
         switch (Settings.mode.rawCaptureBracket) {
-        case "ev2": return [ -2, 0, 2 ]
-        case "ev1": return [ -1, 0, 1 ]
+        case "ev3": return [ 0, -6 ]
+        case "ev2": return [ 0, -4 ]
+        case "ev1": return [ 0, -2 ]
         default: return []
         }
     }
@@ -321,7 +335,7 @@ FocusScope {
                 return shutter
             }
         }
-        return 16666667
+        return 0
     }
 
     function _camera2CurrentIso() {
@@ -337,10 +351,8 @@ FocusScope {
 
     function _camera2BracketShutterNs(ev) {
         var base = Number(_camera2BracketBaseShutterNs)
-        if (!(base > 0)) {
-            base = 16666667
-        }
-        return String(Math.max(1, Math.round(base * Math.pow(2, ev))))
+        return extensions.camera2BracketShutterNs(
+                    _camera2ResolvedCameraId, String(base), ev)
     }
 
     function _clearWarmRawBracketRenderQueue() {
@@ -363,9 +375,8 @@ FocusScope {
             captureView._camera2BracketBaseShutterNs = "0"
             captureView._camera2BracketBaseIso = 0
             captureView._clearWarmRawBracketRenderQueue()
-            captureBusy = false
-            window.camera2CaptureBusy = false
-            if (!extensions.combineBracketImages(
+            captureView._camera2BracketMerging = true
+            if (!extensions.combineRawBracket(
                         combinedPath, sourcePaths,
                         Settings.mode.rawCaptureJpegQuality)) {
                 camera._failCamera2ImageCapture("Could not start bracket combine")
@@ -398,6 +409,21 @@ FocusScope {
         case Orientation.LandscapeInverted: return 180
         default: return 90
         }
+    }
+
+    function _captureMetadata() {
+        var metadata = captureOverlay.captureMetadata()
+        metadata.exposure_control = exposureLogic.diagnostics()
+        metadata.exposure_compensation_ev = exposureLogic.effectiveEv
+        metadata.model = deviceInfo.prettyName
+        metadata.make = deviceInfo.manufacturer
+        if (!_camera2ViewfinderActive && !extensions.rawImageCaptureAvailable) {
+            metadata.capture_source = "qt_multimedia"
+            metadata.camera_id = Settings.deviceId
+            metadata.capture_orientation = captureOrientation
+            metadata.exposure_compensation_ev = camera.exposure.exposureCompensation
+        }
+        return metadata
     }
 
     function _camera2CaptureRotation() {
@@ -443,7 +469,8 @@ FocusScope {
     }
 
     function _recoverStaleCamera2CaptureState() {
-        if (!_camera2CaptureRunning || _camera2LiveJpegCaptureRunning) {
+        if (_camera2BracketQueue.length > 0 || _camera2BracketMerging
+                || !_camera2CaptureRunning || _camera2LiveJpegCaptureRunning) {
             return false
         }
 
@@ -461,6 +488,7 @@ FocusScope {
     }
 
     function _triggerCapture() {
+        if (captureOverlay) captureOverlay.cancelZoom()
         // avoid duplicate capture if volume key and some other key trigger (e.g. shutter)
         captureOnVolumeRelease = false
         _recoverStaleCamera2CaptureState()
@@ -584,6 +612,7 @@ FocusScope {
     }
 
     on_Camera2ViewfinderActiveChanged: {
+        if (captureOverlay) captureOverlay.cancelZoom()
         if (_camera2ViewfinderActive) {
             camera2ResolveCameraIdTimer.restart()
         }
@@ -595,6 +624,8 @@ FocusScope {
     }
 
     onDeviceIdChanged: {
+        if (_camera2BracketQueue.length > 0 || _camera2BracketMerging)
+            camera._failCamera2ImageCapture("RAW bracket cancelled: camera changed")
         _resetFocus()
         resetZoom()
         captureTimer.reset()
@@ -787,6 +818,7 @@ FocusScope {
         }
 
         function _captureWithQtMultimedia() {
+            extensions.setCaptureMetadata(captureView._captureMetadata())
             camera.imageCapture.captureToLocation(Settings.photoCapturePath('jpg'))
         }
 
@@ -835,11 +867,8 @@ FocusScope {
                 captureView._camera2BracketBasePath = ""
                 captureView._camera2BracketBaseShutterNs = "0"
                 captureView._camera2BracketBaseIso = 0
-                captureBusy = false
-                if (captureView._camera2ViewfinderActive) {
-                    window.camera2CaptureBusy = false
-                }
-                if (!extensions.combineBracketImages(
+                captureView._camera2BracketMerging = true
+                if (!extensions.combineRawBracket(
                             combinedPath, sourcePaths,
                             Settings.mode.rawCaptureJpegQuality)) {
                     camera._failCamera2ImageCapture("Could not start bracket combine")
@@ -866,6 +895,8 @@ FocusScope {
         }
 
         function _failCamera2ImageCapture(error) {
+            captureView._camera2BracketMerging = false
+            extensions.discardRawBracket()
             console.warn("Camera2 image capture failed:", error)
             camera2CaptureErrorNotification.publishMessage(error)
             captureView._releaseCamera2BracketFocusHold()
@@ -899,10 +930,10 @@ FocusScope {
                     : 0
             var bracketShutter = bracketActive
                     ? captureView._camera2BracketShutterNs(bracketEv)
-                    : Settings.mode.rawCaptureShutterNs
+                    : captureView._captureExposureTime
             var bracketIso = bracketActive
                     ? captureView._camera2BracketBaseIso
-                    : Settings.mode.rawCaptureIso
+                    : captureView._captureExposureIso
             var manualCaptureExposure = Number(bracketIso) > 0 ||
                     Number(bracketShutter) > 0
             extensions.setNextCaptureBracketMetadata(
@@ -917,7 +948,7 @@ FocusScope {
                                                Settings.mode.rawCaptureJpegQuality,
                                                captureView._camera2AdvancedJpegRotation(),
                                                Settings.mode.rawCaptureExposure,
-                                               Settings.mode.rawCaptureScene,
+                                               exposureLogic.scene,
                                                bracketIso,
                                                bracketShutter,
                                                Settings.mode.rawCaptureAperture,
@@ -939,6 +970,9 @@ FocusScope {
                 return
             }
 
+            var metadata = captureView._captureMetadata()
+            extensions.setCaptureMetadata(metadata)
+            if (camera2Viewfinder) camera2Viewfinder.setCaptureMetadata(metadata)
             captureView._camera2CapturePending = false
             var captureStarted
             var bracketActive = captureView._camera2BracketQueue.length > 0
@@ -947,10 +981,10 @@ FocusScope {
                     : 0
             var bracketShutter = bracketActive
                     ? captureView._camera2BracketShutterNs(bracketEv)
-                    : Settings.mode.rawCaptureShutterNs
+                    : captureView._captureExposureTime
             var bracketIso = bracketActive
                     ? captureView._camera2BracketBaseIso
-                    : Settings.mode.rawCaptureIso
+                    : captureView._captureExposureIso
             var manualCaptureExposure = Number(bracketIso) > 0 ||
                     Number(bracketShutter) > 0
             extensions.setNextCaptureBracketMetadata(
@@ -1002,14 +1036,13 @@ FocusScope {
                 }
             } else {
                 console.log("capture-rotation qml format=raw path="
-                            + (captureView._warmRawReady && !bracketActive
-                               ? "warm" : "cold")
+                            + (captureView._warmRawReady ? "warm" : "cold")
                             + " advanced=" + Settings.global.advancedMode
                             + " captureOrientation=" + captureOrientation
                             + " rotation=" + camera2Rotation)
                 captureView._camera2CaptureRunning = true
                 // Warm preview RAW is a RAW16-only path; RAW10 must use the cold bridge capture.
-                if (captureView._warmRawReady && !bracketActive) {
+                if (captureView._warmRawReady) {
                     if (bracketActive
                             && typeof camera2Viewfinder.captureRawBracket === "function") {
                         var targetPaths = []
@@ -1036,11 +1069,8 @@ FocusScope {
                                     rawPaths, metadataPaths, bracketIso, exposures)
                         if (!captureStarted) {
                             captureView._clearWarmRawBracketRenderQueue()
-                            captureStarted = camera2Viewfinder.captureRawWithExposure(
-                                        captureView._captureSidecarPath(".warm.raw16"),
-                                        captureView._captureSidecarPath(".warm.json"),
-                                        bracketIso,
-                                        bracketShutter)
+                            _failCamera2ImageCapture("Could not start RAW bracket burst")
+                            return
                         }
                     } else if (bracketActive) {
                         captureStarted = camera2Viewfinder.captureRawWithExposure(
@@ -1102,7 +1132,7 @@ FocusScope {
                                             Settings.global.rawCaptureSaveFormat,
                                             Settings.mode.rawRenderEngine,
                                             Settings.mode.rawCaptureRawFormat,
-                                            Settings.mode.rawCaptureScene,
+                                            bracketActive ? "manual" : exposureLogic.scene,
                                             Settings.mode.rawCaptureColorTemperature,
                                             Settings.mode.rawCaptureColorTint,
                                             Settings.mode.rawCaptureProgressiveJpeg,
@@ -1140,6 +1170,30 @@ FocusScope {
                 return
             }
 
+            if (captureView._camera2ViewfinderActive && !exposureLogic.captureReady) {
+                exposureLogic.status = "Waiting for requested exposure before capture"
+                return
+            }
+            if (captureView._camera2BracketSteps().length > 0 &&
+                    !(captureView._camera2CurrentIso() > 0 && captureView._camera2CurrentShutterNs() > 0)) {
+                exposureLogic.status = "Waiting for exposure results before bracketing"
+                return
+            }
+            var pair = captureView._camera2BracketSteps()
+            if (pair.length > 0) {
+                var baseTime = captureView._camera2CurrentShutterNs()
+                var shortTime = Number(extensions.camera2BracketShutterNs(
+                            captureView._camera2ResolvedCameraId, String(baseTime), pair[1]))
+                if (!(shortTime > 0 && shortTime < baseTime)) {
+                    exposureLogic.status = "Shutter limit: no shorter bracket exposure available"
+                    return
+                }
+                if (shortTime > baseTime * Math.pow(2, pair[1]) + 1)
+                    exposureLogic.status = "Shutter limit: reduced bracket separation"
+            }
+            captureView._captureExposureIso = exposureLogic.appliedIso
+            captureView._captureExposureTime = String(Math.round(exposureLogic.appliedTime))
+            extensions.setCaptureCompensation(exposureLogic.compensationSteps)
             captureBusy = true
             captureView._camera2CaptureStartedMs = Date.now()
             console.log("capture-timing qml shutter t=0 format="
@@ -1327,6 +1381,11 @@ FocusScope {
             resolution: _pickResolution(CameraConfigs.supportedImageResolutions, Settings.aspectRatio)
 
             onImageSaved: {
+                if (!extensions.finalizeImageMetadata(path)) {
+                    camera.unlockAutoFocus()
+                    captureBusy = false
+                    return
+                }
                 // HDR case emits the exposed already on the first image, delay the feedback so user avoids
                 // moving the device until it's safe again.
                 if (camera.exposure.exposureMode == Camera.ExposureHDR) {
@@ -1442,7 +1501,8 @@ FocusScope {
     CameraExtensions {
         id: extensions
 
-        onRawImageCaptured: {
+        onRawBracketFrameReady: {
+            if (captureView._camera2BracketQueue.length !== 2) return
             if (captureView._camera2WarmRawBracketTargetPaths.length > 0) {
                 captureView._camera2BracketCapturedPaths =
                         captureView._camera2BracketCapturedPaths.concat([path])
@@ -1450,6 +1510,11 @@ FocusScope {
                 captureView._renderNextWarmRawBracketFrame()
                 return
             }
+            camera._finishCamera2ImageCapture(path, "application/octet-stream")
+        }
+
+        onRawImageCaptured: {
+            captureView._camera2BracketMerging = false
             camera._finishCamera2ImageCapture(path, mimeType)
         }
 
@@ -1482,6 +1547,7 @@ FocusScope {
         }
 
         onRawBracketReady: {
+            if (captureView._camera2BracketQueue.length !== 2) return
             captureView._camera2WarmRawBracketRawPaths = rawPaths
             captureView._camera2WarmRawBracketMetadataPaths = metadataPaths
             captureView._camera2WarmRawBracketRenderIndex = 0
@@ -1558,23 +1624,11 @@ FocusScope {
         value: parseFloat(Settings.mode.rawCaptureFocusDistance)
     }
 
-    Binding {
-        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
-        property: "exposureCompensation"
-        value: Settings.global.exposureCompensation
-    }
 
-    Binding {
-        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
-        property: "sensorSensitivity"
-        value: Settings.mode.rawCaptureIso
-    }
 
-    Binding {
-        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
-        property: "exposureTime"
-        value: Settings.mode.rawCaptureShutterNs
-    }
+
+
+
 
     Binding {
         target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
@@ -1604,8 +1658,22 @@ FocusScope {
 
     Binding {
         target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "focusPeaking"
+        value: Settings.global.advancedMode && Settings.global.experimentalExposureLayout
+               && Settings.global.captureMode === "image" && Settings.global.focusPeaking
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
+        property: "exposureZebras"
+        value: Settings.global.advancedMode && Settings.global.experimentalExposureLayout
+               && Settings.global.captureMode === "image" && Settings.global.exposureZebras
+    }
+
+    Binding {
+        target: captureView._camera2ViewfinderActive ? captureView.camera2Viewfinder : null
         property: "sceneMode"
-        value: Settings.mode.rawCaptureScene
+        value: exposureLogic.scene
     }
 
     Binding {

@@ -38,7 +38,7 @@ mkdir -p "$output_dir"
     "$project_dir/android/preview.c" \
     "$project_dir/android/jpeg_capture.c" \
     -I"$project_dir/android" \
-    -lcamera2ndk -lmediandk -landroid \
+    -lcamera2ndk -lmediandk -landroid -lm \
     -o "$output_dir/libsfoscamera2.so"
 
 echo "Built $output_dir/libsfoscamera2.so"

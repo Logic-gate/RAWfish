@@ -362,6 +362,15 @@ bool sfos_camera2_set_scene_mode(ACaptureRequest *request, int scene_mode)
                android_scene_mode);
 }
 
+static int capture_compensation_steps;
+static bool capture_compensation_set;
+
+SFOS_CAMERA2_EXPORT void sfos_camera2_set_capture_compensation(int steps)
+{
+    capture_compensation_steps = steps;
+    capture_compensation_set = true;
+}
+
 bool sfos_camera2_set_manual_sensor(const ACameraMetadata *metadata,
                                     ACaptureRequest *request,
                                     int32_t sensitivity,
@@ -371,6 +380,12 @@ bool sfos_camera2_set_manual_sensor(const ACameraMetadata *metadata,
         return false;
     }
     if (sensitivity == 0 && exposure_time_ns == 0) {
+        if (capture_compensation_set) {
+            int32_t range[2] = { 0, 0 };
+            sfos_camera2_copy_i32_array(metadata, ACAMERA_CONTROL_AE_COMPENSATION_RANGE, range, 2);
+            sfos_camera2_set_request_i32(request, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION,
+                sfos_camera2_clamp_i32(capture_compensation_steps, range[0], range[1]));
+        }
         return sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE,
                                            ACAMERA_CONTROL_AE_MODE_ON);
     }
@@ -381,19 +396,17 @@ bool sfos_camera2_set_manual_sensor(const ACameraMetadata *metadata,
             !sfos_camera2_metadata_has_i32(
                 metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
                 ACAMERA_SENSOR_EXPOSURE_TIME)) {
-        return sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE,
-                                           ACAMERA_CONTROL_AE_MODE_ON);
+        return false;
     }
-
-    if (sensitivity == 0) {
-        sensitivity = 100;
-    }
-    if (exposure_time_ns == 0) {
-        exposure_time_ns = 16666667;
+    // Partial-auto is resolved by the app. Never invent the other parameter.
+    if (sensitivity == 0 || exposure_time_ns == 0 ||
+            !sfos_camera2_metadata_has_u8(metadata, ACAMERA_REQUEST_AVAILABLE_CAPABILITIES,
+                ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR)) {
+        return false;
     }
 
     bool ok = sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_MODE,
-                                          ACAMERA_CONTROL_MODE_OFF) &&
+                                          ACAMERA_CONTROL_MODE_AUTO) &&
               sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE,
                                           ACAMERA_CONTROL_AE_MODE_OFF);
     if (sfos_camera2_metadata_has_i32(
@@ -566,4 +579,18 @@ bool sfos_camera2_set_zoom_ratio(const ACameraMetadata *metadata,
 
     return ACaptureRequest_setEntry_float(
         request, ACAMERA_CONTROL_ZOOM_RATIO, 1, &zoom_ratio) == ACAMERA_OK;
+}
+
+// Reading an optional metadata tag does not require the API 28 logical-camera
+// functions; older HALs simply return no entry.
+void sfos_camera2_active_physical_id(const ACameraMetadata *metadata, char *out, size_t capacity)
+{
+    if (!capacity) return;
+    out[0] = '\0';
+    ACameraMetadata_const_entry entry;
+    if (!metadata || ACameraMetadata_getConstEntry(metadata,
+            ACAMERA_LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID, &entry) != ACAMERA_OK || !entry.count) return;
+    const size_t count = entry.count < capacity ? entry.count : capacity - 1;
+    memcpy(out, entry.data.u8, count);
+    out[count] = '\0';
 }

@@ -113,6 +113,9 @@ enum sfos_camera2_raw_format {
  * sizeof(struct sfos_camera2_capture_options) so future versions can remain
  * ABI-compatible.
  */
+// Optional cold-capture EV setup; preserves the existing capture ABI.
+SFOS_CAMERA2_EXPORT void sfos_camera2_set_capture_compensation(int steps);
+
 struct sfos_camera2_capture_options {
     /**< ABI size guard. Must be sizeof(struct sfos_camera2_capture_options). */
     size_t size;

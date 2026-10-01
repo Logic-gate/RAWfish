@@ -54,7 +54,6 @@ CameraPage {
         iface: "com.rawfish.camera.ui"
         service: "com.rawfish.camera"
         path: "/"
-
         signal showViewfinder(variant args)
         onShowViewfinder: {
             page.returnToCaptureMode()

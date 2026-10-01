@@ -16,6 +16,7 @@
 #include <QStringList>
 #include <QVariantList>
 #include <QJsonObject>
+#include <QSize>
 
 class QTemporaryDir;
 
@@ -36,6 +37,10 @@ public:
     Q_INVOKABLE QStringList camera2RawSizeModel(const QString &cameraId,
                                                 const QString &rawFormat);
     Q_INVOKABLE QStringList camera2JpegSizeModel(const QString &cameraId);
+    Q_INVOKABLE QSize camera2PreferredPreviewSize(const QString &cameraId);
+    Q_INVOKABLE int camera2PreviewOrientation(const QString &cameraId, int fallback);
+    Q_INVOKABLE QVariantMap camera2SimpleModeOverrides(const QString &cameraId);
+    Q_INVOKABLE bool camera2PreviewMirror(const QString &cameraId, bool fallback);
     Q_INVOKABLE QStringList camera2CaptureFormatModel(const QString &cameraId);
     Q_INVOKABLE QStringList camera2LensModel(const QString &cameraId);
     Q_INVOKABLE QString camera2LensLabel(const QString &cameraId);
@@ -45,6 +50,9 @@ public:
     Q_INVOKABLE QVariantList camera2IsoModel(const QString &cameraId);
     Q_INVOKABLE QStringList camera2BracketModel(const QString &cameraId);
     Q_INVOKABLE QString camera2MaxShutterNs(const QString &cameraId);
+    Q_INVOKABLE QVariantMap camera2ExposureCapabilities(const QString &cameraId);
+    Q_INVOKABLE void setCaptureCompensation(int steps) { m_captureCompensation = steps; }
+    Q_INVOKABLE QString camera2BracketShutterNs(const QString &cameraId, const QString &base, int ev);
     Q_INVOKABLE QStringList camera2ShutterModel(const QString &cameraId);
     Q_INVOKABLE QStringList camera2FocusDistanceModel(const QString &cameraId);
     Q_INVOKABLE qreal camera2MaximumZoom(const QString &cameraId);
@@ -61,6 +69,8 @@ public:
     Q_INVOKABLE QString camera2CompatibilityLevel(const QString &cameraId);
     Q_INVOKABLE QString camera2CompatibilitySummary(const QString &cameraId);
     Q_INVOKABLE QString exportCamera2CompatibilityReport(const QString &cameraId);
+    Q_INVOKABLE bool finalizeImageMetadata(const QString &path);
+    Q_INVOKABLE void setCaptureMetadata(const QVariantMap &metadata);
     Q_INVOKABLE void setNextCaptureBracketMetadata(int index, int count,
                                                    qreal ev,
                                                    const QString &baseShutterNs);
@@ -102,14 +112,17 @@ public:
                                      int colorTemperature,
                                      int colorTint,
                                      bool progressiveJpeg);
-    Q_INVOKABLE bool combineBracketImages(const QString &targetPath,
+    Q_INVOKABLE void discardRawBracket();
+    Q_INVOKABLE bool combineRawBracket(const QString &targetPath,
                                           const QVariantList &sourcePaths,
                                           int jpegQuality);
 signals:
+    void rawBracketFrameReady(const QString &path);
     void rawImageCaptured(const QString &path, const QString &mimeType);
     void rawImageCaptureFailed(const QString &error);
 
 private:
+    int m_captureCompensation = 0;
     void finishRawImageCapture(int exitCode, QProcess::ExitStatus exitStatus);
     void finishRawImageRender();
     void finishBracketCombine();
@@ -121,7 +134,8 @@ private:
     bool saveJsonSidecar(const QString &targetPath, const QByteArray &json);
     bool copyJsonSidecar(const QString &sourcePath, const QString &targetPath);
     bool writeDngSidecar(const QString &metadataPath, const QString &targetPath);
-    void preserveRawCaptureFiles();
+    bool preserveRawCaptureFiles();
+    bool stageRawBracketFrame();
     void clearRawImageCapture();
     bool loadCamera2Capabilities(const QString &cameraId);
 
@@ -131,10 +145,13 @@ private:
         RawCaptureJpegCapturing
     };
 
+    QJsonObject m_captureMetadata;
     QScopedPointer<QProcess> m_rawCaptureProcess;
     QScopedPointer<QFutureWatcher<bool> > m_rawRenderWatcher;
     QScopedPointer<QFutureWatcher<bool> > m_bracketCombineWatcher;
     QScopedPointer<QTemporaryDir> m_rawCaptureDirectory;
+    QScopedPointer<QTemporaryDir> m_rawBracketDirectory;
+    bool m_rawBracketCancelled = false;
     RawCaptureStage m_rawCaptureStage = RawCaptureIdle;
     QString m_rawCaptureTargetPath;
     QString m_rawCapturePrefix;
