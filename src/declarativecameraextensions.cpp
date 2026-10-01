@@ -6,6 +6,7 @@
 #include "declarativecameraextensions.h"
 #include "previewsize.h"
 #include "exifutils.h"
+#include "dnglensshading.h"
 #include "imageadjustments.h"
 #include "rawbracket.h"
 
@@ -41,8 +42,17 @@
 
 #include <tiffio.h>
 
+// C++ counterpart of the QML DeviceInfo type used in
+// src/capture/CaptureView.qml. Provided by the "systemsettings" pkg-config
+// module already linked in src.pro.
+#include <deviceinfo.h>
+
 #ifndef TIFFTAG_NOISEPROFILE
 #define TIFFTAG_NOISEPROFILE 51041
+#endif
+
+#ifndef TIFFTAG_OPCODELIST2
+#define TIFFTAG_OPCODELIST2 51009
 #endif
 
 #include <algorithm>
@@ -51,6 +61,18 @@
 #include <initializer_list>
 #include <stdint.h>
 #include <utime.h>
+
+namespace {
+// TIFFTAG_NOISEPROFILE and TIFFTAG_OPCODELIST2 are DNG-private tags that this
+// build of libtiff does not register internally (unlike e.g. COLORMATRIX1 or
+// ASSHOTNEUTRAL, which libtiff already knows about). Without registering
+// them first, TIFFSetField() fails with "Unknown tag" and the tag is never
+// written.
+const TIFFFieldInfo dngPrivateFields[] = {
+    { TIFFTAG_NOISEPROFILE, TIFF_VARIABLE2, TIFF_VARIABLE2, TIFF_DOUBLE, FIELD_CUSTOM, 1, 1, const_cast<char *>("DNGNoiseProfile") },
+    { TIFFTAG_OPCODELIST2, TIFF_VARIABLE2, TIFF_VARIABLE2, TIFF_UNDEFINED, FIELD_CUSTOM, 1, 1, const_cast<char *>("DNGOpcodeList2") },
+};
+}
 
 DeclarativeCameraExtensions::DeclarativeCameraExtensions(QObject *parent)
     : QObject(parent)
@@ -2472,6 +2494,11 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
         return false;
     }
 
+    // Register DNG-private tags this libtiff build doesn't know about by
+    // default; see the comment on dngPrivateFields above.
+    TIFFMergeFieldInfo(tiff, dngPrivateFields,
+                        sizeof(dngPrivateFields) / sizeof(dngPrivateFields[0]));
+
     const QByteArray software = QByteArrayLiteral("RAWfish Camera2");
     const QByteArray uniqueModel = QStringLiteral("Sailfish Camera2 camera %1")
             .arg(metadata.value(QStringLiteral("camera_id")).toString())
@@ -2513,6 +2540,18 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
     TIFFSetField(tiff, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tiff, 0));
     TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     TIFFSetField(tiff, TIFFTAG_SOFTWARE, software.constData());
+    // Standard DNG/EXIF Make+Model, as any camera DNG carries. Used by
+    // tools/calibration/generate_lens_shading.py to name calibration files,
+    // and by DngLensShading::buildOpcodeList2() (see below) to look one up.
+    static const DeviceInfo deviceInfo;
+    const QByteArray make = deviceInfo.manufacturer().toUtf8();
+    const QByteArray model = deviceInfo.prettyName().toUtf8();
+    if (!make.isEmpty()) {
+        TIFFSetField(tiff, TIFFTAG_MAKE, make.constData());
+    }
+    if (!model.isEmpty()) {
+        TIFFSetField(tiff, TIFFTAG_MODEL, model.constData());
+    }
     TIFFSetField(tiff, TIFFTAG_CFAREPEATPATTERNDIM, cfaRepeatPatternDim);
     TIFFSetField(tiff, TIFFTAG_CFAPATTERN, 4, cfaPattern.constData());
     TIFFSetField(tiff, TIFFTAG_DNGVERSION, dngVersion);
@@ -2551,6 +2590,47 @@ bool writeTiffDng(const QString &metadataPath, const QString &dngPath,
             noiseProfile[index] = noiseProfileJson.at(index).toDouble();
         }
         TIFFSetField(tiff, TIFFTAG_NOISEPROFILE, 8, noiseProfile);
+    }
+
+    // Per-channel vignetting/color-shading correction, if a calibration
+    // exists for this device/camera/resolution (see
+    // tools/calibration/generate_lens_shading.py and
+    // src/calibration/README.md). A calibration in the user's device-profiles
+    // directory overrides the one bundled with the app, without rebuilding or
+    // repackaging RAWfish. If neither has a matching file, no correction is
+    // written.
+    QStringList calibrationDirs;
+    const QString profileDir = rawfishUserDeviceProfileDir();
+    if (!profileDir.isEmpty()) {
+        const QString userCalibrationDir =
+                QDir(profileDir).filePath(QStringLiteral("lens-shading"));
+        // RAWfish only reads from this directory; it is created (idempotent)
+        // so users can see where an override is expected.
+        QDir().mkpath(userCalibrationDir);
+        calibrationDirs.append(userCalibrationDir);
+    }
+    calibrationDirs.append(QStringLiteral(DEPLOYMENT_PATH "calibration"));
+    const QString cameraId = metadata.value(QStringLiteral("camera_id")).toString();
+    QByteArray opcodeList2;
+    for (const QString &calibrationDir : calibrationDirs) {
+        QString lensShadingWarning;
+        opcodeList2 = DngLensShading::buildOpcodeList2(
+                calibrationDir, QString::fromUtf8(model), cameraId, cfa, width, height,
+                &lensShadingWarning);
+        if (!opcodeList2.isEmpty()) {
+            break;
+        }
+        if (!lensShadingWarning.isEmpty()) {
+            // The file exists but is broken/mismatched: report it and stop,
+            // rather than silently falling through to the bundled default
+            // and masking what could be a mistake in the user's own override.
+            qWarning() << lensShadingWarning;
+            break;
+        }
+        // No warning and no data: no file at this path, try the next one.
+    }
+    if (!opcodeList2.isEmpty()) {
+        TIFFSetField(tiff, TIFFTAG_OPCODELIST2, opcodeList2.size(), opcodeList2.constData());
     }
 
     QByteArray row(rowStride, Qt::Uninitialized);

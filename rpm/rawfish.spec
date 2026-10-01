@@ -15,9 +15,9 @@ Source0:    %{name}-%{version}.tar.bz2
 # libsfoscamera2.so is an Android/Bionic library loaded through libhybris from
 # /usr/libexec/droid-hybris. Its NDK dependencies are provided by the Android
 # compatibility image, not by Sailfish RPM packages.
-%global __requires_exclude_from ^.*/usr/libexec/droid-hybris/system/lib64/libsfoscamera2\\.so$
-%global __provides_exclude_from ^.*/usr/libexec/droid-hybris/system/lib64/libsfoscamera2\\.so$
-%global __requires_exclude ^(libandroid\\.so.*|libcamera2ndk\\.so.*|libmediandk\\.so.*|libnativewindow\\.so.*|liblog\\.so.*|libdl_android\\.so.*)$
+%global __requires_exclude_from ^.*/usr/libexec/droid-hybris/system/lib64/libsfoscamera2\.so$
+%global __provides_exclude_from ^.*/usr/libexec/droid-hybris/system/lib64/libsfoscamera2\.so$
+%global __requires_exclude ^(libandroid\.so.*|libcamera2ndk\.so.*|libmediandk\.so.*|libnativewindow\.so.*|liblog\.so.*|libdl_android\.so.*)$
 
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Gui)
@@ -29,6 +29,7 @@ BuildRequires:  pkgconfig(Qt5Test)
 BuildRequires:  pkgconfig(Qt5Multimedia)
 BuildRequires:  pkgconfig(qdeclarative5-boostable)
 BuildRequires:  pkgconfig(libjpeg)
+BuildRequires:  pkgconfig(libtiff-4)
 BuildRequires:  pkgconfig(mlite5) >= 0.2.5
 BuildRequires:  pkgconfig(systemsettings) >= 0.2.13
 BuildRequires:  libtiff-devel
