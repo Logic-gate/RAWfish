@@ -676,8 +676,35 @@ void Camera2Preview::setFocusPoint(qreal x, qreal y)
     if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0) {
         return;
     }
-    m_focusX = x;
-    m_focusY = y;
+
+    // x/y are normalized coordinates within the displayed preview, which is
+    // rotated by m_orientation relative to the raw sensor frame (see the
+    // frame.transformed() rotation in parseFrames()). The native focus
+    // backend applies the AF region directly to the sensor active array, so
+    // the point must be rotated back into the raw sensor's coordinate space
+    // before being sent, or tapping the displayed image focuses the wrong
+    // spot (axes end up swapped/inverted).
+    qreal rawX = x;
+    qreal rawY = y;
+    switch (m_orientation) {
+    case 90:
+        rawX = y;
+        rawY = 1.0 - x;
+        break;
+    case 180:
+        rawX = 1.0 - x;
+        rawY = 1.0 - y;
+        break;
+    case 270:
+        rawX = 1.0 - y;
+        rawY = x;
+        break;
+    default:
+        break;
+    }
+
+    m_focusX = rawX;
+    m_focusY = rawY;
     if (m_process && m_process->state() == QProcess::Running) {
         m_process->write(QStringLiteral("focus %1 %2\n")
                          .arg(m_focusX, 0, 'f', 4)
