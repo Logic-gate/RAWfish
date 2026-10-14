@@ -21,6 +21,7 @@ SOURCES += rawbracket.cpp \
         capturemodel.cpp \
         declarativecameraextensions.cpp \
         exifutils.cpp \
+        dnglensshading.cpp \
         imageadjustments.cpp \
         declarativesettings.cpp \
         cameraconfigs.cpp
@@ -31,6 +32,7 @@ HEADERS += rawbracket.h rawbracketmath.h \
         capturemodel.h \
         declarativecameraextensions.h \
         exifutils.h \
+        dnglensshading.h \
         imageadjustments.h \
         declarativesettings.h \
         cameraconfigs.h
@@ -45,7 +47,8 @@ import.files = \
         gallery \
         qmldir \
         settings \
-        settings.qml
+        settings.qml \
+        calibration
 
 import.path = $$TARGETPATH
 target.path = $$TARGETPATH
