@@ -1,0 +1,26 @@
+build/
+sailfish/indraw
+# App build products (sfdk writes them in-tree).
+app/*.o
+app/moc_*
+app/indraw-app
+app/RPMS/
+RPMS/
+app/documentation.list
+app/Makefile
+*.part
+.sfdk/
+
+# Test captures and their sidecars/develops (data, not code; keep out of git).
+images/
+*.dng
+*.dng.xmp
+*.raw16
+*.raw16.json
+*.stack
+*.stack.json
+*.jpg
+indraw.log
+!scripts/*.dng
+# Python byte-code (scripts)
+__pycache__/

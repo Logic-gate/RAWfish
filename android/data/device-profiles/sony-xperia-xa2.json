@@ -1,0 +1,16 @@
+{
+  "name": "Sony Xperia XA2 (H3113, H3123, H3133, H4113, H4133)",
+  "_comment": "Shipped device profile: measured corrections for this camera module (docs/DEVICE-XA2.md). One camera module for every XA2 variant. Best with the Sony v16 vendor binaries (full 5984x3392 JPEG). A key in your own override-hal.json replaces the same key here.",
+  "match": { "make": "Sony", "models": ["Xperia XA2", "Xperia XA2 Dual", "H3113", "H3123", "H3133", "H4113", "H4133"], "raw": [5984, 3392] },
+  "notch": false,
+  "cameras": [
+    {
+      "camera_id": "0",
+      "overrides": {
+        "_hal_exposure_max_ns": 610665315,
+        "observed_shutter_max_ns": 610665315
+      },
+      "shading_file": "shading_sony-xperia-xa2_cam0_5984x3392.json"
+    }
+  ]
+}

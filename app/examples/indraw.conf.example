@@ -1,0 +1,117 @@
+; indraw.conf.example -- every key of ~/.config/com.indraw/indraw/indraw.conf,
+; with what it does, its values and its limits. Written by indRAW at each start
+; next to the real file (this copy is refreshed; the real file is never touched).
+;
+; How to edit the real file: CLOSE the app first (it rewrites the file when a
+; setting changes, and drops any comment), edit, reopen. A value out of its
+; range is clamped, a value not in its list falls back to the default: a typo
+; never stops the app. Keys are under [General].
+;
+; Settings NOT in this file (dconf, from Settings > Apps > indRAW):
+;   /apps/indraw/menu/startMode     last | simple | advanced   mode at start
+;   /apps/indraw/menu/startManual   true | false               start in manual focus + exposure
+;   /apps/indraw/menu/showScenes    true | false               scenes in the camera menu
+;   /apps/indraw/menu/previewColumns true | false              Vf noise / Vf sharpen columns
+;   output folders and file prefix (the [output] settings of the Settings page)
+
+[General]
+
+; --- The camera menu ------------------------------------------------------
+; Self-timer before a shot, seconds.            values: 0, 3, 10        default 0
+timerSec=0
+; Image proportion of the JPEG.                 values: 4:3, 16:9       default 4:3
+format=4:3
+; JPEG size, WIDTHxHEIGHT among the sizes the camera lists ("" = the largest).
+;                                               e.g. 4096x3072          default ""
+captureSize=
+; JPEG quality.                                 values: 80, 90, 95, 100 default 95
+jpegQuality=95
+; White-balance preset: 1 auto, 2 incandescent, 3 fluorescent, 4 warm fluorescent,
+; 5 daylight, 6 cloudy, 7 twilight, 8 shade (only those the camera lists).
+;                                               range 1..8              default 1
+awbMode=1
+; The photo's noise reduction: 0 default, 1 off, 2 fast, 3 high quality,
+; 4 minimal, 5 zero-shutter-lag.                range 0..5              default 1 (off)
+noiseIndex=1
+; The photo's sharpening: 0 default, 1 off, 2 fast, 3 high quality, 4 zsl.
+;                                               range 0..4              default 1 (off)
+edgeIndex=1
+; The viewfinder's own noise reduction / sharpening (same lists).
+;                                               ranges 0..5 / 0..4      defaults 2 (fast) / 1 (off)
+previewNoiseIndex=2
+previewEdgeIndex=1
+; Bracketing: off; 0 = three shots at the same exposure (x3); 1, 2, 3 = three
+; shots at -N, 0, +N stops.                     values: off, 0, 1, 2, 3 default off
+bracket=off
+; Rule-of-thirds grid.                          values: 0, 1            default 0
+gridOn=0
+; Mode last used (simple 0, advanced 1); read when "Mode at start" is "last".
+;                                               values: 0, 1            default 1
+advanced=1
+; Scene mode (Camera2 number; 0 off). Used only when the scenes are shown.
+;                                               range 0..18             default 0
+sceneMode=0
+; Flash.                                        values: off, auto, on, torch   default off
+flash=off
+; Σ stacks: 1 = the stack's own frames; 2 or 4 = that many times more frames,
+; divided out (less noise, 2x or 4x the time).  values: 1, 2, 4         default 1
+stackDenoise=1
+
+; --- Focus peaking and zebra (no longer in the menu) -----------------------
+; A change in % applied to the device's own thresholds (override-hal.json:
+; peak_edge, zebra_jpeg, zebra_raw). Negative = more peaking / zebra appears
+; earlier; positive = less / later.             values: -30, 0, 30      default 0
+peakTweak=0
+zebraTweak=0
+
+; --- White balance (the deck's ± and readouts) ------------------------------
+; Warmth shift from the white in force, in steps of 5 % on red/blue
+; (+ warmer).                                   range -20..20           default 0
+wbShift=0
+; Tint shift, % of green (- greener, + magenta). range -100..100        default 0
+tint=0
+; A white measured on a neutral object (the 2 s press on a readout): gains
+; "R,Ge,Go,B"; "" = none. At start it is kept only if "Keep previous manual WB"
+; is tapped.                                    e.g. 1.8868,1,1,1.4961  default ""
+wbFixed=
+; Size of one press of the warmth button, in 5 % units.   range 1..4   default 1
+fineWarmthStep=1
+; Size of one press of the tint button, in % of green.    range 1..25  default 5
+fineTintStep=5
+
+; --- Lens shading (vignetting) in the DNG -------------------------------------
+; When a measured calibration exists for the phone (one is shipped for the
+; Jolla Phone 2), each DNG gets a gain map composed for its own lens position
+; and light; these three set how it is applied (darktable applies it).
+; Pivot: 0 = only brighten the edges, 100 = only darken towards the darkest
+; corner; in between, both. darktable clips values pushed above white, so a
+; pivot keeps bright edges from clipping (raise the exposure in darktable).
+;                                               range 0..100            default 50
+shadingPivot=50
+; How much of the correction is applied.        range 0..100            default 100
+shadingStrength=100
+; The largest gain allowed (more amplifies the corners' noise).
+;                                               range 1..8              default 5
+shadingMaxGain=5
+
+; --- Σ (stacked long exposures) ------------------------------------------------
+; Target frame rate of the Σ viewfinder: one frame of the stack's exposure, as
+; short as this allows, the ISO raised to match (slower when the maximum ISO
+; is reached).                                  range 1..30 frames/s    default 10
+sigmaPreviewFps=10
+; Measured by the app after each stack (time the camera adds between
+; sub-frames); used for the time estimate under the wheel. Leave it.
+;                                               range 0..5000 ms        default 200
+frameLatencyMs=200
+
+; --- Kept for "Start in manual focus and exposure" --------------------------
+; Saved when the app goes to the background or closes; leave them.
+; Focus distance in diopters (1/metres; 0 = infinity).   range 0..10
+lastFocusD=1
+; ISO and shutter (nanoseconds; beyond 500000000 a Σ stack).
+lastIso=100
+lastShutterNs=16666667
+# The level's zero, recorded by holding "level" with the phone upright
+# (degrees; empty or absent = the sensor's own zero).
+# levelRoll0=0.00
+# levelPitch0=0.00

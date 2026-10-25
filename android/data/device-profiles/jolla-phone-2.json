@@ -1,0 +1,24 @@
+{
+  "name": "Jolla Phone 2 (JP2601)",
+  "_comment": "Shipped device profile: measured corrections for this camera module (docs/DEVICE-PROFILES.md). A key in your own override-hal.json replaces the same key here.",
+  "match": {
+    "make": "Jolla",
+    "models": [
+      "JP2601"
+    ],
+    "raw": [
+      4096,
+      3072
+    ]
+  },
+  "notch": true,
+  "cameras": [
+    {
+      "camera_id": "0",
+      "overrides": {
+        "_hal_exposure_max_ns": 16000000000,
+        "observed_shutter_max_ns": 500000000
+      }
+    }
+  ]
+}

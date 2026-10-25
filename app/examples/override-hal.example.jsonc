@@ -1,0 +1,104 @@
+// override-hal.example.jsonc -- every key of device-profiles/override-hal.json,
+// with what it does, its values and its limits.
+//
+// A REFERENCE, written by indRAW at each start next to the real file (this copy
+// is refreshed; the real file is never touched). With these // comments it is
+// not valid JSON and the engine never reads it: copy into override-hal.json
+// only the lines you need, WITHOUT the comments.
+//
+// The real file: one block per camera (camera_id); a field left out keeps the
+// built-in default. The engine checks the file at each open: an unknown key, a
+// value out of range or broken JSON and the WHOLE file is ignored (the log,
+// ~/.cache/com.indraw/indraw/indraw-ui.log, says why). See
+// docs/DEVICE-PROFILES.md. Keys starting with "_" (the starter's "_hal_..."
+// references) are never read.
+{
+  "cameras": [
+    {
+      // Camera2 id of the camera this block corrects: "0" main, "1" front,
+      // "2".. others ("indraw probe" lists them).
+      "camera_id": "0",
+
+      "overrides": {
+        // A pause before every capture, in ms (1..3000; absent: none). For a
+        // HAL whose lens is still moving when the photo is taken (the XA2).
+        // "capture_delay_ms": 500,
+        // Longest REAL single exposure, measured (the HAL may claim more: the
+        // JP2 claims 16 s and does 0.5 s). Beyond it the speed wheel offers
+        // Σ stacks.
+        // Nanoseconds, 1000000 (1 ms) .. 60000000000 (60 s). Default 500000000.
+        "observed_shutter_max_ns": 500000000,
+
+        // Shortest frame time the viewfinder may use (its fastest rate;
+        // 33333333 = 30 frames/s).
+        // Nanoseconds, 1000000 .. 1000000000. Default 33333333.
+        "min_frame_ns": 33333333,
+
+        // Focus peaking threshold: the edge strength from which a pixel is
+        // marked. Higher = only the stronger, sharper edges.
+        // 1 .. 255. Default 40.
+        "peak_edge": 40,
+
+        // Focus peaking line width, viewfinder pixels.
+        // 1 .. 6. Default 2.
+        "peak_width": 2,
+
+        // Zebra threshold on the viewfinder image (JPEG type): a channel at or
+        // above it is striped.
+        // 1 .. 255. Default 250.
+        "zebra_jpeg": 250,
+
+        // Zebra threshold on the RAW meter (raw type), in sensor DN (the
+        // JP2's white is 1023).
+        // 1 .. 1000. Default 992.
+        "zebra_raw": 992
+      },
+
+      // Measured points "real distance -> the lens value the HAL needs", so
+      // that manual focus distances are true. Usually filled by Focus cal. in
+      // the menu (it writes focus-calibration.json, merged over this).
+      // Up to 16 points; real_m in metres (> 0), hal_diopters >= 0; distances
+      // strictly increasing in diopters and lens values not decreasing, or the
+      // table is refused. Default: none (distances 1:1).
+      // Form (example values, not a phone's):
+      //   "focus_calibration": [ { "real_m": 0.5, "hal_diopters": 2.1 },
+      //                          { "real_m": 2.0, "hal_diopters": 0.55 } ],
+      "focus_calibration": [],
+
+      // The lens-shading (vignetting) map written into the DNGs: "measured"
+      // (default: the measured calibration for this phone when one is found
+      // -- shading_<maker>-<model>_cam<ID>_<W>x<H>.json in
+      // device-profiles/lens-shading/ or shipped with indRAW -- else the
+      // HAL's), "hal" (always the HAL's own map), "none" (no map).
+      "shading": "measured",
+
+      // Keys the HAL reads only when the SESSION is configured (the probe's
+      // session_keys: the JP2's MediaTek HDR mode 0x80030000, EIS...). Same
+      // entries as vendor_request without "on". Needs a HAL with session
+      // parameters (Android 9 base and up: the JP2; not the XA2, where the
+      // open reply says "session_params":"unsupported").
+      // "session_request": [
+      //   { "tag": "0x80030000", "type": "i32", "value": 1 }
+      // ],
+
+      // Experimental, for a port: build the photo and RAW requests from the
+      // HAL's preview template instead of its still template ("still" or
+      // absent: as always). The log's '# templates:' line shows what each
+      // template carries.
+      // "still_template": "preview",
+
+      // Chipset (vendor) request keys set at open, for experiments: tag = the
+      // key's hex id 0x8000xxxx (generated-hal.json lists them as
+      // vendor_request_keys); type = u8 | i32 | float | i64 (the key's own);
+      // value; on = preview | photo | all. Not interpreted by the engine; the
+      // log says whether the camera accepted each.
+      // Example, tested on the JP2 (docs/VENDOR-TESTS.md): MediaTek's
+      // multi-frame noise reduction of the photo in auto -- it runs only at
+      // high ISO (a little less grain, +0.4 s), nothing in good light; 0
+      // switches it off without removing the line:
+      //   "vendor_request": [ { "tag": "0x80040000", "type": "i32", "value": 255, "on": "photo" } ]
+      // Default: none.
+      "vendor_request": []
+    }
+  ]
+}
