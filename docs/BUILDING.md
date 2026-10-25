@@ -73,9 +73,11 @@ Nothing else from Android is needed: no Android Studio, no SDK, no emulator.
 ## 4. Get the source
 
 ```sh
-git clone https://github.com/Ric9k/indraw.git
+git clone https://github.com/Ric9k-TMO-FSO/indraw.git
 cd indraw
 ```
+(the repository is private for now: cloning needs access to it, and over
+HTTPS a fine-grained personal access token as the password)
 (or unzip a release archive and `cd` into it). Everything below runs from
 this directory.
 

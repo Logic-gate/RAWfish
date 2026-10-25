@@ -4,7 +4,7 @@ Summary:    indRAW camera engine (Camera2 bridge library + CLI)
 Version:    0.47.68
 Release:    1
 License:    BSD-3-Clause
-URL:        https://github.com/Ric9k/indraw
+URL:        https://github.com/Ric9k-TMO-FSO/indraw
 Source0:    %{name}-%{version}.tar.bz2
 # The Android-side library lives in droid-hybris' lib64 on 64-bit ports
 # (aarch64) and lib on 32-bit ones (armv7hl); the library itself is built for

@@ -3,7 +3,7 @@ Summary:    indRAW camera (viewfinder)
 Version:    0.20.53
 Release:    1
 License:    BSD-3-Clause
-URL:        https://github.com/Ric9k/indraw
+URL:        https://github.com/Ric9k-TMO-FSO/indraw
 Source0:    %{name}-%{version}.tar.bz2
 
 BuildRequires:  pkgconfig(sailfishapp)
