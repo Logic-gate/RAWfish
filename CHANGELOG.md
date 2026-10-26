@@ -5,13 +5,20 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.47.68)
+## Known issues (as of 0.47.69)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.47.69 — DNG thumbnails in the right colours under warm or LED light (patch 0263)
+- The gallery's DNG thumbnail used the sensor's daylight colour matrix
+  whatever the light: under a 3500 K LED it came out yellow-green while
+  darktable showed the scene neutral. It now follows the DNG standard:
+  the light's temperature from the white balance, the two matrices
+  interpolated at it. New photos only.
 
 ## app 0.20.53 (ui 177) — the version badge clear of the rounded corner; the roadmap rewritten (patch 0259)
 - The small "ui" badge moves a few millimetres left, out of the screen's

@@ -1848,9 +1848,49 @@ static int write_dng_preview(const char *dng_path, const dng_params_t *p)
      * to camera->XYZ, compose with XYZ(D65)->sRGB, scale each row so the
      * as-shot neutral comes out white, then fold the neutral in so the matrix
      * takes WHITE-BALANCED camera RGB (the pixel loop applies gr/gb and clips
-     * before it). Approximate (one matrix, no forward matrix) but far closer
-     * than the raw camera RGB. */
-    if (p->color1.have && p->have_neutral && p->neutral_num[0] > 0 && p->neutral_num[1] > 0 && p->neutral_num[2] > 0) {
+     * before it). The fallback when the forward matrices are missing: one
+     * matrix, right only near its own illuminant (D65). */
+    /* The DNG way first (0.47.69), when the HAL gives both colour and both
+     * forward matrices: the light's temperature from the as-shot neutral
+     * through the two ColorMatrices (ct_estimate), the ForwardMatrix
+     * interpolated at it (white-balanced camera RGB -> XYZ D50), then XYZ D50
+     * -> sRGB (Bradford-adapted). The one-matrix path below used the D65
+     * matrix alone whatever the light: under a 3500 K LED the thumbnail came
+     * out yellow-green where darktable shows the scene neutral. */
+    if (p->color1.have && p->color2.have && p->forward1.have && p->forward2.have && p->have_neutral &&
+        p->neutral_num[0] > 0 && p->neutral_num[1] > 0 && p->neutral_num[2] > 0 &&
+        ct_illuminant_k(p->illuminant1) > 0 && ct_illuminant_k(p->illuminant2) > 0) {
+        static const double xyzd50_to_srgb[9] = {
+            3.1338561, -1.6168667, -0.4906146, -0.9787684, 1.9161415, 0.0334540, 0.0719453, -0.2289914, 1.4052427 };
+        double c1[9], c2[9], f1[9], f2[9], fm[9], neutral[3], wn[3];
+        double t1 = ct_illuminant_k(p->illuminant1), t2 = ct_illuminant_k(p->illuminant2), duv;
+        int i, r, cc, kk, cct = 0;
+        for (i = 0; i < 9; ++i) {
+            c1[i] = p->color1.den[i] ? (double)p->color1.num[i] / p->color1.den[i] : 0;
+            c2[i] = p->color2.den[i] ? (double)p->color2.num[i] / p->color2.den[i] : 0;
+            f1[i] = p->forward1.den[i] ? (double)p->forward1.num[i] / p->forward1.den[i] : 0;
+            f2[i] = p->forward2.den[i] ? (double)p->forward2.num[i] / p->forward2.den[i] : 0;
+        }
+        for (i = 0; i < 3; ++i) neutral[i] = (double)p->neutral_num[i] / p->neutral_den[i];
+        if (ct_estimate(c1, t1, c2, t2, neutral, &cct, &duv) == 0 && cct > 0) {
+            ct_matrix_at(f1, t1, f2, t2, (double)cct, fm);
+            for (r = 0; r < 3; ++r)
+                for (cc = 0; cc < 3; ++cc) {
+                    double a = 0;
+                    for (kk = 0; kk < 3; ++kk) a += xyzd50_to_srgb[r * 3 + kk] * fm[kk * 3 + cc];
+                    cam2srgb[r * 3 + cc] = a;
+                }
+            /* white-balanced white (1,1,1) -> exactly white */
+            for (r = 0; r < 3; ++r) wn[r] = cam2srgb[r * 3] + cam2srgb[r * 3 + 1] + cam2srgb[r * 3 + 2];
+            if (wn[0] > 1e-6 && wn[1] > 1e-6 && wn[2] > 1e-6) {
+                for (r = 0; r < 3; ++r) for (cc = 0; cc < 3; ++cc) cam2srgb[r * 3 + cc] /= wn[r];
+                gr = neutral[1] / neutral[0];        /* the white balance, applied below */
+                gb = neutral[1] / neutral[2];
+                have_c2s = 1;
+            }
+        }
+    }
+    if (!have_c2s && p->color1.have && p->have_neutral && p->neutral_num[0] > 0 && p->neutral_num[1] > 0 && p->neutral_num[2] > 0) {
         double cm[9], inv[9], neutral[3], wn[3];
         int i, r, cc, kk;
         static const double xyz2srgb[9] = {

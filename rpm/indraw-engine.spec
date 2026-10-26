@@ -1,7 +1,7 @@
 Name:       indraw-engine
 Summary:    indRAW camera engine (Camera2 bridge library + CLI)
 # Keep in step with indraw_version.h (scripts/build-engine-rpm.sh checks).
-Version:    0.47.68
+Version:    0.47.69
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Ric9k-TMO-FSO/indraw

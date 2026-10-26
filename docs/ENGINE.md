@@ -272,3 +272,14 @@ padded rows, odd widths, truncated planes). On an x86 host at -O2 it is
 1.3x faster than the per-pixel loop (the compiler already hoisted much of
 the per-pixel cost); the gain on the phones' ARM cores is to be measured,
 not assumed.
+
+## The DNG thumbnail's colour (0.47.69)
+
+The thumbnail written next to each DNG is rendered the way a raw converter
+reads the file: the light's temperature from the as-shot neutral through
+ColorMatrix1/2 (ct_estimate, the same as the viewfinder's kelvin), the
+ForwardMatrix1/2 interpolated at it (white-balanced camera RGB -> XYZ D50),
+then XYZ D50 -> sRGB (Bradford). Until 0.47.68 it used ColorMatrix1 (D65)
+alone, right in daylight only: under a 3500 K LED a cream wall came out
+B/G 0.23 (yellow-green), now 0.65 -- as darktable shows it. Without the
+forward matrices the one-matrix path remains as a fallback.
