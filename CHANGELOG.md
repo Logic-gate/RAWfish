@@ -5,13 +5,19 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.47.73)
+## Known issues (as of 0.47.74)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.47.74 — app 0.20.57 (ui 181) — the burst gap withdrawn (patch 0270)
+- The x3 burst's "Gap" (0.47.73) is withdrawn: the JP2's camera ignores
+  the frame duration on the burst's frames, the three always came 34-41 ms
+  apart whatever the setting. Measured and recorded in the docs; further
+  tries are in the roadmap.
 
 ## 0.47.73 — app 0.20.56 (ui 180) — a gap between the frames of the x3 burst (patch 0269)
 - With Bracket x3 in JPEG, a new "Gap" column spaces the three frames:

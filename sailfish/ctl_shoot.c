@@ -42,9 +42,7 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
     /* x3 in JPEG: one burst; the pair goes along when held. */
     if (req->bracket == 0 && !req->raw) {
         n = snprintf(lines[0], CTL_SHOOT_LINE, "burst %s n=3%s", req->name, q);
-        if (req->gap > 0 && n < CTL_SHOOT_LINE)       /* the sensor spaces the frames */
-            n += snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " gap=%.3f", req->gap);
-        if (xs->fixed_pair && n < CTL_SHOOT_LINE) snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " exp=%.7f iso=%d", ns / 1e9, iso);
+        if (xs->fixed_pair) snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " exp=%.7f iso=%d", ns / 1e9, iso);
         return 1;
     }
     /* Bracket: three real exposures around the pair (x3 in raw: three the same). */

@@ -224,7 +224,7 @@ static int view_command(const char *line)
     return 1;
 }
 
-/* "sh name=N type=jpg|raw q=Q noise=M edge=M bracket=off|0|1|2|3 denoise_sigma=D [gap=S]":
+/* "sh name=N type=jpg|raw q=Q noise=M edge=M bracket=off|0|1|2|3 denoise_sigma=D":
  * a press of the shutter (the self-timer is the interface's). The capture
  * lines go to the queue the CLI drains. */
 static int shoot_command(const char *line)
@@ -244,7 +244,6 @@ static int shoot_command(const char *line)
     /* denoise_sigma: the Σ stack's poses per frame (renamed from 'denoise',
      * which read like a noise-reduction mode; the old name still accepted) */
     if ((v = field(line, "denoise_sigma")) || (v = field(line, "denoise"))) r.denoise = atoi(v);
-    if ((v = field(line, "gap"))) r.gap = atof(v);             /* the x3 burst's spacing, s */
     if (!c.exp || !c.foc) return 1;
     ctl_exp_state(c.exp, &xs);
     ctl_focus_state(c.foc, &fs);

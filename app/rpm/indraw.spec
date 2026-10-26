@@ -1,6 +1,6 @@
 Name:       indraw-app
 Summary:    indRAW camera (viewfinder)
-Version:    0.20.56
+Version:    0.20.57
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Ric9k-TMO-FSO/indraw
@@ -29,7 +29,7 @@ Requires:       nemo-qml-plugin-configuration-qt5
 Requires:       libkeepalive
 # The engine (library + CLI) is its own package, built by
 # scripts/build-engine-rpm.sh at the top of the repository.
-Requires:       indraw-engine >= 0.47.73
+Requires:       indraw-engine >= 0.47.71
 
 %description
 indRAW camera application: the live viewfinder backed by the indraw engine.

@@ -43,6 +43,14 @@ Each item says why, so it can be picked up later without re-deriving it.
   meant for frames that will be reprocessed; without that path they only
   mean what the HAL decides (fast or high quality).
 
+- **A gap between the x3 burst's frames** (asked 26 Oct): spacing them by
+  SENSOR_FRAME_DURATION does nothing on the JP2 (VENDOR-TESTS: 34-41 ms
+  whatever the gap; withdrawn in 0.47.74). To continue if wanted: read the
+  frame duration each frame's result reports; try the burst with the
+  preview paused, then with CONTROL_MODE OFF; else captures sent one by one
+  with a pause (any interval, a few tens of ms of precision, each with the
+  usual 0.35 s delay).
+
 ### To find out
 - **The viewfinder's "maze" at high ISO** (JP2; RAWfish shows the same):
   after about thirty seconds on a still scene, maze-like patterns and an

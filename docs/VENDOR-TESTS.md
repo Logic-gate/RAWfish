@@ -133,6 +133,29 @@ with what we know. Not to be retried blindly. An HDR of indRAW's own
 possible chantier, a different one. Remove the HDR entries from the
 override after testing: they do nothing.
 
+### Burst frame spacing by SENSOR_FRAME_DURATION: ignored (26 Oct 2026)
+
+Tried in 0.47.73 (withdrawn in 0.47.74): the x3 burst (one capture() call
+with three still requests) with SENSOR_FRAME_DURATION set on the requests
+to space the frames, exposure in auto (the live pair frozen) and in
+manual. The spacing measured from the images' timestamps:
+
+| Gap asked | exposure | spacing measured |
+|---|---|---|
+| none | 30 ms | 33.7 ms |
+| 0.1 s | 40 ms | 41.0 ms |
+| 0.2 s | 40 ms | 41.0 ms |
+| 0.3 s | 30 ms | 34.0 ms |
+| 0.5 s | 30 ms | 34.0 ms |
+| 0.5 s (manual, 1/200 s) | 5 ms | 33.7 ms |
+| 0.1 s (manual, 1/200 s) | 5 ms | 33.7 ms |
+
+The frames always follow at the sensor's pace (the exposure or 1/30 s):
+the HAL ignores the requested frame duration on these captures. Not
+tried: the frame duration the HAL reports applied in each frame's result;
+the preview's repeating request paused during the burst; CONTROL_MODE OFF
+on the burst's requests. See ROADMAP.
+
 ## Xperia XA2 (Sony / Qualcomm), main camera
 
 - Only three vendor request keys (`0x801b0000`, `0x801b0001`,

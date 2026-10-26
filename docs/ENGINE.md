@@ -179,7 +179,7 @@ as events.
 | `vw tap U V` | a tap at a display-window point: the controller maps it to the viewfinder frame and runs the focus sequence (as `fc ref`) |
 | `vw clear` / `vw state` | the reference point forgotten / the state once |
 
-| `sh name=N type=jpg\|raw q=Q noise=M edge=M bracket=off\|0\|1\|2\|3 denoise_sigma=D [gap=S]` | a press of the shutter: the controller turns it into the engine's `jpeg` / `raw` / `stack` / `burst` lines (the held pair, the manual distance, a stack for a Σ speed, a burst or three shots for a bracket), run as if typed; the self-timer is the interface's |
+| `sh name=N type=jpg\|raw q=Q noise=M edge=M bracket=off\|0\|1\|2\|3 denoise_sigma=D` | a press of the shutter: the controller turns it into the engine's `jpeg` / `raw` / `stack` / `burst` lines (the held pair, the manual distance, a stack for a Σ speed, a burst or three shots for a bracket), run as if typed; the self-timer is the interface's |
 
 Event: `vwstate zoom= loupe= view=x,y,w,h ref=has,u,v` -- the view window to
 show (array-normalised) and the reference point in display-window

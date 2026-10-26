@@ -1473,7 +1473,6 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
  * N JPEGs (2..8, default 3) back to back at one exposure (the given manual
  * pair, or the live automatic one frozen). Each file gets its own name, the
  * timestamp's milliseconds advanced by one per frame. */
-static int64_t g_burst_gap_ns;   /* parsed by cmd_burst, handed to the engine */
 static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
 {
     char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
@@ -1488,7 +1487,6 @@ static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
         else if (!strncmp(tok, "q=", 2)) quality = atoi(tok + 2);
         else if (!strncmp(tok, "exp=", 4)) { if (!parse_exposure(tok + 4, &exposure_ns)) { emit("{\"ok\":false,\"error\":\"burst: bad exp\"}"); return 1; } }
         else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
-        else if (!strncmp(tok, "gap=", 4)) { if (!parse_exposure(tok + 4, &g_burst_gap_ns)) { emit("{\"ok\":false,\"error\":\"burst: bad gap\"}"); return 1; } }
         else if (lookup(k_noise, tok, &nr) || lookup(k_edge, tok, &edge)) continue;
         else { emit("{\"ok\":false,\"error\":\"burst: unknown option\"}"); return 1; }
     }
@@ -1504,13 +1502,7 @@ static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
         paths[k] = files[k];
     }
     if (!bf) { emit("{\"ok\":false,\"error\":\"burst: bridge has no indraw_burst\"}"); return 1; }
-    {   /* the frame spacing, for this burst only */
-        typedef int (*gap_fn)(int64_t);
-        gap_fn sg = (gap_fn)a_dlsym(g_bridge_for_vendor, "indraw_set_burst_gap");
-        if (sg) sg(g_burst_gap_ns);
-        g_burst_gap_ns = 0;
-    }
-    if (bf(paths, n, quality, nr, edge, exposure_ns, iso, timeout_for(exposure_ns) + 600 * n, out, OUT_SIZE)) { emit(out); return 1; }
+    if (bf(paths, n, quality, nr, edge, exposure_ns, iso, timeout_for(exposure_ns), out, OUT_SIZE)) { emit(out); return 1; }
     emit(out);
     return 0;
 }

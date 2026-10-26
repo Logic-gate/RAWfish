@@ -57,7 +57,6 @@ Item {
     // Bracketing: "off", "0" (three shots in a row at the same exposure, for a
     // short moment), or "1".."3" (three shots at -N, 0, +N stops).
     property string bracket: "off"
-    property int burstGapMs: 0                     // x3 burst: frame spacing (0 = fastest)
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
@@ -145,7 +144,6 @@ Item {
         previewNoiseIndex = num("previewNoiseIndex", 2, 0, noiseModes.length - 1)
         previewEdgeIndex = num("previewEdgeIndex", 1, 0, edgeModes.length - 1)
         bracket = pick("bracket", "off", ["off", "0", "1", "2", "3"])
-        burstGapMs = Number(pick("burstGapMs", "0", ["0", "100", "200", "300", "500"]))
         gridOn = num("gridOn", 0, 0, 1) === 1
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)
@@ -427,16 +425,6 @@ Item {
                                               : qsTr("3 frames, ±%1 EV").arg(v) }
                 shortFor: function(v) { return v === "off" ? qsTr("off") : v === "0" ? "x3" : "±" + v }
                 onPicked: { menu.bracket = value; menu.save("bracket", value) } }
-            // The x3 burst's spacing (ui 180): the sensor itself spaces the three
-            // frames (their frame duration), up to what the HAL delivers (0.5 s
-            // on the JP2). Only with x3 in JPEG. A frame cannot be shorter than
-            // its exposure: with a pose longer than the gap, the frames follow
-            // each other at the pose's own pace.
-            MenuColumn { visible: menu.advanced && menu.bracket === "0"; width: band.colW; header: header
-                caption: qsTr("Gap"); values: [0, 100, 200, 300, 500]; current: menu.burstGapMs
-                labelFor: function(v) { return v === 0 ? qsTr("The 3 frames as fast as possible") : qsTr("The 3 frames %1 s apart").arg(v / 1000) }
-                shortFor: function(v) { return v === 0 ? qsTr("fast") : (v / 1000) + "s" }
-                onPicked: { menu.burstGapMs = value; menu.save("burstGapMs", value) } }
             // The level's zero: "zeroed" once recorded (a long press on "level"
             // with the phone upright), "factory" clears it.
             MenuColumn { width: band.colW; header: header

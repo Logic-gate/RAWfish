@@ -611,7 +611,6 @@ static struct {
     int n_session_req;
     int session_params_used;                /* -1 unsupported, 0 none, 1 applied */
     int trigger_pending;                    /* an AF scan / AE precapture was started */
-    int64_t burst_gap_ns;                   /* the next burst's frame spacing (0 = fastest) */
     int af_zoom_on;                         /* our zoom AF region is on the requests */
     int spot_on;                            /* the meter measures the tap's spot */
     float spot_hw, spot_hh;                 /* the spot half-size, sensor-normalised (follows the loupe) */
@@ -4762,7 +4761,6 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
     struct timespec dl;
     camera_status_t st;
     jw_t w;
-    int64_t gap_ns = 0, ts_first = 0, ts_last = 0, ts;
     if (!paths || n < 2 || n > 8 || !out || !out_size || quality < 1 || quality > 100) return IR_EARG;
     if (!g.session) return fail(out, out_size, IR_ESTATE, "burst", "camera not open", 0);
     if (exposure_ns <= 0) {                        /* automatic: freeze the live pair */
@@ -4773,19 +4771,8 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
             return fail(out, out_size, IR_ESTATE, "burst", "no live exposure yet", 0);
     }
     if (set_exposure(g.still_request, exposure_ns, iso, out, out_size)) return IR_EARG;
-    pthread_mutex_lock(&g.lock);
-    gap_ns = g.burst_gap_ns;
-    g.burst_gap_ns = 0;                            /* once                          */
-    pthread_mutex_unlock(&g.lock);
-    if (gap_ns > 0) {                              /* the sensor spaces the frames  */
-        ACameraMetadata_const_entry e;
-        int64_t cap = g.override_shutter_max_ns;
-        if (cap <= 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_MAX_FRAME_DURATION, &e) == ACAMERA_OK && e.count)
-            cap = e.data.i64[0];
-        if (cap > 0 && gap_ns > cap) gap_ns = cap;
-        if (gap_ns < exposure_ns) gap_ns = exposure_ns;
-        ACaptureRequest_setEntry_i64(g.still_request, ACAMERA_SENSOR_FRAME_DURATION, 1, &gap_ns);
-    }
+    u8 = (uint8_t)quality;
+    ACaptureRequest_setEntry_u8(g.still_request, ACAMERA_JPEG_QUALITY, 1, &u8);
     {
         int32_t jo = photo_orientation_deg();      /* upright on the ground */
         int use_nr = nr >= 0 ? nr : g.tpl_nr;       /* the shot's own, or the template's */
@@ -4828,7 +4815,6 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
         }
         pthread_mutex_unlock(&g.lock);
         if (!img) break;                           /* timeout or failure            */
-        if (AImage_getTimestamp(img, &ts) == AMEDIA_OK) { if (!ts_first) ts_first = ts; ts_last = ts; }
         if (AImage_getPlaneData(img, 0, &data, &dlen) == AMEDIA_OK && dlen > 4 && data[0] == 0xFF && data[1] == 0xD8) {
             size_t l = (size_t)dlen;
             while (l >= 2 && !(data[l - 2] == 0xFF && data[l - 1] == 0xD9)) --l;   /* trim padding */
@@ -4845,10 +4831,6 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
     g.jpeg_qn = 0;
     pthread_mutex_unlock(&g.lock);
     set_exposure(g.still_request, 0, 0, out, out_size);   /* the next photo starts in auto */
-    if (gap_ns > 0) {                              /* the next photo: no imposed spacing */
-        int64_t fd = 0;
-        ACaptureRequest_setEntry_i64(g.still_request, ACAMERA_SENSOR_FRAME_DURATION, 1, &fd);
-    }
     if (got > 0) emit_event("captured kind=burst\n");
     /* Write them (Exif with the frozen pair, the same for all). */
     for (k = 0; k < got; ++k) {
@@ -4866,25 +4848,10 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
     }
     if (got < n && rc == IR_OK) rc = IR_ECAPTURE;
     jw_init(&w, out, out_size);
-    jw_add(&w, "{\"ok\":%s,\"burst\":%d,\"taken\":%d,\"exposure_ns\":%lld,\"iso\":%d,\"gap_ms\":%.1f,\"spacing_ms\":%.1f,\"ms\":{\"capture\":%.1f,\"total\":%.1f}%s}",
+    jw_add(&w, "{\"ok\":%s,\"burst\":%d,\"taken\":%d,\"exposure_ns\":%lld,\"iso\":%d,\"ms\":{\"capture\":%.1f,\"total\":%.1f}%s}",
            got == n && rc == IR_OK ? "true" : "false", n, got, (long long)exposure_ns, iso,
-           gap_ns / 1e6, got > 1 ? (ts_last - ts_first) / 1e6 / (got - 1) : 0.0,
            t_cap - t0, now_ms() - t0, err ? ",\"error\":\"write failed\"" : "");
     return rc;
-}
-
-/* The spacing of the next burst's frames, in ns (0: as fast as the sensor
- * goes). Set by the CLI just before indraw_burst; used once. The burst's
- * requests then carry it as their SENSOR_FRAME_DURATION, so the sensor
- * itself spaces the frames (exact); it is clamped to the frame duration
- * the HAL really delivers (the observed shutter ceiling, 0.5 s on the JP2,
- * else the HAL's maximum), and is never shorter than the exposure. */
-IR_API int indraw_set_burst_gap(int64_t gap_ns)
-{
-    pthread_mutex_lock(&g.lock);
-    g.burst_gap_ns = gap_ns > 0 ? gap_ns : 0;
-    pthread_mutex_unlock(&g.lock);
-    return IR_OK;
 }
 
 /* The photo entry points, wrapped so the exposure meter is paused (and any
