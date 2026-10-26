@@ -3,21 +3,20 @@
 
 ## Human description
 
-RAWfish deconstructed, reorganized, cleaned, reconstructed.
-Transitional version meant to be merged/repalce RAWfish, once all functions and UI are brought in.
-Coded by IA under the supervision of and at the request of the developers.
+indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.
+Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.
+Coded by IA under the supervision of and at the request of the creators.
 Supervision and all the tests made by humans.
+No human code review yet. Audits by other sessions and other AI models.
 
 ### Architecture
-Camera CLI engine + UI for SailfishOS.
+Camera CLI engine + Silica UI for SailfishOS.
 Built on Android's Camera2 through libhybris.
 -Command line engine (talks to the HAL) (docs/ENGINE.md)
--Controller (claculations)
+-Controller (clculations)
 -UI (user requests, feedback, settings) (docs/USER-GUIDE.md)
 -OS Settings page
 -config files (txt+json)
-
-Sailfish/indraw (glibc) -> libhybris -> libindraw.so (bionic, NDK Camera2) -> HAL
 
 ### Features
 JPG
@@ -46,12 +45,12 @@ No network/radio access
 Currently tested on the JP2 (more) and the XA2 (less).
 Testing are also being conducted on Xperia 10 IV Community port.
 
-Beta version. We still have some bug hunting work + Ui/functions improvements.
+Beta version. We still have some bug hunting work + Ui/functions improvements to do.
 
 indRAW is a rebuild based on RAWfish, itself a fork of Jolla Camera.
-Nothing would have been possible without Mad_Dev's big work on discovering how to make raw pics with the Jolla Phone 2 and it's IMX766 sensor.
+Nothing would have been possible without Mad_Dev's big work on how to make raw pics with the Jolla Phone 2 and it's IMX766 sensor.
 
-## References
+## References, credits
 https://github.com/sailfishos/jolla-camera
 https://github.com/Logic-gate/RAWfish
 
