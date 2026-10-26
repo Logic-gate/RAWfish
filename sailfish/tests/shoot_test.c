@@ -41,6 +41,10 @@ int main(void)
     xs.shutter_ns = 16666667; r.denoise = 1; r.bracket = 0; r.raw = 0; fs.mode = CTL_FOCUS_ONCE;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && !strcmp(lines[0], "burst photo n=3 q=95 off_noise fast_edge exp=0.0166667 iso=400"), "x3 JPEG: a burst, the pair along");
+    r.gap = 0.2;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && !strcmp(lines[0], "burst photo n=3 q=95 off_noise fast_edge gap=0.200 exp=0.0166667 iso=400"), "x3 JPEG with a gap: gap=0.200 on the burst");
+    r.gap = 0;
     r.raw = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 3 && !strcmp(lines[0], lines[2]) && !strncmp(lines[1], "raw photo exp=0.0166667", 23), "x3 raw: three shots at the same exposure");
@@ -49,6 +53,6 @@ int main(void)
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 3 && strstr(lines[0], "exp=0.0500000") && strstr(lines[1], "exp=0.2000000") && strstr(lines[2], "exp=0.5000000"),
           "bracket +-2: 1/20, 1/5, and the ceiling 1/2");
-    printf(fails ? "shoot: FAILED (%d)\n" : "shoot: OK (6 rules)\n", fails);
+    printf(fails ? "shoot: FAILED (%d)\n" : "shoot: OK (7 rules)\n", fails);
     return fails ? 1 : 0;
 }

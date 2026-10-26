@@ -32,6 +32,7 @@ typedef struct {
     char noise[24], edge[24];   /* the photo's processing modes (jpeg), "" = none */
     int bracket;                /* -1 off, 0 = x3 same exposure, 1..3 stops */
     int denoise;                /* stacks: 1, 2 or 4 */
+    double gap;                 /* x3 burst: frame spacing, s (0 = fastest) */
 } ctl_shoot_req_t;
 
 #define CTL_SHOOT_MAX_LINES 3

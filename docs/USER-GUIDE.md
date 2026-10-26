@@ -185,6 +185,7 @@ columns or swipe up to close.
 | Noise, Sharpen | the camera's noise reduction and sharpening **for the photos** |
 | Vf noise, Vf sharpen | the same for the **viewfinder** only (shown when enabled in Settings); by default light noise reduction and no sharpening, which keeps a high-ISO preview clean |
 | Bracket | off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
+| Gap | with Bracket x3 in JPEG: the three frames as fast as possible, or 0.1, 0.2, 0.3 or 0.5 s apart -- the sensor itself spaces them, exactly (at most what the camera delivers: 0.5 s on the JP2; with a pose longer than the gap, the frames follow each other at the pose's pace) |
 | Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. In automatic exposure the camera measures with a pre-flash first, so the shot takes half a second to a second longer. When the exposure is held (a wheel touched, or a circle in automatic) "auto" cannot judge and does not fire; "on" always fires. No flash in a burst. |
 | Grid | rule-of-thirds lines |
 | Σ denoise | for Σ (stacked) shots only: 2x or 4x the frames for less noise, 2x or 4x the time |

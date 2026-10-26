@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "179"                             // shown in the deck
+    readonly property string uiVersion: "180"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > indRAW), applied to the engine
@@ -790,6 +790,7 @@ ApplicationWindow {
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
                                        + " bracket=" + settingsMenu.bracket
+                                       + (settingsMenu.bracket === "0" && settingsMenu.burstGapMs > 0 ? " gap=" + (settingsMenu.burstGapMs / 1000) : "")
                                        + " denoise_sigma=" + settingsMenu.stackDenoise)
             }
 
