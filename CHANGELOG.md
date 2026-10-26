@@ -13,6 +13,12 @@ Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## build — the packages keep their specs' versions after a git tag (patch 0267)
+- With a release tag in the history, sfdk renamed both packages after the
+  tag (indraw-app-0.47.69+main...), and the app could not find the
+  engine version it requires. The build scripts now tell sfdk to keep the
+  specs' versions.
+
 ## app 0.20.55 (ui 179) — the ZSL noise and sharpening modes leave the menu (patch 0266)
 - The zero-shutter-lag modes are no longer offered in the Noise and
   Sharpen columns: they belong to a capture path indRAW does not use, and

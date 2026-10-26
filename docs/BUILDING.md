@@ -196,3 +196,13 @@ docs/         USER-GUIDE.md, ENGINE.md (command reference), UI-NOTES.md (what th
 indraw_version.h   the engine's version, shared by the library, the tool and the spec
 patches/      the project's history as a patch series (not needed to build)
 ```
+
+## Versions and git tags
+
+The packages carry the versions written in their specs (the engine's in
+rpm/indraw-engine.spec, the app's in app/rpm/indraw.spec; they differ).
+sfdk would otherwise derive them from a git tag found in the history
+(`git describe`) -- after a release tag such as v0.47.69 both packages
+came out as 0.47.69+main.<date>.<hash>, and the app's "requires engine >="
+could not be met. The build scripts therefore run `sfdk -c no-fix-version
+build`. Building by hand: add the same option.

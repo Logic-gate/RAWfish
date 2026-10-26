@@ -25,6 +25,6 @@ case "$target" in
 esac
 ./scripts/build-android.sh                 # build/android/libindraw.so (prebuilt for the RPM)
 "$sfdk" build-init
-"$sfdk" build
+"$sfdk" -c no-fix-version build
 echo "indraw-engine $ver:"
 ls -1 RPMS/indraw-engine-*.rpm

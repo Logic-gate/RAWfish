@@ -29,6 +29,11 @@ for a in "$@"; do
 done
 : "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to the Android NDK directory (see docs/BUILDING.md)}"
 sfdk=${SFDK:-sfdk}
+# Every sfdk build runs with 'no-fix-version': with a git tag in the history
+# (a release, v0.47.69...) sfdk would otherwise replace BOTH specs' versions
+# by the tag's plus a git suffix (indraw-app-0.47.69+main.2026...), the app
+# would then require an engine version that no package carries. The
+# versions are the specs' own (the engine's and the app's differ).
 if [ -n "$all" ]; then
     previous=$("$sfdk" config --show 2>/dev/null | sed -n 's/^target = //p')
     targets=${INDRAW_TARGETS:-$("$sfdk" tools list 2>/dev/null | grep -o 'SailfishOS-[0-9.]*-\(aarch64\|armv7hl\)' | sort -u)}
@@ -67,7 +72,7 @@ echo "== engine (library with the NDK, CLI + RPM with sfdk) =="
 if [ -n "$clean" ]; then rm -rf build/android RPMS sailfish/indraw; fi
 ./scripts/build-engine-rpm.sh
 echo "== app (sfdk) =="
-( cd app && "$sfdk" build $clean )      # the app's spec always builds from clean
+( cd app && "$sfdk" -c no-fix-version build $clean )      # the app's spec always builds from clean
 
 # The binaries must be of the target's architecture (a package built from a
 # stale binary of the other one cannot be installed). Checked with file(1),
