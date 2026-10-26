@@ -5,13 +5,17 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.47.69)
+## Known issues (as of 0.47.70)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.47.70 — milliseconds in the log (patch 0264)
+- The log's times now have milliseconds: a capture's real duration, and
+  where the time goes, can be read from it.
 
 ## 0.47.69 — DNG thumbnails in the right colours under warm or LED light (patch 0263)
 - The gallery's DNG thumbnail used the sensor's daylight colour matrix

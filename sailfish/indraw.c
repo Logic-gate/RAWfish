@@ -115,16 +115,19 @@ static android_dlopen_fn a_dlopen; /* libhybris' dlopen for Android libraries */
 static android_dlsym_fn a_dlsym;   /* libhybris' dlsym                         */
 static FILE *g_log;                /* --log file, or NULL                       */
 
-/* Appends "HH:MM:SS <prefix><text>" to the log (no-op without --log). */
+/* Appends "HH:MM:SS.mmm <prefix><text>" to the log (no-op without --log).
+ * Milliseconds since 0.47.70: a command and its reply in the same second
+ * said nothing about a 0.5 s capture against a 2 s one. */
 static void log_line(const char *prefix, const char *text)
 {
     char stamp[16];
-    time_t t = time(NULL);
+    struct timespec ts;
     struct tm tm;
     if (!g_log) return;
-    localtime_r(&t, &tm);
+    clock_gettime(CLOCK_REALTIME, &ts);
+    localtime_r(&ts.tv_sec, &tm);
     strftime(stamp, sizeof stamp, "%H:%M:%S", &tm);
-    fprintf(g_log, "%s %s%s\n", stamp, prefix, text);
+    fprintf(g_log, "%s.%03ld %s%s\n", stamp, ts.tv_nsec / 1000000L, prefix, text);
     fflush(g_log);                              /* survive a crash          */
 }
 
