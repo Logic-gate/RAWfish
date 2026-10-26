@@ -1,67 +1,66 @@
 ## indRAW (air input, boats, engines...)
 
-
 ## Human description
 
-indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.
-Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.
-Coded by IA under the supervision of and at the request of the creators.
-Supervision and all the tests made by humans.
+indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
+Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.\
+Coded by AI under the supervision of and at the request of the creators.\
+Supervision and all the tests made by humans.\
 No human code review yet. Audits by other sessions and other AI models.
 
 ### Architecture
-Camera CLI engine + Silica UI for SailfishOS.
+
+Camera CLI engine + Silica UI for SailfishOS.\
 Built on Android's Camera2 through libhybris.
--Command line engine (talks to the HAL) (docs/ENGINE.md)
--Controller (clculations)
--UI (user requests, feedback, settings) (docs/USER-GUIDE.md)
--OS Settings page
--config files (txt+json)
+
+- Command line engine (talks to the HAL) (`docs/ENGINE.md`)
+- Controller (calculations)
+- UI (user requests, feedback, settings) (`docs/USER-GUIDE.md`)
+- OS Settings page
+- Config files (txt + json)
 
 ### Features
-JPG
-RAW (DNG)
-Long exposure up to 8 minutes (stacking, experimental)
-Manual controls (focus, exposure, white balance, noise, sharpening...)
-Hystogram, spot measurement
-Loupe for exposure and focus
-Bracketting (3x same EV, +1, +2, +3 )
-User lens shading calibration tool, color, luminance, focus adapted (DNG exif)
-User focus calibration tool (factory uncalibrated)
-User click-to-WB (HAL)
-Zoom (digital)
-Flash
-Peaking
-Zebra
-Spirit level
-Gallery DNG previews
-Sailjailed
 
-No GPS
-No network/radio access
+- JPG
+- RAW (DNG)
+- Long exposure up to 8 minutes (stacking, experimental)
+- Manual controls (focus, exposure, white balance, noise, sharpening...)
+- Histogram, spot measurement
+- Loupe for exposure and focus
+- Bracketing (3x same EV, +1, +2, +3)
+- User lens shading calibration tool: colour, luminance, focus adapted (DNG Exif)
+- User focus calibration tool (factory uncalibrated)
+- User click-to-WB (HAL)
+- Zoom (digital)
+- Flash
+- Peaking
+- Zebra
+- Spirit level
+- Gallery DNG previews
+- Sailjailed
 
+No GPS.\
+No network/radio access.
 
-### Actual Stage
-Currently tested on the JP2 (more) and the XA2 (less).
-Testing are also being conducted on Xperia 10 IV Community port.
+### Actual stage
 
-Beta version. We still have some bug hunting work + Ui/functions improvements to do.
+Currently tested on the JP2 (more) and the XA2 (less).\
+Tests are also being conducted on the Xperia 10 IV community port.
 
-indRAW is a rebuild based on RAWfish, itself a fork of Jolla Camera.
-Nothing would have been possible without Mad_Dev's big work on how to make raw pics with the Jolla Phone 2 and it's IMX766 sensor.
+Beta version. We still have some bug hunting work + UI/functions improvements to do.
+
+indRAW is a rebuild based on RAWfish, itself a fork of Jolla Camera.\
+Nothing would have been possible without Mad_Dev's big work on how to make raw pics with the Jolla Phone 2 and its IMX766 sensor.
 
 ## References, credits
-https://github.com/sailfishos/jolla-camera
-https://github.com/Logic-gate/RAWfish
 
-Discussion:
+- https://github.com/sailfishos/jolla-camera
+- https://github.com/Logic-gate/RAWfish
+
+Discussion:\
 https://forum.sailfishos.org/t/next-gen-native-camera-app-rawfish/34150
 
-
-
----------------------------------------------------------------------------------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+---
 
 ## LLM description
 
@@ -270,12 +269,14 @@ sensor's CFA, so it is correct on any phone. (A later indraw settings page will 
 
 ## Exif in the JPEGs
 
-The HAL's JPEG carries an Exif segment without ISO or exposure (JP2). The engine replaces it with
-its own (`android/exifwrite.c`): Make/Model/Software, DateTime and DateTimeOriginal, ExposureTime
-and ISO **as the HAL reported having applied them** (the capture result matched to the image; a
-missing result leaves the tags out rather than guessing), FNumber, FocalLength and the 35 mm
-equivalent, and the Orientation tag copied from the HAL's segment (the HAL may rotate pixels or set
-the tag; we keep its choice). No thumbnail, no maker notes.
+The HAL's JPEG carries an Exif segment without ISO or exposure (JP2). The engine merges its own
+into it (`android/exifwrite.c`): everything the HAL wrote is kept (its thumbnail, flash, metering,
+scene type, maker note...), and what the engine knows better replaces the HAL's value or is added:
+Make/Model/Software, the dates, ExposureTime and ISO **as the HAL reported having applied them**
+(the capture result matched to the image; a missing result leaves the tags out rather than
+guessing), the APEX shutter and aperture values, ExposureMode, FNumber, FocalLength and the 35 mm
+equivalent. The HAL's Orientation tag is kept when valid (the HAL may rotate pixels or set the
+tag; we keep its choice).
 
 ## Live exposure for the UI (stream mode)
 
@@ -396,7 +397,7 @@ Porting to another phone: `docs/PORTING.md`.
 
 ```json
 { "hide": ["wheels", "type", "histogram", "headers"],
-  "quality": 95, "noise": "zsl_noise", "edge": "hq_edge",
+  "quality": 95, "noise": "minimal_noise", "edge": "hq_edge",
   "menu": ["timer", "format", "wb"] }
 ```
 
