@@ -5,13 +5,18 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.47.70)
+## Known issues (as of 0.47.71)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.47.71 — app 0.20.54 (ui 178) — the shutter's 'denoise' field renamed 'denoise_sigma' (patch 0265)
+- In the shutter command (and so in the log), 'denoise' becomes
+  'denoise_sigma': it is the Σ stack's poses per frame, not a noise
+  reduction mode. The old name is still read.
 
 ## 0.47.70 — milliseconds in the log (patch 0264)
 - The log's times now have milliseconds: a capture's real duration, and
