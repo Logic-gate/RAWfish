@@ -48,8 +48,8 @@ seconds (`0.008`, `0.5`, `4`).
 | Command | Options | Limits |
 |---|---|---|
 | `jpeg NAME` | `q=N` JPEG quality | 1..100, default 95 |
-| | noise mode: `default_noise` `off_noise` `fast_noise` `hq_noise` `minimal_noise` `zsl_noise` | those the camera lists |
-| | edge mode: `default_edge` `off_edge` `fast_edge` `hq_edge` `zsl_edge` | those the camera lists |
+| | noise mode: `default_noise` `off_noise` `fast_noise` `hq_noise` `minimal_noise` `zsl_noise` | those the camera lists (the app's menu leaves out the zsl ones) |
+| | edge mode: `default_edge` `off_edge` `fast_edge` `hq_edge` `zsl_edge` | those the camera lists (idem) |
 | | `focus=` (below) | default: keep the lens where it is |
 | | `exp=SEC iso=N` manual exposure (AE off) | the sensor's ranges (`caps`); `exp` also capped by the single-exposure ceiling |
 | | `easy` | the one combined path: AF + AE before the shot |

@@ -69,7 +69,7 @@ Item {
     // Simple mode layout, from ~/.config/com.indraw/indraw/simple.json
     // (defaults below): what it hides, what it fixes, which menu columns stay.
     property var simple: ({ "hide": ["wheels", "type", "histogram", "headers"],
-                            "quality": 95, "noise": "zsl_noise", "edge": "hq_edge",
+                            "quality": 95, "noise": "minimal_noise", "edge": "hq_edge",
                             "menu": ["timer", "format", "wb"] })
     function simpleHides(what) { return !advanced && simple.hide && simple.hide.indexOf(what) >= 0 }
     function simpleMenuHas(col) { return advanced || (simple.menu && simple.menu.indexOf(col) >= 0) }
@@ -92,8 +92,13 @@ Item {
     readonly property var sceneList: [0].concat(sceneAvailable.filter(function(m) { return m > 0 && m !== 17 }))
     function sceneChunk(i) { return sceneList.slice(i * 5, i * 5 + 5) }
 
-    readonly property var noiseModes: ["default_noise","off_noise","fast_noise","hq_noise","minimal_noise","zsl_noise"]
-    readonly property var edgeModes:  ["default_edge","off_edge","fast_edge","hq_edge","zsl_edge"]
+    // The photo's noise reduction and sharpening as offered to the user. The
+    // ZSL modes are left out (ui 179): they belong to a zero-shutter-lag
+    // capture with reprocessing that indRAW does not do; alone they mean what
+    // the HAL decides (fast or high quality). An old saved index past the end
+    // is clamped (zsl_noise -> minimal, zsl_edge -> hq). docs/ROADMAP: ZSL.
+    readonly property var noiseModes: ["default_noise","off_noise","fast_noise","hq_noise","minimal_noise"]
+    readonly property var edgeModes:  ["default_edge","off_edge","fast_edge","hq_edge"]
     readonly property var awbNames: { 1: qsTr("Automatic"), 2: qsTr("Incandescent"), 3: qsTr("Fluorescent"),
                                       4: qsTr("Warm fluorescent"), 5: qsTr("Daylight"), 6: qsTr("Cloudy"),
                                       7: qsTr("Twilight"), 8: qsTr("Shade") }
@@ -164,7 +169,7 @@ Item {
         if (j && j.hide instanceof Array && j.menu instanceof Array) {
             simple = { "hide": j.hide.filter(function(x) { return typeof x === "string" }),
                        "quality": Math.max(1, Math.min(100, Number(j.quality) || 95)),
-                       "noise": noiseModes.indexOf(j.noise) >= 0 ? j.noise : "zsl_noise",
+                       "noise": noiseModes.indexOf(j.noise) >= 0 ? j.noise : "minimal_noise",
                        "edge": edgeModes.indexOf(j.edge) >= 0 ? j.edge : "hq_edge",
                        "menu": j.menu.filter(function(x) { return typeof x === "string" }) }
         }
@@ -208,13 +213,13 @@ Item {
     // The noise and edge options a JPEG / burst command carries: the photo
     // columns in advanced mode, simple.json's in simple mode.
     function photoProcessing() {
-        var ni = advanced ? noiseIndex : Math.max(0, noiseModes.indexOf(simple.noise || "zsl_noise"))
+        var ni = advanced ? noiseIndex : Math.max(0, noiseModes.indexOf(simple.noise || "minimal_noise"))
         var ei = advanced ? edgeIndex : Math.max(0, edgeModes.indexOf(simple.edge || "hq_edge"))
         return " " + noiseModes[ni] + " " + edgeModes[ei]
     }
     // The same two modes as "noise=... edge=..." fields (the controller's "sh").
     function photoProcessingFields() {
-        var ni = advanced ? noiseIndex : Math.max(0, noiseModes.indexOf(simple.noise || "zsl_noise"))
+        var ni = advanced ? noiseIndex : Math.max(0, noiseModes.indexOf(simple.noise || "minimal_noise"))
         var ei = advanced ? edgeIndex : Math.max(0, edgeModes.indexOf(simple.edge || "hq_edge"))
         return " noise=" + noiseModes[ni] + " edge=" + edgeModes[ei]
     }
@@ -392,12 +397,12 @@ Item {
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                caption: qsTr("Noise"); values: [0, 1, 2, 3, 4, 5]; current: menu.noiseIndex
+                caption: qsTr("Noise"); values: [0, 1, 2, 3, 4]; current: menu.noiseIndex
                 labelFor: function(v) { return qsTr("Photo noise reduction: %1").arg(menu.shortName(menu.noiseModes[v])) }
                 shortFor: function(v) { return menu.shortName(menu.noiseModes[v]).substr(0, 4) }
                 onPicked: { menu.noiseIndex = value; menu.save("noiseIndex", value) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4]; current: menu.edgeIndex
+                caption: qsTr("Sharpen"); values: [0, 1, 2, 3]; current: menu.edgeIndex
                 labelFor: function(v) { return qsTr("Photo sharpening: %1").arg(menu.shortName(menu.edgeModes[v])) }
                 shortFor: function(v) { return menu.shortName(menu.edgeModes[v]).substr(0, 4) }
                 onPicked: { menu.edgeIndex = value; menu.save("edgeIndex", value) } }

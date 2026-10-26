@@ -1,6 +1,6 @@
 Name:       indraw-app
 Summary:    indRAW camera (viewfinder)
-Version:    0.20.54
+Version:    0.20.55
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Ric9k-TMO-FSO/indraw

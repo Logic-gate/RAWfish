@@ -13,6 +13,13 @@ Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## app 0.20.55 (ui 179) — the ZSL noise and sharpening modes leave the menu (patch 0266)
+- The zero-shutter-lag modes are no longer offered in the Noise and
+  Sharpen columns: they belong to a capture path indRAW does not use, and
+  alone mean whatever the HAL decides. The simple mode's photos use the
+  minimal noise reduction and high-quality sharpening. A ZSL capture to
+  shorten the shutter delay is in the roadmap.
+
 ## 0.47.71 — app 0.20.54 (ui 178) — the shutter's 'denoise' field renamed 'denoise_sigma' (patch 0265)
 - In the shutter command (and so in the log), 'denoise' becomes
   'denoise_sigma': it is the Σ stack's poses per frame, not a noise

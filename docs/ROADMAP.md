@@ -30,6 +30,19 @@ Each item says why, so it can be picked up later without re-deriving it.
   viewfinder to take the full width (a 16:9 image on a 16:9 screen leaves
   no room under it).
 
+- **A shorter shutter delay with ZSL** (zero shutter lag): the camera keeps
+  the last full-resolution frames, unprocessed, in a ring buffer; at the
+  press the app takes the frame of that instant and sends it back to the
+  HAL to be processed into the JPEG (reprocessing). It would remove most of
+  the 0.35-0.45 s between the press and the image on the JP2. Needs the
+  HAL's reprocessing capability (the probe's capabilities:
+  private_reprocessing or yuv_reprocessing; the XA2 has neither, the JP2
+  to check). A RAW variant would keep the RAW meter's last frames. To
+  measure first with the log's milliseconds (0.47.70). Meanwhile the ZSL
+  noise / sharpening modes are not offered in the menu (ui 179): they are
+  meant for frames that will be reprocessed; without that path they only
+  mean what the HAL decides (fast or high quality).
+
 ### To find out
 - **The viewfinder's "maze" at high ISO** (JP2; RAWfish shows the same):
   after about thirty seconds on a still scene, maze-like patterns and an
