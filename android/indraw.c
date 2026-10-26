@@ -1401,6 +1401,20 @@ static void on_raw_image(void *ctx, AImageReader *reader)
     if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img) return;
     pthread_mutex_lock(&g.lock);
     busy = g.capture_busy;
+    if (busy && g.meter_inflight > 0) {
+        /* A photo is waiting for the RAW stream (meter_quiesce) and this is
+         * the meter frame still in flight: it frees the slot. Up to 0.47.71
+         * it was taken for the photo's image and the slot never freed, so
+         * meter_quiesce ran into its 1 s timeout before EVERY RAW with the
+         * meter on: the RAW flashed ~1 s later than the JPEG (log, 26 Oct:
+         * command to reply 1511 ms, the capture itself 511 ms). The photo's
+         * own capture is sent only after meter_quiesce returns. */
+        g.meter_inflight--;
+        pthread_cond_broadcast(&g.cond);
+        pthread_mutex_unlock(&g.lock);
+        AImage_delete(img);
+        return;
+    }
     if (busy) {
         if (g.raw_image) AImage_delete(g.raw_image);   /* stale one: drop          */
         g.raw_image = img;
@@ -2042,6 +2056,8 @@ static void meter_quiesce(void)
         if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) { g.meter_inflight = 0; break; }
     pthread_mutex_unlock(&g.lock);
 }
+/* (meter_quiesce's timeout is now only a safety net: a meter frame in flight
+ * frees its slot when its image or its failure arrives.) */
 
 /* The photo is done with the RAW stream: the meter may resume. */
 static void meter_release(void)

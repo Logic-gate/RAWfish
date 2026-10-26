@@ -5,13 +5,20 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.47.71)
+## Known issues (as of 0.47.72)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.47.72 — a RAW no longer waits a second before it is taken (patch 0268)
+- With the RAW meter on (the RAW type), every RAW photo waited a full
+  second before its capture: the meter frame in flight was mistaken for
+  the photo's and its slot never freed, so the wait ran to its timeout.
+  The RAW now flashes as soon as the JPEG does (stacks and the noise
+  profile benefit too).
 
 ## build — the packages keep their specs' versions after a git tag (patch 0267)
 - With a release tag in the history, sfdk renamed both packages after the

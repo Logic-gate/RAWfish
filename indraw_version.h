@@ -5,5 +5,5 @@
  * (rpm/indraw-engine.spec) carries the same number. */
 #ifndef INDRAW_VERSION_H
 #define INDRAW_VERSION_H
-#define IR_VERSION "0.47.71"
+#define IR_VERSION "0.47.72"
 #endif
