@@ -79,7 +79,7 @@ devices need porting (see "Device profiles", `docs/PORTING.md`).
 
 Two parts: the **engine** (`rawfish-ir-cli` program + `librawfish-ir.so`, this README) and the **app**
 (`app/`, Qt/Silica, see `docs/UI-NOTES.md` for its behaviour specification). The app's layout is
-modelled on [RAWfish](https://forum.sailfishos.org/) (a Jolla Camera fork), whose SF2P/SF2M
+modelled on [RAWfish](https://github.com/Logic-gate/RAWfish) (a Jolla Camera fork), whose SF2P/SF2M
 frame protocol it reuses; what it deliberately does differently is listed in `docs/UI-NOTES.md`
 ("vs RAWfish"). Development relies on AI assistance (code, debugging, research), every change
 being reviewed and tested on the device by a person; contributions are welcome on the same terms.

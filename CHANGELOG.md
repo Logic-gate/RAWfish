@@ -14,6 +14,10 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## docs — the README's RAWfish link (patch 0281)
+- The README's technical part linked "RAWfish" to the forum's home page;
+  it points at RAWfish's repository, like the credits above it.
+
 ## 0.1.4 (ui 184) — no engine restart at the first switch to RAW (patch 0280)
 - On a fresh install the first switch to the RAW type showed "Starting
   camera..." (XA2): the type change always set the photo size, and the
