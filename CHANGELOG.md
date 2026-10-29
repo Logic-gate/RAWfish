@@ -6,13 +6,24 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.2)
+## Known issues (as of 0.1.3)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.3 — the lock contract written and checked; the controller under ThreadSanitizer (patch 0275)
+- The engine's threads and locks are written down (android/indraw.c's
+  header, docs/ARCHITECTURE.md "Threads and locks") and the checker
+  enforces three rules: g.lock never re-taken, the order g.lock -> out_lock,
+  the output descriptors only under out_lock (it found one place that
+  reset them outside the lock, at setup: fixed). The checker tests itself
+  on a bad sample.
+- A two-thread stress test of the controller (the event reader against the
+  CLI's commands) runs under ThreadSanitizer, and Helgrind when valgrind is
+  installed: no report.
 
 ## 0.1.2 — packaging and documentation from the October 2026 audits (patch 0274)
 - Both packages ship the licence (%license); the duplicate LICENSES/LICENSE

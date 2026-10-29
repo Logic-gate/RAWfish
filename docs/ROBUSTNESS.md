@@ -139,3 +139,16 @@ near 2^32, a HAL Exif IFD of 64 foreign entries keeping all 15 of ours
 (59 checks under ASan/UBSan; a 32-bit build was not possible on the host,
 the subtractive form is correct on both). The host-only `extern
 __system_property_get` next to the NDK include is gone.
+
+### Third pass (0.1.1-0.1.3): three audits of the whole tree
+
+Bugs fixed: parseFrames' 32-bit size check (a crafted header crashed the
+app), the controller's lock initialisation, silent Exif drops, the PC DNG
+converter's hard-coded Bayer pattern / make / orientation and a stacking
+corner case, the viewfinder Noise / Sharpen columns. Packaging: %license,
+one LICENSE, pinned and checksummed NDK headers. Concurrency: the contract
+written and partly enforced (lockcheck.awk, three rules), the controller
+under ThreadSanitizer and Helgrind. Not done, by decision: a JSON library
+instead of the bounded hand readers (ROADMAP); restricting the CLI's
+--jpgdir / --dngdir (it is a terminal tool, not sandboxed, by design: the
+README says so).

@@ -53,6 +53,38 @@ and peaking).
 5. **One frame protocol.** SF2P (viewfinder frames) and SF2M (events) stay
    the transport to the interface; SF2M gains the controller's states.
 
+## Threads and locks
+
+Threads, in the one `rawfish-ir-cli` process:
+
+| Thread | Runs | Takes |
+|---|---|---|
+| main (the CLI) | stdin commands: engine functions, controller commands | the controller's lock around each command; g.lock inside the engine functions |
+| controller reader | the engine's events from the pipe: the exposure / focus / view controllers' reactions | the controller's lock around each event |
+| Camera2 callbacks (HAL threads) | image listeners, capture results / failures | g.lock (state), then out_lock (output) |
+| meter | the RAW meter's captures, when on | g.lock, then out_lock |
+
+Locks:
+- **The controller's lock** (recursive, created once): one controller caller
+  at a time, the CLI or the reader. The controller never calls into the engine
+  from the reader while the CLI is inside the engine: both go through it.
+- **g.lock** (engine state; not recursive): never taken twice on one path
+  (0.47.15's self-deadlock).
+- **g.out_lock** (engine output: the stream and event descriptors, the
+  order of frames and events): taken after g.lock when both are needed,
+  never before it.
+- The event pipe is non-blocking: a Camera2 callback never waits on the
+  controller (state lines are dropped when the pipe is full and counted;
+  one-off events wait at most 300 ms).
+
+What checks it: `scripts/lockcheck.awk` (g.lock not re-taken, the order
+g.lock -> out_lock, the descriptors only under out_lock; with a self-test on
+a bad sample), and the controller under two threads with ThreadSanitizer and
+Helgrind (`sailfish/tests/controller_stress_test.c`), both in
+`scripts/check-host.sh`. The engine itself cannot run under those tools on a
+PC (it needs the Camera2 HAL): for it, the contract above, its header comment
+and a reviewer's reading are what there is.
+
 ## Where each function goes
 
 | Function | Today | Goes to |

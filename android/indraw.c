@@ -11,6 +11,25 @@
  * and returns 0 on success, or one of the RF_E* codes below on failure.
  * No callback ever crosses the libhybris boundary: the Sailfish side only
  * calls functions and reads the JSON they produce.
+ *
+ * Threads and locks (the contract; scripts/lockcheck.awk checks the parts a
+ * line-by-line reading can, docs/ARCHITECTURE.md "Threads and locks"):
+ *   - the caller's thread: the exported functions (the CLI's commands, one at
+ *     a time under the controller's lock);
+ *   - Camera2's threads: the image listeners (on_*_image) and the capture
+ *     callbacks (on_preview_result, on_capture_completed/failed,
+ *     on_meter_result/failed), which the HAL calls on threads of its own;
+ *   - meter_main: the RAW exposure meter's thread, when the meter is on.
+ * Two mutexes. g.lock guards the session state in g (everything but the
+ * output descriptors); it is NOT recursive: never taken twice on one path.
+ * g.out_lock guards the output: g.stream_fd, g.event_fd, the order of the
+ * SF2P frames and SF2M lines on the stream, events_dropped. The only
+ * nesting order is g.lock -> out_lock (emit_event may be called with g.lock
+ * held); never out_lock -> g.lock. No callback blocks on the controller:
+ * events go into a non-blocking pipe (state lines dropped when it is full,
+ * one-off events wait at most 300 ms). ThreadSanitizer cannot run this file
+ * (it needs the HAL); the controller, which can, runs under TSan and
+ * Helgrind in check-host.sh.
  */
 
 #include <camera/NdkCameraCaptureSession.h> /* ACameraCaptureSession_*          */
@@ -2708,8 +2727,10 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     g.tpl_edge = template_u8(g.still_request, ACAMERA_EDGE_MODE);
     g.pv_nr = -1;                            /* preview processing untouched so far   */
     g.pv_edge = -1;
+    pthread_mutex_lock(&g.out_lock);         /* the descriptors live under out_lock */
     g.stream_fd = -1;                        /* not streaming unless indraw_stream_* */
     g.event_fd = -1;                         /* no controller unless indraw_set_event_fd */
+    pthread_mutex_unlock(&g.out_lock);
     g.tpl_control = template_u8(g.still_request, ACAMERA_CONTROL_MODE);
     {
         ACameraMetadata_const_entry fe;

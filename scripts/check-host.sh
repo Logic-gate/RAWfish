@@ -75,6 +75,21 @@ gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/
 # The controller runs without Android or Qt: its host test (sailfish/tests).
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ctl-test "$root/sailfish/tests/controller_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
 /tmp/indraw-ctl-test
+# The controller under two threads (the event reader and the CLI's commands),
+# with ThreadSanitizer, and with Helgrind when valgrind is installed: the one
+# part of the code these tools can run (the engine needs the Camera2 HAL).
+gcc -std=c11 -g -O1 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -fsanitize=thread -o /tmp/indraw-ctl-tsan \
+    "$root/sailfish/tests/controller_stress_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" \
+    "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
+TSAN_OPTIONS="halt_on_error=1" /tmp/indraw-ctl-tsan | sed 's/^/tsan: /'
+if command -v valgrind >/dev/null 2>&1; then
+    gcc -std=c11 -g -O1 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -o /tmp/indraw-ctl-hg \
+        "$root/sailfish/tests/controller_stress_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" \
+        "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
+    valgrind --tool=helgrind --error-exitcode=3 -q /tmp/indraw-ctl-hg | sed 's/^/helgrind: /'
+else
+    echo "helgrind: skipped (valgrind not installed)"
+fi
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_exposure.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-exp-test "$root/sailfish/tests/exposure_test.c" "$root/sailfish/ctl_exposure.c" -lm
 /tmp/indraw-exp-test | tail -1
@@ -187,8 +202,12 @@ PYEOF
 # g.lock is not reentrant: taking it twice in one function deadlocks the
 # camera at the first frame (0.47.15). A straight-line scan, fast and crude:
 # a lock re-taken in the other arm of an if carries "lockcheck: branch".
-awk -f "$root/scripts/lockcheck.awk" "$root/android/indraw.c" || { echo "android/indraw.c: g.lock taken while held (see above)"; exit 1; }
-echo "android/indraw.c: no g.lock taken twice (OK)"
+awk -f "$root/scripts/lockcheck.awk" "$root/android/indraw.c" || { echo "android/indraw.c: the lock contract is broken (see above)"; exit 1; }
+# ... and the checker still catches each of its three rules on a bad sample.
+printf 'static void a(void)\n{\n    pthread_mutex_lock(&g.out_lock);\n    pthread_mutex_lock(&g.lock);\n}\nstatic void b(void)\n{\n    int fd = g.stream_fd;\n}\nstatic void c(void)\n{\n    pthread_mutex_lock(&g.lock);\n    pthread_mutex_lock(&g.lock);\n}\n' > /tmp/indraw-lockcheck-bad.c
+n_bad=$(awk -f "$root/scripts/lockcheck.awk" /tmp/indraw-lockcheck-bad.c | wc -l)
+[ "$n_bad" -eq 3 ] || { echo "lockcheck.awk: its self-test found $n_bad of 3 faults" >&2; exit 1; }
+echo "android/indraw.c: lock contract OK (g.lock not re-taken, order g.lock -> out_lock, descriptors under out_lock; checker self-test 3/3)"
 
 # A "(64bit)" provide named outside an "%ifarch aarch64" block breaks the
 # 32-bit package (armv7hl: "nothing provides ...(64bit)", 0.47.24).

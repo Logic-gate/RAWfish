@@ -51,6 +51,11 @@ Each item says why, so it can be picked up later without re-deriving it.
   with a pause (any interval, a few tens of ms of precision, each with the
   usual 0.35 s delay).
 
+- **A JSON library for the profile, override and calibration readers**
+  (cJSON, one file, MIT): suggested by two October 2026 audits. The hand
+  readers are bounded and tested (no memory fault found); a library would
+  remove a class of misreadings of odd but valid JSON. Not urgent.
+
 ### To find out
 - **The viewfinder's "maze" at high ISO** (JP2; RAWfish shows the same):
   after about thirty seconds on a still scene, maze-like patterns and an
