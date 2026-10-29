@@ -242,8 +242,11 @@ calibration of your own are measurements: keep a copy first if you have
 some (`tar czf ~/rawfish-ir-perso.tgz -C ~ .local/share/com.rawfish/rawfish-ir .config/com.rawfish/rawfish-ir`).
 Then install the two packages: the first start asks Sailjail's permissions,
 uses the lens-shading calibration shipped for the phone, has no focus
-calibration (it is made by hand), and writes its starter files in
-`~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.
+calibration (it is made by hand), and copies the commented example
+`override-hal.example.jsonc` into `~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.
+`generated-hal.json` and a starter `override-hal.json` are written only by the
+probe: the Settings page's "Create the device profile files" (at the app's next
+start) or `rawfish-ir-cli probe`; the app does not need them.
 
 ## Continuous integration
 

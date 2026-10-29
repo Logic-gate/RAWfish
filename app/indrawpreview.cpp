@@ -184,7 +184,13 @@ void IndrawPreview::start()
     /* An empty size means "max": the engine picks the largest listed JPEG /
      * RAW16 size and the widest preview <= 1280, so every camera (front
      * included, with its own size list) opens without the UI knowing it. */
-    const QString cap = m_captureSize.isEmpty() ? QStringLiteral("max")
+    /* "max" also after an engine that died before its caps: a stored size
+     * the camera does not list made every restart fail the same way ('jpeg
+     * size not listed', 'engine stopped (3 restarts failed)': JP2 front
+     * camera, October 2026); the caps of the "max" engine let the page
+     * settle a size this camera has. */
+    m_gotCaps = false;
+    const QString cap = (m_captureSize.isEmpty() || m_sizeFallback) ? QStringLiteral("max")
             : QStringLiteral("%1x%2").arg(m_captureSize.width()).arg(m_captureSize.height());
     const QString prev = m_previewSize.isEmpty() ? QStringLiteral("max")
             : QStringLiteral("%1x%2").arg(m_previewSize.width()).arg(m_previewSize.height());
@@ -596,6 +602,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         m_caps.insert(QStringLiteral("min_focus_diopters"), f.value("min_focus", "0").toDouble());  /* the closest lens position, HAL value */
         /* the screen's top cutout from the device profile: 1, 0, -1 unknown */
         m_caps.insert(QStringLiteral("notch"), f.value("notch", "-1").toInt());
+        m_gotCaps = true;
+        m_sizeFallback = false;
         emit capsChanged();
     } else if (name == "ae") {
         m_liveIso = f.value("iso").toInt();
@@ -906,11 +914,21 @@ void IndrawPreview::onProcessFinished(int code, QProcess::ExitStatus status)
     Q_UNUSED(code)
     Q_UNUSED(status)
     if (sender() != m_process) return;      /* a replaced engine: not ours any more */
+    /* The dead process goes: the restart below only starts an engine when
+     * there is none (m_process null), and nothing else cleared it after an
+     * unexpected exit -- so the "try again" never ran and the viewfinder
+     * stayed on "engine stopped" until a camera switch or a restart of the
+     * app (ui 185; October 2026, a JP2 user's "many engine stopped"). */
+    m_process->disconnect(this);
+    m_process->deleteLater();
+    m_process = nullptr;
+    m_buffer.clear();
     setRunning(false);
     /* Still meant to be active: the engine died. Say so, and try again a few
      * times with a pause (a transient HAL hiccup recovers; a real fault
      * stops after the third try instead of looping). */
     if (m_active) {
+        if (!m_gotCaps) m_sizeFallback = true;   /* it never opened: retry at "max" */
         setError(QStringLiteral("engine stopped"));
         scheduleRestart();
     }

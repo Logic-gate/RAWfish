@@ -6,13 +6,26 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.4)
+## Known issues (as of 0.1.5)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.5 (ui 185) — the engine restarts after a fault; a camera switch from RAW no longer asks the front camera for the main one's size (patch 0282)
+- An engine that stopped was never restarted, although the app said it
+  would try three times: "engine stopped" stayed until a camera switch or
+  a new start of the app (a JP2 user's "many engine stopped"). It now
+  restarts.
+- Switching from the main camera in RAW to a camera without RAW could ask
+  the new camera for the main camera's size (50 MP on the JP2), which it
+  does not list: the engine refused to open. The size is now settled once
+  the new camera's sizes are known; and an engine that dies before it has
+  opened is restarted at the camera's largest size.
+- The log's "# caps" line gives the focal length, its 35 mm equivalent and
+  the RAW size.
 
 ## docs — the README's RAWfish link (patch 0281)
 - The README's technical part linked "RAWfish" to the forum's home page;

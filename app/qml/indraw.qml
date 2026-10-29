@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "184"                             // shown in the deck
+    readonly property string uiVersion: "185"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -722,7 +722,9 @@ ApplicationWindow {
                     // the parts worth having there (sizes, scenes, thresholds).
                     viewfinder.sendCommand("# caps jpeg_sizes=" + viewfinder.caps.jpegSizes
                                            + " scene_modes=" + viewfinder.caps.sceneModes
-                                           + " peak_edge=" + viewfinder.caps.peakEdge + " peak_width=" + viewfinder.caps.peakWidth)
+                                           + " peak_edge=" + viewfinder.caps.peakEdge + " peak_width=" + viewfinder.caps.peakWidth
+                                           + " focal_mm=" + viewfinder.caps.focalMm + " focal_eq=" + viewfinder.caps.focalEq
+                                           + " raw=" + viewfinder.caps.rawW + "x" + viewfinder.caps.rawH)
                 }
                 // Another camera lists other sizes: forget the chosen one, with
                 // no restart of its own (the camera change restarts the engine

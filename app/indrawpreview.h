@@ -335,6 +335,10 @@ private:
     int m_displayRotation = 0;     /* QML item rotation, for fit math           */
     QString m_errorString;
     int m_restarts = 0;            /* unexpected exits restarted in a row        */
+    bool m_gotCaps = false;        /* this engine reached its caps line          */
+    bool m_sizeFallback = false;   /* the last engine died before its caps: the
+                                    * next one opens at "max" (a size this camera
+                                    * does not list stops the engine at open)    */
     bool m_stacking = false;       /* a stack is running in the engine          */
     QString m_jpgDir, m_dngDir, m_prefix;   /* output settings in force         */
     bool m_stopWanted = false;     /* setActive(false) arrived during a stack   */

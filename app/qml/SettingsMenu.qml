@@ -283,7 +283,12 @@ Item {
     // set the size, and on a fresh install (the size still "", the engine on
     // "max") the first switch to RAW restarted the engine for nothing (XA2,
     // 29 Oct 2026: "Starting camera..." at the first RAW).
-    onImageTypeChanged: settleSize()
+    // Deferred, like onJpegSizesChanged: a camera without RAW sets the type
+    // aside to jpg while its caps are being taken in, and settling inside that
+    // change used the PREVIOUS camera's sizes: the JP2's front camera was asked
+    // for 8192x6144 (the main camera's 50 MP), which it does not list, and the
+    // engine stopped ('# settle: format 4:3 wants 8192x6144', ui 185).
+    onImageTypeChanged: Qt.callLater(settleSize)
     function setSize(sz) {
         captureSize = sz; save("captureSize", sz)
         if (sz !== "") save(format === "16:9" ? "captureSize169" : "captureSize43", sz)   /* the format's own */
