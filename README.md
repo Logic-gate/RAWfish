@@ -1,13 +1,6 @@
-## RAWfish-indRAW
-
-Names: **RAWfish-indRAW** is the project (this branch of RAWfish); **RAWfish-ir**
-is what you see on the phone (the app grid, Settings); `rawfish-ir` is the
-technical name (packages `rawfish-ir-cli` and `rawfish-ir-gui`, binaries,
-paths, settings); `indraw` stays the engine's development name in the sources.
-
 ## Human description
 
-RAWfish-indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
+indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
 Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.\
 Coded by AI under the supervision of and at the request of the creators.\
 Supervision and all the tests made by humans.\
@@ -68,6 +61,14 @@ https://forum.sailfishos.org/t/next-gen-native-camera-app-rawfish/34150
 ---
 
 ## LLM description
+
+## RAWfish-indRAW
+
+Names: **RAWfish-indRAW** is the project (this branch of RAWfish); **RAWfish-ir**
+is what you see on the phone (the app grid, Settings); `rawfish-ir` is the
+technical name (packages `rawfish-ir-cli` and `rawfish-ir-gui`, binaries,
+paths, settings); `indraw` stays the engine's development name in the sources.
+
 
 RAWfish-indRAW
 
