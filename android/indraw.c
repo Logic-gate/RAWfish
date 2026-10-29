@@ -715,7 +715,9 @@ static int write_all(int fd, const void *buf, size_t len)
 static int write_sf2p(int fd, const uint8_t *rgb, int w, int h)
 {
     uint8_t hdr[16];
-    uint32_t bytes = (uint32_t)w * h * 3;
+    uint32_t bytes;
+    if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return -1;   /* a false header never goes out */
+    bytes = (uint32_t)w * (uint32_t)h * 3u;
     hdr[0]='S'; hdr[1]='F'; hdr[2]='2'; hdr[3]='P';
     hdr[4]=(uint8_t)w; hdr[5]=(uint8_t)(w>>8); hdr[6]=(uint8_t)(w>>16); hdr[7]=(uint8_t)(w>>24);
     hdr[8]=(uint8_t)h; hdr[9]=(uint8_t)(h>>8); hdr[10]=(uint8_t)(h>>16); hdr[11]=(uint8_t)(h>>24);
@@ -3343,7 +3345,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
     ACaptureRequest *reqs[1];
     AImage *img = NULL;
     uint8_t *data = NULL;
-    int data_len = 0, err, failed, fail_reason, dev_err;
+    int data_len = 0, err, failed, fail_reason, dev_err, exif_dropped = 0;
     int64_t img_ts = -1;
     size_t jpeg_len;
     double t0, t_3a, t_image, t_written;
@@ -3495,6 +3497,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
         ex.orientation = 0;                                         /* keep the HAL's tag  */
         ex.wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;       /* the white the file got */
         ex.exposure_manual = exposure_ns > 0;                       /* a manual pair was asked */
+        ex.hal_dropped = &exif_dropped;                             /* reported if not 0 */
         pthread_mutex_unlock(&g.lock);
         err = exif_write_jpeg(path, data, jpeg_len, &ex);
         if (err) err = write_file(path, data, jpeg_len);           /* never lose the shot */
@@ -3530,6 +3533,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
         jw_add(&w, "null");                     /* never invent values            */
     jw_add(&w, ",\"requested\":{\"exposure_ns\":%lld,\"iso\":%d},\"preview_frames_during\":%ld,",
            (long long)exposure_ns, iso, frames_during); /* 0 = automatic            */
+    if (exif_dropped > 0) jw_add(&w, "\"exif_hal_dropped\":%d,", exif_dropped);   /* never silent */
     add_variant(&w, variant);
     jw_add(&w, "}");
     pthread_mutex_unlock(&g.lock);
@@ -4036,11 +4040,15 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     f = save ? fopen(side, "w") : NULL;
     if (!save) goto report;                      /* measure-only: no files        */
     if (!f) { if (rmeta) ACameraMetadata_free(rmeta); return fail(out, out_size, IR_EFILE, "sidecar", strerror(errno), errno); }
+    /* make / model / orientation since 0.1.1: the PC converter
+     * (scripts/raw16-to-dng.py) wrote "Jolla Phone 2" and no rotation for
+     * every phone (October 2026 audit) */
     fprintf(f, "{\n  \"indraw\": \"%s\",\n  \"camera_id\": \"%s\",\n"
+               "  \"make\": \"%s\",\n  \"model\": \"%s\",\n  \"photo_orientation\": %d,\n"
                "  \"layout\": {\"format\": \"uint16le\", \"width\": %d, \"height\": %d, "
                "\"source_row_stride\": %d},\n  \"image_timestamp\": %lld,\n"
                "  \"matches_result\": %s,\n  \"static\": {",
-            IR_VERSION, g.camera_id, w_px, h_px, stride, (long long)img_ts,
+            IR_VERSION, g.camera_id, g.make, g.model, (int)photo_orientation_deg(), w_px, h_px, stride, (long long)img_ts,
             res_ts == img_ts ? "true" : "false");
     dump_tags(f, g.chars, k_raw_static, sizeof k_raw_static / sizeof k_raw_static[0]);
     fputs("\n  },\n  \"result\": {", f);
@@ -4532,11 +4540,12 @@ static int indraw_stack_impl(const char *path, const char *datetime, int64_t fil
     f = fopen(side, "w");
     if (!f) { rc = fail(out, out_size, IR_EFILE, "sidecar", strerror(errno), errno); goto done; }
     fprintf(f, "{\n  \"indraw\": \"%s\",\n  \"camera_id\": \"%s\",\n"
+               "  \"make\": \"%s\",\n  \"model\": \"%s\",\n  \"photo_orientation\": %d,\n"
                "  \"layout\": {\"format\": \"uint32le\", \"width\": %d, \"height\": %d},\n"
                "  \"stack\": {\"frames\": %d, \"sub_exposure_ns\": %lld, \"stk_denoise\": %d, "
                "\"film_exposure_ns\": %lld, \"iso\": %d},\n"
                "  \"image_timestamp\": %lld,\n  \"matches_result\": %s,\n  \"static\": {",
-            IR_VERSION, g.camera_id, w, h, n, (long long)sub_ns, stk_denoise,
+            IR_VERSION, g.camera_id, g.make, g.model, (int)photo_orientation_deg(), w, h, n, (long long)sub_ns, stk_denoise,
             (long long)(base * sub_ns), g.r_iso,
             (long long)img_ts, res_ts == img_ts ? "true" : "false");
     dump_tags(f, g.chars, k_raw_static, sizeof k_raw_static / sizeof k_raw_static[0]);

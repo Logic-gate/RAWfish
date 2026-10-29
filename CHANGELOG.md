@@ -5,13 +5,30 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.1.0)
+## Known issues (as of 0.1.1)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.1 — bugs from the October 2026 audits (patch 0273)
+- The viewfinder's frame reader refuses a header whose size does not add
+  up in 64 bits (a 65536 x 65536 header announcing 0 bytes slipped through
+  and crashed the app), and no longer makes a short event wait for the
+  next frame.
+- The engine never writes a frame header larger than any sensor.
+- The controller's lock is created once, recursive from its first use.
+- A JPEG whose camera Exif had more entries than room says so in its reply
+  (exif_hal_dropped) instead of dropping them silently.
+- RAW16 and stack sidecars carry the phone's make, model and the photo's
+  orientation; scripts/raw16-to-dng.py writes the sensor's own Bayer
+  pattern, make, model and orientation (it wrote "Jolla Phone 2", BGGR, no
+  rotation for every phone), and a stack shorter than its denoise factor no
+  longer gives black and white levels of 0.
+- The settings menu's viewfinder Noise / Sharpen columns had kept the ZSL
+  entries removed in 0266 (an error at every menu build).
 
 ## 0.1.0 — RAWfish-indRAW: indRAW joins RAWfish as a branch; one version for both packages (patch 0271)
 - New names, decided with RAWfish's developer: the project is

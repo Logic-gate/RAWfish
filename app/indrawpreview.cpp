@@ -409,8 +409,11 @@ void IndrawPreview::parseFrames()
     const int size = m_buffer.size();
     const char *base = m_buffer.constData();
     for (;;) {
-        if (size - pos < SF2P_HEADER)
-            break;                 /* not even a header yet                     */
+        if (size - pos < SF2M_HEADER)
+            break;                 /* not even the shorter header yet (an SF2M
+                                    * packet needs 8 bytes; it waited for 16
+                                    * until ui 183: a short event sat until the
+                                    * next frame arrived)                      */
 
         /* Which packet is at the front? SF2M (metadata/event) or SF2P (frame). */
         const bool isM = memcmp(base + pos, SF2M_MAGIC, 4) == 0;
@@ -427,7 +430,6 @@ void IndrawPreview::parseFrames()
 
         if (isM) {
             /* SF2M: 8-byte header + a text line. Parse the whole packet. */
-            if (size - pos < SF2M_HEADER) break;
             const uchar *mp = reinterpret_cast<const uchar *>(base + pos);
             const quint32 mn = qFromLittleEndian<quint32>(mp + 4);
             if (mn > 4096) { ++pos; continue; }                    /* sanity */
@@ -438,13 +440,18 @@ void IndrawPreview::parseFrames()
             continue;
         }
 
+        if (size - pos < SF2P_HEADER)
+            break;                 /* a frame header is 16 bytes                */
         const uchar *p = reinterpret_cast<const uchar *>(base + pos);
         const quint32 w = qFromLittleEndian<quint32>(p + 4);
         const quint32 h = qFromLittleEndian<quint32>(p + 8);
         const quint32 n = qFromLittleEndian<quint32>(p + 12);
 
-        /* Sanity-check the header before trusting the size. */
-        if (n != w * h * 3 || w == 0 || h == 0 || n > 200u * 1000u * 1000u) {
+        /* Sanity-check the header before trusting the size: the product in
+         * 64 bits (w = h = 65536 made w*h*3 wrap to 0 in 32 bits and a frame
+         * announcing n = 0 pass, then img.copy() read 12 GB past the buffer:
+         * October 2026 audit), and a frame no larger than any sensor's. */
+        if (w == 0 || h == 0 || w > 16384 || h > 16384 || quint64(n) != quint64(w) * h * 3u) {
             ++pos;                 /* bad header: slip a byte and resync         */
             continue;
         }

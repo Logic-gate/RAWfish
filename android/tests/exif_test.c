@@ -226,7 +226,13 @@ int main(void)
             len = (size_t)(p - big) + 8;
         }
         info.orientation = 1;
-        rc = exif_write_jpeg("/tmp/indraw_exif_test.jpg", big, len, &info);
+        {
+            int dropped = -1;
+            info.hal_dropped = &dropped;
+            rc = exif_write_jpeg("/tmp/indraw_exif_test.jpg", big, len, &info);
+            CHECK(rc == 0 && dropped == 0, "a HAL IFD of exactly 64 entries: nothing dropped (count %d)", dropped);
+            info.hal_dropped = NULL;
+        }
         {
             static uint8_t out[8192];
             rent_t ifd0[16], exif[96];

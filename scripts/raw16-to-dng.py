@@ -8,7 +8,7 @@ FILE.json is its sidecar. A DNG is a TIFF with a few extra tags, so this
 writes one directly, no libtiff. It carries everything a raw developer
 (darktable, Lightroom, RawTherapee) needs:
   - the sensor pixels (a stack is scaled back down to 16 bits)
-  - black / white levels and the Bayer pattern (BGGR)
+  - black / white levels and the Bayer pattern (the sensor's, from the sidecar)
   - both colour calibrations (illuminant, colour matrix, forward matrix)
   - the as-shot white balance (from the neutral colour point)
   - the lens shading map as an OpcodeList2 GainMap, so the vignetting is
@@ -123,23 +123,29 @@ def flat_matrix(m):
     return [a / b for a, b in m]
 
 
-def gainmap_opcode(shading_map, cols, rows, width, height):
+# The sensor's colour filter arrangement (SENSOR_INFO_COLOR_FILTER_ARRANGEMENT,
+# 0 RGGB 1 GRBG 2 GBRG 3 BGGR) as the DNG CFAPattern colours of its 2x2 cell
+# (0 red, 1 green, 2 blue), row by row. Until 0.1.1 this script wrote BGGR for
+# every phone (October 2026 audit).
+CFA_COLOURS = {0: (0, 1, 1, 2), 1: (1, 0, 2, 1), 2: (1, 2, 0, 1), 3: (2, 1, 1, 0)}
+# The photo's rotation (degrees clockwise to view it upright) as a TIFF Orientation.
+ORIENTATION_TAG = {0: 1, 90: 6, 180: 3, 270: 8}
+
+
+def gainmap_opcode(shading_map, cols, rows, width, height, cfa=3):
     """Builds an OpcodeList2 blob with four GainMap opcodes (one per CFA
     plane), so the developer multiplies the RAW by these per-position gains
     and removes the vignetting. Big-endian, as the DNG opcode spec requires."""
     import struct as _s
     m = np.array(shading_map, dtype=np.float32).reshape(rows, cols, 4)
-    # NOTE: this PC-side writer assumes BGGR (true for the reference phone). The
-    # on-phone writer (dngwrite.c) maps gain channels per the actual CFA.
-    # DNG GainMap planes map to CFA positions; for BGGR the AOSP map order is
-    # (R, Geven, Godd, B) -> place each on its Bayer coordinate.
-    # top-left=B(0,0) top-right=G(0,1) bottom-left=G(1,0) bottom-right=R(1,1)
-    planes = [  # (row0, col0, channel in the shading map)
-        (0, 0, 3),  # B
-        (0, 1, 1),  # G even
-        (1, 0, 2),  # G odd
-        (1, 1, 0),  # R
-    ]
+    # DNG GainMap planes map to CFA positions; the AOSP map order is
+    # (R, G on even rows, G on odd rows, B): each Bayer position takes the
+    # channel of its colour (and, for a green, of its row's parity).
+    colours = CFA_COLOURS.get(cfa, CFA_COLOURS[3])
+    planes = []   # (row0, col0, channel in the shading map)
+    for k, (row0, col0) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
+        c = colours[k]
+        planes.append((row0, col0, 0 if c == 0 else 3 if c == 2 else (1 if row0 == 0 else 2)))
     blob = _s.pack(">I", len(planes))           # opcode count
     for row0, col0, ch in planes:
         gains = m[:, :, ch].astype(">f4")
@@ -188,6 +194,11 @@ def main():
     meta = json.load(open(path + ".json"))
     lay, st, res = meta["layout"], meta["static"], meta["result"]
     w, h = lay["width"], lay["height"]
+    cfa = int(st.get("SENSOR_INFO_COLOR_FILTER_ARRANGEMENT", 3))   # 3 = BGGR (sidecars before 0.1.1: the JP2)
+    make = meta.get("make") or "Jolla"         # sidecars before 0.1.1 had no make/model: the JP2's
+    model = meta.get("model") or "JP2601"
+    if cfa not in CFA_COLOURS:
+        sys.exit("unsupported colour filter arrangement %d (not a 2x2 Bayer RGB)" % cfa)
 
     stack = meta.get("stack", {})
     nframes = stack.get("frames", 1)
@@ -201,8 +212,11 @@ def main():
     # and multiply the levels by that same net frame-equivalent -- lossless, and
     # the exposure stays truthful (same logic as the on-phone writer).
     if nframes > 1:
-        stk_denoise = stack.get("stk_denoise", 1)
-        base = nframes // max(stk_denoise, 1)
+        stk_denoise = max(int(stack.get("stk_denoise", 1)), 1)
+        # never below one frame-equivalent: a stack shorter than stk_denoise
+        # (an abort, or 8 frames at denoise 16) made base 0, so black and
+        # white came out 0 and the DNG unusable (October 2026 audit)
+        base = max(nframes // stk_denoise, 1)
         shift = 0
         level_mul = base
         while 1023 * level_mul > 65535:
@@ -221,18 +235,18 @@ def main():
     ifd.set(T["BitsPerSample"], SHORT, 16)
     ifd.set(T["Compression"], SHORT, 1)             # uncompressed
     ifd.set(T["PhotometricInterpretation"], SHORT, 32803)  # CFA
-    ifd.set(T["Make"], ASCII, "Jolla")
-    ifd.set(T["Model"], ASCII, "Phone 2")
-    ifd.set(T["Orientation"], SHORT, 1)
+    ifd.set(T["Make"], ASCII, make)
+    ifd.set(T["Model"], ASCII, model)
+    ifd.set(T["Orientation"], SHORT, ORIENTATION_TAG.get(int(meta.get("photo_orientation", 0)) % 360, 1))
     ifd.set(T["SamplesPerPixel"], SHORT, 1)
     ifd.set(T["RowsPerStrip"], LONG, h)
     ifd.set(T["PlanarConfiguration"], SHORT, 1)
     ifd.set(T["Software"], ASCII, "rawfish-ir")
     ifd.set(T["CFARepeatPatternDim"], SHORT, 2, 2)
-    ifd.set(T["CFAPattern"], BYTE, 2, 1, 1, 0)      # BGGR: B=2 G=1 G=1 R=0
+    ifd.set(T["CFAPattern"], BYTE, *CFA_COLOURS.get(cfa, CFA_COLOURS[3]))   # the sensor's own
     ifd.set(T["DNGVersion"], BYTE, 1, 4, 0, 0)
     ifd.set(T["DNGBackwardVersion"], BYTE, 1, 3, 0, 0)
-    ifd.set(T["UniqueCameraModel"], ASCII, "Jolla Phone 2 rear")
+    ifd.set(T["UniqueCameraModel"], ASCII, "%s %s" % (make, model))
     ifd.set(T["CFAPlaneColor"], BYTE, 0, 1, 2)      # R,G,B
     ifd.set(T["CFALayout"], SHORT, 1)
     ifd.set(T["BlackLevel"], SHORT, int(round(sum(black) / len(black))))
@@ -264,7 +278,7 @@ def main():
     smsize = st.get("LENS_INFO_SHADING_MAP_SIZE")
     if shading and smap and smsize:
         cols, rows = smsize
-        blob = gainmap_opcode(smap, cols, rows, w, h)
+        blob = gainmap_opcode(smap, cols, rows, w, h, cfa)
         ifd.set(T["OpcodeList2"], UNDEFINED, *blob)
 
     # EXIF sub-IFD.

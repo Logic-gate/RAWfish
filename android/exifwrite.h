@@ -23,6 +23,9 @@ typedef struct {
     int orientation;                       /* EXIF 1..8; 0: not written        */
     int wb_manual;                         /* WhiteBalance: 1 manual, 0 auto   */
     int exposure_manual;                   /* ExposureMode: 1 manual pair, 0 auto */
+    int *hal_dropped;                      /* out, optional: HAL entries left out for
+                                            * lack of room (its IFD over 64 entries,
+                                            * its data over the pool): 0 normally */
 } exif_info_t;
 
 /* Writes `jpeg` (len bytes, starting FF D8) to `path` with one Exif APP1:

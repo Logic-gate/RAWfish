@@ -93,6 +93,7 @@ typedef struct {
     int n0, ne, n1;
     const uint8_t *thumb; size_t thumb_len;   /* IFD1's JPEG thumbnail, in t  */
     uint8_t *pool; size_t pool_n, pool_cap;   /* converted external data      */
+    int dropped;                              /* entries left out for lack of room */
 } hal_t;
 static uint32_t rd16(const hal_t *h, const uint8_t *p) { return h->le ? (uint32_t)(p[0] | (p[1] << 8)) : (uint32_t)((p[0] << 8) | p[1]); }
 static uint32_t rd32(const hal_t *h, const uint8_t *p)
@@ -133,6 +134,7 @@ static uint32_t hal_read_ifd(hal_t *h, size_t off, entry_t *out, int *n, uint32_
     if (off > h->tl || h->tl - off < 2) return 0;
     cnt = rd16(h, h->t + off);
     if (h->tl - off - 2 < cnt * 12 + 4) return 0;
+    if (cnt > HAL_MAX) h->dropped += (int)(cnt - HAL_MAX);     /* over our room: counted, not silent */
     for (k = 0; k < cnt && *n < HAL_MAX; ++k) {
         const uint8_t *e = h->t + off + 2 + k * 12;
         entry_t x;
@@ -145,13 +147,13 @@ static uint32_t hal_read_ifd(hal_t *h, size_t off, entry_t *out, int *n, uint32_
         if (x.tag == 0x8825 || x.tag == 0xA005) continue;
         if (vl <= 4) {
             const uint8_t *v = pool_put(h, e + 8, vl, x.type);
-            if (!v) continue;
+            if (!v) { ++h->dropped; continue; }
             memset(x.inl, 0, 4); memcpy(x.inl, v, vl); x.ext = NULL; x.extlen = 0;
         } else {
             uint32_t vo = rd32(h, e + 8);
             if (vo > h->tl || vl > h->tl - vo) continue;           /* points outside: dropped */
             x.ext = pool_put(h, h->t + vo, vl, x.type);
-            if (!x.ext) continue;
+            if (!x.ext) { ++h->dropped; continue; }
             x.extlen = (uint32_t)vl; memset(x.inl, 0, 4);
         }
         out[(*n)++] = x;
@@ -364,6 +366,7 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
         if (rename(part, path) != 0) { rc = errno; unlink(part); goto out; }
     }
 out:
+    if (info->hal_dropped) *info->hal_dropped = hal.dropped;
     free(app1);
     hal_free(&hal);
     return rc;

@@ -39,14 +39,29 @@ static struct {
     ctl_caps_t caps;             /* the last caps, for the shoot decisions */
     char capture_q[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE];
     int capture_n, capture_i;
-} c = { .rd = -1, .wr = -1, .lock = PTHREAD_MUTEX_INITIALIZER };
+} c = { .rd = -1, .wr = -1,
+};
+/* The lock is recursive from its first use and initialised exactly once
+ * (pthread_once). Until 0.1.1 it was statically a plain mutex, then
+ * re-initialised as recursive in every ctl_start and never destroyed: UB on
+ * a stop/start cycle, and not recursive before the first start (October
+ * 2026 audit). */
+static pthread_once_t lock_once = PTHREAD_ONCE_INIT;
+static void lock_init(void)
+{
+    pthread_mutexattr_t at;
+    pthread_mutexattr_init(&at);
+    pthread_mutexattr_settype(&at, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&c.lock, &at);
+    pthread_mutexattr_destroy(&at);
+}
 
 /* The exposure is left alone while EITHER the interface says so (the loupe
  * being moved) or a focus search runs: one flag in the exposure module, two
  * sources here, so neither can un-pause the other's reason. */
 static void apply_pause(void) { if (c.exp) ctl_exp_set_paused(c.exp, c.ui_paused || c.focus_paused); }
 
-void ctl_lock(void) { pthread_mutex_lock(&c.lock); }
+void ctl_lock(void) { pthread_once(&lock_once, lock_init); pthread_mutex_lock(&c.lock); }
 void ctl_unlock(void) { pthread_mutex_unlock(&c.lock); }
 
 static double now_ms(void)
@@ -308,7 +323,6 @@ static void *reader(void *arg)
 int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_line_fn engine_line)
 {
     int fds[2];
-    pthread_mutexattr_t at;
     if (c.running) return 0;
     if (!emit || !set_event_fd) { fprintf(stderr, "rawfish-ir-cli: controller: engine entry points missing\n"); return -1; }
     if (pipe(fds) != 0) { perror("rawfish-ir-cli: controller: pipe"); return -1; }
@@ -321,10 +335,6 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
 #ifdef F_SETPIPE_SZ
     fcntl(fds[1], F_SETPIPE_SZ, 1 << 20);
 #endif
-    pthread_mutexattr_init(&at);
-    pthread_mutexattr_settype(&at, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&c.lock, &at);
-    pthread_mutexattr_destroy(&at);
     c.rd = fds[0]; c.wr = fds[1];
     c.emit = emit; c.set_event_fd = set_event_fd; c.engine_line = engine_line;
     c.exp = ctl_exp_new(exp_cmd, exp_state, NULL);
