@@ -24,3 +24,5 @@ indraw.log
 !scripts/*.dng
 # Python byte-code (scripts)
 __pycache__/
+# sfdk writes it at the top of the tree during a build
+documentation.list
