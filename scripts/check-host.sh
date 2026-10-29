@@ -5,6 +5,14 @@
 # scripts/ndk-headers.sha256 (they were fetched from a moving branch until
 # 0.1.2: October 2026 audit); the real build is build-android.sh.
 set -eu
+# Runs a host test and prints its last line; a failing test fails the
+# check. (Until 0.1.3 the tests ran as "test | tail -1": in sh a pipeline's
+# status is its last command's, so a FAILED test printed FAILED and the
+# check still passed -- found while adding the CI.)
+run_test() {
+    out=$("$@" 2>&1) || { printf '%s\n' "$out"; echo "FAILED: $*" >&2; exit 1; }
+    printf '%s\n' "$out" | tail -1
+}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 hdr=${NDK_HEADERS:-/tmp/ndkhdr}
 av_rev=43a832b45a7129f3db1357c18157dcfcfa53b82e      # LineageOS android_frameworks_av, lineage-21.0, Oct 2026
@@ -81,27 +89,31 @@ gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ctl-test "$root/sailfish/tests
 gcc -std=c11 -g -O1 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -fsanitize=thread -o /tmp/indraw-ctl-tsan \
     "$root/sailfish/tests/controller_stress_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" \
     "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
-TSAN_OPTIONS="halt_on_error=1" /tmp/indraw-ctl-tsan | sed 's/^/tsan: /'
+# (no pipe: in sh, a pipeline's status is its last command's, and a TSan
+# report must fail the check)
+out=$(TSAN_OPTIONS="halt_on_error=1" /tmp/indraw-ctl-tsan 2>&1) || { echo "$out"; echo "tsan: FAILED" >&2; exit 1; }
+echo "tsan: $out"
 if command -v valgrind >/dev/null 2>&1; then
     gcc -std=c11 -g -O1 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -o /tmp/indraw-ctl-hg \
         "$root/sailfish/tests/controller_stress_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" \
         "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
-    valgrind --tool=helgrind --error-exitcode=3 -q /tmp/indraw-ctl-hg | sed 's/^/helgrind: /'
+    out=$(valgrind --tool=helgrind --error-exitcode=3 -q /tmp/indraw-ctl-hg 2>&1) || { echo "$out"; echo "helgrind: FAILED" >&2; exit 1; }
+    echo "helgrind: $out"
 else
     echo "helgrind: skipped (valgrind not installed)"
 fi
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_exposure.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-exp-test "$root/sailfish/tests/exposure_test.c" "$root/sailfish/ctl_exposure.c" -lm
-/tmp/indraw-exp-test | tail -1
+run_test /tmp/indraw-exp-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_focus.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-foc-test "$root/sailfish/tests/focus_test.c" "$root/sailfish/ctl_focus.c" -lm
-/tmp/indraw-foc-test | tail -1
+run_test /tmp/indraw-foc-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_view.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-view-test "$root/sailfish/tests/view_test.c" "$root/sailfish/ctl_view.c" -lm
-/tmp/indraw-view-test | tail -1
+run_test /tmp/indraw-view-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_shoot.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shoot-test "$root/sailfish/tests/shoot_test.c" "$root/sailfish/ctl_shoot.c" -lm
-/tmp/indraw-shoot-test | tail -1
+run_test /tmp/indraw-shoot-test
 echo "sailfish/indraw.c: OK (-O2)"
 
 # RPM specs: in %install every line is a shell command, so a line that is
@@ -143,28 +155,28 @@ fi
 # The white balance in kelvin (android/colortemp.h, pure C): the JP2's own
 # matrices and five measured whites.
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ct-test "$root/android/tests/colortemp_test.c" -lm
-/tmp/indraw-ct-test | tail -1
+run_test /tmp/indraw-ct-test
 
 # The measured lens-shading calibration (android/shading.h, pure C): the
 # JP2's own file, parsing, interpolation, dosing.
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shading-test "$root/android/tests/shading_test.c" -lm
-(cd "$root" && /tmp/indraw-shading-test) | tail -1
+(cd "$root" && run_test /tmp/indraw-shading-test)
 
 # Building a calibration from flat-field DNGs (android/shading_build.h): write
 # synthetic flats with the real dng_write(), read them back, assemble, round
 # trip -- also exercises the DNG writer's pixels and GainMap.
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shading-build-test "$root/android/tests/shading_build_test.c" "$root/android/dngwrite.c" -lm
-/tmp/indraw-shading-build-test | tail -1
+run_test /tmp/indraw-shading-build-test
 
 # The preview's YUV -> RGB: pixel-exact with the per-pixel reference.
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-yuv-test "$root/android/tests/yuv_test.c"
-/tmp/indraw-yuv-test | tail -1
+run_test /tmp/indraw-yuv-test
 
 # The Exif merge: the HAL's APP1 kept (entries, byte order, thumbnail), ours
 # replacing or adding, under the sanitizers.
 gcc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-exif-test \
     "$root/android/tests/exif_test.c" "$root/android/exifwrite.c" -I "$root/android" -lm
-/tmp/indraw-exif-test | tail -1
+run_test /tmp/indraw-exif-test
 
 # The engine's longest event line (vfmeter: line[2600]) must fit the
 # controller's reader line (line[4096]) with room: a line longer than the

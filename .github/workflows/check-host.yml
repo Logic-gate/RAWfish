@@ -1,0 +1,26 @@
+# Runs the host checks on every push and pull request: both halves compiled
+# with -Werror (gcc and clang), the Android side type-checked against pinned,
+# checksummed NDK headers, every host test (several under ASan/UBSan), the
+# controller under ThreadSanitizer and Helgrind, the lock checker, the specs
+# and device profiles. Nothing here needs a phone. (October 2026 audit.)
+name: check-host
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang valgrind python3
+      - name: scripts/check-host.sh
+        run: sh scripts/check-host.sh

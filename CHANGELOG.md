@@ -14,6 +14,14 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## CI — the host checks on every push (patch 0276)
+- A GitHub Actions workflow (.github/workflows/check-host.yml) runs
+  scripts/check-host.sh on every push and pull request (gcc and clang,
+  pinned NDK headers, every host test, the sanitizers, the lock checker).
+- scripts/check-host.sh now fails when a host test fails: the tests ran
+  piped into "tail -1", which hid their exit status (a FAILED test printed
+  FAILED and the check still passed).
+
 ## 0.1.3 — the lock contract written and checked; the controller under ThreadSanitizer (patch 0275)
 - The engine's threads and locks are written down (android/indraw.c's
   header, docs/ARCHITECTURE.md "Threads and locks") and the checker

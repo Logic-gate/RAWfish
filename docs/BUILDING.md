@@ -227,3 +227,15 @@ Photos stay where they are (`~/Pictures/indRAW/` unless the settings say
 otherwise); the dconf line copies the output folders you chose, so the
 gallery keeps showing them. Then remove the old packages:
 `pkcon remove indraw-app indraw-engine`.
+
+## Continuous integration
+
+`.github/workflows/check-host.yml` runs `./scripts/check-host.sh` on GitHub's
+Ubuntu runners at every push and pull request: both halves compiled with
+-Werror by gcc and clang, the Android side against pinned NDK headers, every
+host test (several under AddressSanitizer / UndefinedBehaviorSanitizer), the
+controller under ThreadSanitizer and Helgrind, the lock checker, the specs
+and device profiles. It needs no phone and builds no package. On a private
+repository it uses the account's free monthly Actions minutes (a run takes a
+minute or two); on a public one it is free. The result shows on the commit
+in GitHub (a tick or a cross) and in the repository's Actions tab.
