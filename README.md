@@ -1,4 +1,6 @@
-## Human description
+## indRAW
+
+### Human description
 
 indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
 Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.\
