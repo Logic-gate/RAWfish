@@ -409,12 +409,12 @@ Item {
             // The viewfinder's processing (Vf), separate from the photos' (shown
             // when "Viewfinder processing in the camera menu" is on in Settings).
             MenuColumn { visible: menu.advanced && menu.previewColumns; width: band.colW; header: header
-                caption: qsTr("Vf noise"); values: [0, 1, 2, 3, 4, 5]; current: menu.previewNoiseIndex
+                caption: qsTr("Vf noise"); values: [0, 1, 2, 3, 4]; current: menu.previewNoiseIndex
                 labelFor: function(v) { return qsTr("Viewfinder noise reduction: %1").arg(menu.shortName(menu.noiseModes[v])) }
                 shortFor: function(v) { return menu.shortName(menu.noiseModes[v]).substr(0, 4) }
                 onPicked: { menu.previewNoiseIndex = value; menu.save("previewNoiseIndex", value); menu.applyLive() } }
             MenuColumn { visible: menu.advanced && menu.previewColumns; width: band.colW; header: header
-                caption: qsTr("Vf sharpen"); values: [0, 1, 2, 3, 4]; current: menu.previewEdgeIndex
+                caption: qsTr("Vf sharpen"); values: [0, 1, 2, 3]; current: menu.previewEdgeIndex
                 labelFor: function(v) { return qsTr("Viewfinder sharpening: %1").arg(menu.shortName(menu.edgeModes[v])) }
                 shortFor: function(v) { return menu.shortName(menu.edgeModes[v]).substr(0, 4) }
                 onPicked: { menu.previewEdgeIndex = value; menu.save("previewEdgeIndex", value); menu.applyLive() } }
