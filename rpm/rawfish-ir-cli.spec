@@ -1,7 +1,7 @@
 Name:       rawfish-ir-cli
 Summary:    RAWfish-indRAW camera engine (Camera2 bridge library, controller, CLI)
 # Keep in step with indraw_version.h (scripts/build-engine-rpm.sh checks).
-Version:    0.1.1
+Version:    0.1.2
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
@@ -70,6 +70,7 @@ install -d %{buildroot}%{_datadir}/rawfish-ir/device-profiles
 install -m 644 android/data/device-profiles/*.json %{buildroot}%{_datadir}/rawfish-ir/device-profiles/
 
 %files
+%license LICENSE
 %{_libexecdir}/rawfish-ir/rawfish-ir-cli
 %{_bindir}/rawfish-ir-cli
 %{_libexecdir}/droid-hybris/system/%{hybrislib}/librawfish-ir.so

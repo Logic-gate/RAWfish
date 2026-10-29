@@ -106,8 +106,10 @@ converges, and a JPEG output sits on the same session, so a photo is a single re
 Captures are written to `~/Pictures/RAWfish-ir/` as `NAME_YYYYMMDD_HHMMSS_mmm.EXT`: the command's
 first argument is a name prefix, and the engine always appends the capture timestamp (milliseconds
 so a burst never collides) and the extension (`.jpg`, `.dng`). DNGs carry the capture time in
-EXIF (`DateTimeOriginal`). (`~/Pictures` is outside the Sailjail auto-whitelist: the CLI runs
-unsandboxed, the app declares the Pictures permission.)
+EXIF (`DateTimeOriginal`). (`~/Pictures` is outside the Sailjail auto-whitelist: the app declares
+the Pictures permission.) **The command-line tool is not sandboxed**: run from a terminal,
+`rawfish-ir-cli` has the user's rights, and `--jpgdir` / `--dngdir` take any folder the user can
+write. Only the app (and the engine it launches) runs inside Sailjail.
 
 ## Build
 
@@ -141,7 +143,7 @@ ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-android.sh   # build/android/libra
 
 ```sh
 ./rawfish-ir-cli caps 0       # sizes, noise/edge modes, ISO/speed/focus ranges, per-size timings, shading info
-printf 'jpeg /tmp/a.jpg q=95 off_noise\njpeg /tmp/b.jpg q=90 minimal_noise off_edge focus=continuous\nquit\n' \\
+printf 'jpeg a q=95 off_noise\njpeg b q=90 minimal_noise off_edge focus=continuous\nquit\n' \
     | ./rawfish-ir-cli --log ~/rawfish-ir.log run 0 8192x6144
 ```
 
@@ -157,20 +159,19 @@ Mode names always carry their family: `hq_noise` (NOISE_REDUCTION_MODE_HIGH_QUAL
 ## RAW16
 
 ```sh
-printf 'raw b-raw.raw16\njpeg b-denoise_off-sharp_off.jpg off_noise off_edge\nquit\n' \
+printf 'raw b\njpeg b-denoise_off-sharp_off off_noise off_edge\nquit\n' \
     | ./rawfish-ir-cli --log rawfish-ir.log run 0 8192x6144 raw=4096x3072
-python3 scripts/raw16-check.py b-raw.raw16 [--shading]     # on a PC: levels, WB, shading, PNG
 ```
 
-`raw NAME` writes a ready-to-develop DNG directly on the phone (same format as
-`raw16-to-dng.py` below: lens shading GainMap, colour calibration, white balance, noise profile,
-EXIF). `raw FILE` with any other extension writes the raw pixels (uint16 little-endian,
-width x height, no padding) and `FILE.json`:
-layout, static sensor/lens facts (CFA, black/white levels, colour matrices, shading map size,
-`SENSOR_INFO_LENS_SHADING_APPLIED`) and the per-frame result (exposure, ISO, WB gains,
-neutral point, noise profile, lens shading map when the camera reports it).
+`raw NAME` writes a ready-to-develop DNG directly on the phone, as
+`NAME_YYYYMMDD_HHMMSS_mmm.dng` (lens shading GainMap, colour calibration, white balance, noise
+profile, EXIF). NAME is a prefix of letters, digits, `-` and `_` only: the engine adds the date and
+the extension (see "Output files"). Files written before 0.47 as raw pixels (`.raw16`, uint16
+little-endian, with a `.json` sidecar: layout, static sensor facts, the per-frame result) are
+still read by `scripts/raw16-check.py` (levels, WB, shading, PNG) and turned into DNGs by
+`scripts/raw16-to-dng.py` on a PC.
 
-File names: fields separated by `-`, each field `name_value` (e.g. `m-denoise_zsl-sharp_hq-q90.jpg`).
+Prefixes: fields separated by `-`, each field `name_value` (e.g. `m-denoise_off-sharp_hq-q90`).
 
 ## Manual exposure
 
@@ -200,15 +201,14 @@ an internal `SpecialLongExp` mode above a fixed threshold with no Camera2 contro
 So long exposures are stacked:
 
 ```sh
-printf 'stack night-16s.stack total=16 sub=0.5 iso=100\nquit\n' \
+printf 'stack night-16s film=16 sub=0.5 iso=100\nquit\n' \
     | ./rawfish-ir-cli --log rawfish-ir.log run 0 4096x3072 raw=4096x3072
-python3 scripts/raw16-check.py night-16s.stack     # handles the uint32 sum
 ```
 
 `stack NAME film=T [sub=T] [stk_denoise=1|2|4] [iso=N]` builds a film-equivalent long exposure by
-stacking RAW sub-frames (the HAL caps a real single exposure near 1/2 s). `FILE.dng` writes a DNG;
-any other extension writes the raw uint32 sum + `FILE.json`. AF is turned off for the whole burst,
-so the frames share one focus.
+stacking RAW sub-frames (the HAL caps a real single exposure near 1/2 s) and writes one DNG,
+`NAME_..._.dng`. (Older raw `.stack` sums, uint32 with a `.json`, are read by the PC scripts.)
+AF is turned off for the whole burst, so the frames share one focus.
 
 It is a lossless **brute sum**: N sub-frames are added in 32-bit, and the DNG's black/white levels
 are scaled by the frame-equivalent, so the exposure stays truthful and no precision is thrown away.
@@ -239,8 +239,8 @@ tripod the frames are not aligned (no registration yet).
 ## DNG
 
 ```sh
-python3 scripts/raw16-to-dng.py m-raw.raw16            # -> m-raw.dng
-python3 scripts/raw16-to-dng.py night-16s.stack        # a stack works too
+python3 scripts/raw16-to-dng.py m-raw.raw16            # -> m-raw.dng (files from before 0.47)
+python3 scripts/raw16-to-dng.py night-16s.stack        # a raw stack sum works too
 python3 scripts/raw16-to-dng.py m-raw.raw16 --no-shading
 ```
 

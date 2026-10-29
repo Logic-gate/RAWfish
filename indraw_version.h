@@ -5,5 +5,5 @@
  * (rpm/rawfish-ir-cli.spec) and the gui's carry the same number. */
 #ifndef INDRAW_VERSION_H
 #define INDRAW_VERSION_H
-#define IR_VERSION "0.1.1"
+#define IR_VERSION "0.1.2"
 #endif

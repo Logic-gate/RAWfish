@@ -1,13 +1,18 @@
 #!/bin/sh
 # PC-only sanity check: compiles both halves with the host gcc.
 # The Android side is only syntax/type-checked against NDK headers fetched
-# from AOSP (LineageOS mirror); the real build is build-android.sh.
+# from AOSP (LineageOS mirror) at PINNED commits and checked against
+# scripts/ndk-headers.sha256 (they were fetched from a moving branch until
+# 0.1.2: October 2026 audit); the real build is build-android.sh.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 hdr=${NDK_HEADERS:-/tmp/ndkhdr}
-if [ ! -f "$hdr/camera/NdkCameraDevice.h" ]; then
+av_rev=43a832b45a7129f3db1357c18157dcfcfa53b82e      # LineageOS android_frameworks_av, lineage-21.0, Oct 2026
+native_rev=bb156c091b21aab6e5752bc7368832065c2fa0c8  # LineageOS android_frameworks_native, idem
+if [ ! -f "$hdr/.pinned-$av_rev" ]; then
+    rm -rf "$hdr"
     mkdir -p "$hdr/camera" "$hdr/media" "$hdr/android"
-    av=https://raw.githubusercontent.com/LineageOS/android_frameworks_av/lineage-21.0
+    av=https://raw.githubusercontent.com/LineageOS/android_frameworks_av/$av_rev
     for f in NdkCameraManager NdkCameraDevice NdkCameraError NdkCameraMetadata \
              NdkCameraMetadataTags NdkCameraWindowType NdkCaptureRequest NdkCameraCaptureSession; do
         curl -sfL "$av/camera/ndk/include/camera/$f.h" -o "$hdr/camera/$f.h"
@@ -15,8 +20,10 @@ if [ ! -f "$hdr/camera/NdkCameraDevice.h" ]; then
     for f in NdkImage NdkImageReader NdkMediaError; do
         curl -sfL "$av/media/ndk/include/media/$f.h" -o "$hdr/media/$f.h"
     done
-    curl -sfL https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-21.0/libs/nativewindow/include/android/native_window.h \
+    curl -sfL https://raw.githubusercontent.com/LineageOS/android_frameworks_native/$native_rev/libs/nativewindow/include/android/native_window.h \
         -o "$hdr/android/native_window.h"
+    ( cd "$hdr" && sha256sum -c --quiet "$root/scripts/ndk-headers.sha256" ) || { echo "NDK headers: checksum mismatch (scripts/ndk-headers.sha256)" >&2; exit 1; }
+    touch "$hdr/.pinned-$av_rev"
     # bionic's system properties (Exif Make/Model): a stand-in for the host.
     mkdir -p "$hdr/sys"
     printf '#pragma once\n#define PROP_VALUE_MAX 92\nint __system_property_get(const char *name, char *value);\n' > "$hdr/sys/system_properties.h"
@@ -83,6 +90,10 @@ gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shoot-test "$root/sailfish/tes
 echo "sailfish/indraw.c: OK (-O2)"
 
 # RPM specs: in %install every line is a shell command, so a line that is
+# The app is built from app/ alone (sfdk), so it carries its own copy of the
+# licence for its %license: the two must stay the same file.
+cmp -s "$root/LICENSE" "$root/app/LICENSE" || { echo "app/LICENSE differs from LICENSE: copy it again" >&2; exit 1; }
+echo "licence: app/LICENSE = LICENSE (OK)"
 # One version number for the two packages and the library (RAWfish-indRAW 0.1.0+).
 v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/indraw_version.h")
 v_cli=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir-cli.spec")

@@ -1,17 +1,30 @@
 # Changelog (AI generated)
 
-Versions are the engine's (`indraw_version.h`); the app's version and its
-"ui NN" badge are given alongside. Patch numbers refer to the files in
-`patches/` (a documentary record, see patches/README.md).
-Newest first.
+Since 0.1.0 one version covers the library and both packages
+(`indraw_version.h`, the two specs); before it, the versions were the
+engine's, with the app's and its "ui NN" badge alongside. Patch numbers
+refer to the patch series the changes were delivered as (kept outside the
+repository). Newest first.
 
-## Known issues (as of 0.1.1)
+## Known issues (as of 0.1.2)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.2 — packaging and documentation from the October 2026 audits (patch 0274)
+- Both packages ship the licence (%license); the duplicate LICENSES/LICENSE
+  is gone (the app's build keeps an identical copy, app/LICENSE).
+- CREDITS says plainly what RAWfish-indRAW owes RAWfish: its logic and the
+  look of its interface, modelled on it, without copying its code.
+- The README's examples work again (file names are prefixes; the engine
+  writes DNGs), and it says that the command-line tool is not sandboxed.
+- The host check fetches its Android headers at pinned commits and checks
+  their SHA-256 (they came from a moving branch).
+- References to files that are not in the repository (docs/METHOD.md, the
+  patch series) are gone.
 
 ## 0.1.1 — bugs from the October 2026 audits (patch 0273)
 - The viewfinder's frame reader refuses a header whose size does not add

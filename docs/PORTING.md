@@ -110,9 +110,6 @@ Device profiles are data: they can be added without touching the code.
   reset). The size is forgotten without a restart; the new camera's caps
   settle it, restarting only if "max" was not the format's size.
 
-Before porting to a new phone, read docs/METHOD.md: the questions that
-found the problems on the JP2 and the XA2, worth asking first.
-
 ## When a HAL moves the lens at the shutter (XA2, 0.47.54)
 
 On the Xperia XA2 the lens moved at the shutter in 'once' and manual focus,

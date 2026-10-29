@@ -153,7 +153,7 @@ profile and the settings are on the phone.
 For a truly clean slate:
 
 ```sh
-git clean -xdf -e patches/          # deletes every untracked file (build outputs, .sfdk/ state)
+git clean -xdf                      # deletes every untracked file (build outputs, .sfdk/ state)
 git status                          # should be empty
 ./scripts/build-all.sh
 ```
@@ -189,13 +189,12 @@ android/      the Android library (Camera2 through the NDK): indraw.c, dngwrite.
 sailfish/     the command-line tool that loads it through libhybris, and controller.c (the
               controller layer, docs/ARCHITECTURE.md) with its host test in tests/
 app/          the Qt/QML application (qml/, indrawpreview.cpp, the spec in rpm/)
-rpm/          the engine's RPM spec
+rpm/          the engine's RPM spec (rawfish-ir-cli)
 scripts/      build and diagnostic scripts (build-all.sh is the one to remember)
 docs/         USER-GUIDE.md, ENGINE.md (command reference), UI-NOTES.md (what the app does and why), DEVICE-PROFILES.md,
               GENERATED-HAL.md, STACKING.md, PORTING.md, ROBUSTNESS.md, ROADMAP.md, ARCHITECTURE.md,
               this file
-indraw_version.h   the engine's version, shared by the library, the tool and the spec
-patches/      the project's history as a patch series (not needed to build)
+indraw_version.h   the version, shared by the library, the tool and both specs
 ```
 
 ## Versions and git tags

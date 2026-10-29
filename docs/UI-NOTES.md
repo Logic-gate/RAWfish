@@ -7,10 +7,7 @@ Graphical/structural reference: RAWfish v1.3.1-alpha.9 -- we follow its layout
 and components closely, but with the explicit differences in "vs RAWfish" below.
 
 Build note: changes are delivered as patches, applied with `git apply` and
-committed one by one; the git history of the reference repository is the
-authority. `patches/` keeps those files as a documentary record, in order: the
-series does not replay from an empty tree (it spans several working copies and
-early hand edits; it applies up to 0058, see patches/README.md).
+committed one by one; the git history of the repository is the authority.
 
 
 ## Core principles

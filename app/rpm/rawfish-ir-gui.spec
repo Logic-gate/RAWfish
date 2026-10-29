@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-indRAW camera (the interface)
-Version:    0.1.1
+Version:    0.1.2
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
@@ -74,6 +74,7 @@ install -D -m 644 settings/rawfish-ir.json %{buildroot}%{_datadir}/jolla-setting
 install -D -m 644 settings/SettingsPage.qml %{buildroot}%{_datadir}/jolla-settings/pages/rawfish-ir/SettingsPage.qml
 
 %files
+%license LICENSE
 %{_bindir}/rawfish-ir
 %{_datadir}/rawfish-ir
 %{_datadir}/applications/rawfish-ir.desktop
