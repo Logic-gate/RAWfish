@@ -1,9 +1,9 @@
 build/
-sailfish/indraw
+sailfish/rawfish-ir-cli
 # App build products (sfdk writes them in-tree).
 app/*.o
 app/moc_*
-app/indraw-app
+app/rawfish-ir
 app/RPMS/
 RPMS/
 app/documentation.list

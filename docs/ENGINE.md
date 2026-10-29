@@ -1,7 +1,7 @@
 # (AI generated)
-# The indRAW engine: command reference
+# The RAWfish-indRAW engine: command reference
 
-`indraw` (the command-line tool, `/usr/bin/indraw`) loads `libindraw.so`
+`rawfish-ir-cli` (the command-line tool, `/usr/bin/rawfish-ir-cli`; the sources keep the engine's development name, indraw) loads `librawfish-ir.so`
 through libhybris and drives the camera with Android's Camera2. The app uses
 exactly this interface; everything here can be done by hand in a terminal on
 the phone. The app must be closed while you use the tool (one user of the
@@ -13,13 +13,13 @@ read (`> ...`) and every result are appended to FILE with a timestamp.
 
 ## Invocation
 
-    indraw [--log FILE] [--jpgdir DIR] [--dngdir DIR] COMMAND ...
+    rawfish-ir-cli [--log FILE] [--jpgdir DIR] [--dngdir DIR] COMMAND ...
 
 | Option | Meaning | Default |
 |---|---|---|
 | `--log FILE` | append a timestamped transcript to FILE | none |
-| `--jpgdir DIR` | where JPEGs go (`~/` = home); created if needed, refused at start if impossible | `~/Pictures/indRAW` |
-| `--dngdir DIR` | where DNGs (and their `.previews/`) go | `~/Pictures/indRAW` |
+| `--jpgdir DIR` | where JPEGs go (`~/` = home); created if needed, refused at start if impossible | `~/Pictures/RAWfish-ir` |
+| `--dngdir DIR` | where DNGs (and their `.previews/`) go | `~/Pictures/RAWfish-ir` |
 
 The options may come in any order, before the command.
 
@@ -141,13 +141,13 @@ frames after it is asked to; a display that maps frames with `fcrop` never
 jumps.
 
 Internals: with a controller attached (`indraw_set_event_fd`, done by the
-`indraw` process at stream start), these events go to the controller through
+`rawfish-ir-cli` process at stream start), these events go to the controller through
 a pipe and reach the stream through `indraw_emit`; the behaviour seen by an
 interface is the same.
 
 ## Controller commands (`stream` mode)
 
-In `stream` mode the `indraw` process also runs the controller
+In `stream` mode the `rawfish-ir-cli` process also runs the controller
 (docs/ARCHITECTURE.md): the camera's behaviour, which the interface drives
 with high-level commands on the same stdin. The controller turns them into
 the engine commands above (logged with a `c> ` prefix) and reports its state
@@ -219,7 +219,7 @@ Checked at every open; out-of-range values are ignored with a log line.
 | 0 | done |
 | 2 | bad command line |
 | 10 | libhybris / android_dlopen unavailable |
-| 12 | `libindraw.so` not loaded, a symbol missing, or library/tool version mismatch |
+| 12 | `librawfish-ir.so` not loaded, a symbol missing, or library/tool version mismatch |
 | 14 | binder thread pool could not start |
 | 20 | the camera layer reported an error |
 
@@ -227,39 +227,39 @@ Checked at every open; out-of-range values are ignored with a log line.
 
 List the cameras, then what the back camera offers:
 
-    indraw cameras
-    indraw caps 0
+    rawfish-ir-cli cameras
+    rawfish-ir-cli caps 0
 
 One JPEG and one DNG, automatic exposure, transcript in a log:
 
-    printf 'jpeg test\nraw test\nquit\n' | indraw --log /tmp/t.log run 0 max max raw=max
+    printf 'jpeg test\nraw test\nquit\n' | rawfish-ir-cli --log /tmp/t.log run 0 max max raw=max
 
 A manual 1/60 s at ISO 400, focused at 1.5 m, quality 90, no noise reduction:
 
-    printf 'jpeg street q=90 off_noise focus=1.5m exp=0.0167 iso=400\nquit\n' | indraw run 0 max
+    printf 'jpeg street q=90 off_noise focus=1.5m exp=0.0167 iso=400\nquit\n' | rawfish-ir-cli run 0 max
 
 A Σ8s stack at ISO 400 with the denoise x2 (32 sub-frames, about 22 s), into
 its own folder:
 
-    printf 'stack night film=8 iso=400 stk_denoise=2\nquit\n' | indraw --dngdir ~/Pictures/night run 0 max max raw=max
+    printf 'stack night film=8 iso=400 stk_denoise=2\nquit\n' | rawfish-ir-cli --dngdir ~/Pictures/night run 0 max max raw=max
 
 Three JPEGs as fast as the sensor allows (a short moment), at a fixed 1/250 s:
 
-    printf 'burst moment n=3 exp=0.004 iso=400\nquit\n' | indraw run 0 4096x3072
+    printf 'burst moment n=3 exp=0.004 iso=400\nquit\n' | rawfish-ir-cli run 0 4096x3072
 
 Measure a scene's exposure without writing anything:
 
-    printf 'raw - exp=0.01 iso=100\nquit\n' | indraw run 0 max max raw=max
+    printf 'raw - exp=0.01 iso=100\nquit\n' | rawfish-ir-cli run 0 max max raw=max
 
 Dark frames for a noise measurement (lens covered; see `STACKING.md`):
 
     for iso in 100 400 1600; do for n in 1 2; do echo "raw dark-iso_${iso}-n_${n} focus=inf exp=0.01 iso=${iso}"; done; done > /tmp/d.txt
     echo quit >> /tmp/d.txt
-    indraw --dngdir ~/Pictures/darks run 0 max max raw=max < /tmp/d.txt
+    rawfish-ir-cli --dngdir ~/Pictures/darks run 0 max max raw=max < /tmp/d.txt
 
 Write the device profile files:
 
-    indraw probe
+    rawfish-ir-cli probe
 
 ## The preview's YUV -> RGB (0.47.61)
 

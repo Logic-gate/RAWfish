@@ -1,10 +1,10 @@
 # (AI generated)
-# Porting indRAW to another device
+# Porting RAWfish-indRAW to another device
 
-indRAW was built and tested on the Jolla Phone 2 (JP2, MediaTek HAL, Sony
+RAWfish-indRAW was built and tested on the Jolla Phone 2 (JP2, MediaTek HAL, Sony
 IMX766). Everything device-specific was pushed into data the engine reads at
 run time. This page says what to expect, what RAWfish's README lists as porting
-work and how indRAW stands on each point, and the steps.
+work and how RAWfish-indRAW stands on each point, and the steps.
 
 ## Prerequisites the device must meet (no way around them)
 
@@ -30,7 +30,7 @@ work and how indRAW stands on each point, and the steps.
 
 ## RAWfish's porting list, point by point
 
-| RAWfish's point | indRAW |
+| RAWfish's point | RAWfish-indRAW |
 |---|---|
 | Camera2 through libhybris | same requirement (above) |
 | RAW16 output from the HAL | same; absent RAW is handled (JPEG only) |
@@ -39,21 +39,21 @@ work and how indRAW stands on each point, and the steps.
 | orientation, mirroring, cropping, focus coordinates | the view rotation comes from the HAL's sensor orientation per camera; taps and the loupe go through the same transform; front cameras are not mirrored by design (a camera, not a mirror) |
 | lens / ISO / shutter metadata missing or wrong | the engine reports what the HAL applied and checks it against the image (`matches_image`); the Exif it writes carries only what the HAL reported |
 | warm-JPEG path depending on a helper staying alive | not applicable: one session, one process, the preview is the session |
-| vendor library namespace issues | the engine uses only standard Camera2 keys (no vendor tags); loading problems would show at `indraw cameras` |
+| vendor library namespace issues | the engine uses only standard Camera2 keys (no vendor tags); loading problems would show at `rawfish-ir-cli cameras` |
 | performance varies | the meter rate, the peaking and the stack latency are measured or adjustable, not assumed |
 
-What indRAW adds that is device-specific and must be measured: the single
+What RAWfish-indRAW adds that is device-specific and must be measured: the single
 exposure ceiling, the focus calibration, the aid thresholds (below).
 
 ## Steps
 
 1. Build and install both RPMs (`docs/BUILDING.md`).
-2. On the device: `indraw cameras` lists the cameras; `indraw caps 0` dumps
+2. On the device: `rawfish-ir-cli cameras` lists the cameras; `rawfish-ir-cli caps 0` dumps
    what the HAL claims for one. If the first fails with a libhybris or binder
    error, stop here: the prerequisites are not met.
-3. `indraw probe` writes `generated-hal.json` into
-   `~/.local/share/com.indraw/indraw/device-profiles/` (read-only reference).
-4. Try the command line before the app: `indraw stream 0 max max raw=max`
+3. `rawfish-ir-cli probe` writes `generated-hal.json` into
+   `~/.local/share/com.rawfish/rawfish-ir/device-profiles/` (read-only reference).
+4. Try the command line before the app: `rawfish-ir-cli stream 0 max max raw=max`
    with `jpeg test` / `raw test` on stdin (`docs/DEVICE-PROFILES.md` has
    examples). Read the JSON replies: `applied` must match `requested`, and
    `matches_image` must be true.
@@ -100,7 +100,7 @@ Device profiles are data: they can be added without touching the code.
   raw requests kept the setup's continuous AF and this HAL started a scan
   at the capture, undoing the lock (0.47.51).
 - A 16:9 RAW stream (the HAL's 20 MP 16:9 readout of the 4:3 IMX300:
-  indRAW never sees more than the HAL delivers): "4:3" asked for the
+  RAWfish-indRAW never sees more than the HAL delivers): "4:3" asked for the
   largest size of all, which is 16:9 -- the format did nothing. The format
   now takes the largest size of its own ratio, the binning judged on the
   dimension the format does not crop, and the menu says which format is

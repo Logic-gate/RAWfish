@@ -1,7 +1,7 @@
 /*
  * indraw.c -- Sailfish side of indraw (glibc program, built with the Sailfish SDK).
  *
- * Loads the Android-side library libindraw.so through libhybris and drives it:
+ * Loads the Android-side library librawfish-ir.so through libhybris and drives it:
  * camera listing and capabilities, the device profile files, and a session
  * ("run" / "stream") that keeps the camera open and executes one command per
  * line of stdin (photos, stacks, live viewfinder settings). The complete
@@ -40,7 +40,7 @@
 enum {
     EXIT_USAGE = 2,       /* bad command line                          */
     EXIT_HYBRIS = 10,     /* libhybris or android_dlopen unavailable   */
-    EXIT_BRIDGE = 12,     /* libindraw.so not loaded / symbol missing   */
+    EXIT_BRIDGE = 12,     /* librawfish-ir.so not loaded / symbol missing */
     EXIT_DROIDMEDIA = 14, /* binder thread pool could not be started   */
     EXIT_FAILED = 20,     /* the bridge reported an error              */
 };
@@ -144,10 +144,10 @@ static void emit(const char *json)
 }
 
 /* Resolves the device-profiles directory, honouring the Sailjail sandbox.
- * Order: INDRAW_PROFILE_DIR (for tests), else $XDG_DATA_HOME/com.indraw/indraw,
- * else $HOME/.local/share/com.indraw/indraw. Sailjail whitelists exactly
+ * Order: INDRAW_PROFILE_DIR (for tests), else $XDG_DATA_HOME/com.rawfish/rawfish-ir,
+ * else $HOME/.local/share/com.rawfish/rawfish-ir. Sailjail whitelists exactly
  * $HOME/.local/share/<OrganizationName>/<ApplicationName>, i.e.
- * com.indraw/indraw, and sets XDG_DATA_HOME inside the sandbox, so reading it
+ * com.rawfish/rawfish-ir, and sets XDG_DATA_HOME inside the sandbox, so reading it
  * (as Qt's QStandardPaths does) is correct both inside and outside the jail.
  * Writes the path into `buf`; returns 0 on success, -1 if it does not fit. */
 static int profile_dir(char *buf, size_t n)
@@ -159,9 +159,9 @@ static int profile_dir(char *buf, size_t n)
     if (over && over[0])
         len = snprintf(buf, n, "%s", over);
     else if (xdg && xdg[0])
-        len = snprintf(buf, n, "%s/com.indraw/indraw/device-profiles", xdg);
+        len = snprintf(buf, n, "%s/com.rawfish/rawfish-ir/device-profiles", xdg);
     else if (home && home[0])
-        len = snprintf(buf, n, "%s/.local/share/com.indraw/indraw/device-profiles", home);
+        len = snprintf(buf, n, "%s/.local/share/com.rawfish/rawfish-ir/device-profiles", home);
     else
         return -1;                                    /* no HOME: give up       */
     return (len < 0 || (size_t)len >= n) ? -1 : 0;
@@ -302,7 +302,7 @@ static void exif_from_ts(const struct timespec *ts, char *buf, size_t n)
 
 /* True if `name` is a safe filename prefix: non-empty and only letters, digits,
  * '-' and '_'. This refuses '/', spaces and shell/path metacharacters, so a
- * prefix can never escape ~/Pictures/indRAW/ or make an odd filename. */
+ * prefix can never escape ~/Pictures/RAWfish-ir/ or make an odd filename. */
 static int valid_name(const char *name)
 {
     const char *p;
@@ -346,14 +346,14 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
 static void ov_log(const char *msg)
 {
     log_line("# ", msg);
-    fprintf(stderr, "indraw: %s\n", msg);
+    fprintf(stderr, "rawfish-ir-cli: %s\n", msg);
 }
 
 /* Two sources of device corrections, read in this order for every key:
  *   0. the user's override-hal.json (device-profiles/ in the app's data),
  *      used unless its structure is broken (check_override);
  *   1. the device profile shipped with indRAW for this phone
- *      (/usr/share/indraw/device-profiles/, one JSON file per camera
+ *      (/usr/share/rawfish-ir/device-profiles/, one JSON file per camera
  *      module), matched by make and model,
  *      or by the camera's RAW size when no model matches.
  * A key the user writes replaces the shipped one; a key the user does not
@@ -457,7 +457,7 @@ static int str_in(const char *from, const char *to, const char *key, char *val, 
     return 1;
 }
 /* Finds the device profile shipped for this phone: the files in
- * /usr/share/indraw/device-profiles/, each with a "match" block
+ * /usr/share/rawfish-ir/device-profiles/, each with a "match" block
  *   "match": { "make": "Sony", "models": ["Xperia XA2", "H4113", ...],
  *              "raw": [5984, 3392] }
  * A model listed (any case) with the same make wins; else, with the same
@@ -466,7 +466,7 @@ static int str_in(const char *from, const char *to, const char *key, char *val, 
  * notch ("notch": true/false at the top level) for the interface. */
 static void find_shipped_profile(void *bridge, const char *id)
 {
-    static const char *const dirpath = "/usr/share/indraw/device-profiles";
+    static const char *const dirpath = "/usr/share/rawfish-ir/device-profiles";
     typedef int (*info_fn)(char *, size_t);
     typedef int (*caps_fn)(const char *, char *, size_t);
     typedef int (*notch_fn)(int);
@@ -790,7 +790,7 @@ static int write_focus_calibration(const char *id, const float *real_d, const fl
     snprintf(part, sizeof part, "%s.part", file);
     f = fopen(part, "w");
     if (!f) return -1;
-    fprintf(f, "{\n  \"_comment\": \"written by 'indraw calib': manual focus distance -> the HAL's lens value; merged over override-hal.json\",\n"
+    fprintf(f, "{\n  \"_comment\": \"written by 'rawfish-ir-cli calib': manual focus distance -> the HAL's lens value; merged over override-hal.json\",\n"
                "  \"cameras\": [\n    {\n      \"camera_id\": \"%s\",\n      \"focus_calibration\": [\n", id);
     for (i = 0; i < n; ++i) {
         if (real_d[i] > 0) fprintf(f, "        { \"real_m\": %.3f, \"hal_diopters\": %.3f }%s\n", 1.0 / real_d[i], hal_d[i], i + 1 < n ? "," : "");
@@ -801,14 +801,14 @@ static int write_focus_calibration(const char *id, const float *real_d, const fl
     return 0;
 }
 
-/* Builds an output path: ~/Pictures/indRAW/<prefix>_<YYYYMMDD>_<HHMMSS>_<ms>.<ext>
+/* Builds an output path: ~/Pictures/RAWfish-ir/<prefix>_<YYYYMMDD>_<HHMMSS>_<ms>.<ext>
  * The command's filename argument becomes <prefix>; indraw always appends the
  * timestamp (with milliseconds, so a burst never collides) and the extension
- * for the command. Creates ~/Pictures/indRAW/ if missing. Returns 0, or -1 if
+ * for the command. Creates ~/Pictures/RAWfish-ir/ if missing. Returns 0, or -1 if
  * the path does not fit or HOME is unset. (Note: ~/Pictures is NOT one of the
  * three dirs Sailjail auto-whitelists; the CLI tool runs unsandboxed, but the
  * future Qt app will need a Pictures permission to write here.) */
-/* Output folders: ~/Pictures/indRAW by default for everything; the app (or
+/* Output folders: ~/Pictures/RAWfish-ir by default for everything; the app (or
  * the caller) can put JPEGs and DNGs elsewhere with --jpgdir / --dngdir, a
  * "~/" prefix standing for HOME. Nothing else decides where files go. */
 static char g_jpgdir[1024], g_dngdir[1024];
@@ -834,7 +834,7 @@ static int build_output_path(const char *prefix, const char *ext,
     if (want[0]) { snprintf(dir, sizeof dir, "%s", want); }
     else {
         if (!home || !home[0]) return -1;
-        if (snprintf(dir, sizeof dir, "%s/Pictures/indRAW", home) >= (int)sizeof dir) return -1;
+        if (snprintf(dir, sizeof dir, "%s/Pictures/RAWfish-ir", home) >= (int)sizeof dir) return -1;
     }
     if (mkdir_p(dir) != 0) return -1;             /* ensure the folder exists     */
     localtime_r(&t, &tm);                         /* the SAME instant as the EXIF */
@@ -850,10 +850,10 @@ static int load_hybris(void)
 {
     void *h = dlopen("libhybris-common.so.1", RTLD_NOW | RTLD_LOCAL); /* usual name */
     if (!h) h = dlopen("libhybris-common.so", RTLD_NOW | RTLD_LOCAL); /* fallback   */
-    if (!h) { fprintf(stderr, "indraw: %s\n", dlerror()); return 0; }
+    if (!h) { fprintf(stderr, "rawfish-ir-cli: %s\n", dlerror()); return 0; }
     a_dlopen = (android_dlopen_fn)dlsym(h, "android_dlopen");
     a_dlsym = (android_dlsym_fn)dlsym(h, "android_dlsym");
-    if (!a_dlopen || !a_dlsym) { fprintf(stderr, "indraw: no android_dlopen\n"); return 0; }
+    if (!a_dlopen || !a_dlsym) { fprintf(stderr, "rawfish-ir-cli: no android_dlopen\n"); return 0; }
     return 1;
 }
 
@@ -863,9 +863,9 @@ static int start_binder_pool(void)
 {
     void *dm = a_dlopen("libdroidmedia.so", RTLD_NOW);
     void (*init)(void);
-    if (!dm) { fprintf(stderr, "indraw: libdroidmedia.so not loaded\n"); return 0; }
+    if (!dm) { fprintf(stderr, "rawfish-ir-cli: libdroidmedia.so not loaded\n"); return 0; }
     init = (void (*)(void))a_dlsym(dm, "_droid_media_init");
-    if (!init) { fprintf(stderr, "indraw: _droid_media_init missing\n"); return 0; }
+    if (!init) { fprintf(stderr, "rawfish-ir-cli: _droid_media_init missing\n"); return 0; }
     init();
     return 1;
 }
@@ -974,13 +974,13 @@ static int timeout_for(int64_t exposure_ns)
 static void usage(void)
 {
     fprintf(stderr,
-            "usage: indraw [--log FILE] [--jpgdir DIR] [--dngdir DIR] caps ID\n"
-            "       indraw [--log FILE] cameras\n"
-            "       indraw [--log FILE] probe          (write generated-hal.json)\n"
+            "usage: rawfish-ir-cli [--log FILE] [--jpgdir DIR] [--dngdir DIR] caps ID\n"
+            "       rawfish-ir-cli [--log FILE] cameras\n"
+            "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]   (default preview 1280x960)\n"
             "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]   (SF2P frames on stdout)\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
-            "  files are written to ~/Pictures/indRAW/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS_mmm.EXT\n"
+            "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS_mmm.EXT\n"
             "  stdin: jpeg NAME [q=95] [default_noise|off_noise|fast_noise|hq_noise|minimal_noise|zsl_noise]\n"
             "                   [default_edge|off_edge|fast_edge|hq_edge|zsl_edge]\n"
             "                   [focus=auto|continuous|continuous_video|macro|edof|inf|<m>m] [easy]\n"
@@ -1705,7 +1705,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(argv[1], "--jpgdir") || !strcmp(argv[1], "--dngdir")) {
             char *dst = argv[1][2] == 'j' ? g_jpgdir : g_dngdir;
             if (expand_home(argv[2], dst, 1024) != 0 || mkdir_p(dst) != 0) {
-                fprintf(stderr, "indraw: cannot use folder %s\n", argv[2]); return EXIT_USAGE;
+                fprintf(stderr, "rawfish-ir-cli: cannot use folder %s\n", argv[2]); return EXIT_USAGE;
             }
         } else { usage(); return EXIT_USAGE; }
         argv += 2;
@@ -1725,9 +1725,9 @@ int main(int argc, char **argv)
         cmdline[len] = ' ';                    /* a separating space            */
         cmdline[len + 1] = '\0';               /* keep it a valid string        */
     }
-    log_line("$ indraw ", cmdline);
+    log_line("$ rawfish-ir-cli ", cmdline);
 
-    if (!lib) lib = "libindraw.so";
+    if (!lib) lib = "librawfish-ir.so";
     if (!load_hybris()) return EXIT_HYBRIS;
 
     /* `run` opens the camera: start the binder pool BEFORE loading the bridge. */
@@ -1735,20 +1735,20 @@ int main(int argc, char **argv)
         return EXIT_DROIDMEDIA;   /* the binder pool is needed by BOTH run and stream */
 
     bridge = a_dlopen(lib, RTLD_NOW);
-    if (!bridge) { fprintf(stderr, "indraw: cannot load %s\n", lib); return EXIT_BRIDGE; }
+    if (!bridge) { fprintf(stderr, "rawfish-ir-cli: cannot load %s\n", lib); return EXIT_BRIDGE; }
     {
         indraw_version_fn ver = (indraw_version_fn)a_dlsym(bridge, "indraw_version");
-        const char *vs = ver ? ver() : "indraw (version symbol missing)";
-        fprintf(stderr, "indraw: %s\n", vs);    /* report the loaded library     */
+        const char *vs = ver ? ver() : "rawfish-ir (version symbol missing)";
+        fprintf(stderr, "rawfish-ir-cli: %s\n", vs);    /* report the loaded library     */
         log_line("# ", vs);
         /* The library and this CLI are built and installed separately; a
          * mismatch used to fail silently (an old library refusing new sizes).
          * Refuse to go on and say so, in the log and on stderr. */
-        if (strcmp(vs, "indraw " IR_VERSION) != 0) {
+        if (strcmp(vs, "rawfish-ir " IR_VERSION) != 0) {
             char msg[160];
-            snprintf(msg, sizeof msg, "version mismatch: CLI %s, library '%s' -- reinstall indraw-engine",
+            snprintf(msg, sizeof msg, "version mismatch: CLI %s, library '%s' -- reinstall rawfish-ir-cli",
                      IR_VERSION, vs);
-            fprintf(stderr, "indraw: %s\n", msg);
+            fprintf(stderr, "rawfish-ir-cli: %s\n", msg);
             log_line("# ", msg);
             return EXIT_BRIDGE;
         }
@@ -1787,7 +1787,7 @@ int main(int argc, char **argv)
             return EXIT_FAILED;
         }
         if ((err = mkdir_p(dir)) != 0) {
-            fprintf(stderr, "indraw: mkdir %s: %s\n", dir, strerror(err));
+            fprintf(stderr, "rawfish-ir-cli: mkdir %s: %s\n", dir, strerror(err));
             emit("{\"ok\":false,\"error\":\"probe: cannot create profile dir\"}");
             return EXIT_FAILED;
         }
@@ -1987,7 +1987,7 @@ int main(int argc, char **argv)
             /* The measured lens-shading calibration for this phone and camera
              * (shading_<maker>-<model>_cam<ID>_<W>x<H>.json): the user's
              * device-profiles/lens-shading/ first, then the one shipped with
-             * the engine in /usr/share/indraw (visible in the app's sandbox);
+             * the engine in /usr/share/rawfish-ir (visible in the app's sandbox);
              * unless the override says "hal" or "none". */
             {
                 indraw_shading_load_fn sl = (indraw_shading_load_fn)a_dlsym(bridge, "indraw_shading_load");
@@ -2004,7 +2004,7 @@ int main(int argc, char **argv)
                         ov_string(argv[2], "shading_file", nm, sizeof nm);
                         if (sn) sn(nm);
                     }
-                    sl(udir, "/usr/share/indraw/lens-shading", read_override_shading(argv[2]), out, sizeof out);
+                    sl(udir, "/usr/share/rawfish-ir/lens-shading", read_override_shading(argv[2]), out, sizeof out);
                     log_line("# shading: ", out);
                 }
             }

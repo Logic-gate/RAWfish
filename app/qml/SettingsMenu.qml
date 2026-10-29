@@ -8,7 +8,7 @@
  * Columns: flash, mode, self-timer, format, resolution, JPEG quality, white
  * balance presets, noise reduction, sharpening (and the viewfinder's, if the
  * Settings page asks), bracketing, grid, Σ denoise (the zebra and peaking
- * tweaks are in indraw.conf only); the scenes only when the Settings page's switch is on (grouped
+ * tweaks are in rawfish-ir.conf only); the scenes only when the Settings page's switch is on (grouped
  * modes override the atomic controls). The fine white balance lives on the
  * deck (the ± around the shutter), no longer here; the capture's 3A wait is
  * the engine's default (1.5 s). Values persist in the app's settings file
@@ -61,12 +61,12 @@ Item {
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
     property bool advanced: true                   // simple = jpg only, no wheels
-    // The Σ preview's target frame rate (indraw.conf, hand-edited): the ISO is
+    // The Σ preview's target frame rate (rawfish-ir.conf, hand-edited): the ISO is
     // raised so that one frame this short stands for the stack.
     property int sigmaPreviewFps: 10
     property int wbShift: 0                        // steps of 5 % red/blue from the AWB; 0 = AWB
     property int tint: 0                           // percent of green, - green .. + magenta
-    // Simple mode layout, from ~/.config/com.indraw/indraw/simple.json
+    // Simple mode layout, from ~/.config/com.rawfish/rawfish-ir/simple.json
     // (defaults below): what it hides, what it fixes, which menu columns stay.
     property var simple: ({ "hide": ["wheels", "type", "histogram", "headers"],
                             "quality": 95, "noise": "minimal_noise", "edge": "hq_edge",
@@ -197,7 +197,7 @@ Item {
         if (viewfinder && viewfinder.running) viewfinder.sendCommand("wb fixed off")
         applyLive()
     }
-    // The measured lens-shading map's dosing (indraw.conf, hand-edited; see
+    // The measured lens-shading map's dosing (rawfish-ir.conf, hand-edited; see
     // shading.h): pivot 0..100 (0 only brightens the edges, 100 only darkens
     // towards the darkest corner -- darktable clips what is pushed above
     // white), strength 0..100, maximum gain.
@@ -466,12 +466,12 @@ Item {
                 onPicked: { viewfinder.sendCommand("calib " + value); header.show(value === "clear" ? qsTr("Calibration points forgotten")
                                                                                  : qsTr("Recorded %1").arg(value === "inf" ? "\u221e" : value + " m")) } }
             // Focus peaking and zebra thresholds: no longer in the menu; the
-            // % tweaks (peakTweak, zebraTweak) are read from indraw.conf, the
+            // % tweaks (peakTweak, zebraTweak) are read from rawfish-ir.conf, the
             // device values from override-hal.json (see the .example files).
             // Scenes, far right: grouped modes; with one on, the HAL drives
             // 3A and the atomic controls grey out (see the deck).
             // Scenes: as many columns of five as the HAL's list needs.
-            // Shown only when Settings > indRAW > "Scenes in the camera menu"
+            // Shown only when Settings > RAWfish-ir > "Scenes in the camera menu"
             // is on (off by default: not yet implemented properly), in the
             // simple mode as in the advanced one.
             Repeater {

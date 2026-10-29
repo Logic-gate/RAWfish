@@ -398,7 +398,7 @@ static void fill_ifd0(ifd_t *d, const dng_params_t *p)
     e_short(d, TAG_SamplesPerPixel, 1);            /* one sample (mosaiced)     */
     e_long(d, TAG_RowsPerStrip, (uint32_t)p->height); /* whole image in 1 strip */
     e_short(d, TAG_PlanarConfig, 1);               /* contiguous                */
-    e_ascii(d, TAG_Software, p->software ? p->software : "indraw");
+    e_ascii(d, TAG_Software, p->software ? p->software : "rawfish-ir");
     if (p->datetime && p->datetime[0])             /* when the file was written  */
         e_ascii(d, TAG_DateTime, p->datetime);
     e_shorts(d, TAG_CFARepeatDim, cfa_dim, 2);     /* 2x2 CFA tile              */

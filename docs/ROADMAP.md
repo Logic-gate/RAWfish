@@ -22,7 +22,7 @@ Each item says why, so it can be picked up later without re-deriving it.
   for small everyday files. To decide: reopen the session at that size
   (about 1 s to switch, ~1.5 MB files) or keep the current size (instant,
   3-4 MB).
-- **An HDR of indRAW's own**: the JP2 HAL's own is not reachable from
+- **An HDR of RAWfish-indRAW's own**: the JP2 HAL's own is not reachable from
   Camera2 (VENDOR-TESTS). Bracketed RAWs merged in linear space on the
   stacking code (tripod or steady hand: no alignment), written as one DNG;
   the bracketing setting already takes the exposures.
@@ -100,7 +100,7 @@ falling back on the previous one where it does not work:
 
 
 ### Merge with RAWfish
-Possible shape: indRAW's engine (one process, one Camera2 session for
+Possible shape: RAWfish-indRAW's engine (one process, one Camera2 session for
 viewfinder and photos) under RAWfish's interface in photo mode, GStreamer
 kept for video. The controller layer (docs/ARCHITECTURE.md, done in 0.47.9)
 already gives any interface the same camera behaviour.

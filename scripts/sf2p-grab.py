@@ -5,7 +5,7 @@ The device sends it on stdout; pipe it here. Each frame is a 16-byte header
 "SF2P" + little-endian width, height, byte-count, then width*height*3 RGB bytes.
 
 Usage, on the phone over ssh or locally:
-    indraw --log indraw.log stream 0 4096x3072 raw=4096x3072 < /dev/null \
+    rawfish-ir-cli --log rawfish-ir.log stream 0 4096x3072 raw=4096x3072 < /dev/null \
         | python3 sf2p-grab.py --count 5 --out /tmp
 
 Saves frame_000.ppm .. ; --every N saves one in N; --count stops after that many.

@@ -3,7 +3,7 @@
 
 ## What was measured (Jolla Phone 2, October 2026)
 
-Flat fields through a diffuser, RAW (indRAW 0.47.32), manual focus at known
+Flat fields through a diffuser, RAW (RAWfish-indRAW 0.47.32), manual focus at known
 lens positions, a 12 x 16 grid (edge-anchored), the gain that makes each
 point equal to a 6 % patch at the centre. Repeatability between frames of a
 position: better than 0.5 %.
@@ -44,7 +44,7 @@ the HDR scene mode. Not used.)
 `device-profiles/lens-shading/shading_<maker>-<model>_cam<ID>_<W>x<H>.json`,
 named after the phone (ro.product.manufacturer / ro.product.model) so that
 users of the same model can exchange it; the engine also ships one per known
-phone (`/usr/share/indraw/lens-shading/`, the JP2's built from the two
+phone (`/usr/share/rawfish-ir/lens-shading/`, the JP2's built from the two
 series above); the user's file wins. Contents (see `android/shading.h`):
 
 - `luminance`: a green gain grid per lens position, keyed by the HAL's own
@@ -62,7 +62,7 @@ of the HAL's. Without a file: the HAL's map, as before. The override's
 `shading` key: `measured` (default), `hal`, `none`. Nothing is baked into the
 pixels: the developer applies the map.
 
-## The user's dosing (indraw.conf)
+## The user's dosing (rawfish-ir.conf)
 
 From Ric9k's RAWfish calibration script: `shadingPivot` (0..100, default 50;
 0 only brightens the edges, 100 only darkens towards the darkest corner --
@@ -112,7 +112,7 @@ white balance (normalised to the centre now).
 
 ## The assistant (ui 156)
 
-Settings > indRAW > "Calibrate the lens shading" sets a request; at its
+Settings > RAWfish-ir > "Calibrate the lens shading" sets a request; at its
 next start the camera page pushes `ShadingAssistant.qml` over itself (the
 engine keeps running and the page drives it). Step 1 prepares (what is
 needed; full calibration or add a light; the light's kind = its colour

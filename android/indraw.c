@@ -2131,7 +2131,7 @@ static void close_all(void)
 /* Library version string, to check that the right .so is installed. */
 IR_API const char *indraw_version(void)
 {
-    return "indraw " IR_VERSION;
+    return "rawfish-ir " IR_VERSION;   /* the installed name; the code keeps indraw */
 }
 
 /* Lists the camera ids the device exposes, as a JSON array of strings. Mirrors
@@ -3481,7 +3481,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
         exif_datetime(dt, sizeof dt);
         ex.make = make[0] ? make : NULL;
         ex.model = model[0] ? model : NULL;
-        ex.software = "indRAW " IR_VERSION;
+        ex.software = "RAWfish-ir " IR_VERSION;
         ex.datetime = dt;
         ex.exposure_ns = g.result_ready ? g.r_exposure_ns : -1;    /* only what the HAL reported */
         ex.iso = g.result_ready ? g.r_iso : -1;
@@ -4017,7 +4017,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     if (want_dng) {
         dng_params_t dp;
         char sw[32], dt[24];
-        snprintf(sw, sizeof sw, "indraw %s", IR_VERSION);
+        snprintf(sw, sizeof sw, "RAWfish-ir %s", IR_VERSION);
         dng_params_from(&dp, rmeta, dng_px, w_px, h_px, sh_gains, sh_cols, sh_rows,
                         a_exposure, a_iso, sw);
         if (datetime && datetime[0]) dp.datetime = datetime; /* caller's instant */
@@ -4451,7 +4451,7 @@ static int indraw_stack_impl(const char *path, const char *datetime, int64_t fil
         char sw[32], dt[24];
         int y, x, k, scale;
         if (!px16) { rc = fail(out, out_size, IR_EFILE, "stack", "out of memory", 0); goto done; }
-        snprintf(sw, sizeof sw, "indraw %s", IR_VERSION);
+        snprintf(sw, sizeof sw, "RAWfish-ir %s", IR_VERSION);
         /* Metadata (levels, matrices, noise) from the first frame. */
         dng_params_from(&dp, first_meta ? first_meta : g.r_meta, px16, w, h,
                         sh_gains, sh_cols, sh_rows, (int64_t)(base_eff * sub_ns + 0.5), g.r_iso, sw);
@@ -4838,7 +4838,7 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
         char dt[24];
         memset(&ex, 0, sizeof ex);
         exif_datetime(dt, sizeof dt);
-        ex.datetime = dt; ex.software = "indRAW " IR_VERSION;
+        ex.datetime = dt; ex.software = "RAWfish-ir " IR_VERSION;
         ex.wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
         ex.exposure_manual = exposure_ns > 0;
         ex.exposure_ns = exposure_ns; ex.iso = iso;

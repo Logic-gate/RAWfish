@@ -1,16 +1,16 @@
 # Device profiles (AI generated)
 
-indRAW must run on more than the reference phone (Jolla Phone 2), so anything
+RAWfish-indRAW must run on more than the reference phone (Jolla Phone 2), so anything
 that varies between devices lives in data, not in the code. The data is split
 by **nature**, not by device -- this is the key difference from RAWfish, where a
 single per-device "profile" mixes sensor facts, corrections and UI preferences,
 so changing phone loses your UI choices and you can no longer tell what a value
-means. indRAW keeps three natures strictly apart:
+means. RAWfish-indRAW keeps three natures strictly apart:
 
 ## 1. What the HAL claims  (read-only, per device)
 
-A snapshot of the sensor's declared capabilities, written by `indraw probe` to
-`generated-hal.json`. indRAW generates it and never edits it. It is reference
+A snapshot of the sensor's declared capabilities, written by `rawfish-ir-cli probe` to
+`generated-hal.json`. RAWfish-indRAW generates it and never edits it. It is reference
 only: camera ids, sizes, ranges, modes, and the grouped controls (scenes,
 effects) the device lists.
 
@@ -50,7 +50,7 @@ Corrections wired today (both optional, per camera):
 A third, richer correction is the **focus calibration table**: `LENS_FOCUS_DISTANCE`
 is often uncalibrated (the JP2 reports `uncalibrated`), so a requested distance does
 not match reality -- on the JP2, infinity is reached near `focus=0.5m`, not `inf`.
-The table maps a real distance to the HAL diopter that actually reaches it; indraw
+The table maps a real distance to the HAL diopter that actually reaches it; the engine
 interpolates in diopters (optics is linear there), extrapolates beyond the ends, and
 clamps to the lens's physical range. Measure it by shooting `scripts/focus-calib.sh`
 at known distances and picking the sharpest frame. Each user can refine it for their
@@ -100,7 +100,7 @@ position as "this is what D metres means on this lens".
 2. In the app, with the focus button on **once**, tap the target. Wait for
    the circle to become **solid** (sharp).
 3. Pull the menu down and, in the **Focus cal.** column (shown when "Focus
-   calibration in the camera menu" is on in Settings > Apps > indRAW), tap
+   calibration in the camera menu" is on in Settings > Apps > RAWfish-ir), tap
    **0.5m**, then tap it again while it blinks red (the second tap confirms:
    a stray touch never overwrites a point). The
    engine records the lens value it has at that moment for 0.5 m, in
@@ -121,7 +121,7 @@ engine's stdin. The old sweep method (`scripts/focus-calib.sh`, shooting a
 series of DNGs around each distance and judging sharpness) is still there for
 the demanding.
 
-`indraw probe` writes a starter `override-hal.json` when there is none: one
+`rawfish-ir-cli probe` writes a starter `override-hal.json` when there is none: one
 block per camera the phone has, every field the engine reads with its
 built-in default, and next to the fields that correct a HAL claim the HAL's
 own value as a reference (`_hal_exposure_max_ns`, `_hal_min_frame_ns`; keys
@@ -132,7 +132,7 @@ ones after a system update. Delete a field or a camera block to go back to
 the defaults.
 
 The engine checks the file at every camera open and writes its findings to the
-log (`~/.cache/com.indraw/indraw/indraw-ui.log`, lines starting with `#`):
+log (`~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`, lines starting with `#`):
 an unknown key (a typo such as `peak_egde`) is reported and ignored; a value
 outside its range (e.g. `peak_edge` 1..255, `observed_shutter_max_ns`
 1 ms..60 s) is reported and the default kept; unbalanced braces or quotes make
@@ -148,14 +148,14 @@ plain values.
 
 **Where the files come from.** `override-hal.json` (with a starter block
 per camera, the HAL's claims as `_hal_` references) and
-`generated-hal.json` are written by the probe: Settings > Apps > indRAW >
+`generated-hal.json` are written by the probe: Settings > Apps > RAWfish-ir >
 "Create the device profile files" (run at the next start of the app), or
-`indraw probe` in a terminal. The starter is written only when no
+`rawfish-ir-cli probe` in a terminal. The starter is written only when no
 override-hal.json exists, so deleting it and running the probe gives it
 back; the app's normal start does not.
 
-**Shipped device profiles (0.47.57).** indRAW ships one profile per camera
-module in `/usr/share/indraw/device-profiles/` (source:
+**Shipped device profiles (0.47.57).** RAWfish-indRAW ships one profile per camera
+module in `/usr/share/rawfish-ir/device-profiles/` (source:
 `android/data/device-profiles/`), the same format as `override-hal.json` plus:
 - `"match": { "make": "Sony", "models": [...], "raw": [W, H] }`: the phone is
   matched by make and model (any case); if no model matches, by make and the
@@ -182,7 +182,7 @@ point of a port: a control absent from request_keys is ignored or refused.
 **Lens shading (vignetting).** A measured calibration per phone model and
 camera, `shading_<maker>-<model>_cam<ID>_<W>x<H>.json`, in
 `device-profiles/lens-shading/` (or shipped with the engine in
-`/usr/share/indraw/lens-shading/`; the JP2's is):
+`/usr/share/rawfish-ir/lens-shading/`; the JP2's is):
 each DNG then gets a gain map for its own lens position and light instead of
 the HAL's partial one. The camera block's `shading` key: `measured`
 (default), `hal`, `none`. Measurements, model and file: `docs/LENS-SHADING.md`.
@@ -214,7 +214,7 @@ noise reduction switch:
 ```
 
 Both files can also be created from the phone: the "Create the device profile
-files" button of Settings > Apps > indRAW asks the app to run `probe` at its
+files" button of Settings > Apps > RAWfish-ir asks the app to run `probe` at its
 next start. The override is applied right after the camera opens; the tool
 prints what it applied. Field reference for the generated file:
 `docs/GENERATED-HAL.md`.
@@ -238,13 +238,13 @@ prints what it applied. Field reference for the generated file:
 Menus, toggles, display choices. These belong to the Qt app, in its own file,
 and are **never** mixed with sensor data. Changing phone must not change your UI
 preferences, and changing UI preferences must not touch the hardware data. The
-app keeps them in `~/.config/com.indraw/indraw/indraw.conf` (and a few in dconf,
-from its Settings page; `indraw.conf.example` describes every key); the CLI
+app keeps them in `~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf` (and a few in dconf,
+from its Settings page; `rawfish-ir.conf.example` describes every key); the CLI
 tool has no UI.
 
 ## Everything asked of the HAL is atomic
 
-indRAW never drives a *grouped* control that reconfigures several things at once:
+RAWfish-indRAW never drives a *grouped* control that reconfigures several things at once:
 no scene mode, no effect, no global "auto" that overrides the atomic settings.
 On open, every request is set to `CONTROL_MODE = AUTO` with `SCENE_MODE =
 DISABLED` and `EFFECT_MODE = OFF`, so a scene or effect can never silently change
@@ -260,8 +260,8 @@ Following the Sailjail sandbox (which whitelists
 `$HOME/.local/share/<OrganizationName>/<ApplicationName>` and sets
 `XDG_DATA_HOME` inside the jail), the files live in:
 
-    $XDG_DATA_HOME/com.indraw/indraw/device-profiles/      (inside the sandbox)
-    $HOME/.local/share/com.indraw/indraw/device-profiles/  (fallback)
+    $XDG_DATA_HOME/com.rawfish/rawfish-ir/device-profiles/      (inside the sandbox)
+    $HOME/.local/share/com.rawfish/rawfish-ir/device-profiles/  (fallback)
 
 `INDRAW_PROFILE_DIR` overrides both, for tests. The CLI tool reads
 `XDG_DATA_HOME` first, which is what Qt's `QStandardPaths::AppLocalDataLocation`

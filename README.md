@@ -1,8 +1,13 @@
-## indRAW
+## RAWfish-indRAW
+
+Names: **RAWfish-indRAW** is the project (this branch of RAWfish); **RAWfish-ir**
+is what you see on the phone (the app grid, Settings); `rawfish-ir` is the
+technical name (packages `rawfish-ir-cli` and `rawfish-ir-gui`, binaries,
+paths, settings); `indraw` stays the engine's development name in the sources.
 
 ## Human description
 
-indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
+RAWfish-indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
 Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.\
 Coded by AI under the supervision of and at the request of the creators.\
 Supervision and all the tests made by humans.\
@@ -49,7 +54,7 @@ Tests are also being conducted on the Xperia 10 IV community port.
 
 Beta version. We still have some bug hunting work + UI/functions improvements to do.
 
-indRAW is a rebuild based on RAWfish, itself a fork of Jolla Camera.\
+RAWfish-indRAW is a rebuild based on RAWfish, itself a fork of Jolla Camera.\
 Nothing would have been possible without Mad_Dev's big work on how to make raw pics with the Jolla Phone 2 and its IMX766 sensor.
 
 ## References, credits
@@ -64,7 +69,7 @@ https://forum.sailfishos.org/t/next-gen-native-camera-app-rawfish/34150
 
 ## LLM description
 
-indRAW
+RAWfish-indRAW
 
 A camera for Sailfish OS built on Android's Camera2 through libhybris: fast JPEG, true RAW
 (DNG) with manual shutter / ISO / focus, a strictly WYSIWYG viewfinder, and an engine that only
@@ -72,15 +77,15 @@ ever drives atomic controls and reports what the hardware really applied. Refere
 Jolla Phone 2 (2026); also runs, as a proof of concept, on the Sony Xperia XA2 (32-bit); other
 devices need porting (see "Device profiles", `docs/PORTING.md`).
 
-Two parts: the **engine** (`indraw` CLI + `libindraw.so`, this README) and the **app**
+Two parts: the **engine** (`rawfish-ir-cli` program + `librawfish-ir.so`, this README) and the **app**
 (`app/`, Qt/Silica, see `docs/UI-NOTES.md` for its behaviour specification). The app's layout is
 modelled on [RAWfish](https://forum.sailfishos.org/) (a Jolla Camera fork), whose SF2P/SF2M
 frame protocol it reuses; what it deliberately does differently is listed in `docs/UI-NOTES.md`
 ("vs RAWfish"). Development relies on AI assistance (code, debugging, research), every change
 being reviewed and tested on the device by a person; contributions are welcome on the same terms.
 License: BSD-3-Clause (`LICENSE`); lineage and credits in `CREDITS.md`; what changed when in `CHANGELOG.md`.
-The project was called **rawbar** until October 2026: the name survives in the history (`patches/`,
-old logs) and nowhere else.
+The project was called **rawbar**, then **indRAW**, before joining RAWfish as this branch in
+October 2026 (RAWfish-indRAW); the sources keep `indraw` as the engine's name.
 
 ## Engine
 
@@ -90,7 +95,7 @@ Using the app: `docs/USER-GUIDE.md`.
 Goals: fast JPEG, quality RAW with manual speed / ISO / focus.
 
 ```
-sailfish/indraw (glibc)  --libhybris-->  libindraw.so (bionic, NDK Camera2)  -->  HAL
+sailfish/rawfish-ir-cli (glibc)  --libhybris-->  librawfish-ir.so (bionic, NDK Camera2)  -->  HAL
 ```
 
 The Android library keeps ONE session open: a small YUV preview runs continuously so 3A
@@ -98,8 +103,8 @@ converges, and a JPEG output sits on the same session, so a photo is a single re
 
 ## Output files
 
-Captures are written to `~/Pictures/indRAW/` as `NAME_YYYYMMDD_HHMMSS_mmm.EXT`: the command's
-first argument is a name prefix, and indraw always appends the capture timestamp (milliseconds
+Captures are written to `~/Pictures/RAWfish-ir/` as `NAME_YYYYMMDD_HHMMSS_mmm.EXT`: the command's
+first argument is a name prefix, and the engine always appends the capture timestamp (milliseconds
 so a burst never collides) and the extension (`.jpg`, `.dng`). DNGs carry the capture time in
 EXIF (`DateTimeOriginal`). (`~/Pictures` is outside the Sailjail auto-whitelist: the CLI runs
 unsandboxed, the app declares the Pictures permission.)
@@ -112,32 +117,32 @@ rebuilding from zero. The short version: `./scripts/build-all.sh` makes both RPM
 Two RPMs, installed on the phone with `rpm -Uvh` (as root):
 
 ```sh
-ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh   # RPMS/indraw-engine-X.Y.Z-1.aarch64.rpm
-cd app && sfdk build                                           # app/RPMS/indraw-app-X.Y.Z-1.aarch64.rpm
+ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh   # RPMS/rawfish-ir-cli-X.Y.Z-1.aarch64.rpm
+cd app && sfdk build                                           # app/RPMS/rawfish-ir-gui-X.Y.Z-1.aarch64.rpm
 ```
 
-`indraw-engine` carries `libindraw.so` (prebuilt with the NDK, installed to
-`/usr/libexec/droid-hybris/system/lib64/`) and the `indraw` CLI (`/usr/libexec/indraw/indraw`,
-plus `/usr/bin/indraw`); `indraw-app` requires it. The version is `indraw_version.h`, shared by
+`rawfish-ir-cli` carries `librawfish-ir.so` (prebuilt with the NDK, installed to
+`/usr/libexec/droid-hybris/system/lib64/`) and the `rawfish-ir-cli` program (`/usr/libexec/rawfish-ir/rawfish-ir-cli`,
+plus `/usr/bin/rawfish-ir-cli`); `rawfish-ir-gui` requires it. The version is `indraw_version.h`, shared by
 the library, the CLI and the spec; the CLI refuses to run with a library of another version.
 
-Install by hand (development): copy `build/android/libindraw.so` to
-`/usr/libexec/droid-hybris/system/lib64/` (as root) and `sailfish/indraw` to
-`/usr/libexec/indraw/indraw` (mode 755) and/or a working directory. Inside the Sailjail
+Install by hand (development): copy `build/android/librawfish-ir.so` to
+`/usr/libexec/droid-hybris/system/lib64/` (as root) and `sailfish/rawfish-ir-cli` to
+`/usr/libexec/rawfish-ir/rawfish-ir-cli` (mode 755) and/or a working directory. Inside the Sailjail
 sandbox `/usr/bin` only holds the app binary, so the app launches the engine from `/usr/libexec`.
 
 ```sh
-ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-android.sh   # build/android/libindraw.so
-./scripts/build-sailfish.sh                                # sailfish/indraw (sfdk workspace)
+ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-android.sh   # build/android/librawfish-ir.so
+./scripts/build-sailfish.sh                                # sailfish/rawfish-ir-cli (sfdk workspace)
 ./scripts/check-host.sh                                    # PC: compile check only
 ```
 
 ## Use (on the phone, camera app closed)
 
 ```sh
-./indraw caps 0       # sizes, noise/edge modes, ISO/speed/focus ranges, per-size timings, shading info
+./rawfish-ir-cli caps 0       # sizes, noise/edge modes, ISO/speed/focus ranges, per-size timings, shading info
 printf 'jpeg /tmp/a.jpg q=95 off_noise\njpeg /tmp/b.jpg q=90 minimal_noise off_edge focus=continuous\nquit\n' \\
-    | ./indraw --log ~/indraw.log run 0 8192x6144
+    | ./rawfish-ir-cli --log ~/rawfish-ir.log run 0 8192x6144
 ```
 
 `run` prints one JSON line when the camera is open (`ms.open`, `ms.session`, `ms.first_frame`),
@@ -153,7 +158,7 @@ Mode names always carry their family: `hq_noise` (NOISE_REDUCTION_MODE_HIGH_QUAL
 
 ```sh
 printf 'raw b-raw.raw16\njpeg b-denoise_off-sharp_off.jpg off_noise off_edge\nquit\n' \
-    | ./indraw --log indraw.log run 0 8192x6144 raw=4096x3072
+    | ./rawfish-ir-cli --log rawfish-ir.log run 0 8192x6144 raw=4096x3072
 python3 scripts/raw16-check.py b-raw.raw16 [--shading]     # on a PC: levels, WB, shading, PNG
 ```
 
@@ -196,7 +201,7 @@ So long exposures are stacked:
 
 ```sh
 printf 'stack night-16s.stack total=16 sub=0.5 iso=100\nquit\n' \
-    | ./indraw --log indraw.log run 0 4096x3072 raw=4096x3072
+    | ./rawfish-ir-cli --log rawfish-ir.log run 0 4096x3072 raw=4096x3072
 python3 scripts/raw16-check.py night-16s.stack     # handles the uint32 sum
 ```
 
@@ -248,13 +253,13 @@ removes the vignetting (the RAW itself is not corrected; `--no-shading` omits it
 `writeGainMapOpcode`), the layout darktable actually reads on this phone: in `OpcodeList2`, with
 region Top/Left/Bottom/Right as uint32 pixels (Bottom/Right = height/width), MapSpacing/MapOrigin
 as float64, and the gains as float32. This mixed int/float64/float32 layout is not obvious from
-the spec text and was taken from that source. indraw targets the format the installed tools apply,
+the spec text and was taken from that source. RAWfish-indRAW targets the format the installed tools apply,
 not the newest spec (1.7.x), which installed versions would not read.
 
 ## Noise profile (darktable)
 
 ```sh
-printf 'noiseprofile jolla.json\nquit\n' | ./indraw --log indraw.log run 0 4096x3072 raw=4096x3072
+printf 'noiseprofile jolla.json\nquit\n' | ./rawfish-ir-cli --log rawfish-ir.log run 0 4096x3072 raw=4096x3072
 ```
 
 `noiseprofile FILE.json [sub=T]` sweeps ISO (100, 200, 400 ... up to the sensor maximum), reads
@@ -264,7 +269,7 @@ sensor measures its own noise. The file's `comment` says where to install it (on
 `~/.config/darktable/`); after a restart, darktable's *denoise (profiled)* module offers this
 camera's per-ISO profile. The report lists the a/b coefficients per ISO, so you can see whether the
 HAL returns real per-ISO values or a fixed model. The gain-channel-to-colour mapping follows the
-sensor's CFA, so it is correct on any phone. (A later indraw settings page will have a
+sensor's CFA, so it is correct on any phone. (A later settings page will have a
 "generate noise profiles" button for this.)
 
 ## Exif in the JPEGs
@@ -282,7 +287,7 @@ tag; we keep its choice).
 
 ```sh
 printf 'exposure exp=0.008 iso=400\nev 2\nmeter on rate=5\nexposure auto\nmeter off\nquit\n' \
-    | ./indraw --log indraw.log stream 0 4096x3072 raw=4096x3072 > /dev/null
+    | ./rawfish-ir-cli --log rawfish-ir.log stream 0 4096x3072 raw=4096x3072 > /dev/null
 ```
 
 - `exposure auto | exp=SEC iso=N` sets the viewfinder's exposure live: the HAL's AE, or a
@@ -331,7 +336,7 @@ printf 'exposure exp=0.008 iso=400\nev 2\nmeter on rate=5\nexposure auto\nmeter 
   `stk_denoise`, divided out) into one DNG of exposure `film`; up to 4096 frames. The focus is
   frozen at the lens position the HAL last reported (no scan: focus before the shot). While it
   runs the SF2M channel carries `progress kind=stack frame=i n=N elapsed_ms=...` per frame and
-  ends with `stack_done frames=F n=N aborted=0|1 ms=...`. **SIGUSR1** to the `indraw` process, or
+  ends with `stack_done frames=F n=N aborted=0|1 ms=...`. **SIGUSR1** to the `rawfish-ir-cli` process, or
   the end of its stdin (the app gone), aborts at the next sub-frame and writes what was added,
   with the exposure really reached. Formulas, noise and how to lower it: `docs/STACKING.md`.
 - `meter on|off [rate=HZ]` runs the exposure meter: every period a RAW16 frame is captured and
@@ -344,7 +349,7 @@ result -- the frame is read, before any encoding -- or the image, once), `writte
 is on disk) and `written kind=preview path=NAME_vf.ppm orientation=N` (a half-size RGB render of
 the DNG's own pixels -- black-subtracted, white-balanced with the as-shot neutral, gamma 1/2.2 --
 written in the hidden `.previews/` subfolder, which the app converts to `NAME_vf.jpg` rotated
-upright; indRAW's gallery pairs it with its DNG, the system's indexer skips the folder, so it
+upright; RAWfish-indRAW's gallery pairs it with its DNG, the system's indexer skips the folder, so it
 never shows up as a photo of its own), and besides:
 `caps` once at stream start (ISO range and analog ceiling, exposure range, the single-exposure
 ceiling after `override-hal.json`, EV range/step, orientation, black/white levels), `ae` about
@@ -357,13 +362,13 @@ clipping and a 64-bin RGB histogram), `meter` at the meter rate (`mean` = centre
 
 ## The app and Sailjail
 
-The app runs sandboxed from the app grid (`[X-Sailjail]` in `app/indraw.desktop`:
-`ApplicationName=indraw`, permissions Camera, Pictures, MediaIndexing -- the least it needs: no
+The app runs sandboxed from the app grid (`[X-Sailjail]` in `app/rawfish-ir.desktop`:
+`ApplicationName=rawfish-ir`, permissions Camera, Pictures, MediaIndexing -- the least it needs: no
 other user directories, no network, no location). The sandbox only shows
-`/usr/share/indraw` (so the spec installs the QML there, not under the binary's name),
-`~/.local/share/com.indraw/indraw` (the engine's device profiles, see below) and
-`~/.cache/com.indraw/indraw`, where the app writes the engine log `indraw-ui.log`. Photos go to
-`~/Pictures/indRAW/` through the Pictures permission.
+`/usr/share/rawfish-ir` (so the spec installs the QML there, not under the binary's name),
+`~/.local/share/com.rawfish/rawfish-ir` (the engine's device profiles, see below) and
+`~/.cache/com.rawfish/rawfish-ir`, where the app writes the engine log `rawfish-ir.log`. Photos go to
+`~/Pictures/RAWfish-ir/` through the Pictures permission.
 
 The caps line also carries `peak_edge`, `peak_width`, `zebra_jpeg` and `zebra_raw` (the focus
 peaking's sensitivity and line width, the zebra clipping level for jpg, 0..255, and raw, per-mille
@@ -374,25 +379,25 @@ lens's f-number).
 
 ## Where captures go, and their names
 
-By default everything goes to `~/Pictures/indRAW/` as `photo_YYYYMMDD_HHMMSS_mmm.EXT`. The system
-Settings app has an indRAW page (Settings > Apps > indRAW, like RAWfish) with the file name prefix
-and the JPEG and DNG folders; they are dconf keys under `/apps/indraw/output` (`prefix`, `jpgDir`,
+By default everything goes to `~/Pictures/RAWfish-ir/` as `photo_YYYYMMDD_HHMMSS_mmm.EXT`. The system
+Settings app has a RAWfish-ir page (Settings > Apps > RAWfish-ir, like RAWfish) with the file name prefix
+and the JPEG and DNG folders; they are dconf keys under `/apps/rawfish-ir/output` (`prefix`, `jpgDir`,
 `dngDir`), read by the app at every engine start. The prefix is letters, digits, `-` and `_` (up to
 32); folders are absolute (`~/` = home) and must be under `~/Pictures` for the sandboxed app to be
 allowed to write there (the page refuses others). The engine gets them as `--jpgdir` / `--dngdir`
-options (`indraw [--log FILE] [--jpgdir DIR] [--dngdir DIR] stream ...`); the DNG previews live in
+options (`rawfish-ir-cli [--log FILE] [--jpgdir DIR] [--dngdir DIR] stream ...`); the DNG previews live in
 `<dngDir>/.previews/` with a `.nomedia` file, so the system's indexer leaves them alone. The
 gallery and the cover follow the configured folders.
 
 The same page has a "Device tuning" section: a switch that shows the focus calibration column
 in the camera's menu, and a button asking the app to write the device profile files at its next
-start (`/apps/indraw/device`).
+start (`/apps/rawfish-ir/device`).
 
 Porting to another phone: `docs/PORTING.md`.
 
 ## Simple mode layout
 
-`~/.config/com.indraw/indraw/simple.json` defines what the app's simple mode hides and fixes
+`~/.config/com.rawfish/rawfish-ir/simple.json` defines what the app's simple mode hides and fixes
 (defaults when absent):
 
 ```json
@@ -403,17 +408,17 @@ Porting to another phone: `docs/PORTING.md`.
 
 ## Device profiles (multi-device)
 
-indRAW keeps per-device data out of the code, split by nature (see
+RAWfish-indRAW keeps per-device data out of the code, split by nature (see
 `docs/DEVICE-PROFILES.md`): what the HAL claims (`generated-hal.json`, read-only),
 corrections to it (`override-hal.json`, atomic sensor fixes only -- today
 `observed_shutter_max_ns`, the tested long-exposure ceiling, replacing the hard-coded 1/2 s), and UI
 preferences (device-independent, kept by the app in its own settings). Files live under
-`~/.local/share/com.indraw/indraw/device-profiles/` (Sailjail path;
+`~/.local/share/com.rawfish/rawfish-ir/device-profiles/` (Sailjail path;
 `INDRAW_PROFILE_DIR` overrides for tests).
 
 ```sh
-./indraw cameras          # list camera ids
-./indraw probe            # write generated-hal.json (a snapshot of every camera's caps)
+./rawfish-ir-cli cameras          # list camera ids
+./rawfish-ir-cli probe            # write generated-hal.json (a snapshot of every camera's caps)
 ```
 
 Everything asked of the HAL is **atomic** by default: each control is one

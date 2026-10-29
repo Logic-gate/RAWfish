@@ -1,5 +1,5 @@
 #!/bin/sh
-# Phone-side diagnosis of long exposures (run next to indraw, camera app closed,
+# Phone-side diagnosis of long exposures (run next to rawfish-ir-cli, camera app closed,
 # phone still, dim and STEADY light: do not touch the lamps during the test).
 #   sh test-exposure-sweep.sh        -> sweep.log + a summary on screen
 #
@@ -31,7 +31,7 @@ exp=16 iso=100'
         done
     done
     echo quit
-} | ./indraw --log "$log" run 0 4096x3072 raw=4096x3072 > /dev/null
+} | ./rawfish-ir-cli --log "$log" run 0 4096x3072 raw=4096x3072 > /dev/null
 
 # Summary: one line per shot (command, measured mean, time to image, preview
 # frames delivered during the capture, or the error).

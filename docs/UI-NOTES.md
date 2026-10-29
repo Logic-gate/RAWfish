@@ -1,8 +1,8 @@
 # (AI written, human thought)
-# indRAW UI & behaviour specification
+# RAWfish-indRAW UI & behaviour specification
 
 Reference for the Qt/Sailfish app and the engine's UI-facing behaviour. The
-engine (indraw) exposes every control atomically; the UI composes them.
+engine (rawfish-ir-cli; indraw in the sources) exposes every control atomically; the UI composes them.
 Graphical/structural reference: RAWfish v1.3.1-alpha.9 -- we follow its layout
 and components closely, but with the explicit differences in "vs RAWfish" below.
 
@@ -26,7 +26,7 @@ early hand edits; it applies up to 0058, see patches/README.md).
   `renderExposure`), neither in the viewfinder nor in the file. More light = more
   ISO or longer exposure.
 - **Gain.** The only brightness amplification is the ISO (any level, incl. past
-  the analog ceiling: controlled, visible, deliberate). indraw never adds digital
+  the analog ceiling: controlled, visible, deliberate). The engine never adds digital
   gain on top, and sends no separate gain command to the HAL. Stacking
   (accumulating real exposures) is our own thing, not a cosmetic gain.
 - **Sensor-bias corrections are kept** (not gain): white balance (corrects the
@@ -278,16 +278,16 @@ they drive). The full list with explanations: docs/USER-GUIDE.md.
 
 ## Output folders and names
 
-The indRAW page of the system Settings app (dconf `/apps/indraw/output`, see
+The RAWfish-indRAW page of the system Settings app (dconf `/apps/rawfish-ir/output`, see
 README): `prefix` (default `photo`), `jpgDir` and `dngDir` (default
-`~/Pictures/indRAW` for both, under `~/Pictures` for the sandbox). The gallery merges both folders, newest first; DNG previews
+`~/Pictures/RAWfish-ir` for both, under `~/Pictures` for the sandbox). The gallery merges both folders, newest first; DNG previews
 sit in `<dngDir>/.previews/` with a `.nomedia` marker.
 
 ## Image types (three)
 
 - `raw`       : RAW16 DNG (brut, linear). Each DNG gets a NAME_vf.jpg preview
                 in the hidden .previews/ subfolder, rendered by the engine from
-                the DNG's own pixels (half size, as-shot white balance): indRAW's
+                the DNG's own pixels (half size, as-shot white balance): RAWfish-indRAW's
                 gallery shows it in the DNG's place, with a "DNG quick preview"
                 banner on its top edge saying that deleting it deletes the DNG
                 (share/details/delete act on the DNG); the system gallery never
@@ -331,7 +331,7 @@ Automatic and shifted balances alike, since the result's gains are the ones
 applied. The buttons are coloured by what they do (orange / blue for the
 warmth, magenta / green for the tint, white for the zoom); a readout is
 coloured while its shift is not zero and a double tap on it resets that
-shift. The step sizes are hand-edited in indraw.conf (fineWarmthStep in
+shift. The step sizes are hand-edited in rawfish-ir.conf (fineWarmthStep in
 5 % units, fineTintStep in % of green): a preference, not a menu item. The
 centre column is 46 % of the deck (41 % before), the wheels and the left
 buttons slightly narrower. The balance stays a setting the interface
@@ -472,7 +472,7 @@ SAME MECHANISM AS RAWFISH:
   and the JPEG, never to the RAW (as-shot neutral is metadata only). The
   presets are CONTROL_AWB_MODE in both. Manual WB differs in HOW the HAL is
   told: RAWfish sends a Kelvin value through a MediaTek vendor tag
-  (MTK_3A_AWB_VALUE, AWB off); indRAW shifts the AWB's own gains through
+  (MTK_3A_AWB_VALUE, AWB off); RAWfish-indRAW shifts the AWB's own gains through
   the standard colour-correction keys (device-independent, no Kelvin scale,
   "warmer/cooler than the AWB chose"). The vendor Kelvin tag is noted for a
   possible later addition where the HAL offers it.
@@ -504,7 +504,7 @@ SHARED LIMITATION (not solved by either):
   bracketing; settings persisted), gallery on an inner left-to-right swipe
   with DNG previews (NAME_vf.jpg), real zoom, focus loupe, volume-key focus
   and double-press screenshot, UI rotation, cameras shown by focal length.
-  Packaging: indraw-engine + indraw-app RPMs, one shared version.
+  Packaging: rawfish-ir-cli + rawfish-ir-gui RPMs, one shared version.
 - Since then (ui 78-105, see CHANGELOG.md): RAWfish-style menu, simple and
   advanced modes, scenes, manual white balance, stacked exposures (Σ) with
   progress/abort, DNG previews from the raw, gallery as a system page, output
@@ -577,7 +577,7 @@ displayed window --, refuses clipping (> 2 % of the quads near white) and
 darkness (green under 3 % of the range), and keeps gains making that white
 neutral (green 1) as the base of the manual white balance, with the AWB's
 last colour transform. The menu's shift and tint reset and apply on top; the
-AWB mode waits. The gains are saved (`wbFixed` in indraw.conf) and re-applied
+AWB mode waits. The gains are saved (`wbFixed` in rawfish-ir.conf) and re-applied
 at start with a button "Keep previous manual WB" and a 6 s bar: without a
 click the AWB comes back (0.47.21: a forgotten measured white would colour
 every later photo). A double tap on a readout returns to the AWB. Files say
@@ -599,7 +599,7 @@ HAL corrects it later): the middle is the most exact.
   bounds the flash's AE precapture, and 1.5 s is needed for it to meter
   (shorter: over-exposed). The engine's default is 1.5 s; the command stays
   for scripts.
-- Scenes are hidden unless Settings > indRAW > "Scenes in the camera menu
+- Scenes are hidden unless Settings > RAWfish-ir > "Scenes in the camera menu
   (not yet implemented)" is on; then in simple mode too. A scene left on
   with the switch off is ignored (sent as off).
 - The swipe that opens the menu needs 20 % of its height (40 % before:
@@ -617,7 +617,7 @@ itself a PagedView, RightToLeft, no wrap, newest at index 0 next to the
 camera. Nested PagedViews hand the gesture over: a swipe past the newest
 capture carries on into the camera in the same movement, and back.
 
-indRAW now does the same: the camera page is the root page; its four
+RAWfish-indRAW now does the same: the camera page is the root page; its four
 visual blocks (notch band, viewfinder zone, settings menu, deck) are the
 second item of the switcher, GalleryView.qml (ex GalleryPage.qml) the
 first, loaded asynchronously. The switcher is not interactive while a
@@ -629,27 +629,27 @@ switcher. The viewfinder keeps running under the gallery, as before.
 
 ## Start in manual (ui 140)
 
-Settings > indRAW > "Start in manual focus and exposure" (dconf
-/apps/indraw/menu/startManual, off by default). At the first start of the
+Settings > RAWfish-ir > "Start in manual focus and exposure" (dconf
+/apps/rawfish-ir/menu/startManual, off by default). At the first start of the
 engine in an app run, 1.5 s after (so that, with nothing saved, the wheels
 are pinned where the automatic exposure settled): "fc distance" with the
 last distance, focus mode manual, ISO and speed pinned at the last values.
-The last values (lastFocusD, lastIso, lastShutterNs in indraw.conf) are
+The last values (lastFocusD, lastIso, lastShutterNs in rawfish-ir.conf) are
 saved when the app goes to the background or closes, not at every change.
 Advanced mode only.
 
 ## Commented references; peaking and zebra out of the menu (ui 141)
 
-indraw.conf cannot hold comments (QSettings rewrites it and drops them),
+rawfish-ir.conf cannot hold comments (QSettings rewrites it and drops them),
 and JSON has none: the app installs two commented references at each
-start, `indraw.conf.example` (every key: function, values, limits, default;
+start, `rawfish-ir.conf.example` (every key: function, values, limits, default;
 the dconf settings listed apart) and `override-hal.example.jsonc` (real `//`
 comments, so not loadable JSON, never read; checked that it is valid JSON
 once the comments are stripped). The real override-hal.json stays plain
 values, without comments. Shipped in
-/usr/share/indraw/examples, copied next to the real files, which are never
+/usr/share/rawfish-ir/examples, copied next to the real files, which are never
 touched. The Peak and Zebra tweak columns left the menu: peakTweak and
-zebraTweak stay in indraw.conf, the device values in override-hal.json.
+zebraTweak stay in rawfish-ir.conf, the device values in override-hal.json.
 
 ## Any screen, any photo shape (ui 144)
 
@@ -795,7 +795,7 @@ assistant's before/after preview of a flat field builds on this.
 ## Lens-shading assistant (ui 156)
 
 A page pushed over the camera from a Settings request (dconf
-/apps/indraw/device/shadingCalRequested, cleared as soon as it is served,
+/apps/rawfish-ir/device/shadingCalRequested, cleared as soon as it is served,
 so a crash or a back-swipe never reopens it). It only sends 'shading
 calibrate ...' and listens to the engine's cal_exposure / cal_progress /
 cal_done events (IndrawPreview signals calExposure / calProgress /
@@ -884,7 +884,7 @@ re-evaluated yet, so settleSize compared against the previous camera's
 size. settleSize now runs through Qt.callLater, once every binding has
 settled: one start per switch, as in the harness.
 Each format keeps its own last-chosen size (captureSize43 / captureSize169
-in indraw.conf): coming back to 4:3 restores the resolution chosen there
+in rawfish-ir.conf): coming back to 4:3 restores the resolution chosen there
 instead of the largest.
 
 ## Level colours, log rotation (ui 171)
@@ -892,6 +892,6 @@ instead of the largest.
 The level's horizon line turns yellow when the roll is level (within 1
 degree), wherever the pitch puts it; the two centre marks turn yellow when
 the pitch is straight; both turn green when both are; white otherwise.
-The engine's log (~/.cache/com.indraw/indraw/indraw-ui.log) is rotated by
+The engine's log (~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log) is rotated by
 the app before each engine start once it passes 2 MB: the previous .1 is
 removed and the log becomes it. Two files, 4 MB at most.

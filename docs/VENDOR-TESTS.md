@@ -60,7 +60,7 @@ not change.)
 Daylight, ISO 100, mfbmode 255: 383 and 359 ms -- the fusion did not run.
 
 Conclusions:
-- the MFNR can be driven by indRAW: 1 and 255 run it at high ISO (+0.4 s,
+- the MFNR can be driven by RAWfish-indRAW: 1 and 255 run it at high ISO (+0.4 s,
   a lighter JPEG); in auto (255) the HAL leaves it off when the light is
   enough;
 - the gain is small: ~6 % less fine grain in the dark, nothing like the
@@ -128,7 +128,7 @@ tried (no setprop under /usr/libexec/droid-hybris/system/bin).
 The probe's `0x80030003: [0, 1]` is most likely the stagger modes list.
 
 Conclusion: the HAL's HDR is not reachable from Camera2 on this phone
-with what we know. Not to be retried blindly. An HDR of indRAW's own
+with what we know. Not to be retried blindly. An HDR of RAWfish-indRAW's own
 (bracketed RAWs merged in linear space, on the stacking code) is a
 possible chantier, a different one. Remove the HDR entries from the
 override after testing: they do nothing.

@@ -1,5 +1,5 @@
-; indraw.conf.example -- every key of ~/.config/com.indraw/indraw/indraw.conf,
-; with what it does, its values and its limits. Written by indRAW at each start
+; rawfish-ir.conf.example -- every key of ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf,
+; with what it does, its values and its limits. Written by RAWfish-ir at each start
 ; next to the real file (this copy is refreshed; the real file is never touched).
 ;
 ; How to edit the real file: CLOSE the app first (it rewrites the file when a
@@ -7,11 +7,11 @@
 ; range is clamped, a value not in its list falls back to the default: a typo
 ; never stops the app. Keys are under [General].
 ;
-; Settings NOT in this file (dconf, from Settings > Apps > indRAW):
-;   /apps/indraw/menu/startMode     last | simple | advanced   mode at start
-;   /apps/indraw/menu/startManual   true | false               start in manual focus + exposure
-;   /apps/indraw/menu/showScenes    true | false               scenes in the camera menu
-;   /apps/indraw/menu/previewColumns true | false              Vf noise / Vf sharpen columns
+; Settings NOT in this file (dconf, from Settings > Apps > RAWfish-ir):
+;   /apps/rawfish-ir/menu/startMode     last | simple | advanced   mode at start
+;   /apps/rawfish-ir/menu/startManual   true | false               start in manual focus + exposure
+;   /apps/rawfish-ir/menu/showScenes    true | false               scenes in the camera menu
+;   /apps/rawfish-ir/menu/previewColumns true | false              Vf noise / Vf sharpen columns
 ;   output folders and file prefix (the [output] settings of the Settings page)
 
 [General]

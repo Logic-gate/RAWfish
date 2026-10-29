@@ -44,7 +44,7 @@ The same thing. Summing calibrated frames and averaging them give the same
 signal-to-noise ratio; averaging only keeps the numbers in the camera's range,
 summing keeps the brightness of the total exposure (Sky & Telescope,
 "Astrophotography stacking signal"; Siril documentation, "Sum stacking" and
-"Average stacking"). indRAW sums because a Σ8s has to look like 8 seconds.
+"Average stacking"). RAWfish-indRAW sums because a Σ8s has to look like 8 seconds.
 So yes: it *is* an addition, and that is correct.
 
 ## Why the noise is what it is

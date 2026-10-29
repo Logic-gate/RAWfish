@@ -19,12 +19,12 @@ int main(int argc, char *argv[])
     qmlRegisterType<IndrawPreview>("com.indraw", 1, 0, "IndrawPreview");
 
     QScopedPointer<QQuickView> view(SailfishApp::createView());
-    /* The QML installs to /usr/share/indraw/qml/ (the Sailjail ApplicationName
-     * is "indraw", and the sandbox only shows /usr/share/<ApplicationName>; the
-     * spec moves it there). SailfishApp::pathTo keys off the binary name
-     * (indraw-app), so point at the file directly. */
+    /* The QML installs to /usr/share/rawfish-ir/qml/ (the Sailjail
+     * ApplicationName is "rawfish-ir", the sandbox only shows
+     * /usr/share/<ApplicationName>, and the binary has that name too). The
+     * QML files keep the engine's development name, indraw. */
     view->setSource(QUrl::fromLocalFile(
-        QStringLiteral("/usr/share/indraw/qml/indraw.qml")));
+        QStringLiteral("/usr/share/rawfish-ir/qml/indraw.qml")));
     view->show();
 
     return app->exec();

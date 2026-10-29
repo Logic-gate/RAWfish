@@ -16,4 +16,4 @@ printf '%s\n' \
     'jpeg m-auto.jpg off_noise off_edge focus=now' \
     'jpeg m-exp_20-iso_100.jpg focus=now exp=20 iso=100' \
     quit \
-| ./indraw --log indraw.log run 0 4096x3072 raw=4096x3072
+| ./rawfish-ir-cli --log rawfish-ir.log run 0 4096x3072 raw=4096x3072

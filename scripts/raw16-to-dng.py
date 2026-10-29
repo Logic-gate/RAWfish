@@ -227,7 +227,7 @@ def main():
     ifd.set(T["SamplesPerPixel"], SHORT, 1)
     ifd.set(T["RowsPerStrip"], LONG, h)
     ifd.set(T["PlanarConfiguration"], SHORT, 1)
-    ifd.set(T["Software"], ASCII, "indraw")
+    ifd.set(T["Software"], ASCII, "rawfish-ir")
     ifd.set(T["CFARepeatPatternDim"], SHORT, 2, 2)
     ifd.set(T["CFAPattern"], BYTE, 2, 1, 1, 0)      # BGGR: B=2 G=1 G=1 R=0
     ifd.set(T["DNGVersion"], BYTE, 1, 4, 0, 0)

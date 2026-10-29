@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+X-Nemo-Application-Type=silica-qt5
+Icon=rawfish-ir
+Name=RAWfish-ir
+Exec=rawfish-ir
+Comment=RAWfish-indRAW: RAW and JPEG camera with manual controls
+
+[X-Sailjail]
+OrganizationName=com.rawfish
+ApplicationName=rawfish-ir
+Permissions=Camera;Pictures;MediaIndexing

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds build/android/libindraw.so with the Android NDK (API 24) for one ABI:
+# Builds build/android/librawfish-ir.so with the Android NDK (API 24) for one ABI:
 #   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-android.sh            # arm64-v8a (64-bit phones)
 #   ANDROID_ABI=armeabi-v7a ANDROID_NDK_HOME=... ./scripts/build-android.sh   # 32-bit phones
 # build-engine-rpm.sh picks the ABI from the sfdk target (aarch64 / armv7hl).
@@ -19,5 +19,5 @@ mkdir -p "$root/build/android"
 "$cc" -std=c11 -O2 -g -fPIC -fvisibility=hidden -Wall -Wextra \
     -shared -Wl,--no-undefined \
     "$root/android/indraw.c" "$root/android/dngwrite.c" "$root/android/exifwrite.c" -lcamera2ndk -lmediandk -lm \
-    -o "$root/build/android/libindraw.so"
-echo "built $root/build/android/libindraw.so ($abi)"
+    -o "$root/build/android/librawfish-ir.so"
+echo "built $root/build/android/librawfish-ir.so ($abi)"

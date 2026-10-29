@@ -46,7 +46,7 @@ Item {
     readonly property bool pvSlow: !!st.pvSlow
     readonly property real pvDeficit: st.deficit !== undefined ? st.deficit : 0
     readonly property bool pvTooDark: !!st.tooDark
-    property real previewFps: 10                     // the Σ preview's target rate (indraw.conf)
+    property real previewFps: 10                     // the Σ preview's target rate (rawfish-ir.conf)
     onPreviewFpsChanged: send("pvfps " + previewFps)
 
     // Stacked exposures (longer than the single-exposure ceiling, Σ on the wheel).

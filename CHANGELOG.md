@@ -5,13 +5,36 @@ Versions are the engine's (`indraw_version.h`); the app's version and its
 `patches/` (a documentary record, see patches/README.md).
 Newest first.
 
-## Known issues (as of 0.47.74)
+## Known issues (as of 0.1.0)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.0 — RAWfish-indRAW: indRAW joins RAWfish as a branch; one version for both packages (patch 0271)
+- New names, decided with RAWfish's developer: the project is
+  **RAWfish-indRAW** (the `indraw` branch of RAWfish's repository); on the
+  phone it shows as **RAWfish-ir**; the technical name is `rawfish-ir`:
+  packages `rawfish-ir-cli` (the engine: library, controller, command
+  line; installable alone) and `rawfish-ir-gui` (the interface, which
+  requires the cli), binaries `/usr/bin/rawfish-ir` and
+  `/usr/bin/rawfish-ir-cli` (`/usr/libexec/rawfish-ir/rawfish-ir-cli`),
+  library `librawfish-ir.so`, shipped data under `/usr/share/rawfish-ir/`,
+  user data under `~/.local/share/com.rawfish/rawfish-ir/`, settings in
+  `~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf`, dconf under
+  `/apps/rawfish-ir`, the log `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`,
+  photos in `~/Pictures/RAWfish-ir/` by default. The Exif and DNG Software
+  tag says "RAWfish-ir 0.1.0".
+- Installs next to RAWfish 1.x (nothing shared): both can be used on one
+  phone. The former indRAW packages are separate too; their user files are
+  not read (copy them: docs/BUILDING.md, "Coming from indRAW").
+- The sources keep the engine's development name, indraw (files,
+  functions, QML): nothing internal was renamed.
+- One version number from now on, shared by the two packages and the
+  library, starting at 0.1.0 (a pre-release; 1.0 when it is judged ready
+  to distribute). The history below keeps its old numbers.
 
 ## 0.47.74 — app 0.20.57 (ui 181) — the burst gap withdrawn (patch 0270)
 - The x3 burst's "Gap" (0.47.73) is withdrawn: the JP2's camera ignores

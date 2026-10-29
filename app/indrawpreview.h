@@ -73,12 +73,12 @@ class IndrawPreview : public QQuickItem
      * so fit math can account for the swapped w/h at 90/270. */
     Q_PROPERTY(int displayRotation READ displayRotation WRITE setDisplayRotation NOTIFY displayRotationChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
-    /* ~/.config/com.indraw/indraw (settings, simple.json). */
+    /* ~/.config/com.rawfish/rawfish-ir (settings, simple.json). */
     Q_PROPERTY(QString configDir READ configDir CONSTANT)
     /* Where captures go and how they are named: set by the QML from dconf
-     * (/apps/indraw/output, edited in the system Settings app) through
+     * (/apps/rawfish-ir/output, edited in the system Settings app) through
      * setOutput(); absolute folders, "~/" for HOME; defaults
-     * ~/Pictures/indRAW and "photo". Used at every engine start. */
+     * ~/Pictures/RAWfish-ir and "photo". Used at every engine start. */
     Q_PROPERTY(QString jpgDir READ jpgDir NOTIFY outputChanged)
     Q_PROPERTY(QString dngDir READ dngDir NOTIFY outputChanged)
     Q_PROPERTY(QString capturePrefix READ capturePrefix NOTIFY outputChanged)
@@ -238,7 +238,7 @@ public:
      * pixels) into NAME_vf.jpg, rotated upright by the DNG's orientation
      * (TIFF 1..8), and deletes the .ppm. Returns true on success. */
     Q_INVOKABLE bool convertDngPreview(const QString &ppmPath, int orientation);
-    /* UI preferences, persisted in ~/.config/com.indraw/indraw/indraw.conf. */
+    /* UI preferences, persisted in ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf. */
     Q_INVOKABLE QVariant setting(const QString &key, const QVariant &def) const;
     Q_INVOKABLE void setSetting(const QString &key, const QVariant &value);
     /* Output settings (validated here; invalid values fall back to the
@@ -249,7 +249,7 @@ public:
     /* Reads a JSON object file (e.g. the simple-mode layout), {} if absent. */
     Q_INVOKABLE QVariantMap readJsonFile(const QString &path);
     /* Copies the commented reference files (installed under
-     * /usr/share/indraw/examples) next to the real ones: indraw.conf.example
+     * /usr/share/rawfish-ir/examples) next to the real ones: rawfish-ir.conf.example
      * in the config dir, override-hal.example.jsonc in device-profiles. The
      * copies are refreshed at each start; the real files are never touched. */
     Q_INVOKABLE void installExamples();

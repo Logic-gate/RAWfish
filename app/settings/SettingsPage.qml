@@ -1,8 +1,8 @@
 /*
- * SettingsPage.qml -- indRAW's page in the system Settings app (Settings >
- * Apps > indRAW), the way RAWfish has one. It holds what does not belong in
+ * SettingsPage.qml -- RAWfish-ir's page in the system Settings app (Settings >
+ * Apps > RAWfish-ir), the way RAWfish has one. It holds what does not belong in
  * the camera's own menus: where captures go and how they are named. Values
- * live in dconf under /apps/indraw/output and the app reads them at every
+ * live in dconf under /apps/rawfish-ir/output and the app reads them at every
  * engine start (Nemo.Configuration on both sides).
  *
  * Folders must be under ~/Pictures: that is the only place the sandboxed app
@@ -17,10 +17,10 @@ Page {
 
     ConfigurationGroup {
         id: output
-        path: "/apps/indraw/output"
+        path: "/apps/rawfish-ir/output"
         property string prefix: "photo"
-        property string jpgDir: "~/Pictures/indRAW"
-        property string dngDir: "~/Pictures/indRAW"
+        property string jpgDir: "~/Pictures/RAWfish-ir"
+        property string dngDir: "~/Pictures/RAWfish-ir"
     }
 
     // Tuning helpers: the calibration column in the camera's menu, and a
@@ -28,7 +28,7 @@ Page {
     // (the Settings app itself cannot run the engine).
     ConfigurationGroup {
         id: menuGroup
-        path: "/apps/indraw/menu"
+        path: "/apps/rawfish-ir/menu"
         property bool previewColumns: false
         property string startMode: "last"
         property bool showScenes: false
@@ -36,7 +36,7 @@ Page {
     }
     ConfigurationGroup {
         id: device
-        path: "/apps/indraw/device"
+        path: "/apps/rawfish-ir/device"
         property bool focusCalibrationMenu: false
         property bool probeRequested: false
         property string probeDone: ""        // the app writes the date when done
@@ -60,7 +60,7 @@ Page {
             width: parent.width
             spacing: Theme.paddingMedium
 
-            PageHeader { title: "indRAW" }
+            PageHeader { title: "RAWfish-ir" }
 
             SectionHeader { text: qsTr("Captures") }
 
@@ -82,7 +82,7 @@ Page {
                 id: jpgField
                 width: parent.width
                 label: qsTr("JPEG folder")
-                placeholderText: "~/Pictures/indRAW"
+                placeholderText: "~/Pictures/RAWfish-ir"
                 text: output.jpgDir
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
@@ -96,7 +96,7 @@ Page {
                 id: dngField
                 width: parent.width
                 label: qsTr("DNG folder")
-                placeholderText: "~/Pictures/indRAW"
+                placeholderText: "~/Pictures/RAWfish-ir"
                 text: output.dngDir
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
@@ -110,7 +110,7 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Reset to defaults")
                 onClicked: {
-                    output.prefix = "photo"; output.jpgDir = "~/Pictures/indRAW"; output.dngDir = "~/Pictures/indRAW"
+                    output.prefix = "photo"; output.jpgDir = "~/Pictures/RAWfish-ir"; output.dngDir = "~/Pictures/RAWfish-ir"
                     prefixField.text = output.prefix; jpgField.text = output.jpgDir; dngField.text = output.dngDir
                 }
             }
@@ -161,7 +161,7 @@ Page {
 
             Button {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: device.probeRequested ? qsTr("Requested — open indRAW") : qsTr("Create the device profile files")
+                text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
                 enabled: !device.probeRequested
                 onClicked: device.probeRequested = true
             }
@@ -173,11 +173,11 @@ Page {
                 wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.secondaryHighlightColor
-                text: qsTr("Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of indRAW.")
+                text: qsTr("Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of RAWfish-ir.")
             }
             Button {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: device.shadingCalRequested ? qsTr("Requested — open indRAW") : qsTr("Calibrate the lens shading")
+                text: device.shadingCalRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Calibrate the lens shading")
                 enabled: !device.shadingCalRequested
                 onClicked: device.shadingCalRequested = true
             }
@@ -188,7 +188,7 @@ Page {
                 color: Theme.secondaryHighlightColor
                 font.pixelSize: Theme.fontSizeSmall
                 text: (device.probeDone.length > 0 ? qsTr("Last written: %1. ").arg(device.probeDone) : "")
-                      + qsTr("indRAW writes them when it next opens: generated-hal.json (what the camera driver claims) and, if absent, a starter override-hal.json to edit (shutter ceiling, peaking and zebra thresholds), in ~/.local/share/com.indraw/indraw/device-profiles/. Changes above apply the next time the camera starts.")
+                      + qsTr("RAWfish-ir writes them when it next opens: generated-hal.json (what the camera driver claims) and, if absent, a starter override-hal.json to edit (shutter ceiling, peaking and zebra thresholds), in ~/.local/share/com.rawfish/rawfish-ir/device-profiles/. Changes above apply the next time the camera starts.")
             }
         }
         VerticalScrollDecorator {}

@@ -1,16 +1,16 @@
 #(AI generated)
-# Building indRAW from scratch
+# Building RAWfish-indRAW from scratch
 
 A step-by-step guide for someone who has never built a Sailfish app. It takes
 about an hour the first time (most of it downloads), five minutes afterwards.
 
-indRAW is two packages, built by two different toolchains, because the phone
+RAWfish-indRAW is two packages, built by two different toolchains, because the phone
 runs two worlds at once:
 
 | Package | What is in it | Built with | Why |
 |---|---|---|---|
-| `indraw-engine` | `libindraw.so` (talks to the camera through Android's Camera2) and the `indraw` command-line tool | the **Android NDK** for the library, the **Sailfish SDK** for the tool | the camera driver (HAL) is Android code; Sailfish reaches it through libhybris |
-| `indraw-app` | the Qt/QML user interface | the **Sailfish SDK** | a normal Sailfish application |
+| `rawfish-ir-cli` | `librawfish-ir.so` (talks to the camera through Android's Camera2) and the `rawfish-ir-cli` command-line tool | the **Android NDK** for the library, the **Sailfish SDK** for the tool | the camera driver (HAL) is Android code; Sailfish reaches it through libhybris |
+| `rawfish-ir-gui` | the Qt/QML user interface | the **Sailfish SDK** | a normal Sailfish application |
 
 Both are plain RPM files you copy to the phone and install. The engine's
 version is written in one file, `indraw_version.h`, and the tool refuses to run
@@ -62,7 +62,7 @@ with a library of another version, so always install both packages together.
 The library is Android code, compiled by the NDK's clang for 64-bit ARM.
 
 1. Download the NDK from https://developer.android.com/ndk/downloads
-   (the Linux zip, version **r27** is what indRAW is built with; newer
+   (the Linux zip, version **r27** is what RAWfish-indRAW is built with; newer
    versions should work).
 2. Unzip it somewhere permanent, e.g. `~/android-ndk-r27d`.
 3. Tell the scripts where it is, in your shell profile:
@@ -73,8 +73,9 @@ Nothing else from Android is needed: no Android Studio, no SDK, no emulator.
 ## 4. Get the source
 
 ```sh
-git clone https://github.com/Ric9k-TMO-FSO/indraw.git
-cd indraw
+git clone https://github.com/Logic-gate/RAWfish.git
+cd RAWfish
+git checkout indraw
 ```
 (the repository is private for now: cloning needs access to it, and over
 HTTPS a fine-grained personal access token as the password)
@@ -92,17 +93,17 @@ the engine RPM in the Sailfish build engine, then the app RPM, and ends by
 listing the two files:
 
 ```
-RPMS/indraw-engine-0.41.0-1.aarch64.rpm
-app/RPMS/indraw-app-0.13.0-1.aarch64.rpm
+RPMS/rawfish-ir-cli-0.41.0-1.aarch64.rpm
+app/RPMS/rawfish-ir-gui-0.13.0-1.aarch64.rpm
 ```
 
 What the script does, if you prefer the pieces:
 
 | Step | Command | Result |
 |---|---|---|
-| library | `./scripts/build-android.sh` | `build/android/libindraw.so` |
-| engine RPM | `./scripts/build-engine-rpm.sh` (runs the step above too) | `RPMS/indraw-engine-*.rpm` |
-| app RPM | `cd app && sfdk build` | `app/RPMS/indraw-app-*.rpm` |
+| library | `./scripts/build-android.sh` | `build/android/librawfish-ir.so` |
+| engine RPM | `./scripts/build-engine-rpm.sh` (runs the step above too) | `RPMS/rawfish-ir-cli-*.rpm` |
+| app RPM | `cd app && sfdk build` | `app/RPMS/rawfish-ir-gui-*.rpm` |
 
 A quick sanity check that needs no SDK at all (syntax and types of the C
 code, with stubbed Android headers): `./scripts/check-host.sh`.
@@ -112,28 +113,28 @@ code, with stubbed Android headers): `./scripts/check-host.sh`.
 1. Copy the two RPMs to the phone, e.g. over SSH (`nemo`/`defaultuser` is
    the user name shown in developer tools; the password is the one you set):
    ```sh
-   scp RPMS/indraw-engine-*.rpm app/RPMS/indraw-app-*.rpm defaultuser@<phone-ip>:Downloads/
+   scp RPMS/rawfish-ir-cli-*.rpm app/RPMS/rawfish-ir-gui-*.rpm defaultuser@<phone-ip>:Downloads/
    ```
 2. On the phone (Terminal app or `ssh defaultuser@<phone-ip>`), become root
    and install both at once:
    ```sh
    devel-su
    cd /home/defaultuser/Downloads
-   pkcon install-local -y indraw-engine-*.rpm indraw-app-*.rpm
+   pkcon install-local -y rawfish-ir-cli-*.rpm rawfish-ir-gui-*.rpm
    ```
    To update later, the same command with the new files; to remove:
-   `pkcon remove indraw-app indraw-engine`.
-3. indRAW appears in the app grid. The first launch creates
-   `~/Pictures/indRAW/` for the photos and `~/.cache/com.indraw/indraw/indraw-ui.log`,
+   `pkcon remove rawfish-ir-gui rawfish-ir-cli`.
+3. RAWfish-indRAW appears in the app grid. The first launch creates
+   `~/Pictures/RAWfish-ir/` for the photos and `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`,
    the engine's log -- the first thing to look at if something is wrong.
 
 ### Device profile (optional but recommended)
 
 The engine adapts to the phone through two JSON files in
-`~/.local/share/com.indraw/indraw/device-profiles/` (see `docs/DEVICE-PROFILES.md`):
+`~/.local/share/com.rawfish/rawfish-ir/device-profiles/` (see `docs/DEVICE-PROFILES.md`):
 
 ```sh
-indraw probe          # writes generated-hal.json: what the camera driver claims
+rawfish-ir-cli probe          # writes generated-hal.json: what the camera driver claims
 ```
 and, next to it, `override-hal.json` with what you measured (the single-exposure
 ceiling, the peaking/zebra thresholds, the focus calibration). Without it the
@@ -146,7 +147,7 @@ start again. Nothing you need is lost: the sources are in git, the device
 profile and the settings are on the phone.
 
 ```sh
-./scripts/build-all.sh --clean      # removes build/android, RPMS/, sailfish/indraw; sfdk build --clean
+./scripts/build-all.sh --clean      # removes build/android, RPMS/, sailfish/rawfish-ir-cli; sfdk build --clean
 ```
 
 For a truly clean slate:
@@ -164,9 +165,9 @@ and install it again (step 2.4). Reinstalling the whole SDK is rarely needed.
 On the phone, to start as a brand-new user:
 
 ```sh
-pkcon remove indraw-app indraw-engine
-rm -rf ~/.config/com.indraw ~/.cache/com.indraw ~/.local/share/com.indraw
-# your photos in ~/Pictures/indRAW/ are yours: keep or delete them
+pkcon remove rawfish-ir-gui rawfish-ir-cli
+rm -rf ~/.config/com.rawfish ~/.cache/com.rawfish ~/.local/share/com.rawfish
+# your photos in ~/Pictures/RAWfish-ir/ are yours: keep or delete them
 ```
 
 ## 8. When something goes wrong
@@ -174,11 +175,11 @@ rm -rf ~/.config/com.indraw ~/.cache/com.indraw ~/.local/share/com.indraw
 | Symptom | Cause | Fix |
 |---|---|---|
 | `ld.lld: error: undefined symbol: ...` while building the library | a C function the Android library does not link (e.g. from libm) | the library only links `camera2ndk` and `mediandk` on purpose; keep it that way in your code |
-| `nothing provides 'libc.so()(64bit)'` at install | an old spec let rpm scan the Android library for dependencies | fixed in `rpm/indraw-engine.spec` (scanner excluded); rebuild |
+| `nothing provides 'libc.so()(64bit)'` at install | an old spec let rpm scan the Android library for dependencies | fixed in `rpm/rawfish-ir-cli.spec` (scanner excluded); rebuild |
 | `version mismatch: CLI x, library y` in the log | engine tool and library from different builds | install both RPMs from the same build |
 | `jpeg size not listed` / `raw16 size not listed` in the log | a size the camera does not offer (another camera, 16:9) | the app asks for `max` now; if you drive the tool by hand, use `max` |
-| white screen from the app grid, works from a terminal | the app ran sandboxed and could not find its files | fixed by installing to `/usr/share/indraw`; make sure the RPM is the one you just built (`rpm -ql indraw-app`) |
-| `engine stopped` in the viewfinder | the engine process died | read the end of `~/.cache/com.indraw/indraw/indraw-ui.log`; the app retries three times by itself |
+| white screen from the app grid, works from a terminal | the app ran sandboxed and could not find its files | fixed by installing to `/usr/share/rawfish-ir`; make sure the RPM is the one you just built (`rpm -ql rawfish-ir-gui`) |
+| `engine stopped` in the viewfinder | the engine process died | read the end of `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`; the app retries three times by itself |
 | `sfdk: no target set` | step 2.4 was skipped | `sfdk config target=...` |
 
 ## 9. How the repository is organised
@@ -200,9 +201,30 @@ patches/      the project's history as a patch series (not needed to build)
 ## Versions and git tags
 
 The packages carry the versions written in their specs (the engine's in
-rpm/indraw-engine.spec, the app's in app/rpm/indraw.spec; they differ).
+rpm/rawfish-ir-cli.spec, the app's in app/rpm/rawfish-ir-gui.spec; they differ).
 sfdk would otherwise derive them from a git tag found in the history
 (`git describe`) -- after a release tag such as v0.47.69 both packages
 came out as 0.47.69+main.<date>.<hash>, and the app's "requires engine >="
 could not be met. The build scripts therefore run `sfdk -c no-fix-version
 build`. Building by hand: add the same option.
+
+## Coming from indRAW (the packages before October 2026)
+
+RAWfish-ir installs beside the old indRAW packages and does not read their
+files. To carry over what you measured or set by hand (the focus
+calibration, your own lens-shading calibration, override-hal.json, the
+settings file with the level's zero, the simple-mode layout, the output
+folders), once, on the phone, before the first start of RAWfish-ir:
+
+```sh
+mkdir -p ~/.local/share/com.rawfish/rawfish-ir ~/.config/com.rawfish/rawfish-ir
+cp -a ~/.local/share/com.indraw/indraw/device-profiles ~/.local/share/com.rawfish/rawfish-ir/
+cp ~/.config/com.indraw/indraw/indraw.conf ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf
+cp ~/.config/com.indraw/indraw/simple.json ~/.config/com.rawfish/rawfish-ir/ 2>/dev/null
+dconf dump /apps/indraw/ | dconf load /apps/rawfish-ir/
+```
+
+Photos stay where they are (`~/Pictures/indRAW/` unless the settings say
+otherwise); the dconf line copies the output folders you chose, so the
+gallery keeps showing them. Then remove the old packages:
+`pkcon remove indraw-app indraw-engine`.

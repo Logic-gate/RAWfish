@@ -2,21 +2,21 @@
 # Robustness and safety review (October 2026)
 
 What was examined, what it relies on, and what remains. Written for whoever
-installs indRAW on a device that is not the author's.
+installs RAWfish-indRAW on a device that is not the author's.
 
 ## Privilege and reach
 
-- Both the engine (`indraw` + `libindraw.so`) and the app run as the normal
+- Both the engine (`rawfish-ir-cli` + `librawfish-ir.so`) and the app run as the normal
   user, from the Sailjail sandbox the app's `.desktop` declares: **Camera,
   Pictures, MediaIndexing** and nothing else. No network, no location, no
   other user directories. The engine process is a child of the app and
   inherits the same sandbox.
-- Everything the engine writes goes to `~/Pictures/indRAW/` (captures; the
+- Everything the engine writes goes to `~/Pictures/RAWfish-ir/` (captures; the
   settings may point the JPEG and DNG folders elsewhere under `~/Pictures`,
   and the prefix is limited to letters, digits, `-`, `_`),
-  `~/Pictures/Screenshots/` (the app's screenshots), `~/.cache/com.indraw/indraw/`
-  (the engine log) and `~/.config/com.indraw/indraw/` (settings). It reads
-  `~/.local/share/com.indraw/indraw/device-profiles/`.
+  `~/Pictures/Screenshots/` (the app's screenshots), `~/.cache/com.rawfish/rawfish-ir/`
+  (the engine log) and `~/.config/com.rawfish/rawfish-ir/` (settings). It reads
+  `~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.
 - Photos carry no location data. The Exif holds exposure, ISO, lens,
   date/time, orientation, the device's make/model and the software version.
 

@@ -2,7 +2,7 @@
 # Sony Xperia XA2 (H3113 / H3123 / H3133 / H4113 / H4133)
 
 What was measured on an XA2 Dual (H4113, Sailfish X 5.1, October 2026).
-indRAW's shipped profile for it: `android/data/device-profiles/sony-xperia-xa2.json`.
+RAWfish-indRAW's shipped profile for it: `android/data/device-profiles/sony-xperia-xa2.json`.
 
 ## Vendor binaries: use v16
 
@@ -26,7 +26,7 @@ kernel and data stay.
   "approximate" calibration), shading map 17x13.
 - Front camera: RAW 3280x2464, ISO 40-3200, exposure up to 0.81 s
   (unverified), no AF.
-- Request keys: everything indRAW drives, plus shading.mode, tonemap,
+- Request keys: everything RAWfish-indRAW drives, plus shading.mode, tonemap,
   colorCorrection, hotPixel, blackLevel.lock, optical stabilisation.
 - Three Sony vendor request keys: 0x801b0000 (u8, 0 in every template),
   0x801b0001 (unset), 0x801c0000 (i32: 1 in the preview template, 0 in the

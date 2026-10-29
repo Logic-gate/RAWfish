@@ -310,8 +310,8 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
     int fds[2];
     pthread_mutexattr_t at;
     if (c.running) return 0;
-    if (!emit || !set_event_fd) { fprintf(stderr, "indraw: controller: engine entry points missing\n"); return -1; }
-    if (pipe(fds) != 0) { perror("indraw: controller: pipe"); return -1; }
+    if (!emit || !set_event_fd) { fprintf(stderr, "rawfish-ir-cli: controller: engine entry points missing\n"); return -1; }
+    if (pipe(fds) != 0) { perror("rawfish-ir-cli: controller: pipe"); return -1; }
     /* The engine writes events from its camera threads: the write end is
      * non-blocking (a full pipe drops a state line rather than stalling the
      * preview, see emit_event), and the pipe is enlarged to 1 MB where Linux
@@ -331,7 +331,7 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
     c.foc = ctl_focus_new(foc_cmd, foc_state, foc_pause, foc_spot, NULL);
     c.view = ctl_view_new(view_cmd, view_state, view_ref, NULL);
     if (pthread_create(&c.thread, NULL, reader, NULL) != 0) {
-        perror("indraw: controller: thread");
+        perror("rawfish-ir-cli: controller: thread");
         close(c.rd); close(c.wr); c.rd = c.wr = -1;
         return -1;
     }

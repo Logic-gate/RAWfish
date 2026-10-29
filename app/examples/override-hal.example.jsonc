@@ -1,7 +1,7 @@
 // override-hal.example.jsonc -- every key of device-profiles/override-hal.json,
 // with what it does, its values and its limits.
 //
-// A REFERENCE, written by indRAW at each start next to the real file (this copy
+// A REFERENCE, written by RAWfish-ir at each start next to the real file (this copy
 // is refreshed; the real file is never touched). With these // comments it is
 // not valid JSON and the engine never reads it: copy into override-hal.json
 // only the lines you need, WITHOUT the comments.
@@ -9,14 +9,14 @@
 // The real file: one block per camera (camera_id); a field left out keeps the
 // built-in default. The engine checks the file at each open: an unknown key, a
 // value out of range or broken JSON and the WHOLE file is ignored (the log,
-// ~/.cache/com.indraw/indraw/indraw-ui.log, says why). See
+// ~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log, says why). See
 // docs/DEVICE-PROFILES.md. Keys starting with "_" (the starter's "_hal_..."
 // references) are never read.
 {
   "cameras": [
     {
       // Camera2 id of the camera this block corrects: "0" main, "1" front,
-      // "2".. others ("indraw probe" lists them).
+      // "2".. others ("rawfish-ir-cli probe" lists them).
       "camera_id": "0",
 
       "overrides": {
@@ -68,7 +68,7 @@
       // The lens-shading (vignetting) map written into the DNGs: "measured"
       // (default: the measured calibration for this phone when one is found
       // -- shading_<maker>-<model>_cam<ID>_<W>x<H>.json in
-      // device-profiles/lens-shading/ or shipped with indRAW -- else the
+      // device-profiles/lens-shading/ or shipped with RAWfish-ir -- else the
       // HAL's), "hal" (always the HAL's own map), "none" (no map).
       "shading": "measured",
 

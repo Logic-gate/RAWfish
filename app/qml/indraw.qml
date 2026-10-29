@@ -22,9 +22,9 @@ import QtQuick 2.6                 // 2.6: Image.autoTransform (Qt 5.6, Sailfish
 import QtQuick.Window 2.0          // Screen.pixelDensity (px per mm) for real-size spacing
 import Sailfish.Silica 1.0
 import Nemo.Policy 1.0             // volume keys (Resource.ScaleButton)
-import Nemo.Configuration 1.0      // /apps/indraw/output: the system Settings page's values
+import Nemo.Configuration 1.0      // /apps/rawfish-ir/output: the system Settings page's values
 import Nemo.KeepAlive 1.2          // keep the screen on during a stacked exposure
-import Qt.labs.folderlistmodel 2.1 // the gallery: files of ~/Pictures/indRAW
+import Qt.labs.folderlistmodel 2.1 // the gallery: files of ~/Pictures/RAWfish-ir
 import com.indraw 1.0
 
 ApplicationWindow {
@@ -33,19 +33,19 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "181"                             // shown in the deck
+    readonly property string uiVersion: "182"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
-    // system Settings app (Settings > Apps > indRAW), applied to the engine
+    // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
     // at its next start. Every IndrawPreview item (the camera's, the cover's)
     // takes them through applyOutput(); the gallery reads them from the
     // camera's.
     ConfigurationGroup {
         id: outputConf
-        path: "/apps/indraw/output"
+        path: "/apps/rawfish-ir/output"
         property string prefix: "photo"
-        property string jpgDir: "~/Pictures/indRAW"
-        property string dngDir: "~/Pictures/indRAW"
+        property string jpgDir: "~/Pictures/RAWfish-ir"
+        property string dngDir: "~/Pictures/RAWfish-ir"
     }
     function applyOutput(item) { item.setOutput(outputConf.prefix, outputConf.jpgDir, outputConf.dngDir) }
     // Device tuning flags from the same Settings page: whether the camera menu
@@ -55,7 +55,7 @@ ApplicationWindow {
     // Which optional columns the camera menu shows (Settings page).
     ConfigurationGroup {
         id: menuConf
-        path: "/apps/indraw/menu"
+        path: "/apps/rawfish-ir/menu"
         property bool previewColumns: false
         property string startMode: "last"            // last | simple | advanced
         property bool showScenes: false              // scenes in the camera menu
@@ -63,7 +63,7 @@ ApplicationWindow {
     }
     ConfigurationGroup {
         id: deviceConf
-        path: "/apps/indraw/device"
+        path: "/apps/rawfish-ir/device"
         property bool focusCalibrationMenu: false
         property bool probeRequested: false
         property string probeDone: ""
@@ -96,7 +96,7 @@ ApplicationWindow {
             }
             Label {
                 anchors { left: parent.left; bottom: parent.bottom; margins: Theme.paddingMedium }
-                text: "indRAW"; color: Theme.primaryColor
+                text: "RAWfish-ir"; color: Theme.primaryColor
                 font { pixelSize: Theme.fontSizeMedium; bold: true }
                 style: Text.Outline; styleColor: "black"
             }

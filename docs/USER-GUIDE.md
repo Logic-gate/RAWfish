@@ -1,5 +1,5 @@
 # (AI written, human written user-guite should be made)
-# indRAW user guide
+# RAWfish-indRAW user guide
 
 How to use the camera, screen by screen. For installing it, see
 `BUILDING.md`; for the reasons behind each behaviour, `UI-NOTES.md`.
@@ -122,7 +122,7 @@ the sensor collects is the exposure time times the gain (the ISO), so a
 frame 20 times shorter at 20 times the ISO collects as much as the stack.
 
 **The rhythm.** That frame is made as short as a target rate allows
-(10 frames per second by default, `sigmaPreviewFps` in `indraw.conf`), the
+(10 frames per second by default, `sigmaPreviewFps` in `rawfish-ir.conf`), the
 ISO raised to match. Measuring, the exposure loop and the focus search all
 work one frame at a time, so a fast frame keeps them responsive. If the ISO
 this needs is beyond the sensor's maximum, the frame is made longer, just
@@ -189,10 +189,10 @@ columns or swipe up to close.
 | Grid | rule-of-thirds lines |
 | Σ denoise | for Σ (stacked) shots only: 2x or 4x the frames for less noise, 2x or 4x the time |
 | Focus cal. | the focus calibration assistant (when enabled in Settings) |
-| Scene | only if Settings > indRAW > "Scenes in the camera menu" is on (off by default, not finished): the camera's scene modes, in simple and advanced mode; while one is on, the controls it takes over are greyed |
+| Scene | only if Settings > RAWfish-ir > "Scenes in the camera menu" is on (off by default, not finished): the camera's scene modes, in simple and advanced mode; while one is on, the controls it takes over are greyed |
 
 In **simple** mode the menu only keeps the flash, timer, format and white balance (this
-can be changed in `~/.config/com.indraw/indraw/simple.json`, see the README).
+can be changed in `~/.config/com.rawfish/rawfish-ir/simple.json`, see the README).
 
 ## The gallery (swipe left to right)
 
@@ -232,7 +232,7 @@ natural orientation is assumed.)
 Press both volume keys at once: the screen is saved to
 `~/Pictures/Screenshots/`, with a flash.
 
-## Settings (Settings app > Apps > indRAW)
+## Settings (Settings app > Apps > RAWfish-indRAW)
 
 | Setting | Meaning |
 |---|---|
@@ -244,7 +244,7 @@ Press both volume keys at once: the screen is saved to
 | Mode at start | simple, advanced, or as left (the last mode used) |
 | Viewfinder processing in the camera menu | shows the "Vf noise" and "Vf sharpen" columns |
 | Focus calibration in the camera menu | shows the "Focus cal." column |
-| Create the device profile files | indRAW writes them the next time it opens (the date is shown once done) |
+| Create the device profile files | RAWfish-indRAW writes them the next time it opens (the date is shown once done) |
 
 Changes take effect the next time the camera starts.
 
@@ -267,9 +267,9 @@ Changes take effect the next time the camera starts.
 
 | What | Where |
 |---|---|
-| photos | `~/Pictures/indRAW/` (or the folders set above) |
+| photos | `~/Pictures/RAWfish-ir/` (or the folders set above) |
 | DNG quick previews | `.previews/` inside the DNG folder (hidden, not in the system gallery) |
-| commented references | `indraw.conf.example` next to `indraw.conf`, and `override-hal.example.jsonc` next to `override-hal.json` in `device-profiles/`: every key, what it does, its values and limits, as real comments. References only (never read; the .jsonc is not loadable JSON: copy the lines you need without the comments). Rewritten at each start of the app; your own files are never touched and stay without comments (edit `indraw.conf` with the app closed: it rewrites that file and drops comments) |
-| app settings | `~/.config/com.indraw/indraw/` -- `indraw.conf` also holds hand-edited keys, among them `fineWarmthStep` (the warmth button's step, in 5 % units, 1..4), `fineTintStep` (the tint button's step in % of green, 1..25), `sigmaPreviewFps` (the Σ viewfinder's target frame rate, 1..30, 10 by default), `peakTweak` and `zebraTweak`; every key is described in `indraw.conf.example` next to it |
-| device profile | `~/.local/share/com.indraw/indraw/device-profiles/` |
-| the engine's log | `~/.cache/com.indraw/indraw/indraw-ui.log` -- the first thing to send when something goes wrong |
+| commented references | `rawfish-ir.conf.example` next to `rawfish-ir.conf`, and `override-hal.example.jsonc` next to `override-hal.json` in `device-profiles/`: every key, what it does, its values and limits, as real comments. References only (never read; the .jsonc is not loadable JSON: copy the lines you need without the comments). Rewritten at each start of the app; your own files are never touched and stay without comments (edit `rawfish-ir.conf` with the app closed: it rewrites that file and drops comments) |
+| app settings | `~/.config/com.rawfish/rawfish-ir/` -- `rawfish-ir.conf` also holds hand-edited keys, among them `fineWarmthStep` (the warmth button's step, in 5 % units, 1..4), `fineTintStep` (the tint button's step in % of green, 1..25), `sigmaPreviewFps` (the Σ viewfinder's target frame rate, 1..30, 10 by default), `peakTweak` and `zebraTweak`; every key is described in `rawfish-ir.conf.example` next to it |
+| device profile | `~/.local/share/com.rawfish/rawfish-ir/device-profiles/` |
+| the engine's log | `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log` -- the first thing to send when something goes wrong |

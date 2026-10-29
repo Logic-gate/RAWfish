@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates the indRAW app icon at every size Sailfish OS uses.
+"""Generates the RAWfish-ir app icon at every size Sailfish OS uses.
 
 The icon is a dark Sailfish-style tile (rounded, bottom-left and top-right
 corners sharp) filled with coarse sensor noise and crossed by three analog
@@ -7,7 +7,7 @@ interference lines. The noise lives on a fixed 43x43 grid of blocks and is
 scaled up with nearest-neighbour, so every size shows the same pattern; the
 lines sit at fixed fractions of the height. Deterministic (fixed seed).
 
-    python3 scripts/make-icon.py        # writes app/icons/indraw-<N>.png
+    python3 scripts/make-icon.py        # writes app/icons/rawfish-ir-<N>.png
 
 Sizes: 86, 108, 128, 172 (the launcher picks the one for the screen's
 scale). Requires numpy and Pillow.
@@ -70,6 +70,6 @@ def icon(size):
 
 if __name__ == '__main__':
     for n in SIZES:
-        path = os.path.join(ROOT, 'app', 'icons', 'indraw-%d.png' % n)
+        path = os.path.join(ROOT, 'app', 'icons', 'rawfish-ir-%d.png' % n)
         icon(n).save(path)
         print('wrote', path)

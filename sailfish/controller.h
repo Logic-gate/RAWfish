@@ -1,7 +1,7 @@
 /*
  * controller.h -- the controller layer of indRAW (docs/ARCHITECTURE.md).
  *
- * Sits in the `indraw` process between the engine (libindraw.so, Android
+ * Sits in the `rawfish-ir-cli` process between the engine (librawfish-ir.so, Android
  * side) and the interface (the app, on stdin/stdout). The engine sends its
  * state events (caps, ae, meter, captured, ...) to the controller through a
  * pipe; the controller reads them on its own thread, keeps the camera's

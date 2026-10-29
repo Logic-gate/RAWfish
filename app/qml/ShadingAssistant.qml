@@ -1,6 +1,6 @@
 /*
  * ShadingAssistant.qml -- measure a lens-shading (vignetting) calibration on
- * the phone, launched from Settings > indRAW ("Calibrate the lens shading"):
+ * the phone, launched from Settings > RAWfish-ir ("Calibrate the lens shading"):
  * the request flag is set there, and the camera page pushes this page at
  * its next start. The camera and its engine keep running underneath; this
  * page only drives the engine's 'shading calibrate' command and shows what
@@ -219,7 +219,7 @@ Page {
                     wrapMode: Text.Wrap
                     font.pixelSize: Theme.fontSizeSmall
                     visible: assistant.ok
-                    text: qsTr("indRAW will use it from its next start. To see the effect: take a DNG of the flat field " +
+                    text: qsTr("RAWfish-ir will use it from its next start. To see the effect: take a DNG of the flat field " +
                                "from the camera and look at it in the gallery — the corners come out as bright as the centre.\n\n" +
                                "A previous calibration, if any, was kept in the previous/ folder.")
                 }

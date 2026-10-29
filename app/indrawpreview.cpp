@@ -161,13 +161,13 @@ void IndrawPreview::start()
      * commands (focus, capture...) later. */
     /* The engine's log goes to the app's cache directory: inside the Sailjail
      * sandbox /tmp is private to the app (invisible from a terminal), while
-     * ~/.cache/com.indraw/indraw is whitelisted and shared. */
-    const QString cache = QDir::homePath() + QStringLiteral("/.cache/com.indraw/indraw");
+     * ~/.cache/com.rawfish/rawfish-ir is whitelisted and shared. */
+    const QString cache = QDir::homePath() + QStringLiteral("/.cache/com.rawfish/rawfish-ir");
     QDir().mkpath(cache);
-    const QString log = cache + QStringLiteral("/indraw-ui.log");
+    const QString log = cache + QStringLiteral("/rawfish-ir.log");
     /* The engine appends to the log at every start; left alone it grew
      * without bound (ui 171). Past 2 MB it is rotated: the previous
-     * indraw-ui.log.1 goes, the current log becomes it, a fresh one starts.
+     * rawfish-ir.log.1 goes, the current log becomes it, a fresh one starts.
      * Two files at most, 4 MB at most, and the last two sessions kept. */
     {
         QFileInfo li(log);
@@ -200,11 +200,11 @@ void IndrawPreview::start()
 
     m_buffer.clear();
     /* Inside the Sailjail sandbox /usr/bin only holds the app binary
-     * (firejail --private-bin), so "indraw" in the PATH does not exist there:
-     * use the engine's own directory, /usr/libexec/indraw, visible in the
+     * (firejail --private-bin), so "rawfish-ir-cli" in the PATH does not exist
+     * there: use the engine's own directory, /usr/libexec/rawfish-ir, visible in the
      * sandbox, and fall back to the PATH for an unsandboxed/dev run. */
-    const QString libexec = QStringLiteral("/usr/libexec/indraw/indraw");
-    const QString engine = QFileInfo(libexec).isExecutable() ? libexec : QStringLiteral("indraw");
+    const QString libexec = QStringLiteral("/usr/libexec/rawfish-ir/rawfish-ir-cli");
+    const QString engine = QFileInfo(libexec).isExecutable() ? libexec : QStringLiteral("rawfish-ir-cli");
     m_process->start(engine, args);
 }
 
@@ -255,9 +255,9 @@ void IndrawPreview::sendCommand(const QString &command)
  * Sailjail), so the UI preferences survive restarts without dconf. */
 static QString settingsPath()
 {
-    const QString dir = QDir::homePath() + QStringLiteral("/.config/com.indraw/indraw");
+    const QString dir = QDir::homePath() + QStringLiteral("/.config/com.rawfish/rawfish-ir");
     QDir().mkpath(dir);
-    return dir + QStringLiteral("/indraw.conf");
+    return dir + QStringLiteral("/rawfish-ir.conf");
 }
 /* Output settings, from dconf through the QML (ConfigurationGroup). A folder
  * outside ~/Pictures would make every sandboxed write fail: it is accepted
@@ -265,7 +265,7 @@ static QString settingsPath()
  * prefix outside the engine's safe charset fall back to the defaults. */
 void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, const QString &dngDir)
 {
-    const QString def = QDir::homePath() + QStringLiteral("/Pictures/indRAW");
+    const QString def = QDir::homePath() + QStringLiteral("/Pictures/RAWfish-ir");
     auto folder = [&](QString v) {
         v = v.trimmed();
         if (v.startsWith(QLatin1String("~/"))) v = QDir::homePath() + v.mid(1);
@@ -288,11 +288,11 @@ QString IndrawPreview::capturePrefix() const { return m_prefix; }
 
 void IndrawPreview::installExamples()
 {
-    const QString src = QStringLiteral("/usr/share/indraw/examples/");
-    const QString profiles = QDir::homePath() + QStringLiteral("/.local/share/com.indraw/indraw/device-profiles");
+    const QString src = QStringLiteral("/usr/share/rawfish-ir/examples/");
+    const QString profiles = QDir::homePath() + QStringLiteral("/.local/share/com.rawfish/rawfish-ir/device-profiles");
     QDir().mkpath(profiles);
     const struct { const char *name; QString dir; } ex[] = {
-        { "indraw.conf.example", configDir() },
+        { "rawfish-ir.conf.example", configDir() },
         { "override-hal.example.jsonc", profiles },
     };
     for (const auto &e : ex) {
@@ -305,7 +305,7 @@ void IndrawPreview::installExamples()
 
 QString IndrawPreview::configDir() const
 {
-    const QString dir = QDir::homePath() + QStringLiteral("/.config/com.indraw/indraw");
+    const QString dir = QDir::homePath() + QStringLiteral("/.config/com.rawfish/rawfish-ir");
     QDir().mkpath(dir);
     return dir;
 }
@@ -325,8 +325,8 @@ void IndrawPreview::abortCapture()
 }
 bool IndrawPreview::runProbe()
 {
-    const QString libexec = QStringLiteral("/usr/libexec/indraw/indraw");
-    const QString engine = QFileInfo(libexec).isExecutable() ? libexec : QStringLiteral("indraw");
+    const QString libexec = QStringLiteral("/usr/libexec/rawfish-ir/rawfish-ir-cli");
+    const QString engine = QFileInfo(libexec).isExecutable() ? libexec : QStringLiteral("rawfish-ir-cli");
     QProcess p;
     p.start(engine, QStringList() << QStringLiteral("probe"));
     if (!p.waitForFinished(15000)) { p.kill(); return false; }

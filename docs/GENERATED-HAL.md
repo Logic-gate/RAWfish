@@ -1,18 +1,18 @@
 # (AI generated)
 # generated-hal.json, field by field
 
-`indraw probe` writes this file into `~/.local/share/com.indraw/indraw/device-profiles/`.
+`rawfish-ir-cli probe` writes this file into `~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.
 It is a read-only snapshot of what the camera driver (the Android HAL) claims
 for every camera: `{"cameras":[ <caps of camera 0>, <caps of camera 1>, ... ]}`.
-indRAW never edits it; corrections go in `override-hal.json` next to it
-(`docs/DEVICE-PROFILES.md`). `indraw caps ID` prints one camera's block.
+RAWfish-indRAW never edits it; corrections go in `override-hal.json` next to it
+(`docs/DEVICE-PROFILES.md`). `rawfish-ir-cli caps ID` prints one camera's block.
 
 Sizes are `[width, height]`; times are nanoseconds; "modes" are Camera2 values
 with their names. Everything here is **what the HAL says**, not what it does:
 the override file exists because the two differ (the JP2 claims 16 s exposures
 and honours 1/2 s).
 
-| Field | Meaning | How indRAW uses it |
+| Field | Meaning | How RAWfish-indRAW uses it |
 |---|---|---|
 | `camera_id` | the HAL's id ("0" back, "1" front, more on multi-lens phones) | the FOCAL button cycles the ids |
 | `jpeg`, `raw16`, `yuv` | every output size per format (JPEG; RAW_SENSOR 16-bit; YUV_420_888, the preview) | `max` picks the largest JPEG/RAW and the widest preview ≤ 1280; the resolution menu lists JPEG sizes that are clean binnings of the largest |
@@ -30,10 +30,10 @@ and honours 1/2 s).
 | `control_modes` | CONTROL_MODE values (off, auto, use scene mode, off keep state) | scenes need USE_SCENE_MODE |
 | `session_keys` | keys the HAL reads when the session is CONFIGURED (Camera2 session parameters), not per frame | for vendor experiments: a key listed here may do nothing when set in a request |
 | `vendor_chars` | the values of the vendor characteristics (tags >= 0x80000000, e.g. MediaTek's `available3dnrmodes` 0x80010001), up to 16 each | for vendor experiments: what a vendor key may take |
-| `vendor_request_keys` | request keys outside the Camera2 standard (e.g. MediaTek's) | listed for information; indRAW uses none |
+| `vendor_request_keys` | request keys outside the Camera2 standard (e.g. MediaTek's) | listed for information; RAWfish-indRAW uses none |
 | `raw_capability` | whether the HAL declares the RAW capability | without it no DNG |
 | `scene_modes` | CONTROL_AVAILABLE_SCENE_MODES with names | the Scene columns of the menu |
 | `effects` | CONTROL_AVAILABLE_EFFECTS (mono, sepia...) | listed only; not offered (grouped processing) |
 
-Vendor and effect lists are informative: indRAW drives the HAL with standard
+Vendor and effect lists are informative: RAWfish-indRAW drives the HAL with standard
 keys only, so a port never depends on them.

@@ -31,7 +31,7 @@ done
 sfdk=${SFDK:-sfdk}
 # Every sfdk build runs with 'no-fix-version': with a git tag in the history
 # (a release, v0.47.69...) sfdk would otherwise replace BOTH specs' versions
-# by the tag's plus a git suffix (indraw-app-0.47.69+main.2026...), the app
+# by the tag's plus a git suffix (rawfish-ir-gui-0.1.0+main.2026...), the app
 # would then require an engine version that no package carries. The
 # versions are the specs' own (the engine's and the app's differ).
 if [ -n "$all" ]; then
@@ -51,8 +51,8 @@ if [ -n "$all" ]; then
     echo "Built for:$done_list (the sfdk target is back to ${previous:-unset})."
     echo "Packages:"
     for a in aarch64 armv7hl; do
-        ls -1t RPMS/indraw-engine-*."$a".rpm 2>/dev/null | head -1
-        ls -1t app/RPMS/indraw-app-*."$a".rpm 2>/dev/null | head -1
+        ls -1t RPMS/rawfish-ir-cli-*."$a".rpm 2>/dev/null | head -1
+        ls -1t app/RPMS/rawfish-ir-gui-*."$a".rpm 2>/dev/null | head -1
     done
     exit 0
 fi
@@ -69,7 +69,7 @@ case "$target" in
     *) echo "sfdk target '$target': cannot tell its architecture (aarch64 or armv7hl)" >&2; exit 1 ;;
 esac
 echo "== engine (library with the NDK, CLI + RPM with sfdk) =="
-if [ -n "$clean" ]; then rm -rf build/android RPMS sailfish/indraw; fi
+if [ -n "$clean" ]; then rm -rf build/android RPMS sailfish/rawfish-ir-cli; fi
 ./scripts/build-engine-rpm.sh
 echo "== app (sfdk) =="
 ( cd app && "$sfdk" -c no-fix-version build $clean )      # the app's spec always builds from clean
@@ -78,15 +78,15 @@ echo "== app (sfdk) =="
 # stale binary of the other one cannot be installed). Checked with file(1),
 # on the binaries themselves; no check possible = stop, not pass.
 command -v file >/dev/null || { echo "STOP: 'file' is needed to check the binaries' architecture" >&2; exit 1; }
-for bin in sailfish/indraw app/indraw-app; do
+for bin in sailfish/rawfish-ir-cli app/rawfish-ir; do
     if ! file "$bin" | grep -q "$want"; then
         echo "STOP: $bin is not an $arch binary:" >&2
         file "$bin" >&2
         exit 1
     fi
 done
-eng=$(ls -1t RPMS/indraw-engine-*."$arch".rpm 2>/dev/null | head -1)
-app=$(ls -1t app/RPMS/indraw-app-*."$arch".rpm 2>/dev/null | head -1)
+eng=$(ls -1t RPMS/rawfish-ir-cli-*."$arch".rpm 2>/dev/null | head -1)
+app=$(ls -1t app/RPMS/rawfish-ir-gui-*."$arch".rpm 2>/dev/null | head -1)
 echo
 echo "Packages to copy to the phone and install together (as root: pkcon install-local -y <both>):"
 echo "$eng"
