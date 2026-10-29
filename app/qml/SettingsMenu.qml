@@ -277,7 +277,13 @@ Item {
         var l = sizesFor(format)
         return l.indexOf(captureSize) >= 0 ? captureSize : (l[0] || "")
     }
-    onImageTypeChanged: { var e = effectiveSize(); if (e !== captureSize) setSize(e) }
+    // A type change can narrow the sizes (in raw the JPEG is no wider than the
+    // RAW16 stream): settle like a camera change -- restart only if the engine
+    // is not already running at the size that results. Until ui 184 it always
+    // set the size, and on a fresh install (the size still "", the engine on
+    // "max") the first switch to RAW restarted the engine for nothing (XA2,
+    // 29 Oct 2026: "Starting camera..." at the first RAW).
+    onImageTypeChanged: settleSize()
     function setSize(sz) {
         captureSize = sz; save("captureSize", sz)
         if (sz !== "") save(format === "16:9" ? "captureSize169" : "captureSize43", sz)   /* the format's own */

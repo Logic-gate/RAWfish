@@ -6,13 +6,21 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.3)
+## Known issues (as of 0.1.4)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.4 (ui 184) — no engine restart at the first switch to RAW (patch 0280)
+- On a fresh install the first switch to the RAW type showed "Starting
+  camera..." (XA2): the type change always set the photo size, and the
+  size still unset meant a restart, although the engine already ran at
+  that size. A type change now settles the size like a camera change: it
+  restarts only when the size really changes (on the JP2, going from the
+  50 MP JPEG size, which RAW does not allow, still needs one).
 
 ## docs — dconf keys, a fresh install (patch 0278)
 - BUILDING lists the dconf keys and says how to check what a new user gets
