@@ -207,26 +207,43 @@ came out as 0.47.69+main.<date>.<hash>, and the app's "requires engine >="
 could not be met. The build scripts therefore run `sfdk -c no-fix-version
 build`. Building by hand: add the same option.
 
-## Coming from indRAW (the packages before October 2026)
+## dconf keys
 
-RAWfish-ir installs beside the old indRAW packages and does not read their
-files. To carry over what you measured or set by hand (the focus
-calibration, your own lens-shading calibration, override-hal.json, the
-settings file with the level's zero, the simple-mode layout, the output
-folders), once, on the phone, before the first start of RAWfish-ir:
+The system Settings page's values (everything else is in `rawfish-ir.conf`):
+
+| Key | Values | Default |
+|---|---|---|
+| `/apps/rawfish-ir/output/prefix` | file name prefix: letters, digits, `-` `_` | `photo` |
+| `/apps/rawfish-ir/output/jpgDir`, `dngDir` | folders, under `~/Pictures` | `~/Pictures/RAWfish-ir` |
+| `/apps/rawfish-ir/menu/startMode` | `last`, `simple`, `advanced` | `last` |
+| `/apps/rawfish-ir/menu/startManual` | start in manual focus and exposure | `false` |
+| `/apps/rawfish-ir/menu/showScenes` | the Scene column in the menu | `false` |
+| `/apps/rawfish-ir/menu/previewColumns` | the Vf noise / Vf sharpen columns | `false` |
+| `/apps/rawfish-ir/device/focusCalibrationMenu` | the focus calibration column | `false` |
+| `/apps/rawfish-ir/device/probeRequested`, `probeDone` | write the profile files at the next start; when done | `false`, empty |
+| `/apps/rawfish-ir/device/shadingCalRequested` | open the lens-shading assistant at the next start | `false` |
+
+`dconf dump /apps/rawfish-ir/` shows them; an absent key takes its default,
+so `dconf reset -f /apps/rawfish-ir/` returns to a fresh install's state.
+
+## Starting from scratch
+
+What a new user gets, to check a release: with the app closed, as root
+`pkcon remove rawfish-ir-gui rawfish-ir-cli`, then as the user
 
 ```sh
-mkdir -p ~/.local/share/com.rawfish/rawfish-ir ~/.config/com.rawfish/rawfish-ir
-cp -a ~/.local/share/com.indraw/indraw/device-profiles ~/.local/share/com.rawfish/rawfish-ir/
-cp ~/.config/com.indraw/indraw/indraw.conf ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf
-cp ~/.config/com.indraw/indraw/simple.json ~/.config/com.rawfish/rawfish-ir/ 2>/dev/null
-dconf dump /apps/indraw/ | dconf load /apps/rawfish-ir/
+rm -rf ~/.local/share/com.rawfish/rawfish-ir ~/.config/com.rawfish/rawfish-ir ~/.cache/com.rawfish/rawfish-ir
+dconf reset -f /apps/rawfish-ir/
 ```
 
-Photos stay where they are (`~/Pictures/indRAW/` unless the settings say
-otherwise); the dconf line copies the output folders you chose, so the
-gallery keeps showing them. Then remove the old packages:
-`pkcon remove indraw-app indraw-engine`.
+(not the whole `~/.local/share/com.rawfish`: RAWfish 1.x keeps its data there
+too; photos are not touched). The focus calibration and a lens-shading
+calibration of your own are measurements: keep a copy first if you have
+some (`tar czf ~/rawfish-ir-perso.tgz -C ~ .local/share/com.rawfish/rawfish-ir .config/com.rawfish/rawfish-ir`).
+Then install the two packages: the first start asks Sailjail's permissions,
+uses the lens-shading calibration shipped for the phone, has no focus
+calibration (it is made by hand), and writes its starter files in
+`~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.
 
 ## Continuous integration
 

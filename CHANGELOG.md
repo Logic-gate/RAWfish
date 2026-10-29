@@ -14,6 +14,12 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## docs — dconf keys, a fresh install (patch 0278)
+- BUILDING lists the dconf keys and says how to check what a new user gets
+  ("Starting from scratch", done on the JP2 on 29 Oct 2026: all fine). The
+  carry-over of indRAW's files is gone: nobody but its author ever
+  installed indRAW.
+
 ## CI — the host checks on every push (patch 0276)
 - A GitHub Actions workflow (.github/workflows/check-host.yml) runs
   scripts/check-host.sh on every push and pull request (gcc and clang,
@@ -77,8 +83,8 @@ repository). Newest first.
   photos in `~/Pictures/RAWfish-ir/` by default. The Exif and DNG Software
   tag says "RAWfish-ir 0.1.0".
 - Installs next to RAWfish 1.x (nothing shared): both can be used on one
-  phone. The former indRAW packages are separate too; their user files are
-  not read (copy them: docs/BUILDING.md, "Coming from indRAW").
+  phone. Nothing is carried over from the indRAW packages (they were only
+  ever installed by their author).
 - The sources keep the engine's development name, indraw (files,
   functions, QML): nothing internal was renamed.
 - One version number from now on, shared by the two packages and the
