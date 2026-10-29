@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5   # v5+ runs on Node 24 (v4: Node 20, deprecated)
       - name: Tools
         run: |
           sudo apt-get update -q
