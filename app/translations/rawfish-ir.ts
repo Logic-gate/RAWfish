@@ -772,28 +772,33 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="164"/>
+        <location filename="../settings/SettingsPage.qml" line="173"/>
         <location filename="../settings/SettingsPage.qml" line="180"/>
         <source>Requested — open RAWfish-ir</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="164"/>
-        <source>Create the device profile files</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../settings/SettingsPage.qml" line="169"/>
-        <source>Lens shading (vignetting)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../settings/SettingsPage.qml" line="176"/>
-        <source>Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of RAWfish-ir.</source>
+        <location filename="../settings/SettingsPage.qml" line="177"/>
+        <source>Device profile files</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../settings/SettingsPage.qml" line="180"/>
+        <source>Create the device profile files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../settings/SettingsPage.qml" line="162"/>
+        <source>Lens shading (vignetting)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../settings/SettingsPage.qml" line="169"/>
+        <source>Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of RAWfish-ir.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../settings/SettingsPage.qml" line="173"/>
         <source>Calibrate the lens shading</source>
         <translation type="unfinished"></translation>
     </message>

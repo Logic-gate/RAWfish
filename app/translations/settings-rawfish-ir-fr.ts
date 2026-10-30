@@ -118,28 +118,33 @@
         <translation>Affiche la colonne « Étal. MàP » : faites la mise au point sur une cible à distance connue, touchez cette distance, la position de l'objectif est enregistrée. À désactiver une fois l'objectif étalonné.</translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="164" />
+        <location filename="../settings/SettingsPage.qml" line="173" />
         <location filename="../settings/SettingsPage.qml" line="180" />
         <source>Requested — open RAWfish-ir</source>
         <translation>Demandé — ouvrez RAWfish-ir</translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="164" />
+        <location filename="../settings/SettingsPage.qml" line="177" />
+        <source>Device profile files</source>
+        <translation>Fichiers de profil de l'appareil</translation>
+    </message>
+    <message>
+        <location filename="../settings/SettingsPage.qml" line="180" />
         <source>Create the device profile files</source>
         <translation>Créer les fichiers de profil de l'appareil</translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="169" />
+        <location filename="../settings/SettingsPage.qml" line="162" />
         <source>Lens shading (vignetting)</source>
         <translation>Ombrage de l'objectif (vignetage)</translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="176" />
+        <location filename="../settings/SettingsPage.qml" line="169" />
         <source>Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of RAWfish-ir.</source>
         <translation>Mesure comment l'objectif assombrit les coins, pour corriger chaque DNG. Il faut un diffuseur blanc translucide sur l'objectif et une lumière uniforme ; environ une minute. L'assistant s'ouvre au prochain lancement de RAWfish-ir.</translation>
     </message>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="180" />
+        <location filename="../settings/SettingsPage.qml" line="173" />
         <source>Calibrate the lens shading</source>
         <translation>Étalonner l'ombrage de l'objectif</translation>
     </message>

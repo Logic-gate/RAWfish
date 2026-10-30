@@ -159,13 +159,6 @@ Page {
                 onCheckedChanged: device.focusCalibrationMenu = checked
             }
 
-            Button {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
-                enabled: !device.probeRequested
-                onClicked: device.probeRequested = true
-            }
-
             SectionHeader { text: qsTr("Lens shading (vignetting)") }
             Label {
                 x: Theme.horizontalPageMargin
@@ -180,6 +173,13 @@ Page {
                 text: device.shadingCalRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Calibrate the lens shading")
                 enabled: !device.shadingCalRequested
                 onClicked: device.shadingCalRequested = true
+            }
+            SectionHeader { text: qsTr("Device profile files") }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
+                enabled: !device.probeRequested
+                onClicked: device.probeRequested = true
             }
             Label {
                 x: Theme.horizontalPageMargin
