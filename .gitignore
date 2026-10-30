@@ -26,3 +26,6 @@ indraw.log
 __pycache__/
 # sfdk writes it at the top of the tree during a build
 documentation.list
+# compiled translations (made by the build)
+app/*.qm
+app/translations/*.qm

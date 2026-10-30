@@ -84,9 +84,12 @@ Item {
                                         8: qsTr("Beach"), 9: qsTr("Snow"), 10: qsTr("Sunset"), 11: qsTr("Steady photo"),
                                         12: qsTr("Fireworks"), 13: qsTr("Sports"), 14: qsTr("Party"), 15: qsTr("Candlelight"),
                                         16: qsTr("Barcode"), 18: qsTr("HDR") }
-    readonly property var sceneShort: { 0: "off", 1: "face", 2: "action", 3: "portr.", 4: "landsc", 5: "night", 6: "n.port",
-                                        7: "theatr", 8: "beach", 9: "snow", 10: "sunset", 11: "steady", 12: "firew.",
-                                        13: "sports", 14: "party", 15: "candle", 16: "barcod", 18: "HDR" }
+    // Short forms under the menu's round buttons (about six characters).
+    readonly property var sceneShort: { 0: qsTr("off"), 1: qsTr("face"), 2: qsTr("action"), 3: qsTr("portr."),
+                                        4: qsTr("landsc"), 5: qsTr("night"), 6: qsTr("n.port"), 7: qsTr("theatr"),
+                                        8: qsTr("beach"), 9: qsTr("snow"), 10: qsTr("sunset"), 11: qsTr("steady"),
+                                        12: qsTr("firew."), 13: qsTr("sports"), 14: qsTr("party"), 15: qsTr("candle"),
+                                        16: qsTr("barcod"), 18: qsTr("HDR") }
     readonly property var sceneIcons: { 3: "icon-camera-mode-portrait", 5: "icon-camera-mode-night",
                                         13: "icon-camera-mode-sports", 18: "icon-camera-mode-hdr" }
     readonly property var sceneList: [0].concat(sceneAvailable.filter(function(m) { return m > 0 && m !== 17 }))
@@ -99,10 +102,20 @@ Item {
     // is clamped (zsl_noise -> minimal, zsl_edge -> hq). docs/ROADMAP: ZSL.
     readonly property var noiseModes: ["default_noise","off_noise","fast_noise","hq_noise","minimal_noise"]
     readonly property var edgeModes:  ["default_edge","off_edge","fast_edge","hq_edge"]
+    // The modes as shown: the full name in the header, a short form (four
+    // characters at most) under the button. The keys stay the engine's.
+    readonly property var modeNames: { "default": qsTr("default"), "off": qsTr("off"), "fast": qsTr("fast"),
+                                       "hq": qsTr("high quality"), "minimal": qsTr("minimal") }
+    readonly property var modeShort: { "default": qsTr("def"), "off": qsTr("off"), "fast": qsTr("fast"),
+                                       "hq": qsTr("hq"), "minimal": qsTr("min") }
+    function modeName(m) { var k = shortName(m); return modeNames[k] || k }
+    function modeShortName(m) { var k = shortName(m); return modeShort[k] || k.substr(0, 4) }
     readonly property var awbNames: { 1: qsTr("Automatic"), 2: qsTr("Incandescent"), 3: qsTr("Fluorescent"),
                                       4: qsTr("Warm fluorescent"), 5: qsTr("Daylight"), 6: qsTr("Cloudy"),
                                       7: qsTr("Twilight"), 8: qsTr("Shade") }
-    readonly property var awbShort: { 1: "A", 2: "inc", 3: "flu", 4: "wfl", 5: "sun", 6: "cld", 7: "twi", 8: "shd" }
+    // Short forms under the buttons (about three characters).
+    readonly property var awbShort: { 1: qsTr("A"), 2: qsTr("inc"), 3: qsTr("flu"), 4: qsTr("wfl"), 5: qsTr("sun"),
+                                      6: qsTr("cld"), 7: qsTr("twi"), 8: qsTr("shd") }
     readonly property var awbIcons: { 1: "icon-camera-wb-automatic", 2: "icon-camera-wb-tungsten",
                                       3: "icon-camera-wb-fluorecent", 5: "icon-camera-wb-sunny", 6: "icon-camera-wb-cloudy",
                                       7: "icon-camera-wb-sunset", 8: "icon-camera-wb-shade" }
@@ -244,7 +257,7 @@ Item {
     Connections { target: viewfinder; onRunningChanged: if (viewfinder.running) menu.applyLive() }
 
     function shortName(m) { return m.replace("_noise","").replace("_edge","") }
-    function mp(sz) { if (sz === "") return qsTr("max"); var p = sz.split("x"); return (Math.round(p[0] * p[1] / 1e5) / 10) + " MP" }
+    function mp(sz) { if (sz === "") return qsTr("max"); var p = sz.split("x"); return qsTr("%1 MP").arg(Math.round(p[0] * p[1] / 1e5) / 10) }
     // Listed JPEG sizes of a ratio, largest first.
     // Listed JPEG sizes of a ratio that are clean binnings (1/1, 1/2, 1/4)
     // of the LARGEST SIZE OF THAT RATIO: the odd in-between sizes the HAL
@@ -409,25 +422,25 @@ Item {
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 caption: qsTr("Noise"); values: [0, 1, 2, 3, 4]; current: menu.noiseIndex
-                labelFor: function(v) { return qsTr("Photo noise reduction: %1").arg(menu.shortName(menu.noiseModes[v])) }
-                shortFor: function(v) { return menu.shortName(menu.noiseModes[v]).substr(0, 4) }
+                labelFor: function(v) { return qsTr("Photo noise reduction: %1").arg(menu.modeName(menu.noiseModes[v])) }
+                shortFor: function(v) { return menu.modeShortName(menu.noiseModes[v]) }
                 onPicked: { menu.noiseIndex = value; menu.save("noiseIndex", value) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 caption: qsTr("Sharpen"); values: [0, 1, 2, 3]; current: menu.edgeIndex
-                labelFor: function(v) { return qsTr("Photo sharpening: %1").arg(menu.shortName(menu.edgeModes[v])) }
-                shortFor: function(v) { return menu.shortName(menu.edgeModes[v]).substr(0, 4) }
+                labelFor: function(v) { return qsTr("Photo sharpening: %1").arg(menu.modeName(menu.edgeModes[v])) }
+                shortFor: function(v) { return menu.modeShortName(menu.edgeModes[v]) }
                 onPicked: { menu.edgeIndex = value; menu.save("edgeIndex", value) } }
             // The viewfinder's processing (Vf), separate from the photos' (shown
             // when "Viewfinder processing in the camera menu" is on in Settings).
             MenuColumn { visible: menu.advanced && menu.previewColumns; width: band.colW; header: header
                 caption: qsTr("Vf noise"); values: [0, 1, 2, 3, 4]; current: menu.previewNoiseIndex
-                labelFor: function(v) { return qsTr("Viewfinder noise reduction: %1").arg(menu.shortName(menu.noiseModes[v])) }
-                shortFor: function(v) { return menu.shortName(menu.noiseModes[v]).substr(0, 4) }
+                labelFor: function(v) { return qsTr("Viewfinder noise reduction: %1").arg(menu.modeName(menu.noiseModes[v])) }
+                shortFor: function(v) { return menu.modeShortName(menu.noiseModes[v]) }
                 onPicked: { menu.previewNoiseIndex = value; menu.save("previewNoiseIndex", value); menu.applyLive() } }
             MenuColumn { visible: menu.advanced && menu.previewColumns; width: band.colW; header: header
                 caption: qsTr("Vf sharpen"); values: [0, 1, 2, 3]; current: menu.previewEdgeIndex
-                labelFor: function(v) { return qsTr("Viewfinder sharpening: %1").arg(menu.shortName(menu.edgeModes[v])) }
-                shortFor: function(v) { return menu.shortName(menu.edgeModes[v]).substr(0, 4) }
+                labelFor: function(v) { return qsTr("Viewfinder sharpening: %1").arg(menu.modeName(menu.edgeModes[v])) }
+                shortFor: function(v) { return menu.modeShortName(menu.edgeModes[v]) }
                 onPicked: { menu.previewEdgeIndex = value; menu.save("previewEdgeIndex", value); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.bracket

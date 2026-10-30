@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-indRAW camera (the interface)
-Version:    0.1.5
+Version:    0.1.6
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
@@ -11,6 +11,8 @@ BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Qml)
 BuildRequires:  pkgconfig(Qt5Quick)
 BuildRequires:  qt5-qmake
+# lupdate / lrelease, for the translations (sailfishapp_i18n)
+BuildRequires:  qt5-qttools-linguist
 # QML modules used at runtime, one per import (rpm cannot see QML imports).
 # (No comment after a tag on the same line: rpm would read it as more names.)
 # Sailfish.Silica (+ .private), Sailfish.Gallery
@@ -84,3 +86,4 @@ install -D -m 644 settings/SettingsPage.qml %{buildroot}%{_datadir}/jolla-settin
 %{_datadir}/icons/hicolor/172x172/apps/rawfish-ir.png
 %{_datadir}/jolla-settings/entries/rawfish-ir.json
 %{_datadir}/jolla-settings/pages/rawfish-ir
+%{_datadir}/translations/settings-rawfish-ir-*.qm

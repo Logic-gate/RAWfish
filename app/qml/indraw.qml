@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "185"                             // shown in the deck
+    readonly property string uiVersion: "186"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -542,9 +542,12 @@ ApplicationWindow {
             // 30 % smaller than the digits.
             function timeText(s) {
                 if (s < 0.29) return "1/" + Math.round(1 / s)     // up to 1/4 as a fraction
-                if (s < 60) return (s < 10 ? (Math.round(s * 10) / 10) : Math.round(s)) + "s"
-                if (s < 3600) return Math.round(s / 60) + "m"
-                return Math.round(s / 3600) + "h"
+                //: seconds on the shutter wheel; keep it short (about 4 characters)
+                if (s < 60) return qsTr("%1s").arg(s < 10 ? (Math.round(s * 10) / 10) : Math.round(s))
+                //: minutes on the shutter wheel; keep it short
+                if (s < 3600) return qsTr("%1m").arg(Math.round(s / 60))
+                //: hours on the shutter wheel; keep it short
+                return qsTr("%1h").arg(Math.round(s / 3600))
             }
             function clockText(s) {
                 var m = Math.floor(s / 60), r = Math.round(s - m * 60)
@@ -1135,13 +1138,13 @@ ApplicationWindow {
                         anchors.bottomMargin: Theme.paddingMedium
                         spacing: Theme.paddingLarge * 2
                         Label {
-                            text: "H " + (levelOverlay.screenRoll >= 0 ? "" : "\u2212") + Math.abs(levelOverlay.screenRoll).toFixed(1) + "\u00b0"
+                            text: qsTr("H %1°").arg((levelOverlay.screenRoll >= 0 ? "" : "\u2212") + Math.abs(levelOverlay.screenRoll).toFixed(1))   // H: the roll
                             color: levelOverlay.inkRoll
                             font.pixelSize: Theme.fontSizeSmall
                             style: Text.Outline; styleColor: "#80000000"
                         }
                         Label {
-                            text: "V " + (levelOverlay.pitch >= 0 ? "" : "\u2212") + Math.abs(levelOverlay.pitch).toFixed(1) + "\u00b0"
+                            text: qsTr("V %1°").arg((levelOverlay.pitch >= 0 ? "" : "\u2212") + Math.abs(levelOverlay.pitch).toFixed(1))   // V: the pitch
                             color: levelOverlay.inkPitch
                             font.pixelSize: Theme.fontSizeSmall
                             style: Text.Outline; styleColor: "#80000000"

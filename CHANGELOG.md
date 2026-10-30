@@ -6,13 +6,17 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.5)
+## Known issues (as of 0.1.6)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.6 — the app in French; every text can be translated (patch 0283)
+- The app follows the phone's language: French is the first translation.
+  Every text it shows can now be translated (docs/TRANSLATING.md).
 
 ## 0.1.5 (ui 185) — the engine restarts after a fault; a camera switch from RAW no longer asks the front camera for the main one's size (patch 0282)
 - An engine that stopped was never restarted, although the app said it

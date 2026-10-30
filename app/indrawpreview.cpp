@@ -905,7 +905,7 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 void IndrawPreview::onProcessError(QProcess::ProcessError error)
 {
     Q_UNUSED(error)
-    setError(m_process ? m_process->errorString() : QStringLiteral("process error"));
+    setError(m_process ? m_process->errorString() : tr("process error"));
     setRunning(false);
 }
 
@@ -929,7 +929,7 @@ void IndrawPreview::onProcessFinished(int code, QProcess::ExitStatus status)
      * stops after the third try instead of looping). */
     if (m_active) {
         if (!m_gotCaps) m_sizeFallback = true;   /* it never opened: retry at "max" */
-        setError(QStringLiteral("engine stopped"));
+        setError(tr("engine stopped"));
         scheduleRestart();
     }
 }
@@ -939,13 +939,13 @@ void IndrawPreview::scheduleRestart()
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (now - m_lastRestartMs > 60000) m_restarts = 0;   /* a quiet minute resets the count */
     if (m_restarts >= 3) {
-        setError(QStringLiteral("engine stopped (3 restarts failed)"));
+        setError(tr("engine stopped (3 restarts failed)"));
         return;
     }
     m_restarts++;
     m_lastRestartMs = now;
     QTimer::singleShot(1000 * m_restarts, this, [this]() {
-        if (m_active && !m_process) { setError(QStringLiteral("restarting engine…")); start(); }
+        if (m_active && !m_process) { setError(tr("restarting engine…")); start(); }
     });
 }
 

@@ -4,6 +4,7 @@
             "path": "applications/rawfish-ir.desktop",
             "title": "RAWfish-ir",
             "type": "application",
+            "translation_catalog": "settings-rawfish-ir",
             "icon": "image://theme/rawfish-ir",
             "params": {
                 "source": "/usr/share/jolla-settings/pages/rawfish-ir/SettingsPage.qml"
