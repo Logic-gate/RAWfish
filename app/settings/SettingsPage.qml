@@ -175,12 +175,6 @@ Page {
                 onClicked: device.shadingCalRequested = true
             }
             SectionHeader { text: qsTr("Device profile files") }
-            Button {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
-                enabled: !device.probeRequested
-                onClicked: device.probeRequested = true
-            }
             Label {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -189,6 +183,12 @@ Page {
                 font.pixelSize: Theme.fontSizeSmall
                 text: (device.probeDone.length > 0 ? qsTr("Last written: %1. ").arg(device.probeDone) : "")
                       + qsTr("RAWfish-ir writes them when it next opens: generated-hal.json (what the camera driver claims) and, if absent, a starter override-hal.json to edit (shutter ceiling, peaking and zebra thresholds), in ~/.local/share/com.rawfish/rawfish-ir/device-profiles/. Changes above apply the next time the camera starts.")
+            }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
+                enabled: !device.probeRequested
+                onClicked: device.probeRequested = true
             }
         }
         VerticalScrollDecorator {}

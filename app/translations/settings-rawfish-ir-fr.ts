@@ -120,22 +120,22 @@
     </message>
     <message>
         <location line="+16"/>
-        <location line="+7"/>
+        <location line="+16"/>
         <source>Requested — open RAWfish-ir</source>
         <translation>Demandé — ouvrez RAWfish-ir</translation>
     </message>
     <message>
-        <location line="-3"/>
+        <location line="-12"/>
         <source>Device profile files</source>
         <translation>Fichiers de profil de l&apos;appareil</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+12"/>
         <source>Create the device profile files</source>
         <translation>Créer les fichiers de profil de l&apos;appareil</translation>
     </message>
     <message>
-        <location line="-18"/>
+        <location line="-27"/>
         <source>Lens shading (vignetting)</source>
         <translation>Ombrage de l&apos;objectif (vignetage)</translation>
     </message>
@@ -150,7 +150,7 @@
         <translation>Étalonner l&apos;ombrage de l&apos;objectif</translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+11"/>
         <source>Last written: %1. </source>
         <translation>Dernière écriture : %1. </translation>
     </message>

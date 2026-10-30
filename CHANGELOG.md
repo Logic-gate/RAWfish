@@ -6,13 +6,17 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.8)
+## Known issues (as of 0.1.9)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.9 — Settings page: the text before the button (patch 0286)
+- In "Device profile files", the text now comes before its button, as in
+  the lens-shading section.
 
 ## 0.1.8 — translations: the engine's messages translated again (patch 0285)
 - The engine's messages ("engine stopped"...) were left in English.
