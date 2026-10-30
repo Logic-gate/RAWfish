@@ -7,7 +7,8 @@ language; a language without a translation shows English.
 
 - `app/translations/rawfish-ir.ts`: the English source of every text of the
   app (camera page, shooting menu, gallery, lens-shading assistant, engine
-  messages). Regenerated at every build: do not translate it.
+  messages). Kept up to date by `scripts/update-translations.sh`: do not
+  translate it.
 - `app/translations/rawfish-ir-LANG.ts`: one per language (`fr` today).
 - `app/translations/settings-rawfish-ir-LANG.ts`: the page in the system
   Settings app (Settings > Apps > RAWfish-ir). It is loaded by the Settings
@@ -29,12 +30,19 @@ Configuration for the app, Platform Configuration for the Settings page).
    text editor). Notes for translators (`//:` in the code) appear next to
    the texts: the short forms under the menu's round buttons and the units on
    the shutter wheel must stay short.
-3. In `app/rawfish-ir.pro`, add `translations/rawfish-ir-LANG.ts` to
-   `TRANSLATIONS` (the Settings catalogue is picked up by its file name).
-4. Add `Comment[LANG]=` to `app/rawfish-ir.desktop`.
-5. Build: the .qm files are made and installed by the package.
+3. Add `Comment[LANG]=` to `app/rawfish-ir.desktop`.
+4. Build: every `rawfish-ir-LANG.ts` and `settings-rawfish-ir-LANG.ts` in
+   `app/translations/` is compiled and installed by the package (nothing to
+   declare in the project file).
 
 ## For developers
+
+After adding or changing a text shown on screen, run
+`scripts/update-translations.sh`: it updates every .ts file from all the
+sources (QML, C++, the Settings page); new texts appear as unfinished in
+each language. The build never modifies these files, it only compiles them.
+`scripts/check-host.sh` (and the CI) fails when a text of the code is
+missing from them or untranslated.
 
 Texts shown on screen are wrapped in `qsTr()` in QML and `tr()` in C++
 (allowed for applications; Jolla's own platform components use qsTrId).

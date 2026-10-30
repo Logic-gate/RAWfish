@@ -26,15 +26,25 @@ OTHER_FILES += \
     settings/rawfish-ir.json \
     settings/SettingsPage.qml
 
-# Translations (docs.sailfishos.org, Reference > I18n > Application
-# Configuration). sailfishapp_i18n runs lupdate over this directory at every
-# build (translations/rawfish-ir.ts: the English source for translators, and
-# every file in TRANSLATIONS), compiles them, and installs the .qm files in
-# /usr/share/rawfish-ir/translations, where libsailfishapp loads the one for
-# the phone's language. A new language: add translations/rawfish-ir-LANG.ts
-# here (docs/TRANSLATING.md).
-CONFIG += sailfishapp_i18n
-TRANSLATIONS += translations/rawfish-ir-fr.ts
+# Translations. The build only COMPILES the .ts files (lrelease) and
+# installs the .qm: the app's in /usr/share/rawfish-ir/translations, where
+# libsailfishapp loads the one for the phone's language (docs.sailfishos.org,
+# Reference > I18n > Application Configuration). The .ts files are updated
+# on purpose, by scripts/update-translations.sh, from every source (QML, C++,
+# the Settings page): sailfishapp_i18n ran lupdate at every build over
+# app/qml and app/src only, dropped the engine's messages and rewrote the
+# files in its own format (0.1.8).
+APP_TS = $$files($$PWD/translations/rawfish-ir-*.ts)
+app_qm.input = APP_TS
+app_qm.output = $$OUT_PWD/${QMAKE_FILE_BASE}.qm
+app_qm.commands = lrelease ${QMAKE_FILE_IN} -qm ${QMAKE_FILE_OUT}
+app_qm.CONFIG += no_link target_predeps
+QMAKE_EXTRA_COMPILERS += app_qm
+app_tr.path = /usr/share/rawfish-ir/translations
+app_tr.CONFIG += no_check_exist
+for(ts, APP_TS): app_tr.files += $$OUT_PWD/$$basename(ts)
+app_tr.files ~= s/\.ts$/.qm/g
+INSTALLS += app_tr
 
 # The page in the system Settings app is loaded by the Settings app, which
 # reads the catalogue its entry names ("translation_catalog" in

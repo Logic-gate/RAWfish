@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-indRAW camera (the interface)
-Version:    0.1.7
+Version:    0.1.8
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
@@ -11,7 +11,7 @@ BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Qml)
 BuildRequires:  pkgconfig(Qt5Quick)
 BuildRequires:  qt5-qmake
-# lupdate / lrelease, for the translations (sailfishapp_i18n)
+# lrelease: the build compiles the translations
 BuildRequires:  qt5-qttools-linguist
 # QML modules used at runtime, one per import (rpm cannot see QML imports).
 # (No comment after a tag on the same line: rpm would read it as more names.)

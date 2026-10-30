@@ -121,6 +121,43 @@ echo "sailfish/indraw.c: OK (-O2)"
 # licence for its %license: the two must stay the same file.
 cmp -s "$root/LICENSE" "$root/app/LICENSE" || { echo "app/LICENSE differs from LICENSE: copy it again" >&2; exit 1; }
 echo "licence: app/LICENSE = LICENSE (OK)"
+# Translations: every text shown on screen (qsTr / tr) is in the .ts files,
+# and every language file has a translation for each (lupdate into a
+# scratch copy, compared with the committed files). Skipped without lupdate.
+lupd=$(command -v lupdate || ls /usr/lib/qt5/bin/lupdate 2>/dev/null || true)
+if [ -n "$lupd" ]; then
+    tdir=$(mktemp -d)
+    cp "$root"/app/translations/*.ts "$tdir"/
+    ( cd "$root/app" && "$lupd" -no-obsolete -locations none qml/*.qml indrawpreview.cpp main.cpp -ts "$tdir"/rawfish-ir.ts "$tdir"/rawfish-ir-*.ts >/dev/null 2>&1
+      "$lupd" -no-obsolete -locations none settings/SettingsPage.qml -ts "$tdir"/settings-rawfish-ir-*.ts >/dev/null 2>&1 )
+    python3 - "$root/app/translations" "$tdir" <<'PYEOF'
+import sys, glob, os, xml.etree.ElementTree as ET
+def msgs(f):
+    r = {}
+    for c in ET.parse(f).getroot().iter('context'):
+        n = c.find('name').text
+        for m in c.iter('message'):
+            t = m.find('translation')
+            r[(n, m.find('source').text)] = (t.text or '') if (t is not None and t.get('type') not in ('unfinished', 'vanished', 'obsolete')) else None
+    return r
+repo, fresh = sys.argv[1], sys.argv[2]
+bad = 0
+for f in sorted(glob.glob(os.path.join(fresh, '*.ts'))):
+    name = os.path.basename(f)
+    want, have = msgs(f), msgs(os.path.join(repo, name))
+    missing = [k for k in want if k not in have]
+    gone = [k for k in have if k not in want]
+    untranslated = [k for k, v in have.items() if v is None and name != 'rawfish-ir.ts']
+    for k in missing: print("%s: not in the file (run scripts/update-translations.sh): %s / %r" % (name, k[0], k[1][:60])); bad = 1
+    for k in gone: print("%s: no longer in the code: %s / %r" % (name, k[0], k[1][:60])); bad = 1
+    for k in untranslated: print("%s: not translated: %s / %r" % (name, k[0], k[1][:60])); bad = 1
+    if not (missing or gone or untranslated): print("%s: %d texts, all present%s (OK)" % (name, len(have), "" if name == 'rawfish-ir.ts' else " and translated"))
+sys.exit(bad)
+PYEOF
+    rm -rf "$tdir"
+else
+    echo "translations: lupdate not installed, not checked"
+fi
 # One version number for the two packages and the library (RAWfish-indRAW 0.1.0+).
 v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/indraw_version.h")
 v_cli=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir-cli.spec")
