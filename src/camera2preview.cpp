@@ -703,7 +703,9 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
     node->setTexture(texture);
 
     const QRectF target(0, 0, width(), height());
-    const QSizeF imageSize = m_frame.size();
+    // Map from the texture that was actually uploaded: with a colour look active it is
+    // a reduced copy of m_frame, and using m_frame's size would sample only a corner.
+    const QSizeF imageSize = textureImage.size();
     const qreal zoom = qMax<qreal>(1.0, m_zoom);
     const QSizeF sourceSize(imageSize.width() / zoom,
                             imageSize.height() / zoom);
