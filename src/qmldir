@@ -12,3 +12,5 @@ DisabledByMdmView 1.0 DisabledByMdmView.qml
 IsoItem 1.0 settings/IsoItem.qml
 singleton PhotonTheme 1.0 theme/PhotonTheme.qml
 LooksStrip 1.0 capture/LooksStrip.qml
+PhotonParameterBar 1.0 capture/PhotonParameterBar.qml
+PhotonRuler 1.0 capture/PhotonRuler.qml
