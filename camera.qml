@@ -105,6 +105,8 @@ ApplicationWindow {
                            && Settings.mode.rawCaptureSize === Settings.camera2WarmCaptureSize()
                            && Settings.mode.rawCaptureSpeedMode !== "quality"
         jpegQuality: Settings.mode.rawCaptureJpegQuality
+        lutPath: Settings.mode.colorLookPath
+        lutStrength: Settings.mode.colorLookStrength / 100.0
         readonly property bool frontFacing: Settings.global.frontFacingDeviceId !== ""
                                             && cameraId === Settings.global.frontFacingDeviceId
         orientation: Settings.camera2PreviewOrientation(

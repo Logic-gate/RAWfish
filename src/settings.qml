@@ -50,6 +50,8 @@ SettingsBase {
                                                  "rawCaptureColorTemperature": 0,
                                                  "rawCaptureColorTint": 0,
                                                  "camera2Viewfinder": true,
+                                                 "colorLookPath": "",
+                                                 "colorLookStrength": 100,
                                                  "exposureMode": Camera.ExposureManual,
                                                  "flash": ((globalSettings.captureMode == "image")
                                                            && (globalSettings.position === Camera.BackFace)
@@ -82,6 +84,8 @@ SettingsBase {
                                             && modeSettings.rawCaptureColorTemperature === settingsDefaults["rawCaptureColorTemperature"]
                                             && modeSettings.rawCaptureColorTint === settingsDefaults["rawCaptureColorTint"]
                                             && modeSettings.camera2Viewfinder === settingsDefaults["camera2Viewfinder"]
+                                            && modeSettings.colorLookPath === settingsDefaults["colorLookPath"]
+                                            && modeSettings.colorLookStrength === settingsDefaults["colorLookStrength"]
                                             && globalSettings.exposureCompensation === exposureCompensationDefault
                                             && modeSettings.exposureMode === settingsDefaults["exposureMode"]
                                             && modeSettings.flash == settingsDefaults["flash"]
@@ -217,6 +221,9 @@ SettingsBase {
             property int rawCaptureColorTemperature: 0
             property int rawCaptureColorTint: 0
             property bool camera2Viewfinder: true
+            // Colour look (.cube/.plut path, empty = Standard) and its intensity in percent.
+            property string colorLookPath: ""
+            property int colorLookStrength: 100
 
             onCamera2CaptureFormatChanged: normalizeCamera2Settings()
             onRawCaptureRawFormatChanged: normalizeCamera2Settings()

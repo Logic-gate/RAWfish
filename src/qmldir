@@ -10,3 +10,5 @@ GalleryView 1.0 gallery/GalleryView.qml
 CameraPage 1.0 CameraPage.qml
 DisabledByMdmView 1.0 DisabledByMdmView.qml
 IsoItem 1.0 settings/IsoItem.qml
+singleton PhotonTheme 1.0 theme/PhotonTheme.qml
+LooksStrip 1.0 capture/LooksStrip.qml
