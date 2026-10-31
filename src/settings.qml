@@ -141,6 +141,8 @@ SettingsBase {
         property bool experimentalExposureLayout: false
         // Opt-in Photon-style exposure ruler and parameter row (advanced mode).
         property bool photonLayout: false
+        // Photon-style histogram overlay on the viewfinder (top bar toggle).
+        property bool photonHistogram: true
         property bool advancedMode: false
         property string advancedCamera2CaptureFormat: "jpeg"
         property string advancedRawCaptureSize: "4096x3072"

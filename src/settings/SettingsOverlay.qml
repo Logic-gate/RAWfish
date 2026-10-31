@@ -602,7 +602,8 @@ PinchArea {
 
                 Item {
                     width: camera2ControlGrid.experimentalLayout ? camera2ControlGrid.exposureWidth : parent.width
-                    height: parent.height * 0.34
+                    height: camera2ControlGrid.photon ? 0 : parent.height * 0.34
+                    visible: !camera2ControlGrid.photon
 
                     Canvas {
                         id: exposureHistogram
@@ -655,7 +656,7 @@ PinchArea {
                 Item {
                     id: shutterZoomArea
                     width: parent.width
-                    height: parent.height * 0.66
+                    height: camera2ControlGrid.photon ? parent.height : parent.height * 0.66
 
                     Item {
                         id: bottomShutterAnchor
@@ -841,9 +842,11 @@ PinchArea {
             readonly property bool histogramCollapsed: !Settings.global.simpleHistogramVisible
             readonly property real histogramStripHeight: Theme.itemSizeSmall
             readonly property real histogramOpenHeight: Math.round(height * 0.34)
-            readonly property real histogramHeight: histogramCollapsed
-                                                   ? histogramStripHeight
-                                                   : histogramOpenHeight
+            readonly property real histogramHeight: camera2ControlGrid.photon
+                                                   ? 0
+                                                   : (histogramCollapsed
+                                                      ? histogramStripHeight
+                                                      : histogramOpenHeight)
 
             anchors {
                 fill: parent
@@ -858,6 +861,7 @@ PinchArea {
 
             Item {
                 id: simpleHistogramPanel
+                visible: !camera2ControlGrid.photon
 
                 anchors {
                     left: parent.left
@@ -2181,6 +2185,46 @@ PinchArea {
                 pageStack.push("QrPage.qml", { text: qrFilter.result })
             }
         }
+    }
+
+    // Photon-style top bar and viewfinder histogram.
+    PhotonTopBar {
+        id: photonTopBar
+
+        anchors {
+            top: parent.top
+            topMargin: overlay._safeTopMargin
+            left: parent.left
+            right: parent.right
+        }
+        z: 6
+        opacity: overlay._exposed ? 0.0 : overlay._commonControlOpacity
+        visible: Settings.global.photonLayout && Settings.global.captureMode === "image"
+                 && opacity > 0.0
+        enabled: opacity > 0.5
+
+        timerSeconds: Settings.mode.timer
+        histogramOn: Settings.global.photonHistogram
+
+        onTimerClicked: {
+            var delays = [ 0, 3, 10, 15 ]
+            var index = delays.indexOf(Settings.mode.timer)
+            Settings.mode.timer = delays[(index + 1) % delays.length]
+        }
+        onHistogramClicked: Settings.global.photonHistogram = !Settings.global.photonHistogram
+        onSettingsClicked: overlay.topMenuOpen = true
+    }
+
+    PhotonHistogram {
+        anchors {
+            left: parent.left
+            leftMargin: Theme.paddingMedium
+            top: photonTopBar.bottom
+        }
+        z: 5
+        opacity: photonTopBar.opacity
+        visible: photonTopBar.visible && Settings.global.photonHistogram
+        values: camera2ControlGrid.camera2Viewfinder ? camera2ControlGrid.camera2Viewfinder.histogram : []
     }
 
     ColorFilterView {

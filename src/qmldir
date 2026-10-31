@@ -16,3 +16,6 @@ PhotonParameterBar 1.0 capture/PhotonParameterBar.qml
 PhotonRuler 1.0 capture/PhotonRuler.qml
 PhotonDeck 1.0 capture/PhotonDeck.qml
 PhotonModeSwitcher 1.0 capture/PhotonModeSwitcher.qml
+PhotonIcon 1.0 capture/PhotonIcon.qml
+PhotonTopBar 1.0 capture/PhotonTopBar.qml
+PhotonHistogram 1.0 capture/PhotonHistogram.qml
