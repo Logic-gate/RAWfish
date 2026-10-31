@@ -76,7 +76,7 @@ else
 fi
 # Same flags as sailfish/Makefile (no -D_GNU_SOURCE: the file must declare
 # what it needs itself, as on the build engine), warnings as errors.
-gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/indraw.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -ldl -lpthread -lm
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/indraw.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
 echo "sailfish/indraw.c + controller: OK"
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/indraw.c" -o /dev/null
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/null

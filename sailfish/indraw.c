@@ -32,7 +32,9 @@
 #include <math.h>     /* fabsf: comparing calibration distances  */
 #include <pthread.h>  /* the stdin hang-up watcher thread         */
 #include "../indraw_version.h"
-#include "controller.h"  /* IR_VERSION, shared with the library  */
+#include "controller.h"
+#include "yuvjpeg.h"
+#include "../android/exifwrite.h"  /* IR_VERSION, shared with the library  */
 
 #define OUT_SIZE 32768 /* room for any JSON report (caps lists per-size timings) */
 
@@ -1469,6 +1471,103 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
     return 0;
 }
 
+static double mono_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+}
+/* Appends s to buf as a JSON string (quotes, backslashes and control
+ * characters escaped). */
+static void jw_quote_into(char *buf, size_t n, const char *s)
+{
+    size_t k = strlen(buf);
+    if (k + 1 >= n) return;
+    buf[k++] = '"';
+    for (; *s && k + 7 < n; ++s) {
+        unsigned char ch = (unsigned char)*s;
+        if (ch == '"' || ch == '\\') { buf[k++] = '\\'; buf[k++] = (char)ch; }
+        else if (ch < 0x20) k += (size_t)snprintf(buf + k, n - k, "\\u%04x", ch);
+        else buf[k++] = (char)ch;
+    }
+    buf[k++] = '"'; buf[k] = '\0';
+}
+
+/* Handles one "yuv NAME [q=Q] [exp=SEC iso=N] [focus=...]" line: one
+ * full-resolution YUV frame from the engine (the camera's noise reduction
+ * and sharpening off), compressed here with libjpeg, Exif added by
+ * exifwrite.c, and written like a JPEG. */
+static int cmd_yuv(void *bridge, char **save, char *out)
+{
+    typedef int (*yuv_fn)(int, float, int64_t, int, int, ir_yuv_t *, char *, size_t);
+    typedef void (*yuvfree_fn)(ir_yuv_t *);
+    yuv_fn yf = (yuv_fn)a_dlsym(bridge, "indraw_yuv");
+    yuvfree_fn yfree = (yuvfree_fn)a_dlsym(bridge, "indraw_yuv_free");
+    char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
+    char file[1200];
+    static char cap[OUT_SIZE];
+    int quality = 95, iso = 0, focus_mode = F_KEEP, rc;
+    float focus_diopters = 0.0f;
+    int64_t exposure_ns = 0;
+    struct timespec now;
+    ir_yuv_t f;
+    uint8_t *jpg = NULL;
+    unsigned long jlen = 0;
+    double t0, t1;
+    if (!yf || !yfree) { emit("{\"ok\":false,\"error\":\"yuv: bridge has no indraw_yuv\"}"); return 1; }
+    if (!prefix || !valid_name(prefix)) { emit("{\"ok\":false,\"error\":\"yuv: missing or invalid NAME\"}"); return 1; }
+    clock_gettime(CLOCK_REALTIME, &now);
+    if (build_output_path(prefix, "jpg", &now, file, sizeof file)) { emit("{\"ok\":false,\"error\":\"yuv: cannot build output path\"}"); return 1; }
+    while ((tok = strtok_r(NULL, " \t\r\n", save))) {
+        if (!strncmp(tok, "q=", 2)) quality = atoi(tok + 2);
+        else if (!strncmp(tok, "exp=", 4)) { if (!parse_exposure(tok + 4, &exposure_ns)) { emit("{\"ok\":false,\"error\":\"yuv: bad exp\"}"); return 1; } }
+        else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
+        else if (!strncmp(tok, "focus=", 6)) { if (!parse_focus(tok + 6, &focus_mode, &focus_diopters)) { emit("{\"ok\":false,\"error\":\"yuv: bad focus\"}"); return 1; } }
+        else { emit("{\"ok\":false,\"error\":\"yuv: unknown option\"}"); return 1; }
+    }
+    if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
+    if (yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE)) { emit(out); return 1; }
+    memcpy(cap, out, OUT_SIZE);                          /* the engine's report      */
+    cap[OUT_SIZE - 1] = '\0';
+    t0 = mono_ms();
+    rc = yuv_encode_jpeg(&f, quality, &jpg, &jlen);
+    t1 = mono_ms();
+    if (rc == 0) {
+        exif_info_t ex;
+        char dt[24];
+        struct tm tm;
+        int o = f.orientation_deg % 360;
+        memset(&ex, 0, sizeof ex);
+        localtime_r(&now.tv_sec, &tm);
+        strftime(dt, sizeof dt, "%Y:%m:%d %H:%M:%S", &tm);
+        ex.make = f.make[0] ? f.make : NULL;
+        ex.model = f.model[0] ? f.model : NULL;
+        ex.software = "RAWfish-ir " IR_VERSION;
+        ex.datetime = dt;
+        ex.exposure_ns = f.exposure_ns; ex.iso = f.iso;
+        ex.focal_mm = f.focal_mm; ex.focal_eq_mm = f.focal_eq_mm; ex.f_number = f.f_number;
+        ex.orientation = o == 90 ? 6 : o == 180 ? 3 : o == 270 ? 8 : 1;   /* our pixels are as read */
+        ex.wb_manual = f.wb_manual; ex.exposure_manual = f.exposure_manual;
+        rc = exif_write_jpeg(file, jpg, jlen, &ex);
+    }
+    free(jpg);
+    yfree(&f);
+    if (rc) { snprintf(out, OUT_SIZE, "{\"ok\":false,\"stage\":\"yuv\",\"error\":\"compress or write failed\",\"status\":%d}", rc); emit(out); return 1; }
+    {
+        char *end = strrchr(cap, '}');
+        if (end) *end = '\0';
+        size_t k = strlen(cap);
+        if (k + 8 >= OUT_SIZE) k = OUT_SIZE - 9;
+        memcpy(out, cap, k);
+        memcpy(out + k, ",\"path\":", 8);
+        out[k + 8] = '\0';
+        jw_quote_into(out, OUT_SIZE, file);
+        snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f}", jlen, quality, t1 - t0);
+    }
+    emit(out);
+    return 0;
+}
+
 /* Handles one "burst NAME [n=N] [q=Q] [NOISE] [EDGE] [exp=SEC iso=N]" line:
  * N JPEGs (2..8, default 3) back to back at one exposure (the given manual
  * pair, or the live automatic one frozen). Each file gets its own name, the
@@ -1919,9 +2018,14 @@ int main(int argc, char **argv)
 
         if (!op || !jpeg || !cl) return EXIT_BRIDGE;
         if (argc < 4 || !parse_size(argv[3], &jw, &jh)) { usage(); return EXIT_USAGE; }
-        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH]       */
+        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH] [yuv=WxH] */
             if (!strncmp(argv[i], "raw=", 4)) {
                 if (!parse_size(argv[i] + 4, &rw, &rh)) { usage(); return EXIT_USAGE; }
+            } else if (!strncmp(argv[i], "yuv=", 4)) {
+                int yw, yh;
+                typedef int (*yuvsize_fn)(int, int);
+                yuvsize_fn ys = (yuvsize_fn)a_dlsym(bridge, "indraw_set_yuv_size");
+                if (!parse_size(argv[i] + 4, &yw, &yh) || !ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
             } else if (!parse_size(argv[i], &pw, &ph)) { usage(); return EXIT_USAGE; }
         }
 
@@ -2130,6 +2234,7 @@ int main(int argc, char **argv)
             else if (!strcmp(cmd, "zoom")) failures += cmd_zoom(zf, &save, out);
             else if (!strcmp(cmd, "tap")) failures += cmd_tap(tf, &save, out);
             else if (!strcmp(cmd, "wb")) failures += cmd_wb(wf, wm, &save, out);
+            else if (!strcmp(cmd, "yuv")) failures += cmd_yuv(bridge, &save, out);
             else if (!strcmp(cmd, "scene")) failures += cmd_scene(sf, &save, out);
             else if (!strcmp(cmd, "afwait")) failures += cmd_afwait(aw, &save, out);
             else if (!strcmp(cmd, "calib")) failures += cmd_calib(lp, setcal_cmd, argv[2], &save, out);

@@ -15,6 +15,8 @@ Source0:    %{name}-%{version}.tar.bz2
 %global hybrislib lib
 %endif
 BuildRequires:  gcc
+# libjpeg(-turbo): the CLI compresses the YUV frames itself (the yuv command)
+BuildRequires:  libjpeg-turbo-devel
 # Loaded at run time with dlopen, so rpm does not find them by itself:
 # libhybris (the bridge to the Android libraries) and droidmedia (only to
 # start the binder thread pool the camera service calls back through).
