@@ -282,3 +282,40 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_de
     }
     return 0;
 }
+
+/* Sharpening: the luminance minus its 3x3 mean is the fine detail; a
+ * part of it (the strength) is added back, except where it is smaller
+ * than the noise, where nothing is added: grain is not sharpened. Done
+ * after the merge, on a frame with less noise than any single one. */
+typedef struct { const uint8_t *src; uint8_t *dst; int w, h; float amount, thresh; } sharp_ctx_t;
+static void sharpen_rows(void *p, int y0, int y1)
+{
+    sharp_ctx_t *c = p; int w = c->w, h = c->h, x, y;
+    for (y = y0; y < y1; ++y) {
+        const uint8_t *s = c->src + (size_t)y * w; uint8_t *d = c->dst + (size_t)y * w;
+        if (y == 0 || y == h - 1) { memcpy(d, s, (size_t)w); continue; }
+        d[0] = s[0]; d[w - 1] = s[w - 1];
+        for (x = 1; x < w - 1; ++x) {
+            int sum = s[x - w - 1] + s[x - w] + s[x - w + 1] + s[x - 1] + s[x + 1] + s[x + w - 1] + s[x + w] + s[x + w + 1];
+            float detail = s[x] - (sum + s[x]) / 9.0f, ad = fabsf(detail), o;
+            if (ad <= c->thresh) { d[x] = s[x]; continue; }
+            /* a soft start: the part above the threshold counts, so the rule has no step */
+            detail = detail > 0 ? detail - c->thresh : detail + c->thresh;
+            o = s[x] + c->amount * detail;
+            d[x] = (uint8_t)(o < 0 ? 0 : o > 255 ? 255 : o + 0.5f);
+        }
+    }
+}
+void yuv_sharpen(ir_yuv_t *f, int level, float sigma)
+{
+    static const float amounts[4] = { 0.0f, 0.4f, 0.8f, 1.2f };
+    sharp_ctx_t c; uint8_t *out;
+    if (!f || !f->y || level < 1 || level > 3) return;
+    out = malloc((size_t)f->w * f->h);
+    if (!out) return;
+    c.src = f->y; c.dst = out; c.w = f->w; c.h = f->h; c.amount = amounts[level];
+    c.thresh = 0.7f * sigma;                         /* the fine detail of pure noise has about 0.9 sigma */
+    parallel_rows(sharpen_rows, &c, f->h);
+    memcpy(f->y, out, (size_t)f->w * f->h);
+    free(out);
+}

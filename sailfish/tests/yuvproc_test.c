@@ -72,6 +72,17 @@ int main(void)
         CHECK(right / 10 - left / 10 > 50, "colour edge kept: %.0f -> %.0f", left / 10, right / 10);
     }
     free(out.y); free(out.u); free(out.v);
+    {   /* sharpening: the square's edge gets steeper, a flat area's noise barely moves */
+        ir_yuv_t sh; yuv_denoise_report_t r2;
+        CHECK(yuv_denoise(fr, 4, 0, &sh, &r2) == 0, "a merged frame to sharpen");
+        float flat0 = noise_in(sh.y, W, 100, 100, 400, 250);
+        int edge0 = abs((int)sh.y[(size_t)360 * W + 503] - (int)sh.y[(size_t)360 * W + 498]);
+        yuv_sharpen(&sh, 2, r2.sigma);
+        float flat1 = noise_in(sh.y, W, 100, 100, 400, 250);
+        int edge1 = abs((int)sh.y[(size_t)360 * W + 503] - (int)sh.y[(size_t)360 * W + 498]);
+        CHECK(edge1 > edge0 && flat1 < flat0 * 1.6f, "sharpen 2: edge %d -> %d, flat noise %.2f -> %.2f", edge0, edge1, flat0, flat1);
+        free(sh.y); free(sh.u); free(sh.v);
+    }
     for (int k = 0; k < 4; ++k) { free(fr[k].y); free(fr[k].u); free(fr[k].v); }
     printf(fails ? "yuvproc: FAILED (%d)\n" : "yuvproc: OK\n", fails);
     return fails ? 1 : 0;
