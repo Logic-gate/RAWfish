@@ -1781,8 +1781,8 @@ int main(int argc, char **argv)
     if (!load_hybris()) return EXIT_HYBRIS;
 
     /* `run` opens the camera: start the binder pool BEFORE loading the bridge. */
-    if ((!strcmp(argv[1], "run") || !strcmp(argv[1], "stream")) && !start_binder_pool())
-        return EXIT_DROIDMEDIA;   /* the binder pool is needed by BOTH run and stream */
+    if ((!strcmp(argv[1], "run") || !strcmp(argv[1], "stream") || !strcmp(argv[1], "streamtest")) && !start_binder_pool())
+        return EXIT_DROIDMEDIA;   /* the binder pool is needed by run, stream and streamtest: they open a camera */
 
     bridge = a_dlopen(lib, RTLD_NOW);
     if (!bridge) { fprintf(stderr, "rawfish-ir-cli: cannot load %s\n", lib); return EXIT_BRIDGE; }

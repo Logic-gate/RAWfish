@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-indRAW camera (the interface)
-Version:    0.1.10
+Version:    0.1.11
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
