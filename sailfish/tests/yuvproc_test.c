@@ -76,10 +76,10 @@ int main(void)
         ir_yuv_t sh; yuv_denoise_report_t r2;
         CHECK(yuv_denoise(fr, 4, 0, &sh, &r2) == 0, "a merged frame to sharpen");
         float flat0 = noise_in(sh.y, W, 100, 100, 400, 250);
-        int edge0 = abs((int)sh.y[(size_t)360 * W + 503] - (int)sh.y[(size_t)360 * W + 498]);
+        int edge0 = abs((int)sh.y[(size_t)360 * W + 502] - (int)sh.y[(size_t)360 * W + 500]);   /* across the square's edge at x = 500/501 */
         yuv_sharpen(&sh, 2, r2.sigma);
         float flat1 = noise_in(sh.y, W, 100, 100, 400, 250);
-        int edge1 = abs((int)sh.y[(size_t)360 * W + 503] - (int)sh.y[(size_t)360 * W + 498]);
+        int edge1 = abs((int)sh.y[(size_t)360 * W + 502] - (int)sh.y[(size_t)360 * W + 500]);
         CHECK(edge1 > edge0 && flat1 < flat0 * 1.6f, "sharpen 2: edge %d -> %d, flat noise %.2f -> %.2f", edge0, edge1, flat0, flat1);
         free(sh.y); free(sh.u); free(sh.v);
     }

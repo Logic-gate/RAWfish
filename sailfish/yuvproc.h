@@ -16,7 +16,7 @@ typedef struct {
  * U and V. 0 on success. */
 int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_denoise_report_t *rep);
 
-/* Sharpening of a frame's luminance, in place: level 1..3 (0.4, 0.8, 1.2 of
+/* Sharpening of a frame's luminance, in place: level 1..3 (0.6, 1.2, 1.8 of
  * the fine detail added back), sigma the noise the detail must exceed. */
 void yuv_sharpen(ir_yuv_t *f, int level, float sigma);
 

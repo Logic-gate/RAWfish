@@ -71,10 +71,10 @@ static void box_filter(const float *src, float *dst, int w, int h, int r)
 /* Colour noise: each chroma plane is smoothed by a guided filter whose
  * guide is the luminance at the same resolution. Where the luminance has
  * an edge, the colour keeps it; elsewhere the colour blotches average
- * out. Radius 4 (chroma pixels): larger blurs the colour edges. */
+ * out. Radius 2 (chroma pixels): larger blurs the colour edges. */
 static int guided_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t *v)
 {
-    const int cw = w / 2, ch = h / 2, r = 4;
+    const int cw = w / 2, ch = h / 2, r = 2;
     const float eps = 100.0f;
     size_t n = (size_t)cw * ch;
     float *I = malloc(n * sizeof *I), *mI = malloc(n * sizeof *mI), *II = malloc(n * sizeof *II);
@@ -308,13 +308,13 @@ static void sharpen_rows(void *p, int y0, int y1)
 }
 void yuv_sharpen(ir_yuv_t *f, int level, float sigma)
 {
-    static const float amounts[4] = { 0.0f, 0.4f, 0.8f, 1.2f };
+    static const float amounts[4] = { 0.0f, 0.6f, 1.2f, 1.8f };
     sharp_ctx_t c; uint8_t *out;
     if (!f || !f->y || level < 1 || level > 3) return;
     out = malloc((size_t)f->w * f->h);
     if (!out) return;
     c.src = f->y; c.dst = out; c.w = f->w; c.h = f->h; c.amount = amounts[level];
-    c.thresh = 0.7f * sigma;                         /* the fine detail of pure noise has about 0.9 sigma */
+    c.thresh = 1.0f * sigma;                         /* the fine detail of pure noise: about 0.9 sigma */
     parallel_rows(sharpen_rows, &c, f->h);
     memcpy(f->y, out, (size_t)f->w * f->h);
     free(out);
