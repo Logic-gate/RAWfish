@@ -138,6 +138,16 @@ likely cautious.
 
 ## Decided against (for now)
 
+### Our own tone curves (tried in October 2026, branch `saturation`)
+In manual white balance the ISP takes our colour matrix and our tone
+curves (JP2, tested from the terminal). The matrix works well:
+saturation and toning (sepia, blue...) keep the camera's own tone
+processing. Our curves do not: the camera's curve adapts to each scene
+(it darkened the shadows of a flat indoor scene and opened those of a
+contrasty outdoor one), and a fixed curve of ours blocked the shadows
+where the camera's kept them. Kept for later: effects on top of the
+camera's images (the matrix), not instead of its tone curve.
+
 ### A viewfinder built from the RAW stream
 
 Demosaicing the RAW16 stream (already read for the meter) on the GPU would
