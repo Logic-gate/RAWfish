@@ -14,3 +14,4 @@ singleton PhotonTheme 1.0 theme/PhotonTheme.qml
 LooksStrip 1.0 capture/LooksStrip.qml
 PhotonParameterBar 1.0 capture/PhotonParameterBar.qml
 PhotonRuler 1.0 capture/PhotonRuler.qml
+PhotonDeck 1.0 capture/PhotonDeck.qml

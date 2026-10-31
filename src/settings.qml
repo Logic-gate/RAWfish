@@ -139,6 +139,8 @@ SettingsBase {
         property bool exposureZebras: false
         property bool simpleHistogramVisible: true
         property bool experimentalExposureLayout: false
+        // Opt-in Photon-style exposure ruler and parameter row (advanced mode).
+        property bool photonLayout: false
         property bool advancedMode: false
         property string advancedCamera2CaptureFormat: "jpeg"
         property string advancedRawCaptureSize: "4096x3072"

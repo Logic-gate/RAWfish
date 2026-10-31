@@ -15,6 +15,8 @@ Item {
     property int strength: 100
     property bool expanded: false
     property string looksFolder
+    // Keep clear of the vertical exposure slider along the right edge.
+    property real rightInset: 0
 
     signal lookSelected(string path)
     signal strengthEdited(int percent)
@@ -51,7 +53,7 @@ Item {
 
         Item {
             x: PhotonTheme.spacingLarge
-            width: parent.width - 2 * PhotonTheme.spacingLarge
+            width: parent.width - PhotonTheme.spacingLarge - Math.max(PhotonTheme.spacingLarge, strip.rightInset)
             height: toggle.height + PhotonTheme.spacing
 
             Text {
@@ -90,7 +92,7 @@ Item {
         ListView {
             id: looksList
             visible: strip.expanded
-            width: parent.width
+            width: parent.width - strip.rightInset
             height: visible ? strip._thumb + PhotonTheme.fontSizeCaption * 1.5 + PhotonTheme.spacing : 0
             orientation: ListView.Horizontal
             spacing: PhotonTheme.spacing
@@ -148,7 +150,7 @@ Item {
         Item {
             id: intensity
             x: PhotonTheme.spacingLarge
-            width: parent.width - 2 * PhotonTheme.spacingLarge
+            width: parent.width - PhotonTheme.spacingLarge - Math.max(PhotonTheme.spacingLarge, strip.rightInset)
             visible: strip.expanded && strip.selectedPath.length > 0
             height: visible ? 36 * PhotonTheme.dp : 0
 

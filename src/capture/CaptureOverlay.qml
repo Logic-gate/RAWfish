@@ -527,6 +527,7 @@ SettingsOverlay {
 
         x: 0
         width: captureView._camera2PreviewWidth
+        rightInset: width * 0.10
         y: captureView.camera2TopInset + captureView._camera2PreviewHeight - height
         visible: captureView._camera2ViewfinderActive
                  && isPortrait

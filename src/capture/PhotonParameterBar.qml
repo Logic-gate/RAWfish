@@ -10,7 +10,7 @@ import com.vivid.camera 1.0
 Item {
     id: bar
 
-    // [{ key: "ev", label: "AE", value: "0.0", available: true }, ...]
+    // [{ key: "ev", label: "AE", valueText: "0.0", available: true }, ...]
     property var items: []
     property string selectedKey
 
@@ -50,7 +50,7 @@ Item {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: modelData.value
+                        text: modelData.valueText
                         font.pixelSize: PhotonTheme.fontSizeBody
                         font.bold: cell.selected
                         color: !cell.available ? PhotonTheme.textTertiary

@@ -239,7 +239,7 @@ PinchArea {
             height: Theme.fontSizeTiny
             spacing: camera2ControlGrid.columnGap
             z: 3
-            visible: Settings.global.advancedMode
+            visible: Settings.global.advancedMode && !camera2ControlGrid.photon
 
             Label {
                 width: camera2ControlGrid.leftWidth
@@ -292,6 +292,34 @@ PinchArea {
             }
         }
 
+        PhotonDeck {
+            id: photonDeck
+
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                topMargin: Theme.paddingSmall
+            }
+            z: 3
+            visible: camera2ControlGrid.photon
+            enabled: visible
+            parameters: camera2ControlGrid.photonParameters
+
+            onIndexPicked: {
+                var control = overlay.exposureControl
+                if (key === "ev") {
+                    Settings.global.exposureCompensation = overlay.evChoices()[index]
+                } else if (key === "tv" && control) {
+                    control.setLock("shutter", Settings.camera2ShutterModel()[index])
+                } else if (key === "iso" && control) {
+                    control.setLock("iso", Settings.camera2IsoModel()[index])
+                } else if (key === "wb") {
+                    Settings.mode.rawCaptureColorTemperature = camera2ControlGrid._wbChoices[index]
+                }
+            }
+        }
+
         Grid {
             id: camera2ControlGrid
 
@@ -305,14 +333,82 @@ PinchArea {
             readonly property real columnGap: Math.max(1, Math.round(Theme.pixelRatio))
             readonly property real usableWidth: camera2BottomDeck.width
                                                 - 2 * sideMargin - 3 * columnGap
-            readonly property real leftWidth: Math.round(usableWidth * 0.20)
-            readonly property real centerWidth: Math.round(usableWidth * 0.41)
-            readonly property real speedWidth: Math.round(usableWidth * 0.19)
+            // Photon layout: the speed/ISO wheels give way to the ruler and parameter row.
+            readonly property bool photon: Settings.global.photonLayout
+                                           && Settings.global.advancedMode
+            readonly property real leftWidth: Math.round(usableWidth * (photon ? 0.30 : 0.20))
+            readonly property real centerWidth: photon ? usableWidth - leftWidth
+                                                       : Math.round(usableWidth * 0.41)
+            readonly property real speedWidth: photon ? 0 : Math.round(usableWidth * 0.19)
             readonly property real isoWidth: usableWidth - leftWidth
                                              - centerWidth - speedWidth
             readonly property var camera2Viewfinder: captureView ? captureView.camera2Viewfinder : null
             visible: Settings.global.advancedMode
             enabled: visible
+
+            readonly property var _wbChoices: [ 0, 2000, 3200, 4500, 5500, 6500, 7500, 9000 ]
+
+            function indexOfChoice(model, value) {
+                for (var i = 0; i < model.length; ++i) {
+                    if (String(model[i]) === String(value))
+                        return i
+                }
+                return -1
+            }
+
+            function evText(value) { return Number((Number(value) / 2).toFixed(1)).toFixed(1) }
+            function shutterText(value) {
+                return value === "—" ? value : Settings.rawCaptureShutterLabel(String(value))
+            }
+            function isoText(value) { return value === "—" ? value : (value > 0 ? String(value) : "Auto") }
+            function wbText(value) { return value > 0 ? value + "K" : "Auto" }
+
+            // Same bindings the wheels use, presented as Photon's ruler and parameter row.
+            readonly property var photonParameters: {
+                var deviceDependency = Settings.deviceId
+                var control = overlay.exposureControl
+                var evModel = overlay.evChoices()
+                var shutterModel = Settings.camera2ShutterModel()
+                var isoModel = Settings.camera2IsoModel()
+                var manualReady = !!control && control.active && !control.busy
+                var evAvailable = !!control && !control.fullyManual && !captureView.captureBusy
+                                  && (control.partial || control.capabilities.compensation_step_ev > 0)
+                var evUnit = evModel.length > 1 ? Math.abs(evModel[1] - evModel[0]) : 2
+                var shutterNow = liveShutterValue()
+                var isoNow = liveIsoValue()
+                var aperture = Settings.mode.rawCaptureAperture
+                var temperature = Settings.mode.rawCaptureColorTemperature
+                var last = function(model) { return model[model.length - 1] }
+                return [
+                    { key: "ev", label: "AE", valueText: evText(Settings.global.exposureCompensation),
+                      available: evAvailable, count: evModel.length,
+                      index: indexOfChoice(evModel, Settings.global.exposureCompensation),
+                      startLabel: evText(evModel[0]), endLabel: evText(last(evModel)),
+                      currentLabel: evText(Settings.global.exposureCompensation) + " EV",
+                      majorStep: Math.max(1, Math.round(2 / Math.max(0.01, evUnit))) },
+                    { key: "tv", label: "Tv", valueText: shutterText(shutterNow),
+                      available: manualReady, count: shutterModel.length,
+                      index: indexOfChoice(shutterModel, shutterNow),
+                      startLabel: shutterModel.length ? shutterText(shutterModel[0]) : "",
+                      endLabel: shutterModel.length ? shutterText(last(shutterModel)) : "",
+                      currentLabel: shutterText(shutterNow), majorStep: 0 },
+                    { key: "iso", label: "ISO", valueText: isoText(isoNow),
+                      available: manualReady, count: isoModel.length,
+                      index: indexOfChoice(isoModel, isoNow),
+                      startLabel: isoModel.length ? isoText(isoModel[0]) : "",
+                      endLabel: isoModel.length ? isoText(last(isoModel)) : "",
+                      currentLabel: isoText(isoNow), majorStep: 0 },
+                    { key: "av", label: "Av",
+                      valueText: aperture > 0 ? "f/" + Settings.rawCaptureApertureLabel(aperture) : "Auto",
+                      available: false, count: 0, index: -1 },
+                    { key: "wb", label: temperature > 0 ? "WB" : "AWB",
+                      valueText: temperature > 0 ? temperature + "K" : "AUTO",
+                      available: true, count: _wbChoices.length,
+                      index: indexOfChoice(_wbChoices, temperature),
+                      startLabel: wbText(_wbChoices[0]), endLabel: wbText(last(_wbChoices)),
+                      currentLabel: wbText(temperature), majorStep: 0 }
+                ]
+            }
 
             function focalLengthText() {
                 var focal = camera2Viewfinder && camera2Viewfinder.focalLength
@@ -373,7 +469,9 @@ PinchArea {
                 fill: parent
                 leftMargin: sideMargin
                 rightMargin: sideMargin
-                topMargin: camera2BottomDeck.headerHeight
+                topMargin: camera2ControlGrid.photon
+                           ? photonDeck.height + Theme.paddingSmall
+                           : camera2BottomDeck.headerHeight
             }
             columns: 4
             columnSpacing: columnGap
@@ -468,7 +566,8 @@ PinchArea {
 
                     ValueCarousel {
                         anchors.fill: parent
-                        visible: !overlay.exposureControl || !overlay.exposureControl.fullyManual
+                        visible: !camera2ControlGrid.photon
+                                 && (!overlay.exposureControl || !overlay.exposureControl.fullyManual)
                         enabled: visible && overlay.exposureControl && !captureView.captureBusy
                                  && (overlay.exposureControl.partial || overlay.exposureControl.capabilities.compensation_step_ev > 0)
                         orientation: ListView.Horizontal
@@ -548,7 +647,7 @@ PinchArea {
                     height: parent.height - y
                     selectionAtTop: camera2ControlGrid.experimentalLayout
                     rowHeight: camera2ControlGrid.wheelRowHeight
-                    visible: Settings.global.advancedMode
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon
                     enabled: visible && overlay.exposureControl && overlay.exposureControl.active && !overlay.exposureControl.busy
                     orientation: ListView.Vertical
                     caption: ""
@@ -613,7 +712,7 @@ PinchArea {
                     height: parent.height - y
                     selectionAtTop: camera2ControlGrid.experimentalLayout
                     rowHeight: camera2ControlGrid.wheelRowHeight
-                    visible: Settings.global.advancedMode
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon
                     enabled: visible && overlay.exposureControl && overlay.exposureControl.active && !overlay.exposureControl.busy
                     orientation: ListView.Vertical
                     caption: ""
