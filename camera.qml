@@ -107,12 +107,12 @@ ApplicationWindow {
         jpegQuality: Settings.mode.rawCaptureJpegQuality
         lutPath: Settings.mode.colorLookPath
         lutStrength: Settings.mode.colorLookStrength / 100.0
-        // frontFacingDeviceId comes from QtMultimedia's camera list and need not equal the
-        // Camera2 id ("1"), so also trust the selected side when no explicit device is set.
-        readonly property bool frontFacing: (Settings.global.frontFacingDeviceId !== ""
-                                             && cameraId === Settings.global.frontFacingDeviceId)
-                                            || (Settings.deviceId === ""
-                                                && Settings.global.position === Camera.FrontFace)
+        // The selected side is the reliable signal: frontFacingDeviceId comes from
+        // QtMultimedia's camera list, is never stored for RAWfish and need not equal the
+        // Camera2 id, so it can only add to the position check.
+        readonly property bool frontFacing: Settings.global.position === Camera.FrontFace
+                                            || (Settings.global.frontFacingDeviceId !== ""
+                                                && cameraId === Settings.global.frontFacingDeviceId)
         orientation: Settings.camera2PreviewOrientation(
                          cameraId, frontFacing ? 270 : 90)
         mirror: Settings.camera2PreviewMirror(cameraId, frontFacing)
