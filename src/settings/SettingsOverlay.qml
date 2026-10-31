@@ -306,6 +306,16 @@ PinchArea {
             enabled: visible
             parameters: camera2ControlGrid.photonParameters
 
+            Connections {
+                target: Settings.global
+                onAdvancedModeChanged: photonDeck.selectedKey = "ev"
+            }
+
+            onCycleRequested: {
+                if (key === "af")
+                    camera2ControlGrid.cycleFocusMode()
+            }
+
             onIndexPicked: {
                 var control = overlay.exposureControl
                 if (key === "ev") {
@@ -318,6 +328,33 @@ PinchArea {
                     Settings.mode.rawCaptureColorTemperature = camera2ControlGrid._wbChoices[index]
                 }
             }
+        }
+
+        // Pro = advanced mode with RAW capture; Photo = simple mode with JPEG. Where the
+        // device has no RAW output, Pro keeps working with whatever format is set.
+        PhotonModeSwitcher {
+            id: photonSwitcher
+
+            function selectMode(mode) {
+                var formats = Settings.camera2CaptureFormatModel()
+                Settings.global.advancedMode = (mode === "pro")
+                if (mode === "pro" && formats.indexOf("raw") >= 0)
+                    Settings.mode.camera2CaptureFormat = "raw"
+                else if (mode === "photo" && formats.indexOf("jpeg") >= 0)
+                    Settings.mode.camera2CaptureFormat = "jpeg"
+            }
+
+            anchors {
+                horizontalCenter: parent.horizontalCenter
+                bottom: parent.bottom
+                bottomMargin: Theme.paddingSmall
+            }
+            z: 4
+            visible: camera2ControlGrid.photon
+            enabled: visible && !captureView.captureBusy
+            modes: [ { key: "pro", label: "Pro" }, { key: "photo", label: "Photo" } ]
+            selectedKey: Settings.global.advancedMode ? "pro" : "photo"
+            onModeSelected: selectMode(key)
         }
 
         Grid {
@@ -335,7 +372,6 @@ PinchArea {
                                                 - 2 * sideMargin - 3 * columnGap
             // Photon layout: the speed/ISO wheels give way to the ruler and parameter row.
             readonly property bool photon: Settings.global.photonLayout
-                                           && Settings.global.advancedMode
             readonly property real leftWidth: Math.round(usableWidth * (photon ? 0.30 : 0.20))
             readonly property real centerWidth: photon ? usableWidth - leftWidth
                                                        : Math.round(usableWidth * 0.41)
@@ -363,47 +399,69 @@ PinchArea {
             function isoText(value) { return value === "—" ? value : (value > 0 ? String(value) : "Auto") }
             function wbText(value) { return value > 0 ? value + "K" : "Auto" }
 
+            function focusText(mode) {
+                switch (mode) {
+                case "manual": return Settings.rawCaptureFocusDistanceLabel(Settings.mode.rawCaptureFocusDistance)
+                case "continuous": return "CONT"
+                case "infinity": return "INF"
+                case "none": return "OFF"
+                default: return "AUTO"
+                }
+            }
+
+            function cycleFocusMode() {
+                var modes = Settings.camera2SelectableFocusModeModel()
+                if (modes.length === 0)
+                    return
+                var index = modes.indexOf(Settings.mode.rawCaptureFocusMode)
+                Settings.mode.rawCaptureFocusMode = modes[(index + 1) % modes.length]
+            }
+
             // Same bindings the wheels use, presented as Photon's ruler and parameter row.
+            // Pro (advanced) shows live values and adjusts everything; Photo (simple) shows
+            // titles only and adjusts exposure compensation, as in Photon.
             readonly property var photonParameters: {
                 var deviceDependency = Settings.deviceId
                 var control = overlay.exposureControl
+                var pro = Settings.global.advancedMode
                 var evModel = overlay.evChoices()
                 var shutterModel = Settings.camera2ShutterModel()
                 var isoModel = Settings.camera2IsoModel()
-                var manualReady = !!control && control.active && !control.busy
+                var manualReady = pro && !!control && control.active && !control.busy
                 var evAvailable = !!control && !control.fullyManual && !captureView.captureBusy
                                   && (control.partial || control.capabilities.compensation_step_ev > 0)
                 var evUnit = evModel.length > 1 ? Math.abs(evModel[1] - evModel[0]) : 2
                 var shutterNow = liveShutterValue()
                 var isoNow = liveIsoValue()
-                var aperture = Settings.mode.rawCaptureAperture
+                var focusModes = Settings.camera2SelectableFocusModeModel()
                 var temperature = Settings.mode.rawCaptureColorTemperature
                 var last = function(model) { return model[model.length - 1] }
                 return [
-                    { key: "ev", label: "AE", valueText: evText(Settings.global.exposureCompensation),
+                    { key: "ev", label: pro ? "AE" : "EV",
+                      valueText: pro ? evText(Settings.global.exposureCompensation) : "",
                       available: evAvailable, count: evModel.length,
                       index: indexOfChoice(evModel, Settings.global.exposureCompensation),
                       startLabel: evText(evModel[0]), endLabel: evText(last(evModel)),
                       currentLabel: evText(Settings.global.exposureCompensation) + " EV",
                       majorStep: Math.max(1, Math.round(2 / Math.max(0.01, evUnit))) },
-                    { key: "tv", label: "Tv", valueText: shutterText(shutterNow),
+                    { key: "tv", label: "Tv", valueText: pro ? shutterText(shutterNow) : "",
                       available: manualReady, count: shutterModel.length,
                       index: indexOfChoice(shutterModel, shutterNow),
                       startLabel: shutterModel.length ? shutterText(shutterModel[0]) : "",
                       endLabel: shutterModel.length ? shutterText(last(shutterModel)) : "",
                       currentLabel: shutterText(shutterNow), majorStep: 0 },
-                    { key: "iso", label: "ISO", valueText: isoText(isoNow),
+                    { key: "iso", label: "ISO", valueText: pro ? isoText(isoNow) : "",
                       available: manualReady, count: isoModel.length,
                       index: indexOfChoice(isoModel, isoNow),
                       startLabel: isoModel.length ? isoText(isoModel[0]) : "",
                       endLabel: isoModel.length ? isoText(last(isoModel)) : "",
                       currentLabel: isoText(isoNow), majorStep: 0 },
-                    { key: "av", label: "Av",
-                      valueText: aperture > 0 ? "f/" + Settings.rawCaptureApertureLabel(aperture) : "Auto",
-                      available: false, count: 0, index: -1 },
-                    { key: "wb", label: temperature > 0 ? "WB" : "AWB",
-                      valueText: temperature > 0 ? temperature + "K" : "AUTO",
-                      available: true, count: _wbChoices.length,
+                    { key: "af", label: "AF",
+                      valueText: pro ? focusText(Settings.mode.rawCaptureFocusMode) : "",
+                      available: pro && focusModes.length > 1, cycles: true },
+                    { key: "wb", label: pro && temperature > 0 ? "WB" : "AWB",
+                      valueText: pro ? (temperature > 0 ? temperature + "K" : "AUTO") : "",
+                      available: pro, count: _wbChoices.length,
                       index: indexOfChoice(_wbChoices, temperature),
                       startLabel: wbText(_wbChoices[0]), endLabel: wbText(last(_wbChoices)),
                       currentLabel: wbText(temperature), majorStep: 0 }
@@ -472,6 +530,7 @@ PinchArea {
                 topMargin: camera2ControlGrid.photon
                            ? photonDeck.height + Theme.paddingSmall
                            : camera2BottomDeck.headerHeight
+                bottomMargin: camera2ControlGrid.photon ? photonSwitcher.height + Theme.paddingMedium : 0
             }
             columns: 4
             columnSpacing: columnGap
@@ -482,7 +541,7 @@ PinchArea {
 
                 Item {
                     width: parent.width
-                    height: Settings.global.advancedMode
+                    height: Settings.global.advancedMode && !camera2ControlGrid.photon
                             ? parent.height / 3
                             : parent.height
 
@@ -499,8 +558,8 @@ PinchArea {
 
                 CycleValueButton {
                     width: parent.width
-                    height: Settings.global.advancedMode ? parent.height / 3 : 0
-                    visible: Settings.global.advancedMode
+                    height: Settings.global.advancedMode && !camera2ControlGrid.photon ? parent.height / 3 : 0
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon
                     enabled: visible
                     caption: "FORMAT"
                     settings: Settings.mode
@@ -512,8 +571,8 @@ PinchArea {
 
                 CycleValueButton {
                     width: parent.width
-                    height: Settings.global.advancedMode ? parent.height / 3 : 0
-                    visible: Settings.global.advancedMode && model.length > 0
+                    height: Settings.global.advancedMode && !camera2ControlGrid.photon ? parent.height / 3 : 0
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon && model.length > 0
                     enabled: visible
                     caption: "FOCUS"
                     settings: Settings.mode
@@ -783,8 +842,9 @@ PinchArea {
                 fill: parent
                 leftMargin: camera2ControlGrid.sideMargin
                 rightMargin: camera2ControlGrid.sideMargin
-                topMargin: Theme.paddingSmall
+                topMargin: Theme.paddingSmall + (camera2ControlGrid.photon ? photonDeck.height : 0)
                 bottomMargin: Theme.paddingSmall
+                            + (camera2ControlGrid.photon ? photonSwitcher.height + Theme.paddingMedium : 0)
             }
             visible: !Settings.global.advancedMode
             enabled: visible
@@ -841,7 +901,8 @@ PinchArea {
             ValueCarousel {
                 id: simpleEv
                 anchors { left: parent.left; right: parent.right; top: simpleHistogramPanel.bottom }
-                height: Theme.itemSizeExtraSmall
+                height: camera2ControlGrid.photon ? 0 : Theme.itemSizeExtraSmall
+                visible: !camera2ControlGrid.photon
                 enabled: overlay.exposureControl && !captureView.captureBusy
                          && overlay.exposureControl.capabilities.compensation_step_ev > 0
                 settings: Settings.global
@@ -905,6 +966,7 @@ PinchArea {
                 Column {
                     width: camera2ControlGrid.speedWidth
                     height: parent.height
+                    visible: !camera2ControlGrid.photon
 
                     Label {
                         width: parent.width
@@ -938,6 +1000,7 @@ PinchArea {
                 Column {
                     width: camera2ControlGrid.isoWidth
                     height: parent.height
+                    visible: !camera2ControlGrid.photon
 
                     Label {
                         width: parent.width

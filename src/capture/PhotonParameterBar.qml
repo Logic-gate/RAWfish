@@ -34,6 +34,9 @@ Item {
                 width: bar.width / Math.max(1, bar.items.length)
                 height: bar.height
 
+                readonly property bool titleOnly: modelData.valueText === undefined
+                                                  || modelData.valueText === ""
+
                 Column {
                     anchors.centerIn: parent
                     spacing: PhotonTheme.spacingSmall
@@ -41,15 +44,17 @@ Item {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: modelData.label
-                        font.pixelSize: PhotonTheme.fontSizeCaption
+                        font.pixelSize: cell.titleOnly ? PhotonTheme.fontSizeBody
+                                                       : PhotonTheme.fontSizeCaption
                         font.bold: true
                         color: !cell.available ? PhotonTheme.textTertiary
                                : cell.selected ? PhotonTheme.hud
-                               : PhotonTheme.hudDim
+                               : (cell.titleOnly ? PhotonTheme.textPrimary : PhotonTheme.hudDim)
                     }
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
+                        visible: !cell.titleOnly
                         text: modelData.valueText
                         font.pixelSize: PhotonTheme.fontSizeBody
                         font.bold: cell.selected

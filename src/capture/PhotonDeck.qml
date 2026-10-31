@@ -15,6 +15,16 @@ Column {
     property string selectedKey: "ev"
 
     signal indexPicked(string key, int index)
+    // For items that cycle through their values on tap instead of showing a ruler.
+    signal cycleRequested(string key)
+
+    function _isCycling(key) {
+        for (var i = 0; i < parameters.length; ++i) {
+            if (parameters[i].key === key)
+                return parameters[i].cycles === true
+        }
+        return false
+    }
 
     readonly property var _selected: {
         for (var i = 0; i < parameters.length; ++i) {
@@ -44,6 +54,11 @@ Column {
         width: parent.width
         selectedKey: deck.selectedKey
         items: deck.parameters
-        onItemClicked: deck.selectedKey = key
+        onItemClicked: {
+            if (deck._isCycling(key))
+                deck.cycleRequested(key)
+            else
+                deck.selectedKey = key
+        }
     }
 }
