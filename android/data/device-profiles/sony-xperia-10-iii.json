@@ -1,0 +1,11 @@
+{
+  "name": "Sony Xperia 10 III (XQ-BT52)",
+  "_comment": "Shipped device profile (docs/DEVICE-PROFILES.md). A key in your own override-hal.json replaces the same key here.",
+  "_why": "On this port the camera driver dies at the first frame as soon as a RAW16 stream is in the session, on both cameras (tested 31 Oct 2026: JPEG 4000x3000 + preview ok; the same + RAW16 4032x3016 -> device error; camera 1: 3264x2448 ok, + RAW16 -> device error). JPEG and the viewfinder work. A stopgap: to be lifted when the RAW stream is understood (rawfish-ir-cli streamtest).",
+  "match": { "make": "Sony", "models": ["Xperia 10 III", "XQ-BT52", "XQ-BT41"], "raw": [4032, 3016] },
+  "notch": false,
+  "cameras": [
+    { "camera_id": "0", "overrides": { "raw_stream": false } },
+    { "camera_id": "1", "overrides": { "raw_stream": false } }
+  ]
+}

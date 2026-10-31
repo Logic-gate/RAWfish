@@ -587,6 +587,7 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         for (const QByteArray &m : f.value("scene_modes").split(','))
             if (!m.isEmpty()) scenes.append(m.toInt());
         m_caps.insert(QStringLiteral("sceneModes"), scenes);
+        m_caps.insert(QStringLiteral("limits"), f.value("limits", ""));   /* "raw_off", "jpeg_max", both, or "" */
         m_caps.insert(QStringLiteral("rawW"), f.value("raw").split(',').value(0).toInt());
         m_caps.insert(QStringLiteral("rawH"), f.value("raw").split(',').value(1).toInt());
         /* the JPEG size this session runs at (what 'max' resolved to) */

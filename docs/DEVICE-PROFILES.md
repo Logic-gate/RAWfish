@@ -233,6 +233,30 @@ prints what it applied. Field reference for the generated file:
 }
 ```
 
+### Limiting the streams: a stopgap for a camera driver that dies
+
+Some ports' camera drivers accept the full combination of streams the app
+asks for (JPEG at its largest size + viewfinder + RAW) and then die at the
+first frame (the Xperia 10 III: the RAW stream kills it; JPEG alone works).
+Two keys in a camera's `overrides` limit what is asked:
+
+- `"raw_stream": false` -- no RAW stream for this camera (the app behaves
+  as with a camera without RAW: JPEG only);
+- `"jpeg_max": "WxH"` -- the largest JPEG asked for; `max` becomes it, and
+  the menu offers no larger size.
+
+They are a **stopgap**, not a setting: the log says at each open that the
+streams are limited, and the app shows it for a few seconds at each start.
+Please report such a phone (the forum thread, or an issue), so that the
+cause can be looked for and a shipped profile written.
+
+The shipped profile of the Xperia 10 III uses `raw_stream` on both cameras,
+with its `_why` recording what was tested; nothing to write on that phone.
+
+`rawfish-ir-cli streamtest ID` finds which combinations the camera survives
+(four opens, a few seconds each; the camera service is given time to come
+back after a failure) and ends with the override lines to use, if any.
+
 ## 3. UI / UX preferences  (device-independent)
 
 Menus, toggles, display choices. These belong to the Qt app, in its own file,

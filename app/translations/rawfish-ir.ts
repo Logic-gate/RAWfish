@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+908"/>
+        <location filename="../indrawpreview.cpp" line="+909"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -803,13 +803,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+10"/>
         <location line="+127"/>
-        <location line="+1624"/>
+        <location line="+1643"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1777"/>
+        <location line="-1796"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -898,30 +898,30 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+204"/>
-        <location line="+696"/>
+        <location line="+715"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-696"/>
-        <location line="+696"/>
+        <location line="-715"/>
+        <location line="+715"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-670"/>
-        <location line="+670"/>
+        <location line="-689"/>
+        <location line="+689"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-670"/>
-        <location line="+670"/>
+        <location line="-689"/>
+        <location line="+689"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-597"/>
+        <location line="-616"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -946,7 +946,22 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+165"/>
+        <location line="+167"/>
+        <source>Device profile: no RAW, JPEG size limited</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Device profile: RAW stream off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Device profile: JPEG size limited</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+15"/>
         <source>Σ stacking: experimental feature</source>
         <translation type="unfinished"></translation>
     </message>

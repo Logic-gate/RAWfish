@@ -339,6 +339,7 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "real_m", "hal_diopters", "cameras",
                                            "vendor_request", "tag", "type", "value", "on",
                                            "shading", "still_template", "session_request",
+                                           "raw_stream", "jpeg_max",
                                            /* a shipped device profile's own keys */
                                            "match", "make", "models", "raw", "notch", "shading_file",
                                            "name", NULL };
@@ -415,6 +416,54 @@ static int ov_string(const char *id, const char *key, char *val, size_t n)
         free(text);
     }
     return found;
+}
+
+static int parse_size(const char *s, int *w, int *h);   /* defined with the commands below */
+
+/* "key": true|false in camera `id`'s block (the user's file, then the
+ * shipped profile); 1 found. */
+static int ov_bool(const char *id, const char *key, int *val)
+{
+    int which, found = 0;
+    char kq[80];
+    snprintf(kq, sizeof kq, "\"%s\"", key);
+    for (which = 0; which < 2 && !found; ++which) {
+        char *text = ov_source(which), *end = NULL, *cam, *p;
+        if (!text) continue;
+        cam = ov_cam(text, id, &end);
+        if (cam && (p = find_key(cam, end, kq)) && (p = strchr(p + strlen(kq), ':'))) {
+            for (++p; *p == ' ' || *p == '\t'; ++p) {}
+            if (!strncmp(p, "true", 4)) { *val = 1; found = 1; }
+            else if (!strncmp(p, "false", 5)) { *val = 0; found = 1; }
+        }
+        free(text);
+    }
+    return found;
+}
+
+/* The device profile's limits on the streams, applied BEFORE open:
+ * "raw_stream": false (no RAW stream) and "jpeg_max": "WxH" (the largest
+ * JPEG asked for). For a camera driver that dies with the full combination
+ * (the Xperia 10 III). Logged, so a limited phone is never silent. */
+static void apply_stream_limits(void *bridge, const char *id)
+{
+    typedef int (*lim_fn)(int, int, int);
+    lim_fn lf = (lim_fn)a_dlsym(bridge, "indraw_set_stream_limits");
+    char v[32], msg[200];
+    int raw_on = 1, jw = 0, jh = 0;
+    if (!lf) return;
+    ov_bool(id, "raw_stream", &raw_on);
+    if (ov_string(id, "jpeg_max", v, sizeof v) && !parse_size(v, &jw, &jh)) {
+        snprintf(msg, sizeof msg, "jpeg_max: \"%s\" is not WxH -- ignored", v);
+        ov_log(msg); jw = jh = 0;
+    }
+    if (jw < 0) jw = jh = 0;                           /* "max" means no limit */
+    if (raw_on && jw == 0) return;
+    lf(!raw_on, jw, jh);
+    snprintf(msg, sizeof msg, "streams limited by the device profile for camera %s:%s%s -- a stopgap: please report this phone (docs/DEVICE-PROFILES.md)",
+             id, raw_on ? "" : " no RAW stream", jw > 0 ? " JPEG at most" : "");
+    if (jw > 0) snprintf(msg + strlen(msg), sizeof msg - strlen(msg), " %dx%d", jw, jh);
+    log_line("# ", msg);
 }
 
 /* The user's override file (NULL if absent or too big): ov_slurp on its path. */
@@ -977,6 +1026,7 @@ static void usage(void)
             "usage: rawfish-ir-cli [--log FILE] [--jpgdir DIR] [--dngdir DIR] caps ID\n"
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
+            "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives; the override to use)\n"
             "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]   (default preview 1280x960)\n"
             "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]   (SF2P frames on stdout)\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
@@ -1770,6 +1820,62 @@ int main(int argc, char **argv)
         return rc ? EXIT_FAILED : 0;
     }
 
+    if (!strcmp(argv[1], "streamtest")) {
+        /* Which combinations of streams this camera's driver survives: the
+         * app's (JPEG max + preview + RAW), then without RAW, then RAW with a
+         * small JPEG, then RAW with an 8 MP JPEG. One open each, closed at
+         * once; after a failure, the camera service is given up to 10 s to
+         * come back. Ends with the override-hal.json lines to use, if any.
+         * For a phone where the app shows "engine stopped" (Xperia 10 III). */
+        indraw_open_fn op = (indraw_open_fn)a_dlsym(bridge, "indraw_open");
+        indraw_close_fn cl = (indraw_close_fn)a_dlsym(bridge, "indraw_close");
+        indraw_cameras_fn cams = (indraw_cameras_fn)a_dlsym(bridge, "indraw_cameras");
+        typedef int (*lim_fn)(int, int, int);
+        lim_fn lf = (lim_fn)a_dlsym(bridge, "indraw_set_stream_limits");
+        struct { const char *name; int jw, jh, rw, rh, raw_off, lim_jw, lim_jh; } tests[] = {
+            { "jpeg max + preview + raw max (what the app asks)", -1, -1, -1, -1, 0, 0, 0 },
+            { "jpeg max + preview, no raw",                        -1, -1,  0,  0, 1, 0, 0 },
+            { "jpeg 640x480 + preview + raw max",                 640, 480, -1, -1, 0, 0, 0 },
+            { "jpeg within 3264x2448 + preview + raw max",         -1, -1, -1, -1, 0, 3264, 2448 },
+        };
+        int ok[4] = { 0, 0, 0, 0 }, i, needle_len;
+        char needle[40];
+        if (argc < 3) { usage(); return EXIT_USAGE; }
+        if (!op || !cl || !cams || !lf) return EXIT_BRIDGE;
+        needle_len = snprintf(needle, sizeof needle, "\"%s\"", argv[2]);
+        (void)needle_len;
+        emit("{\"streamtest\":\"start\",\"note\":\"four opens, a few seconds each; nothing is written\"}");
+        for (i = 0; i < 4; ++i) {
+            int rc;
+            lf(tests[i].raw_off, tests[i].lim_jw, tests[i].lim_jh);
+            rc = op(argv[2], tests[i].jw, tests[i].jh, -1, -1, tests[i].rw, tests[i].rh, out, sizeof out);
+            ok[i] = rc == 0;
+            log_line("# streamtest ", tests[i].name);
+            emit(out);
+            cl(out, sizeof out);
+            if (!ok[i]) {                       /* let the camera service come back */
+                int t;
+                for (t = 0; t < 10; ++t) {
+                    sleep(1);
+                    if (cams(out, sizeof out) == 0 && strstr(out, needle)) break;
+                }
+            }
+        }
+        lf(0, 0, 0);
+        if (ok[0])
+            snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"the app's streams work on this camera: no override needed\"}", argv[2]);
+        else if (ok[1] && (ok[2] || ok[3]))
+            snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"RAW fails with the largest JPEG, not with a smaller one\","
+                     "\"override\":{\"camera_id\":\"%s\",\"overrides\":{\"jpeg_max\":\"3264x2448\"}}}", argv[2], argv[2]);
+        else if (ok[1])
+            snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"the RAW stream kills the camera driver; JPEG works\","
+                     "\"override\":{\"camera_id\":\"%s\",\"overrides\":{\"raw_stream\":false}}}", argv[2], argv[2]);
+        else
+            snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"even JPEG + preview fails: not a matter of streams; the log says at which stage\"}", argv[2]);
+        emit(out);
+        return 0;
+    }
+
     if (!strcmp(argv[1], "probe")) {
         /* Snapshot what the HAL claims into generated-hal.json, read-only
          * reference per the device-profiles design (nature 1). The file lists
@@ -1935,6 +2041,7 @@ int main(int argc, char **argv)
         find_shipped_profile(bridge, argv[2]);
         g_ov_user_ok = check_override(argv[2]);
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
+        apply_stream_limits(bridge, argv[2]);      /* raw_stream / jpeg_max, before open */
         {   /* device-profile switch, read BEFORE open: the photo/RAW template */
             typedef int (*set_tpl_fn)(int);
             set_tpl_fn stp = (set_tpl_fn)a_dlsym(bridge, "indraw_set_still_template");

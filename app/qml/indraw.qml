@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "186"                             // shown in the deck
+    readonly property string uiVersion: "187"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -1301,6 +1301,25 @@ ApplicationWindow {
                         width: page.portrait ? parent.width * cut : parent.width
                         height: page.portrait ? parent.height : parent.height * cut
                     }
+                }
+                // A phone limited by its device profile (raw_stream / jpeg_max)
+                // says so for six seconds at every start: a limited phone
+                // is a phone still to understand, not a setting to forget.
+                Label {
+                    id: limitsNotice
+                    anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingLarge * 3 }
+                    visible: text !== "" && limitsTimer.running
+                    text: {
+                        var l = String(viewfinder.caps.limits || "")
+                        if (l.indexOf("raw_off") >= 0 && l.indexOf("jpeg_max") >= 0) return qsTr("Device profile: no RAW, JPEG size limited")
+                        if (l.indexOf("raw_off") >= 0) return qsTr("Device profile: RAW stream off")
+                        if (l.indexOf("jpeg_max") >= 0) return qsTr("Device profile: JPEG size limited")
+                        return ""
+                    }
+                    color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
+                    style: Text.Outline; styleColor: "black"
+                    onTextChanged: if (text !== "") limitsTimer.restart()
+                    Timer { id: limitsTimer; interval: 6000 }
                 }
                 // Stacking is still being validated on the device: say so while
                 // a Σ speed is selected (and not during the shot's black screen).

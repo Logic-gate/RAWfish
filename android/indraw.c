@@ -385,6 +385,22 @@ static int has_output_size(const ACameraMetadata *chars, int format, int w, int 
 
 /* Largest OUTPUT size of `format` by pixel count, with width <= max_w when
  * max_w > 0 (preview pick). Returns 1 if one was found. */
+static int largest_output_size_within(const ACameraMetadata *chars, int format, int max_w, int max_h, int *w, int *h)
+{
+    ACameraMetadata_const_entry e;
+    uint32_t i;
+    long best = 0;
+    if (ACameraMetadata_getConstEntry(chars, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
+                                      &e) != ACAMERA_OK || e.type != ACAMERA_TYPE_INT32)
+        return 0;
+    for (i = 0; i + 3 < e.count; i += 4) {
+        long px = (long)e.data.i32[i + 1] * e.data.i32[i + 2];
+        if (e.data.i32[i] != format || e.data.i32[i + 3] != 0) continue;
+        if (e.data.i32[i + 1] > max_w || e.data.i32[i + 2] > max_h) continue;
+        if (px > best) { best = px; *w = e.data.i32[i + 1]; *h = e.data.i32[i + 2]; }
+    }
+    return best > 0;
+}
 static int largest_output_size(const ACameraMetadata *chars, int format, int max_w, int *w, int *h)
 {
     ACameraMetadata_const_entry e;
@@ -497,6 +513,8 @@ static struct {
     char camera_id[16];
     char make[64], model[64];               /* ro.product.manufacturer / .model  */
     int64_t override_shutter_max_ns;        /* 0 = none; else the tested ceiling */
+    int lim_raw_off;                        /* device profile: no RAW stream      */
+    int lim_jw, lim_jh;                     /* device profile: largest JPEG asked (0 = none) */
     int64_t override_min_frame_ns;          /* 0 = default 1/30 s floor; else set */
     int64_t override_peak_edge;             /* 0 = default 40; peaking gradient threshold */
     int64_t override_zebra_jpeg;            /* 0 = default 250; zebra level, jpg (0..255) */
@@ -2591,6 +2609,16 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         close_all();
         return fail(out, out_size, IR_EARG, "check", "no jpeg size listed", 0);
     }
+    /* The device profile's limits (indraw_set_stream_limits): a JPEG no
+     * larger than jpeg_max (a larger one asked becomes the largest within),
+     * no RAW stream when raw_stream is off. Nothing changes without them. */
+    if (g.lim_jw > 0 && (jw > g.lim_jw || jh > g.lim_jh)) {
+        if (!largest_output_size_within(g.chars, AIMAGE_FORMAT_JPEG, g.lim_jw, g.lim_jh, &jw, &jh)) {
+            close_all();
+            return fail(out, out_size, IR_EARG, "check", "no jpeg size within jpeg_max", 0);
+        }
+    }
+    if (g.lim_raw_off) rw = rh = 0;
     if (pw == -1 && !preview_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 1280, jw, jh, &pw, &ph)) {
         close_all();
         return fail(out, out_size, IR_EARG, "check", "no preview size listed", 0);
@@ -2852,11 +2880,13 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     jw_add(&w, ",\"jpeg_size\":[%d,%d],\"preview_size\":[%d,%d],"
                "\"raw16_size\":[%d,%d],\"shading_map\":%s,"
                "\"af_continuous\":%s,\"template\":{\"noise\":\"%s\",\"edge\":\"%s\"},"
-               "\"session_params\":\"%s\",\"ms\":{\"open\":%.1f,\"session\":%.1f,\"first_frame\":%.1f}}",
+               "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\"},"
+               "\"ms\":{\"open\":%.1f,\"session\":%.1f,\"first_frame\":%.1f}}",
            jw, jh, pw, ph, rw, rh, g.shading_map ? "true" : "false",
            g.af_continuous ? "true" : "false",
            g.tpl_nr >= 0 ? nr_name(g.tpl_nr) : "none", g.tpl_edge >= 0 ? edge_name(g.tpl_edge) : "none",
            g.session_params_used < 0 ? "unsupported" : g.session_params_used ? "applied" : "none",
+           g.lim_raw_off ? "false" : "true", g.lim_jw, g.lim_jh,
            t_open - t0, t_session - t0, t_first - t0);
     return IR_OK;
 #undef SETUP_FAIL
@@ -5189,7 +5219,8 @@ static void emit_caps(void)
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &se) == ACAMERA_OK &&
             se.type == ACAMERA_TYPE_INT32)
             for (i = 0; i + 3 < se.count && n < sizeof sizes - 16; i += 4)
-                if (se.data.i32[i] == AIMAGE_FORMAT_JPEG && se.data.i32[i + 3] == 0)
+                if (se.data.i32[i] == AIMAGE_FORMAT_JPEG && se.data.i32[i + 3] == 0 &&
+                    !(g.lim_jw > 0 && (se.data.i32[i + 1] > g.lim_jw || se.data.i32[i + 2] > g.lim_jh)))
                     n += (size_t)snprintf(sizes + n, sizeof sizes - n, "%s%dx%d", n ? "," : "",
                                           se.data.i32[i + 1], se.data.i32[i + 2]);
         n = 0;
@@ -5222,6 +5253,12 @@ static void emit_caps(void)
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, sizes, awb, scenes);
+    if (g.lim_raw_off || g.lim_jw > 0) {            /* a limited phone says so (the app shows it) */
+        size_t n = strlen(line);
+        if (n && line[n - 1] == '\n') line[--n] = '\0';
+        snprintf(line + n, sizeof line - n, " limits=%s%s%s\n", g.lim_raw_off ? "raw_off" : "",
+                 g.lim_raw_off && g.lim_jw > 0 ? "+" : "", g.lim_jw > 0 ? "jpeg_max" : "");
+    }
     emit_event(line);
 }
 
@@ -6367,6 +6404,16 @@ static int apply_session_request(ACaptureRequest *req)
         if (st == ACAMERA_OK) ++n;
     }
     return n;
+}
+
+/* Before indraw_open, from the device profile: raw_off = no RAW stream;
+ * jpeg_max_w x jpeg_max_h = the largest JPEG asked for (0,0 = none). */
+IR_API int indraw_set_stream_limits(int raw_off, int jpeg_max_w, int jpeg_max_h)
+{
+    if (jpeg_max_w < 0 || jpeg_max_h < 0 || (jpeg_max_w > 0) != (jpeg_max_h > 0)) return IR_EARG;
+    g.lim_raw_off = raw_off ? 1 : 0;
+    g.lim_jw = jpeg_max_w; g.lim_jh = jpeg_max_h;
+    return IR_OK;
 }
 
 /* Device-profile pause before every capture, in ms (0..3000; 0 = none). */

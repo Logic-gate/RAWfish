@@ -6,13 +6,25 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.9)
+## Known issues (as of 0.1.10)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.10 — profile keys to limit the camera's streams (patch 0288)
+- "raw_stream": false and "jpeg_max": "WxH" in a camera's overrides, for
+  phones whose camera driver refuses the full combination of streams
+  (the Xperia 10 III). Documented in override-hal.example.jsonc.
+  The app says so at each start: a limited phone is a phone still to
+  understand.
+- "rawfish-ir-cli streamtest ID": which combinations of streams the
+  camera survives, and the override lines to use.
+- A shipped profile for the Sony Xperia 10 III: no RAW stream on its two
+  cameras (the driver dies with one); JPEG and the viewfinder work. The
+  app says so at each start.
 
 ## 0.1.9 — Settings page: the text before the button (patch 0286)
 - In "Device profile files", the text now comes before its button, as in

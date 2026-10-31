@@ -52,6 +52,13 @@
         // JP2's white is 1023).
         // 1 .. 1000. Default 992.
         "zebra_raw": 992
+
+        // For a camera driver that fails when every stream is asked at once (the
+        // Xperia 10 III). Absent: RAW on if the camera has it, JPEG up to its
+        // largest size. A stopgap: the app says so at each start; please report
+        // the phone. "rawfish-ir-cli streamtest ID" tells which one to use.
+        // "raw_stream": false,
+        // "jpeg_max": "3264x2448",
       },
 
       // Measured points "real distance -> the lens value the HAL needs", so
