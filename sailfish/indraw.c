@@ -34,6 +34,7 @@
 #include "../indraw_version.h"
 #include "controller.h"
 #include "yuvjpeg.h"
+#include "yuvproc.h"
 #include "../android/exifwrite.h"  /* IR_VERSION, shared with the library  */
 
 #define OUT_SIZE 32768 /* room for any JSON report (caps lists per-size timings) */
@@ -988,7 +989,8 @@ static void usage(void)
             "                   [focus=auto|continuous|continuous_video|macro|edof|inf|<m>m] [easy]\n"
             "                   [exp=T] [iso=N]\n"
             "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N]   (- = measure only)\n"
-            "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv]\n"
+            "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
+            "                                (denoise=on: our colour filter; with n=2|4 the frames aligned and merged)\n"
             "                                (N YUV frames in one burst, 1..4, the camera's NR and sharpening off; the\n"
             "                                 first compressed by us; save=yuv keeps every frame as NAME-fK.yuv + .json)\n"
             "         stack NAME film=T [sub=T] [stk_denoise=1|2|4] [iso=N]\n"
@@ -1536,7 +1538,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
     char file[1200];
     static char cap[OUT_SIZE];
-    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0;
+    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0;
+    ir_yuv_t dn; yuv_denoise_report_t rep;
+    memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
     float focus_diopters = 0.0f, ev[4] = { 0, 0, 0, 0 };
     int64_t exposure_ns = 0, ts[4] = { -1, -1, -1, -1 };
     struct timespec now;
@@ -1565,6 +1569,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             if (*q) { emit("{\"ok\":false,\"error\":\"yuv: ev= takes 4 values at most\"}"); return 1; }
         }
         else if (!strcmp(tok, "save=yuv")) do_save = 1;
+        else if (!strcmp(tok, "denoise=on")) denoise = 1;
         else { emit("{\"ok\":false,\"error\":\"yuv: unknown option\"}"); return 1; }
     }
     if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
@@ -1581,8 +1586,13 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     }
     memcpy(cap, out, OUT_SIZE);                          /* the engine's report      */
     cap[OUT_SIZE - 1] = '\0';
+    if (denoise) {                                        /* our own: colour, and the frames merged */
+        const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
+        int nin = (n == 1 && nev == 0) ? 1 : n;
+        if (yuv_denoise(in, nin, 1, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"denoise failed (memory)\"}"); return 1; }
+    }
     t0 = mono_ms();
-    rc = yuv_encode_jpeg(&f, quality, &jpg, &jlen);
+    rc = yuv_encode_jpeg(denoise ? &dn : &f, quality, &jpg, &jlen);
     t1 = mono_ms();
     if (rc == 0) {
         exif_info_t ex;
@@ -1603,6 +1613,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         rc = exif_write_jpeg(file, jpg, jlen, &ex);
     }
     free(jpg);
+    free(dn.y); free(dn.u); free(dn.v);
     if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]);
     if (rc) { snprintf(out, OUT_SIZE, "{\"ok\":false,\"stage\":\"yuv\",\"error\":\"compress or write failed\",\"status\":%d}", rc); emit(out); return 1; }
     {
@@ -1616,6 +1627,12 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         jw_quote_into(out, OUT_SIZE, file);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f", jlen, quality, t1 - t0);
         if (do_save) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"saved_frames\":%d", saved);
+        if (denoise) snprintf(out + strlen(out), OUT_SIZE - strlen(out),
+                              ",\"denoise\":{\"frames\":%d,\"sigma\":%.2f,\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
+                              "\"shifts\":[[%d,%d],[%d,%d],[%d,%d]],\"merged_pct\":[%.0f,%.0f,%.0f]}",
+                              (n == 1 && nev == 0) ? 1 : n, rep.sigma, rep.ms_align, rep.ms_merge, rep.ms_colour,
+                              rep.shift_dy[1], rep.shift_dx[1], rep.shift_dy[2], rep.shift_dx[2], rep.shift_dy[3], rep.shift_dx[3],
+                              rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
     }
     emit(out);

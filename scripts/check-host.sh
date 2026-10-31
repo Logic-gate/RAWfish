@@ -76,7 +76,7 @@ else
 fi
 # Same flags as sailfish/Makefile (no -D_GNU_SOURCE: the file must declare
 # what it needs itself, as on the build engine), warnings as errors.
-gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/indraw.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/indraw.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
 echo "sailfish/indraw.c + controller: OK"
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/indraw.c" -o /dev/null
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/null
@@ -121,6 +121,11 @@ echo "sailfish/indraw.c: OK (-O2)"
 # licence for its %license: the two must stay the same file.
 cmp -s "$root/LICENSE" "$root/app/LICENSE" || { echo "app/LICENSE differs from LICENSE: copy it again" >&2; exit 1; }
 echo "licence: app/LICENSE = LICENSE (OK)"
+# Our noise reduction on YUV frames: alignment, merge, colour filter, on
+# synthetic frames, under ASan/UBSan.
+gcc -std=c11 -O2 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -fsanitize=address,undefined \
+    -I "$root/sailfish" -o /tmp/indraw-yuvproc-test "$root/sailfish/tests/yuvproc_test.c" "$root/sailfish/yuvproc.c" -lpthread -lm
+run_test /tmp/indraw-yuvproc-test
 # Translations: every text shown on screen (qsTr / tr) is in the .ts files,
 # and every language file has a translation for each (lupdate into a
 # scratch copy, compared with the committed files). Skipped without lupdate.
