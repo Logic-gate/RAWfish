@@ -671,9 +671,16 @@ PinchArea {
 
                         MouseArea {
                             readonly property int direction: modelData
-                            width: parent.width
-                            height: (shutterZoomArea.height - bottomShutterAnchor.height) / 2
-                            y: direction > 0 ? 0 : bottomShutterAnchor.y + bottomShutterAnchor.height
+                            // Photon layout: "-" and "+" flank the shutter, since the rows
+                            // above and below it are taken by the parameter row and switcher.
+                            readonly property bool beside: camera2ControlGrid.photon
+                            width: beside ? (shutterZoomArea.width - bottomShutterAnchor.width) / 2
+                                          : parent.width
+                            height: beside ? bottomShutterAnchor.height
+                                           : (shutterZoomArea.height - bottomShutterAnchor.height) / 2
+                            x: beside && direction > 0 ? bottomShutterAnchor.x + bottomShutterAnchor.width : 0
+                            y: beside ? bottomShutterAnchor.y
+                                      : (direction > 0 ? 0 : bottomShutterAnchor.y + bottomShutterAnchor.height)
                             enabled: overlay.zoomButtonsEnabled
                                      && (direction > 0 ? overlay.currentZoom < overlay.maximumZoom
                                                        : overlay.currentZoom > 1)
@@ -936,6 +943,7 @@ PinchArea {
                         font.pixelSize: Theme.fontSizeTiny
                         font.bold: true
                         text: "CAM"
+                        visible: !camera2ControlGrid.photon
                     }
 
                     CameraLensSelector {
@@ -2119,6 +2127,7 @@ PinchArea {
         spacing: Theme.paddingSmall
         opacity: _commonControlOpacity
         visible: opacity > 0.0
+                 && !Settings.global.photonLayout
                  && (!grid.camera2Still || !Settings.global.advancedMode)
 
         WhiteBalanceMenu {
