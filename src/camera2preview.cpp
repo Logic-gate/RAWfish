@@ -1,4 +1,5 @@
 #include "camera2preview.h"
+#include "colorlut.h"
 #include "exifutils.h"
 #include "imageadjustments.h"
 #include "previewaids.h"
@@ -24,6 +25,7 @@
 #include <QtGlobal>
 
 #include <climits>
+#include <memory>
 #include <cmath>
 #include <thread>
 
@@ -499,6 +501,55 @@ void Camera2Preview::setNoiseReduction(int noiseReduction)
     sendSettings();
 }
 
+void Camera2Preview::setLutPath(const QString &path)
+{
+    if (m_lutPath == path) return;
+    m_lutPath = path;
+    emit lutPathChanged();
+    applyLut();
+}
+
+void Camera2Preview::setLutStrength(qreal strength)
+{
+    strength = qBound<qreal>(0.0, strength, 1.0);
+    if (qFuzzyCompare(m_lutStrength, strength)) return;
+    m_lutStrength = strength;
+    emit lutStrengthChanged();
+    applyLut();
+}
+
+// Loads the selected look (.cube or .plut) and publishes it for the preview and
+// every saved image. An empty path or a load failure leaves colours untouched.
+void Camera2Preview::applyLut()
+{
+    QString error;
+    std::shared_ptr<const ColorLut> lut;
+    if (!m_lutPath.isEmpty()) {
+        QFile file(m_lutPath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            error = QStringLiteral("Could not open LUT: %1").arg(m_lutPath);
+        } else if (file.size() > 32 * 1024 * 1024) {
+            error = QStringLiteral("LUT file is too large");
+        } else {
+            const QByteArray data = file.readAll();
+            auto parsed = std::make_shared<ColorLut>();
+            std::string parseError;
+            if (ColorLut::parse(data.constData(), size_t(data.size()),
+                                parsed.get(), &parseError)) {
+                lut = parsed;
+            } else {
+                error = QString::fromStdString(parseError);
+            }
+        }
+    }
+    ColorLut::setActive(lut, float(m_lutStrength));
+    if (m_lutError != error) {
+        m_lutError = error;
+        emit lutErrorChanged();
+    }
+    update();
+}
+
 void Camera2Preview::setFocusPeaking(bool enabled)
 {
     if (m_focusPeaking == enabled) return;
@@ -623,9 +674,18 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
     }
 
     QImage textureImage = m_frame;
+    // A colour look costs per pixel, so the on-screen preview is drawn from a
+    // reduced copy. Saved images are processed at full resolution elsewhere.
+    constexpr int kLutPreviewLongSide = 640;
+    if (ColorLut::hasActive() &&
+            qMax(textureImage.width(), textureImage.height()) > kLutPreviewLongSide) {
+        textureImage = textureImage.scaled(kLutPreviewLongSide, kLutPreviewLongSide,
+                                           Qt::KeepAspectRatio,
+                                           Qt::FastTransformation);
+    }
     if (ImageAdjustments::requested(m_renderExposure, m_colorTemperature,
                                     m_colorTint)) {
-        textureImage = m_frame.copy();
+        textureImage = textureImage.copy();
         ImageAdjustments::apply(&textureImage, m_renderExposure,
                                 m_colorTemperature, m_colorTint);
     }
