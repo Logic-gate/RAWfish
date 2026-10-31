@@ -988,6 +988,9 @@ static void usage(void)
             "                   [focus=auto|continuous|continuous_video|macro|edof|inf|<m>m] [easy]\n"
             "                   [exp=T] [iso=N]\n"
             "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N]   (- = measure only)\n"
+            "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv]\n"
+            "                                (N YUV frames in one burst, 1..4, the camera's NR and sharpening off; the\n"
+            "                                 first compressed by us; save=yuv keeps every frame as NAME-fK.yuv + .json)\n"
             "         stack NAME film=T [sub=T] [stk_denoise=1|2|4] [iso=N]\n"
             "         noiseprofile FILE.json [sub=T]   (darktable noise profile)\n"
             "         focus MODE|hold|rawD [nowait]   (set preview focus live; hold = the lens where it is; rawD = the HAL lens value D)\n"
@@ -1493,28 +1496,55 @@ static void jw_quote_into(char *buf, size_t n, const char *s)
     buf[k++] = '"'; buf[k] = '\0';
 }
 
-/* Handles one "yuv NAME [q=Q] [exp=SEC iso=N] [focus=...]" line: one
- * full-resolution YUV frame from the engine (the camera's noise reduction
- * and sharpening off), compressed here with libjpeg, Exif added by
- * exifwrite.c, and written like a JPEG. */
+/* Handles one "yuv NAME [q=Q] [n=N] [ev=..] [exp=SEC iso=N] [focus=...]
+ * [save=yuv]" line: one or several full-resolution YUV frames from the
+ * engine (the camera's noise reduction and sharpening off); the first is
+ * compressed here with libjpeg, Exif added by exifwrite.c, and written like
+ * a JPEG; save=yuv writes every frame as it is. */
+/* Writes frame f as NAME-fK: the planes as they are (.yuv, planar 4:2:0, Y
+ * then U then V) and a .json beside it. */
+static int yuv_save_frame(const char *prefix, int k, const struct timespec *now, const ir_yuv_t *f, int64_t ts, float ev)
+{
+    char name[64], path[1200], jpath[1216], json[512];
+    FILE *fp;
+    snprintf(name, sizeof name, "%s-f%d", prefix, k + 1);
+    if (build_output_path(name, "yuv", now, path, sizeof path)) return -1;
+    fp = fopen(path, "wb");
+    if (!fp) return -1;
+    if (fwrite(f->y, 1, (size_t)f->w * f->h, fp) != (size_t)f->w * f->h ||
+        fwrite(f->u, 1, (size_t)(f->w / 2) * (f->h / 2), fp) != (size_t)(f->w / 2) * (f->h / 2) ||
+        fwrite(f->v, 1, (size_t)(f->w / 2) * (f->h / 2), fp) != (size_t)(f->w / 2) * (f->h / 2)) { fclose(fp); unlink(path); return -1; }
+    if (fclose(fp)) { unlink(path); return -1; }
+    if (snprintf(jpath, sizeof jpath, "%s.json", path) >= (int)sizeof jpath) return -1;
+    snprintf(json, sizeof json, "{\"format\":\"yuv420p\",\"width\":%d,\"height\":%d,\"orientation_deg\":%d,"
+             "\"exposure_ns\":%lld,\"iso\":%d,\"ev\":%.2f,\"timestamp_ns\":%lld,\"make\":\"%s\",\"model\":\"%s\"}\n",
+             f->w, f->h, f->orientation_deg, (long long)f->exposure_ns, f->iso, (double)ev, (long long)ts, f->make, f->model);
+    fp = fopen(jpath, "w");
+    if (!fp) return -1;
+    fputs(json, fp);
+    return fclose(fp) ? -1 : 0;
+}
+
 static int cmd_yuv(void *bridge, char **save, char *out)
 {
     typedef int (*yuv_fn)(int, float, int64_t, int, int, ir_yuv_t *, char *, size_t);
+    typedef int (*yuvburst_fn)(int, const float *, int64_t, int, int, ir_yuv_t *, int64_t *, char *, size_t);
     typedef void (*yuvfree_fn)(ir_yuv_t *);
     yuv_fn yf = (yuv_fn)a_dlsym(bridge, "indraw_yuv");
+    yuvburst_fn yb = (yuvburst_fn)a_dlsym(bridge, "indraw_yuv_burst");
     yuvfree_fn yfree = (yuvfree_fn)a_dlsym(bridge, "indraw_yuv_free");
     char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
     char file[1200];
     static char cap[OUT_SIZE];
-    int quality = 95, iso = 0, focus_mode = F_KEEP, rc;
-    float focus_diopters = 0.0f;
-    int64_t exposure_ns = 0;
+    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0;
+    float focus_diopters = 0.0f, ev[4] = { 0, 0, 0, 0 };
+    int64_t exposure_ns = 0, ts[4] = { -1, -1, -1, -1 };
     struct timespec now;
-    ir_yuv_t f;
+    ir_yuv_t frames[4], f;
     uint8_t *jpg = NULL;
     unsigned long jlen = 0;
     double t0, t1;
-    if (!yf || !yfree) { emit("{\"ok\":false,\"error\":\"yuv: bridge has no indraw_yuv\"}"); return 1; }
+    if (!yf || !yfree || !yb) { emit("{\"ok\":false,\"error\":\"yuv: bridge has no indraw_yuv\"}"); return 1; }
     if (!prefix || !valid_name(prefix)) { emit("{\"ok\":false,\"error\":\"yuv: missing or invalid NAME\"}"); return 1; }
     clock_gettime(CLOCK_REALTIME, &now);
     if (build_output_path(prefix, "jpg", &now, file, sizeof file)) { emit("{\"ok\":false,\"error\":\"yuv: cannot build output path\"}"); return 1; }
@@ -1523,10 +1553,32 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         else if (!strncmp(tok, "exp=", 4)) { if (!parse_exposure(tok + 4, &exposure_ns)) { emit("{\"ok\":false,\"error\":\"yuv: bad exp\"}"); return 1; } }
         else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
         else if (!strncmp(tok, "focus=", 6)) { if (!parse_focus(tok + 6, &focus_mode, &focus_diopters)) { emit("{\"ok\":false,\"error\":\"yuv: bad focus\"}"); return 1; } }
+        else if (!strncmp(tok, "n=", 2)) { n = atoi(tok + 2); if (n < 1 || n > 4) { emit("{\"ok\":false,\"error\":\"yuv: n=1..4\"}"); return 1; } }
+        else if (!strncmp(tok, "ev=", 3)) {         /* ev=0,-2,... one per frame */
+            char *q = tok + 3, *endp;
+            nev = 0;
+            while (*q && nev < 4) {
+                ev[nev] = (float)strtod(q, &endp);
+                if (endp == q || !(ev[nev] >= -6 && ev[nev] <= 6)) { emit("{\"ok\":false,\"error\":\"yuv: bad ev (each -6..6)\"}"); return 1; }
+                nev++; q = *endp == ',' ? endp + 1 : endp;
+            }
+            if (*q) { emit("{\"ok\":false,\"error\":\"yuv: ev= takes 4 values at most\"}"); return 1; }
+        }
+        else if (!strcmp(tok, "save=yuv")) do_save = 1;
         else { emit("{\"ok\":false,\"error\":\"yuv: unknown option\"}"); return 1; }
     }
     if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
-    if (yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE)) { emit(out); return 1; }
+    if (nev > 0) { if (nev != n) { emit("{\"ok\":false,\"error\":\"yuv: ev= needs one value per frame (n=)\"}"); return 1; } }
+    if (n == 1 && nev == 0) {
+        if (yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE)) { emit(out); return 1; }
+    } else {
+        if (yb(n, nev ? ev : NULL, exposure_ns, iso, timeout_for(exposure_ns), frames, ts, out, OUT_SIZE)) { emit(out); return 1; }
+        f = frames[0];                               /* the JPEG is the first frame */
+    }
+    if (do_save) {
+        for (k = 0; k < (n == 1 && nev == 0 ? 1 : n); ++k)
+            if (yuv_save_frame(prefix, k, &now, n == 1 && nev == 0 ? &f : &frames[k], ts[k], nev ? ev[k] : 0.0f) == 0) saved++;
+    }
     memcpy(cap, out, OUT_SIZE);                          /* the engine's report      */
     cap[OUT_SIZE - 1] = '\0';
     t0 = mono_ms();
@@ -1551,7 +1603,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         rc = exif_write_jpeg(file, jpg, jlen, &ex);
     }
     free(jpg);
-    yfree(&f);
+    if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]);
     if (rc) { snprintf(out, OUT_SIZE, "{\"ok\":false,\"stage\":\"yuv\",\"error\":\"compress or write failed\",\"status\":%d}", rc); emit(out); return 1; }
     {
         char *end = strrchr(cap, '}');
@@ -1562,7 +1614,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         memcpy(out + k, ",\"path\":", 8);
         out[k + 8] = '\0';
         jw_quote_into(out, OUT_SIZE, file);
-        snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f}", jlen, quality, t1 - t0);
+        snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f", jlen, quality, t1 - t0);
+        if (do_save) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"saved_frames\":%d", saved);
+        snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
     }
     emit(out);
     return 0;

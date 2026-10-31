@@ -562,6 +562,8 @@ static struct {
     AImage *jpeg_image;                     /* latest JPEG waiting to be saved   */
     AImage *yuv_image;                      /* latest full-resolution YUV frame  */
     ACaptureRequest *yuv_request;           /* YUV + preview, the HAL's NR/edge off */
+    ACaptureRequest *yuv_burst_req[4];      /* the same, one per frame of a burst (own exposure each) */
+    AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, 0 none) */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
@@ -1146,6 +1148,12 @@ static void on_yuv_image(void *ctx, AImageReader *reader)
     (void)ctx;
     if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img) return;
     pthread_mutex_lock(&g.lock);
+    if (g.yuv_burst_on) {                          /* a burst: keep every frame, in order */
+        if (g.yuv_qn < 4) g.yuv_q[g.yuv_qn++] = img; else AImage_delete(img);
+        pthread_cond_broadcast(&g.cond);
+        pthread_mutex_unlock(&g.lock);
+        return;
+    }
     if (g.yuv_image) AImage_delete(g.yuv_image);  /* stale one: drop              */
     g.yuv_image = img;                             /* hand over to indraw_yuv()    */
     pthread_cond_broadcast(&g.cond);
@@ -2141,6 +2149,13 @@ static void close_all(void)
     if (g.trigger_request) { ACaptureRequest_free(g.trigger_request); g.trigger_request = NULL; }
     if (g.raw_request) { ACaptureRequest_free(g.raw_request); g.raw_request = NULL; }
     if (g.yuv_request) { ACaptureRequest_free(g.yuv_request); g.yuv_request = NULL; }
+    {
+        int qk;
+        for (qk = 0; qk < 4; ++qk)
+            if (g.yuv_burst_req[qk]) { ACaptureRequest_free(g.yuv_burst_req[qk]); g.yuv_burst_req[qk] = NULL; }
+        for (qk = 0; qk < g.yuv_qn; ++qk) AImage_delete(g.yuv_q[qk]);
+        g.yuv_qn = 0; g.yuv_burst_on = 0;
+    }
     if (g.meter_request) { ACaptureRequest_free(g.meter_request); g.meter_request = NULL; }
     if (g.raw_target) { ACameraOutputTarget_free(g.raw_target); g.raw_target = NULL; }
     if (g.yuv_target) { ACameraOutputTarget_free(g.yuv_target); g.yuv_target = NULL; }
@@ -2684,7 +2699,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         if (ms != AMEDIA_OK) SETUP_FAIL("raw_window", "AImageReader_getWindow", ms);
     }
     if (g.yuv_w > 0) {                                         /* optional full YUV */
-        ms = AImageReader_new(g.yuv_w, g.yuv_h, AIMAGE_FORMAT_YUV_420_888, 2, &g.yuv_reader);
+        ms = AImageReader_new(g.yuv_w, g.yuv_h, AIMAGE_FORMAT_YUV_420_888, 5, &g.yuv_reader);
         if (ms != AMEDIA_OK) SETUP_FAIL("yuv_reader", "AImageReader_new", ms);
         AImageReader_setImageListener(g.yuv_reader, &yuv_l);   /* hand to indraw_yuv    */
         ms = AImageReader_getWindow(g.yuv_reader, &g.yuv_window);
@@ -2831,6 +2846,22 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         if (u8_list_has(g.chars, ACAMERA_EDGE_AVAILABLE_EDGE_MODES, ACAMERA_EDGE_MODE_OFF)) {
             u8 = ACAMERA_EDGE_MODE_OFF;
             ACaptureRequest_setEntry_u8(g.yuv_request, ACAMERA_EDGE_MODE, 1, &u8);
+        }
+        {
+            int bk;
+            for (bk = 0; bk < 4; ++bk) {
+                st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_STILL_CAPTURE, &g.yuv_burst_req[bk]);
+                if (st != ACAMERA_OK) SETUP_FAIL("yuv_burst_request", "createCaptureRequest", st);
+                ACaptureRequest_addTarget(g.yuv_burst_req[bk], g.yuv_target);
+                if (u8_list_has(g.chars, ACAMERA_NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES, ACAMERA_NOISE_REDUCTION_MODE_OFF)) {
+                    u8 = ACAMERA_NOISE_REDUCTION_MODE_OFF;
+                    ACaptureRequest_setEntry_u8(g.yuv_burst_req[bk], ACAMERA_NOISE_REDUCTION_MODE, 1, &u8);
+                }
+                if (u8_list_has(g.chars, ACAMERA_EDGE_AVAILABLE_EDGE_MODES, ACAMERA_EDGE_MODE_OFF)) {
+                    u8 = ACAMERA_EDGE_MODE_OFF;
+                    ACaptureRequest_setEntry_u8(g.yuv_burst_req[bk], ACAMERA_EDGE_MODE, 1, &u8);
+                }
+            }
         }
     }
 
@@ -6431,6 +6462,37 @@ static int apply_session_request(ACaptureRequest *req)
     return n;
 }
 
+/* Copies a YUV_420_888 image into f's planar 4:2:0 planes (whatever the
+ * reader's row and pixel strides), and fills its size and orientation. */
+static int yuv_copy(AImage *img, ir_yuv_t *f)
+{
+    int w = 0, h = 0, p;
+    AImage_getWidth(img, &w); AImage_getHeight(img, &h);
+    w &= ~1; h &= ~1;
+    if (w < 16 || h < 16) return -1;
+    f->y = malloc((size_t)w * h);
+    f->u = malloc((size_t)(w / 2) * (h / 2));
+    f->v = malloc((size_t)(w / 2) * (h / 2));
+    if (!f->y || !f->u || !f->v) return -1;
+    for (p = 0; p < 3; ++p) {
+        uint8_t *data = NULL, *dst = p == 0 ? f->y : p == 1 ? f->u : f->v;
+        int len = 0, rs = 0, ps = 0, x, yy, pw = p ? w / 2 : w, ph = p ? h / 2 : h;
+        if (AImage_getPlaneData(img, p, &data, &len) != AMEDIA_OK || AImage_getPlaneRowStride(img, p, &rs) != AMEDIA_OK ||
+            AImage_getPlanePixelStride(img, p, &ps) != AMEDIA_OK || !data || ps < 1 ||
+            (long)(ph - 1) * rs + (long)(pw - 1) * ps >= len)
+            return -1;
+        for (yy = 0; yy < ph; ++yy) {
+            const uint8_t *src = data + (size_t)yy * rs;
+            uint8_t *d = dst + (size_t)yy * pw;
+            if (ps == 1) memcpy(d, src, (size_t)pw);
+            else for (x = 0; x < pw; ++x) d[x] = src[(size_t)x * ps];
+        }
+    }
+    f->w = w; f->h = h;
+    f->orientation_deg = photo_orientation_deg();
+    return 0;
+}
+
 /* Before indraw_open: a full-resolution YUV stream in the session (w,h; -1,-1
  * the largest; 0,0 none). For a JPEG compressed by the command line. */
 IR_API int indraw_set_yuv_size(int w, int h)
@@ -6452,7 +6514,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     struct timespec dl;
     camera_status_t st;
     double t0, t_image, t_copied;
-    int failed, dev_err, p, w = 0, h = 0;
+    int failed, dev_err, w = 0, h = 0;
     jw_t jw;
     if (!f || !out || !out_size || timeout_ms <= 0) return IR_EARG;
     memset(f, 0, sizeof *f);
@@ -6485,32 +6547,13 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
         return fail(out, out_size, IR_ECAPTURE, "wait_image", "timeout", timeout_ms);
     }
     captured_now();
-    AImage_getWidth(img, &w); AImage_getHeight(img, &h);
-    w &= ~1; h &= ~1;
-    f->y = malloc((size_t)w * h);
-    f->u = malloc((size_t)(w / 2) * (h / 2));
-    f->v = malloc((size_t)(w / 2) * (h / 2));
-    if (!f->y || !f->u || !f->v) { AImage_delete(img); indraw_yuv_free(f); return fail(out, out_size, IR_ECAPTURE, "yuv", "out of memory", 0); }
-    for (p = 0; p < 3; ++p) {
-        uint8_t *data = NULL, *dst = p == 0 ? f->y : p == 1 ? f->u : f->v;
-        int len = 0, rs = 0, ps = 0, x, yy, pw = p ? w / 2 : w, ph = p ? h / 2 : h;
-        if (AImage_getPlaneData(img, p, &data, &len) != AMEDIA_OK || AImage_getPlaneRowStride(img, p, &rs) != AMEDIA_OK ||
-            AImage_getPlanePixelStride(img, p, &ps) != AMEDIA_OK || !data || ps < 1 ||
-            (long)(ph - 1) * rs + (long)(pw - 1) * ps >= len) {
-            AImage_delete(img); indraw_yuv_free(f);
-            return fail(out, out_size, IR_ECAPTURE, "yuv", "bad plane layout", p);
-        }
-        for (yy = 0; yy < ph; ++yy) {                 /* one row at a time         */
-            const uint8_t *src = data + (size_t)yy * rs;
-            uint8_t *d = dst + (size_t)yy * pw;
-            if (ps == 1) memcpy(d, src, (size_t)pw);
-            else for (x = 0; x < pw; ++x) d[x] = src[(size_t)x * ps];   /* interleaved U/V */
-        }
+    if (yuv_copy(img, f)) {
+        AImage_delete(img); indraw_yuv_free(f);
+        return fail(out, out_size, IR_ECAPTURE, "yuv", "cannot copy the frame (memory or plane layout)", 0);
     }
+    w = f->w; h = f->h;
     AImage_delete(img);
     t_copied = now_ms();
-    f->w = w; f->h = h;
-    f->orientation_deg = photo_orientation_deg();
     dl = deadline_in(500);                            /* the result: exposure and ISO */
     pthread_mutex_lock(&g.lock);
     while (!g.result_ready)
@@ -6536,6 +6579,112 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     jw_add(&jw, "{\"ok\":true,\"size\":[%d,%d],\"exposure_ns\":%lld,\"iso\":%d,\"ms\":{\"image\":%.1f,\"copied\":%.1f}}",
            w, h, (long long)f->exposure_ns, f->iso, t_image - t0, t_copied - t0);
     return IR_OK;
+}
+
+/* Several YUV frames in one burst: the requests are submitted together,
+ * so the camera takes them back to back (33-41 ms apart on the JP2).
+ * With ev=, each request carries its own manual exposure, derived from
+ * the automatic one frozen at the first frame, as for the bracket. */
+IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
+                            ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
+{
+    ACaptureRequest *reqs[4];
+    int k, got = 0, rc = IR_OK;
+    int64_t exp_min = 0, exp_max = 0, exp_ceiling;
+    int32_t iso_min = 0, iso_max = 0;
+    ACameraMetadata_const_entry e;
+    double t0, t_cap;
+    struct timespec dl;
+    camera_status_t st;
+    jw_t w;
+    if (n < 1 || n > 4 || !frames || !timestamps || !out || !out_size || timeout_ms <= 0) return IR_EARG;
+    for (k = 0; k < n; ++k) { memset(&frames[k], 0, sizeof frames[k]); timestamps[k] = -1; }
+    if (!g.session) return fail(out, out_size, IR_ESTATE, "yuv", "camera not open", 0);
+    if (!g.yuv_burst_req[0]) return fail(out, out_size, IR_ESTATE, "yuv", "no yuv stream (open with yuv=WxH|max)", 0);
+    if (exposure_ns <= 0) {                        /* automatic: freeze the live pair */
+        pthread_mutex_lock(&g.lock);
+        exposure_ns = g.live_exp_ns; iso = g.live_iso_v;
+        pthread_mutex_unlock(&g.lock);
+        if (exposure_ns <= 0 || iso <= 0) return fail(out, out_size, IR_ESTATE, "yuv", "no live exposure yet", 0);
+    }
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE, &e) == ACAMERA_OK && e.count >= 2) { exp_min = e.data.i64[0]; exp_max = e.data.i64[1]; }
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE, &e) == ACAMERA_OK && e.count >= 2) { iso_min = e.data.i32[0]; iso_max = e.data.i32[1]; }
+    exp_ceiling = g.override_shutter_max_ns > 0 && (exp_max <= 0 || g.override_shutter_max_ns < exp_max) ? g.override_shutter_max_ns : exp_max;
+    for (k = 0; k < n; ++k) {
+        /* this frame's pair: the exposure time scaled by 2^ev, kept within the
+         * sensor's range and the tested ceiling; what does not fit goes on the ISO */
+        double f = ev ? pow(2.0, (double)ev[k]) : 1.0;
+        int64_t ex = (int64_t)(exposure_ns * f + 0.5);
+        int is = iso;
+        if (exp_ceiling > 0 && ex > exp_ceiling) { is = (int)((double)iso * (double)ex / (double)exp_ceiling + 0.5); ex = exp_ceiling; }
+        if (exp_min > 0 && ex < exp_min) { is = (int)((double)iso * (double)ex / (double)exp_min + 0.5); ex = exp_min; }
+        if (iso_max > 0 && is > iso_max) is = iso_max;
+        if (iso_min > 0 && is < iso_min) is = iso_min;
+        if (set_exposure(g.yuv_burst_req[k], ex, is, out, out_size)) return IR_EARG;
+        copy_preview_focus(g.yuv_burst_req[k]);
+        reqs[k] = g.yuv_burst_req[k];
+        frames[k].exposure_ns = ex; frames[k].iso = is;
+    }
+    pthread_mutex_lock(&g.lock);
+    for (k = 0; k < g.yuv_qn; ++k) AImage_delete(g.yuv_q[k]);
+    g.yuv_qn = 0; g.yuv_burst_on = 1;
+    g.capture_failed = 0; g.result_ready = 0;
+    g.captured_owed = NULL;
+    pthread_mutex_unlock(&g.lock);
+    t0 = now_ms();
+    st = ACameraCaptureSession_capture(g.session, &g_still_cbs, n, reqs, NULL);
+    if (st != ACAMERA_OK) {
+        pthread_mutex_lock(&g.lock); g.yuv_burst_on = 0; pthread_mutex_unlock(&g.lock);
+        return fail(out, out_size, IR_ECAPTURE, "yuv", "capture refused", st);
+    }
+    dl = deadline_in(timeout_ms + 500 * n);
+    while (got < n) {
+        AImage *img = NULL;
+        int q;
+        pthread_mutex_lock(&g.lock);
+        while (g.yuv_qn == 0 && !g.capture_failed && !g.device_error)
+            if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
+        if (g.yuv_qn > 0) {
+            img = g.yuv_q[0];
+            for (q = 1; q < g.yuv_qn; ++q) g.yuv_q[q - 1] = g.yuv_q[q];
+            g.yuv_qn--;
+        }
+        pthread_mutex_unlock(&g.lock);
+        if (!img) break;
+        AImage_getTimestamp(img, &timestamps[got]);
+        if (yuv_copy(img, &frames[got])) { AImage_delete(img); rc = IR_ECAPTURE; break; }
+        AImage_delete(img);
+        got++;
+    }
+    t_cap = now_ms();
+    pthread_mutex_lock(&g.lock);
+    g.yuv_burst_on = 0;
+    for (k = 0; k < g.yuv_qn; ++k) AImage_delete(g.yuv_q[k]);
+    g.yuv_qn = 0;
+    pthread_mutex_unlock(&g.lock);
+    emit_event("captured kind=yuv\n");
+    for (k = 0; k < n; ++k) {
+        frames[k].exposure_manual = 1;
+        frames[k].wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+        if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, &e) == ACAMERA_OK && e.count)
+            frames[k].focal_mm = e.data.f[0];
+        if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_APERTURES, &e) == ACAMERA_OK && e.count)
+            frames[k].f_number = e.data.f[0];
+        if (frames[k].focal_mm > 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, &e) == ACAMERA_OK &&
+            e.count >= 2 && e.data.f[0] > 0)
+            frames[k].focal_eq_mm = (int)(frames[k].focal_mm * 36.0f / e.data.f[0] + 0.5f);
+        snprintf(frames[k].make, sizeof frames[k].make, "%s", g.make);
+        snprintf(frames[k].model, sizeof frames[k].model, "%s", g.model);
+    }
+    if (got < n) { for (k = 0; k < n; ++k) indraw_yuv_free(&frames[k]); }
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":%s,\"burst\":%d,\"taken\":%d,\"base\":{\"exposure_ns\":%lld,\"iso\":%d},\"frames\":[",
+           got == n && rc == IR_OK ? "true" : "false", n, got, (long long)exposure_ns, iso);
+    for (k = 0; k < got; ++k)
+        jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
+               (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
+    jw_add(&w, "],\"ms\":{\"capture\":%.1f}}", t_cap - t0);
+    return got == n ? rc : (rc == IR_OK ? IR_ECAPTURE : rc);
 }
 
 IR_API void indraw_yuv_free(ir_yuv_t *f)
