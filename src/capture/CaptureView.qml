@@ -166,9 +166,15 @@ FocusScope {
                                                      && extensions.rawImageCaptureAvailable
     readonly property bool camera2CaptureAvailable: extensions.rawImageCaptureAvailable
     readonly property bool _camera2NativeCaptureSize: Settings.mode.rawCaptureSize === "4096x3072"
+    // The preview session's JPEG output is sized to the device's warm capture size (the
+    // same comparison camera.qml uses to enable it), not a fixed 4096x3072: on a phone
+    // with a different sensor size the cold helper path was taken instead, and it
+    // returns an unmetered black frame.
+    readonly property bool _camera2WarmJpegSize: Settings.mode.rawCaptureSize
+                                                 === Settings.camera2WarmCaptureSize()
     readonly property bool _liveJpegCapture: _camera2ViewfinderActive
                                             && Settings.mode.camera2CaptureFormat === "jpeg"
-                                            && _camera2NativeCaptureSize
+                                            && _camera2WarmJpegSize
                                             && camera2Viewfinder
     readonly property bool _warmJpegReady: _liveJpegCapture
                                            && camera2Viewfinder
