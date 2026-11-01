@@ -71,11 +71,24 @@ PinchArea {
         }
     }
 
+    // True when there is something to flip to: either RAWfish knows both sides, or the
+    // camera2 probe lists the usual front (1) and back (0) ids.
+    readonly property bool canFlipCamera: {
+        if (camera.hasCameraOnBothSides)
+            return true
+        var ids = Settings.camera2Capabilities.camera2LensModel(Settings.deviceId)
+        return ids.indexOf("0") >= 0 && ids.indexOf("1") >= 0
+    }
+
     function flipCamera() {
-        if (Settings.global.position === Camera.BackFace) {
-            Settings.deviceId = Settings.global.frontFacingDeviceId
+        if (camera.hasCameraOnBothSides) {
+            if (Settings.global.position === Camera.BackFace) {
+                Settings.deviceId = Settings.global.frontFacingDeviceId
+            } else {
+                Settings.deviceId = Settings.global.previousBackFacingDeviceId
+            }
         } else {
-            Settings.deviceId = Settings.global.previousBackFacingDeviceId
+            Settings.deviceId = Settings.deviceId === "1" ? "0" : "1"
         }
 
         captureView.resetZoom()
@@ -716,7 +729,7 @@ PinchArea {
                         anchors.fill: parent
                         visible: camera2ControlGrid.photon
                         folder: Settings.photoDirectory
-                        flipVisible: camera.hasCameraOnBothSides
+                        flipVisible: overlay.canFlipCamera
                         flipEnabled: overlay.deviceToggleEnabled
                         onGalleryRequested: overlay.galleryRequested()
                         onFlipRequested: overlay.flipCamera()
@@ -997,7 +1010,7 @@ PinchArea {
                             anchors.fill: parent
                             visible: camera2ControlGrid.photon
                             folder: Settings.photoDirectory
-                            flipVisible: camera.hasCameraOnBothSides
+                            flipVisible: overlay.canFlipCamera
                             flipEnabled: overlay.deviceToggleEnabled
                             onGalleryRequested: overlay.galleryRequested()
                             onFlipRequested: overlay.flipCamera()

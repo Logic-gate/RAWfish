@@ -23,19 +23,19 @@ Item {
 
     Rectangle {
         id: thumb
-        width: 40 * PhotonTheme.dp
+        width: 36 * PhotonTheme.dp
         height: width
-        radius: PhotonTheme.radiusSmall
+        radius: 4 * PhotonTheme.dp
         color: PhotonTheme.surfaceVariant
         border.width: Math.max(1, PhotonTheme.dp)
         border.color: PhotonTheme.textSecondary
-        x: sides.width / 2 - 122 * PhotonTheme.dp - width / 2
+        x: sides.width / 2 - 108 * PhotonTheme.dp - width / 2
         y: (sides.height - height) / 2
         visible: latest.url.toString().length > 0
 
         Image {
             anchors.fill: parent
-            anchors.margins: thumb.border.width
+            anchors.margins: thumb.border.width + 1.5 * PhotonTheme.dp
             source: latest.url
             sourceSize: Qt.size(96, 96)
             asynchronous: true
@@ -53,9 +53,9 @@ Item {
 
     Item {
         id: flip
-        width: 40 * PhotonTheme.dp
+        width: 36 * PhotonTheme.dp
         height: width
-        x: sides.width / 2 + 112 * PhotonTheme.dp - width / 2
+        x: sides.width / 2 + 106 * PhotonTheme.dp - width / 2
         y: (sides.height - height) / 2
         visible: sides.flipVisible
         opacity: sides.flipEnabled ? 1.0 : 0.4
