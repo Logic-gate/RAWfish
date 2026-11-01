@@ -2045,41 +2045,18 @@ bool DeclarativeCameraExtensions::processRawImage(
         return false;
     }
     if (m_bracketCount == 2) return stageRawBracketFrame();
-    if (!(m_rawRenderEngine == QLatin1String("fastjpeg")
-            ? renderRawImageWithFastJpegConverter() : renderRawImage())) {
-        const QString error = m_rawCaptureErrors.isEmpty()
-                ? QStringLiteral("RAW image conversion failed")
-                : m_rawCaptureErrors;
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(error);
-        return false;
-    }
-    QString imageError;
-    if (!readableImageExists(localTargetPath, &imageError)) {
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(imageError);
-        return false;
-    }
-    if (!copyJsonSidecar(m_rawCapturePrefix + QLatin1String(".json"),
-                         localTargetPath)) {
-        const QString error = m_rawCaptureErrors.isEmpty()
-                ? QStringLiteral("Could not save RAW metadata sidecar")
-                : m_rawCaptureErrors;
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(error);
-        return false;
-    }
-    QString exifError;
-    if (!ExifUtils::writeJpegExifFromJsonFile(localTargetPath,
-                                              jsonSidecarPath(localTargetPath),
-                                              &exifError)) {
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(exifError);
-        return false;
-    }
-
-    clearRawImageCapture();
-    emit rawImageCaptured(localTargetPath, QStringLiteral("image/jpeg"));
+    // Render off the GUI thread, as the cold path does; finishRawImageRender()
+    // writes the sidecar and EXIF and emits rawImageCaptured().
+    qDebug() << "capture-timing app warm raw render start engine"
+             << m_rawRenderEngine << "t" << m_rawCaptureTimer.elapsed();
+    m_rawRenderStart = m_rawCaptureTimer.elapsed();
+    m_rawRenderWatcher.reset(new QFutureWatcher<bool>);
+    connect(m_rawRenderWatcher.data(), &QFutureWatcher<bool>::finished,
+            this, &DeclarativeCameraExtensions::finishRawImageRender);
+    m_rawRenderWatcher->setFuture(QtConcurrent::run([this]() {
+        return m_rawRenderEngine == QLatin1String("fastjpeg")
+                ? renderRawImageWithFastJpegConverter() : renderRawImage();
+    }));
     return true;
 }
 
@@ -3056,12 +3033,8 @@ bool DeclarativeCameraExtensions::renderRawImageWithFastJpegConverter()
                   .value(QStringLiteral("format")).toString()
             : QString();
     if (metadataFormat == QLatin1String("RAW10")) {
-        m_rawCaptureErrors = QStringLiteral("Fast JPEG converter supports RAW16 only");
-        appendRawCaptureLog(QStringLiteral("%1 metadata=%2 raw=%3")
-                            .arg(m_rawCaptureErrors)
-                            .arg(metadataPath)
-                            .arg(rawPath));
-        return false;
+        // The fast converter reads RAW16 only; the internal renderer handles RAW10.
+        return renderRawImage();
     }
     if (!QFileInfo(rawPath).isFile()) {
         m_rawCaptureErrors = QStringLiteral("RAW file is missing: %1").arg(rawPath);
