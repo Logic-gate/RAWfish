@@ -15,7 +15,11 @@ ApplicationWindow {
     id: window
 
     // Check once per launch, in RAWfish's application identity (not system Settings).
-    Component.onCompleted: Settings.camera2Capabilities.ensureCamera2GeneratedHalConfig(Settings.deviceId)
+    Component.onCompleted: {
+        Settings.camera2Capabilities.startupLog("camera.qml completed")
+        Settings.camera2Capabilities.ensureCamera2GeneratedHalConfig(Settings.deviceId)
+        Settings.camera2Capabilities.startupLog("camera.qml HAL config done")
+    }
 
     property var captureModel: null
     property bool galleryActive
@@ -105,8 +109,16 @@ ApplicationWindow {
                            && Settings.mode.rawCaptureSize === Settings.camera2WarmCaptureSize()
                            && Settings.mode.rawCaptureSpeedMode !== "quality"
         jpegQuality: Settings.mode.rawCaptureJpegQuality
-        readonly property bool frontFacing: Settings.global.frontFacingDeviceId !== ""
-                                            && cameraId === Settings.global.frontFacingDeviceId
+        lutPath: Settings.mode.colorLookPath
+        lutStrength: Settings.mode.colorLookStrength / 100.0
+        flashMode: Settings.mode.flash === Camera.FlashTorch ? 1
+                   : (Settings.mode.flash === Camera.FlashOn ? 2 : 0)
+        // The selected side is the reliable signal: frontFacingDeviceId comes from
+        // QtMultimedia's camera list, is never stored for RAWfish and need not equal the
+        // Camera2 id, so it can only add to the position check.
+        readonly property bool frontFacing: Settings.global.position === Camera.FrontFace
+                                            || (Settings.global.frontFacingDeviceId !== ""
+                                                && cameraId === Settings.global.frontFacingDeviceId)
         orientation: Settings.camera2PreviewOrientation(
                          cameraId, frontFacing ? 270 : 90)
         mirror: Settings.camera2PreviewMirror(cameraId, frontFacing)

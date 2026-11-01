@@ -37,6 +37,10 @@ class Camera2Preview : public QQuickItem
     Q_PROPERTY(QString exposureTime READ exposureTime WRITE setExposureTime NOTIFY exposureTimeChanged)
     Q_PROPERTY(int aperture READ aperture WRITE setAperture NOTIFY apertureChanged)
     Q_PROPERTY(int noiseReduction READ noiseReduction WRITE setNoiseReduction NOTIFY noiseReductionChanged)
+    Q_PROPERTY(QString lutPath READ lutPath WRITE setLutPath NOTIFY lutPathChanged)
+    Q_PROPERTY(qreal lutStrength READ lutStrength WRITE setLutStrength NOTIFY lutStrengthChanged)
+    Q_PROPERTY(int flashMode READ flashMode WRITE setFlashMode NOTIFY flashModeChanged)
+    Q_PROPERTY(QString lutError READ lutError NOTIFY lutErrorChanged)
     Q_PROPERTY(bool focusPeaking READ focusPeaking WRITE setFocusPeaking NOTIFY focusPeakingChanged)
     Q_PROPERTY(bool exposureZebras READ exposureZebras WRITE setExposureZebras NOTIFY exposureZebrasChanged)
     Q_PROPERTY(qreal renderExposure READ renderExposure WRITE setRenderExposure NOTIFY renderExposureChanged)
@@ -119,6 +123,13 @@ public:
     int noiseReduction() const;
     void setNoiseReduction(int noiseReduction);
 
+    QString lutPath() const { return m_lutPath; }
+    void setLutPath(const QString &path);
+    qreal lutStrength() const { return m_lutStrength; }
+    int flashMode() const { return m_flashMode; }
+    void setFlashMode(int mode);
+    void setLutStrength(qreal strength);
+    QString lutError() const { return m_lutError; }
     bool focusPeaking() const { return m_focusPeaking; }
     void setFocusPeaking(bool enabled);
     bool exposureZebras() const { return m_exposureZebras; }
@@ -212,6 +223,10 @@ signals:
     void exposureTimeChanged();
     void apertureChanged();
     void noiseReductionChanged();
+    void lutPathChanged();
+    void lutStrengthChanged();
+    void flashModeChanged();
+    void lutErrorChanged();
     void focusPeakingChanged();
     void exposureZebrasChanged();
     void renderExposureChanged();
@@ -283,6 +298,12 @@ private:
     QString m_exposureTime = QStringLiteral("0");
     int m_aperture = 0;
     int m_noiseReduction = 0;
+    QString m_lutPath;
+    qreal m_lutStrength = 1.0;
+    int m_flashMode = 0;      // 0 off, 1 torch, 2 flash with the shot
+    int m_sentFlashMode = 0;  // last value written to the preview process
+    QString m_lutError;
+    void applyLut();
     bool m_focusPeaking = false;
     bool m_exposureZebras = false;
     qreal m_renderExposure = 1.0;

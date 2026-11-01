@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "declarativecameraextensions.h"
+#include "startuplog.h"
 #include "previewsize.h"
 #include "exifutils.h"
 #include "dnglensshading.h"
@@ -865,9 +866,15 @@ QString DeclarativeCameraExtensions::camera2DeviceConfigDir() const
     return rawfishUserDeviceProfileDir();
 }
 
+void DeclarativeCameraExtensions::startupLog(const QString &event)
+{
+    StartupLog::mark(event);
+}
+
 QString DeclarativeCameraExtensions::ensureCamera2GeneratedHalConfig(
         const QString &cameraId)
 {
+    StartupLog::mark(QStringLiteral("ensureCamera2GeneratedHalConfig begin"));
     Q_UNUSED(cameraId);
     const auto fail = [this](const QString &reason) {
         const QString message = QStringLiteral("Could not generate HAL config: %1").arg(reason);
@@ -916,12 +923,15 @@ QString DeclarativeCameraExtensions::ensureCamera2GeneratedHalConfig(
         if (!rawImageCaptureAvailable()) {
             return fail(QStringLiteral("Camera2 helper is not installed"));
         }
+        StartupLog::mark(QStringLiteral("HAL-config probe begin"));
         QProcess probe;
         probe.start(rawCaptureProbePath());
         if (!probe.waitForStarted(3000)) {
             return fail(QStringLiteral("Camera2 helper did not start"));
         }
-        if (!probe.waitForFinished(5000) || probe.exitStatus() != QProcess::NormalExit || probe.exitCode() != 0) {
+        const bool halProbeDone = probe.waitForFinished(5000);
+        StartupLog::mark(QStringLiteral("HAL-config probe end"));
+        if (!halProbeDone || probe.exitStatus() != QProcess::NormalExit || probe.exitCode() != 0) {
             const QString helperError = filterCamera2HelperErrors(
                         QString::fromLocal8Bit(probe.readAllStandardError()));
             return fail(QStringLiteral("Camera2 probe failed: %1").arg(helperError));
@@ -979,9 +989,12 @@ bool DeclarativeCameraExtensions::loadCamera2Capabilities(const QString &cameraI
         return false;
     }
 
+    StartupLog::mark(QStringLiteral("capabilities probe begin camera=%1").arg(effectiveCameraId));
     QProcess probe;
     probe.start(rawCaptureProbePath());
-    if (!probe.waitForStarted(3000) || !probe.waitForFinished(5000) ||
+    const bool probeDone = probe.waitForStarted(3000) && probe.waitForFinished(5000);
+    StartupLog::mark(QStringLiteral("capabilities probe end camera=%1 ok=%2").arg(effectiveCameraId).arg(probeDone));
+    if (!probeDone ||
             probe.exitStatus() != QProcess::NormalExit ||
             probe.exitCode() != 0) {
         m_camera2ProbeJson = probe.readAllStandardOutput();
@@ -1975,6 +1988,26 @@ bool DeclarativeCameraExtensions::processRawImage(
         const QString &rawRenderEngine,
         int colorTemperature, int colorTint, bool progressiveJpeg)
 {
+    if (m_rawRenderWatcher && !m_rawCaptureProcess && !m_bracketCombineWatcher) {
+        // The previous shot is still being rendered in the background; the
+        // RAW is already on disk, so run this one when the renderer is free.
+        PendingRawJob job;
+        job.targetPath = targetPath;
+        job.rawPath = rawPath;
+        job.metadataPath = metadataPath;
+        job.exposure = exposure;
+        job.saveFormat = rawSaveFormat;
+        job.engine = rawRenderEngine;
+        job.jpegQuality = jpegQuality;
+        job.rotationDegrees = rotationDegrees;
+        job.colorTemperature = colorTemperature;
+        job.colorTint = colorTint;
+        job.progressiveJpeg = progressiveJpeg;
+        m_pendingRawJobs.append(job);
+        qDebug() << "capture-timing app queued raw render, pending"
+                 << m_pendingRawJobs.size();
+        return true;
+    }
     if (m_rawCaptureProcess || m_rawRenderWatcher || m_bracketCombineWatcher) {
         emit rawImageCaptureFailed(QStringLiteral("Camera2 image capture is already running"));
         return false;
@@ -2032,42 +2065,31 @@ bool DeclarativeCameraExtensions::processRawImage(
         return false;
     }
     if (m_bracketCount == 2) return stageRawBracketFrame();
-    if (!(m_rawRenderEngine == QLatin1String("fastjpeg")
-            ? renderRawImageWithFastJpegConverter() : renderRawImage())) {
-        const QString error = m_rawCaptureErrors.isEmpty()
-                ? QStringLiteral("RAW image conversion failed")
-                : m_rawCaptureErrors;
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(error);
-        return false;
-    }
-    QString imageError;
-    if (!readableImageExists(localTargetPath, &imageError)) {
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(imageError);
-        return false;
-    }
-    if (!copyJsonSidecar(m_rawCapturePrefix + QLatin1String(".json"),
-                         localTargetPath)) {
-        const QString error = m_rawCaptureErrors.isEmpty()
-                ? QStringLiteral("Could not save RAW metadata sidecar")
-                : m_rawCaptureErrors;
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(error);
-        return false;
-    }
-    QString exifError;
-    if (!ExifUtils::writeJpegExifFromJsonFile(localTargetPath,
-                                              jsonSidecarPath(localTargetPath),
-                                              &exifError)) {
-        clearRawImageCapture();
-        emit rawImageCaptureFailed(exifError);
-        return false;
-    }
-
-    clearRawImageCapture();
-    emit rawImageCaptured(localTargetPath, QStringLiteral("image/jpeg"));
+    // Render off the GUI thread, as the cold path does; finishRawImageRender()
+    // writes the sidecar and EXIF and emits rawImageCaptured().
+    qDebug() << "capture-timing app warm raw render start engine"
+             << m_rawRenderEngine << "t" << m_rawCaptureTimer.elapsed();
+    m_rawRenderStart = m_rawCaptureTimer.elapsed();
+    m_rawRenderWatcher.reset(new QFutureWatcher<bool>);
+    connect(m_rawRenderWatcher.data(), &QFutureWatcher<bool>::finished,
+            this, &DeclarativeCameraExtensions::finishRawImageRender);
+    m_rawRenderWatcher->setFuture(QtConcurrent::run([this]() {
+        return m_rawRenderEngine == QLatin1String("fastjpeg")
+                ? renderRawImageWithFastJpegConverter() : renderRawImage();
+    }));
     return true;
+}
+
+void DeclarativeCameraExtensions::startNextPendingRawJob()
+{
+    if (m_pendingRawJobs.isEmpty() || m_rawRenderWatcher || m_rawCaptureProcess
+            || m_bracketCombineWatcher)
+        return;
+    const PendingRawJob job = m_pendingRawJobs.takeFirst();
+    processRawImage(job.targetPath, job.rawPath, job.metadataPath, job.exposure,
+                    job.jpegQuality, job.rotationDegrees, job.saveFormat,
+                    job.engine, job.colorTemperature, job.colorTint,
+                    job.progressiveJpeg);
 }
 
 void DeclarativeCameraExtensions::discardRawBracket()
@@ -2278,6 +2300,8 @@ void DeclarativeCameraExtensions::finishRawImageRender()
     if (watcher) {
         watcher->deleteLater();
     }
+    // Whatever happens to this shot, the next queued one may start afterwards.
+    QTimer::singleShot(0, this, [this]() { startNextPendingRawJob(); });
     if (!renderOk) {
         const QString error = m_rawCaptureErrors.isEmpty()
                 ? QStringLiteral("RAW image conversion failed")
@@ -3043,12 +3067,8 @@ bool DeclarativeCameraExtensions::renderRawImageWithFastJpegConverter()
                   .value(QStringLiteral("format")).toString()
             : QString();
     if (metadataFormat == QLatin1String("RAW10")) {
-        m_rawCaptureErrors = QStringLiteral("Fast JPEG converter supports RAW16 only");
-        appendRawCaptureLog(QStringLiteral("%1 metadata=%2 raw=%3")
-                            .arg(m_rawCaptureErrors)
-                            .arg(metadataPath)
-                            .arg(rawPath));
-        return false;
+        // The fast converter reads RAW16 only; the internal renderer handles RAW10.
+        return renderRawImage();
     }
     if (!QFileInfo(rawPath).isFile()) {
         m_rawCaptureErrors = QStringLiteral("RAW file is missing: %1").arg(rawPath);

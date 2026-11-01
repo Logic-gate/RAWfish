@@ -105,6 +105,8 @@ FocusScope {
     property real camera2Zoom: 1.0
     property bool _camera2CapturePending
     property bool _camera2CaptureRunning
+    // Warm RAW shots whose JPEG is still being rendered after the shutter was freed.
+    property int _backgroundRenders: 0
     property bool _camera2LiveJpegCaptureRunning
     property bool _qtFallbackCapturePending
     property string _camera2CaptureTargetPath
@@ -165,10 +167,16 @@ FocusScope {
                                                      && Settings.mode.camera2Viewfinder
                                                      && extensions.rawImageCaptureAvailable
     readonly property bool camera2CaptureAvailable: extensions.rawImageCaptureAvailable
-    readonly property bool _camera2NativeCaptureSize: Settings.mode.rawCaptureSize === "4096x3072"
+    readonly property bool _camera2NativeCaptureSize: Settings.mode.rawCaptureSize === Settings.camera2WarmCaptureSize()
+    // The preview session's JPEG output is sized to the device's warm capture size (the
+    // same comparison camera.qml uses to enable it), not a fixed 4096x3072: on a phone
+    // with a different sensor size the cold helper path was taken instead, and it
+    // returns an unmetered black frame.
+    readonly property bool _camera2WarmJpegSize: Settings.mode.rawCaptureSize
+                                                 === Settings.camera2WarmCaptureSize()
     readonly property bool _liveJpegCapture: _camera2ViewfinderActive
                                             && Settings.mode.camera2CaptureFormat === "jpeg"
-                                            && _camera2NativeCaptureSize
+                                            && _camera2WarmJpegSize
                                             && camera2Viewfinder
     readonly property bool _warmJpegReady: _liveJpegCapture
                                            && camera2Viewfinder
@@ -193,6 +201,7 @@ FocusScope {
     signal recordingStopped(url url, string mimeType)
     signal loaded
     signal captured
+    signal galleryRequested
 
     Item {
         id: captureSnapshot
@@ -619,6 +628,7 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        Settings.camera2Capabilities.startupLog("CaptureView completed")
         loadOverlay()
         camera2ResolveCameraIdTimer.restart()
     }
@@ -891,6 +901,35 @@ FocusScope {
             if (captureView._camera2ViewfinderActive) {
                 window.camera2CaptureBusy = false
             }
+            captureView.captured()
+        }
+
+        // Warm RAW: the RAW is saved before the JPEG exists, so hand the shutter
+        // and preview back now and finish the thumbnail when the render is done.
+        function _releaseForBackgroundRender() {
+            shutterEvent.play()
+            flashAnimation.start()
+            captureView._backgroundRenders += 1
+            captureView._camera2CaptureRunning = false
+            captureView._camera2LiveJpegCaptureRunning = false
+            captureView._unload = false
+            captureView._captureQueued = false
+            captureView._hideCaptureSnapshot()
+            camera2CaptureWatchdog.stop()
+            captureBusy = false
+            if (captureView._camera2ViewfinderActive) {
+                window.camera2CaptureBusy = false
+            }
+        }
+
+        function _completeBackgroundRender(path, mimeType) {
+            captureView._backgroundRenders = Math.max(0, captureView._backgroundRenders - 1)
+            var imageUrl = captureView._localFileUrl(path)
+            console.log("capture-timing qml background render done path=" + path)
+            if (captureModel) {
+                captureModel.appendCapture(imageUrl, mimeType)
+            }
+            Settings.completePhoto(imageUrl)
             captureView.captured()
         }
 
@@ -1514,11 +1553,24 @@ FocusScope {
         }
 
         onRawImageCaptured: {
+            console.log("capture-timing qml captured t="
+                        + (Date.now() - captureView._camera2CaptureStartedMs)
+                        + " path=" + path)
+            if (captureView._backgroundRenders > 0) {
+                camera._completeBackgroundRender(path, mimeType)
+                return
+            }
             captureView._camera2BracketMerging = false
             camera._finishCamera2ImageCapture(path, mimeType)
         }
 
         onRawImageCaptureFailed: {
+            if (captureView._backgroundRenders > 0) {
+                captureView._backgroundRenders -= 1
+                console.warn("Camera2 background render failed:", error)
+                camera2CaptureErrorNotification.publishMessage(error)
+                return
+            }
             captureView._clearWarmRawBracketRenderQueue()
             camera._failCamera2ImageCapture(error)
         }
@@ -1533,7 +1585,7 @@ FocusScope {
         }
 
         onRawImageReady: {
-            extensions.processRawImage(captureView._camera2CaptureTargetPath,
+            if (extensions.processRawImage(captureView._camera2CaptureTargetPath,
                                        rawPath,
                                        metadataPath,
                                        Settings.mode.rawCaptureExposure,
@@ -1543,7 +1595,9 @@ FocusScope {
                                        Settings.mode.rawRenderEngine,
                                        Settings.mode.rawCaptureColorTemperature,
                                        Settings.mode.rawCaptureColorTint,
-                                       Settings.mode.rawCaptureProgressiveJpeg)
+                                       Settings.mode.rawCaptureProgressiveJpeg)) {
+                camera._releaseForBackgroundRender()
+            }
         }
 
         onRawBracketReady: {
@@ -1819,10 +1873,12 @@ FocusScope {
                 captureOverlay.orientationTransitionRunning = Qt.binding(function () {
                     return captureView.orientationTransitionRunning
                 })
+                Settings.camera2Capabilities.startupLog("overlay incubated")
                 overlayFadeIn.start()
                 overlayIncubator = null
                 if ((camera.cameraState == Camera.ActiveState || captureView._camera2ViewfinderActive)
                         && captureOverlay) {
+                    Settings.camera2Capabilities.startupLog("captureView.loaded")
                     captureView.loaded()
                 }
             } else if (status == Component.Error) {

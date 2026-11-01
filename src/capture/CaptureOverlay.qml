@@ -28,6 +28,7 @@ SettingsOverlay {
     currentZoom: captureView._camera2ViewfinderActive ? captureView.camera2Zoom : camera.digitalZoom
     maximumZoom: zoomController.limit
     zoomButtonsEnabled: zoomController.allowed && maximumZoom > 1
+    onGalleryRequested: captureView.galleryRequested()
     onZoomPressed: zoomController.press(direction)
     onZoomReleased: zoomController.release()
     onZoomCanceled: zoomController.cancel()
@@ -519,6 +520,26 @@ SettingsOverlay {
         maximumZoom: captureView._camera2ViewfinderActive
                      ? settingsOverlay.camera2MaximumZoom
                      : camera.maximumDigitalZoom
+    }
+
+    // Photon-style colour looks over the bottom of the viewfinder (portrait only for now).
+    LooksStrip {
+        id: looksStrip
+
+        x: 0
+        width: captureView._camera2PreviewWidth
+        rightInset: width * 0.10
+        y: captureView.camera2TopInset + captureView._camera2PreviewHeight - height
+        visible: captureView._camera2ViewfinderActive
+                 && isPortrait
+                 && Settings.global.captureMode === "image"
+        opacity: 1.0 - settingsOverlay.settingsOpacity
+        enabled: opacity > 0.5
+
+        selectedPath: Settings.mode.colorLookPath
+        strength: Settings.mode.colorLookStrength
+        onLookSelected: Settings.mode.colorLookPath = path
+        onStrengthEdited: Settings.mode.colorLookStrength = percent
     }
 
     Notification {

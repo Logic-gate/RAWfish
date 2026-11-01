@@ -19,23 +19,27 @@ SOURCES += rawbracket.cpp \
         camera2preview.cpp \
         cameraplugin.cpp \
         capturemodel.cpp \
+        latestcapture.cpp \
         declarativecameraextensions.cpp \
         exifutils.cpp \
         dnglensshading.cpp \
         imageadjustments.cpp \
         declarativesettings.cpp \
-        cameraconfigs.cpp
+        cameraconfigs.cpp \
+        looksmodel.cpp
 
-HEADERS += rawbracket.h rawbracketmath.h \
+HEADERS += rawbracket.h rawbracketmath.h colorlut.h \
         previewsize.h previewaids.h \
         camera2preview.h \
         capturemodel.h \
+        latestcapture.h \
         declarativecameraextensions.h \
         exifutils.h \
         dnglensshading.h \
         imageadjustments.h \
         declarativesettings.h \
-        cameraconfigs.h
+        cameraconfigs.h \
+        looksmodel.h
 
 DEFINES += \
         DEPLOYMENT_PATH=\"\\\"\"$${TARGETPATH}/\"\\\"\"
@@ -47,6 +51,7 @@ import.files = \
         gallery \
         qmldir \
         settings \
+        theme \
         settings.qml \
         calibration
 

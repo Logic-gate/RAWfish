@@ -45,11 +45,13 @@ SettingsBase {
                                                  "rawCaptureRotation": 90,
                                                  "rawCaptureScene": "manual",
                                                  "rawCaptureProgressiveJpeg": false,
-                                                 "rawRenderEngine": "internal",
+                                                 "rawRenderEngine": "fastjpeg",
                                                  "rawCaptureRawFormat": "raw16",
                                                  "rawCaptureColorTemperature": 0,
                                                  "rawCaptureColorTint": 0,
                                                  "camera2Viewfinder": true,
+                                                 "colorLookPath": "",
+                                                 "colorLookStrength": 100,
                                                  "exposureMode": Camera.ExposureManual,
                                                  "flash": ((globalSettings.captureMode == "image")
                                                            && (globalSettings.position === Camera.BackFace)
@@ -82,6 +84,8 @@ SettingsBase {
                                             && modeSettings.rawCaptureColorTemperature === settingsDefaults["rawCaptureColorTemperature"]
                                             && modeSettings.rawCaptureColorTint === settingsDefaults["rawCaptureColorTint"]
                                             && modeSettings.camera2Viewfinder === settingsDefaults["camera2Viewfinder"]
+                                            && modeSettings.colorLookPath === settingsDefaults["colorLookPath"]
+                                            && modeSettings.colorLookStrength === settingsDefaults["colorLookStrength"]
                                             && globalSettings.exposureCompensation === exposureCompensationDefault
                                             && modeSettings.exposureMode === settingsDefaults["exposureMode"]
                                             && modeSettings.flash == settingsDefaults["flash"]
@@ -135,6 +139,10 @@ SettingsBase {
         property bool exposureZebras: false
         property bool simpleHistogramVisible: true
         property bool experimentalExposureLayout: false
+        // Opt-in Photon-style exposure ruler and parameter row (advanced mode).
+        property bool photonLayout: true
+        // Photon-style histogram overlay on the viewfinder (top bar toggle).
+        property bool photonHistogram: true
         property bool advancedMode: false
         property string advancedCamera2CaptureFormat: "jpeg"
         property string advancedRawCaptureSize: "4096x3072"
@@ -154,7 +162,7 @@ SettingsBase {
         property int advancedRawCaptureRotation: 90
         property string advancedRawCaptureScene: "manual"
         property bool advancedRawCaptureProgressiveJpeg: false
-        property string advancedRawRenderEngine: "internal"
+        property string advancedRawRenderEngine: "fastjpeg"
         property string advancedRawCaptureRawFormat: "raw16"
         property int advancedRawCaptureColorTemperature: 0
         property int advancedRawCaptureColorTint: 0
@@ -212,11 +220,14 @@ SettingsBase {
             property int rawCaptureRotation: 90
             property string rawCaptureScene: "manual"
             property bool rawCaptureProgressiveJpeg: false
-            property string rawRenderEngine: "internal"
+            property string rawRenderEngine: "fastjpeg"
             property string rawCaptureRawFormat: "raw16"
             property int rawCaptureColorTemperature: 0
             property int rawCaptureColorTint: 0
             property bool camera2Viewfinder: true
+            // Colour look (.cube/.plut path, empty = Standard) and its intensity in percent.
+            property string colorLookPath: ""
+            property int colorLookStrength: 100
 
             onCamera2CaptureFormatChanged: normalizeCamera2Settings()
             onRawCaptureRawFormatChanged: normalizeCamera2Settings()

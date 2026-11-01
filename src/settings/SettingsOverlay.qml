@@ -30,6 +30,7 @@ PinchArea {
 
     property real currentZoom: 1
     property real maximumZoom: 1
+    signal galleryRequested()
     signal zoomPressed(int direction)
     signal zoomReleased()
     signal zoomCanceled()
@@ -68,6 +69,27 @@ PinchArea {
                   ? overlay.exposureControl.limitStatus + " · " + overlay.exposureControl.residualEv.toFixed(1) + " EV shortfall"
                   : (overlay.exposureControl.notice || overlay.exposureControl.status)) : ""
         }
+    }
+
+    // Photon's camera-change button: with a known front/back pair it swaps sides,
+    // otherwise it steps through the camera2 ids (back lens(es) and front) like the old
+    // lens label did.
+    readonly property var _cameraIds: Settings.camera2Capabilities.camera2LensModel(Settings.deviceId)
+    readonly property bool canFlipCamera: camera.hasCameraOnBothSides || _cameraIds.length > 1
+
+    function flipCamera() {
+        if (camera.hasCameraOnBothSides) {
+            if (Settings.global.position === Camera.BackFace) {
+                Settings.deviceId = Settings.global.frontFacingDeviceId
+            } else {
+                Settings.deviceId = Settings.global.previousBackFacingDeviceId
+            }
+        } else if (_cameraIds.length > 1) {
+            var current = _cameraIds.indexOf(Settings.deviceId || camera.deviceId)
+            Settings.deviceId = _cameraIds[(current + 1) % _cameraIds.length]
+        }
+
+        captureView.resetZoom()
     }
 
     property bool _pinchActive
@@ -239,7 +261,7 @@ PinchArea {
             height: Theme.fontSizeTiny
             spacing: camera2ControlGrid.columnGap
             z: 3
-            visible: Settings.global.advancedMode
+            visible: Settings.global.advancedMode && !camera2ControlGrid.photon
 
             Label {
                 width: camera2ControlGrid.leftWidth
@@ -292,6 +314,71 @@ PinchArea {
             }
         }
 
+        PhotonDeck {
+            id: photonDeck
+
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                topMargin: Theme.paddingSmall
+            }
+            z: 3
+            visible: camera2ControlGrid.photon
+            enabled: visible
+            parameters: camera2ControlGrid.photonParameters
+
+            Connections {
+                target: Settings.global
+                onAdvancedModeChanged: photonDeck.selectedKey = "ev"
+            }
+
+            onCycleRequested: {
+                if (key === "af")
+                    camera2ControlGrid.cycleFocusMode()
+            }
+
+            onIndexPicked: {
+                var control = overlay.exposureControl
+                if (key === "ev") {
+                    Settings.global.exposureCompensation = overlay.evChoices()[index]
+                } else if (key === "tv" && control) {
+                    control.setLock("shutter", Settings.camera2ShutterModel()[index])
+                } else if (key === "iso" && control) {
+                    control.setLock("iso", Settings.camera2IsoModel()[index])
+                } else if (key === "wb") {
+                    Settings.mode.rawCaptureColorTemperature = camera2ControlGrid._wbChoices[index]
+                }
+            }
+        }
+
+        // Pro = advanced mode with RAW capture; Photo = simple mode with JPEG. Where the
+        // device has no RAW output, Pro keeps working with whatever format is set.
+        PhotonModeSwitcher {
+            id: photonSwitcher
+
+            function selectMode(mode) {
+                var formats = Settings.camera2CaptureFormatModel()
+                Settings.global.advancedMode = (mode === "pro")
+                if (mode === "pro" && formats.indexOf("raw") >= 0)
+                    Settings.mode.camera2CaptureFormat = "raw"
+                else if (mode === "photo" && formats.indexOf("jpeg") >= 0)
+                    Settings.mode.camera2CaptureFormat = "jpeg"
+            }
+
+            anchors {
+                horizontalCenter: parent.horizontalCenter
+                bottom: parent.bottom
+                bottomMargin: Theme.paddingSmall
+            }
+            z: 4
+            visible: camera2ControlGrid.photon
+            enabled: visible && !captureView.captureBusy
+            modes: [ { key: "pro", label: "Pro" }, { key: "photo", label: "Photo" } ]
+            selectedKey: Settings.global.advancedMode ? "pro" : "photo"
+            onModeSelected: selectMode(key)
+        }
+
         Grid {
             id: camera2ControlGrid
 
@@ -305,14 +392,103 @@ PinchArea {
             readonly property real columnGap: Math.max(1, Math.round(Theme.pixelRatio))
             readonly property real usableWidth: camera2BottomDeck.width
                                                 - 2 * sideMargin - 3 * columnGap
-            readonly property real leftWidth: Math.round(usableWidth * 0.20)
-            readonly property real centerWidth: Math.round(usableWidth * 0.41)
-            readonly property real speedWidth: Math.round(usableWidth * 0.19)
+            // Photon layout: the speed/ISO wheels give way to the ruler and parameter row.
+            readonly property bool photon: Settings.global.photonLayout
+            readonly property real leftWidth: photon ? 0 : Math.round(usableWidth * 0.20)
+            readonly property real centerWidth: photon ? usableWidth - leftWidth
+                                                       : Math.round(usableWidth * 0.41)
+            readonly property real speedWidth: photon ? 0 : Math.round(usableWidth * 0.19)
             readonly property real isoWidth: usableWidth - leftWidth
                                              - centerWidth - speedWidth
             readonly property var camera2Viewfinder: captureView ? captureView.camera2Viewfinder : null
             visible: Settings.global.advancedMode
             enabled: visible
+
+            readonly property var _wbChoices: [ 0, 2000, 3200, 4500, 5500, 6500, 7500, 9000 ]
+
+            function indexOfChoice(model, value) {
+                for (var i = 0; i < model.length; ++i) {
+                    if (String(model[i]) === String(value))
+                        return i
+                }
+                return -1
+            }
+
+            function evText(value) { return Number((Number(value) / 2).toFixed(1)).toFixed(1) }
+            function shutterText(value) {
+                return value === "—" ? value : Settings.rawCaptureShutterLabel(String(value))
+            }
+            function isoText(value) { return value === "—" ? value : (value > 0 ? String(value) : "Auto") }
+            function wbText(value) { return value > 0 ? value + "K" : "Auto" }
+
+            function focusText(mode) {
+                switch (mode) {
+                case "manual": return Settings.rawCaptureFocusDistanceLabel(Settings.mode.rawCaptureFocusDistance)
+                case "continuous": return "CONT"
+                case "infinity": return "INF"
+                case "none": return "OFF"
+                default: return "AUTO"
+                }
+            }
+
+            function cycleFocusMode() {
+                var modes = Settings.camera2SelectableFocusModeModel()
+                if (modes.length === 0)
+                    return
+                var index = modes.indexOf(Settings.mode.rawCaptureFocusMode)
+                Settings.mode.rawCaptureFocusMode = modes[(index + 1) % modes.length]
+            }
+
+            // Same bindings the wheels use, presented as Photon's ruler and parameter row.
+            // Pro (advanced) shows live values and adjusts everything; Photo (simple) shows
+            // titles only and adjusts exposure compensation, as in Photon.
+            readonly property var photonParameters: {
+                var deviceDependency = Settings.deviceId
+                var control = overlay.exposureControl
+                var pro = Settings.global.advancedMode
+                var evModel = overlay.evChoices()
+                var shutterModel = Settings.camera2ShutterModel()
+                var isoModel = Settings.camera2IsoModel()
+                var manualReady = pro && !!control && control.active && !control.busy
+                var evAvailable = !!control && !control.fullyManual && !captureView.captureBusy
+                                  && (control.partial || control.capabilities.compensation_step_ev > 0)
+                var evUnit = evModel.length > 1 ? Math.abs(evModel[1] - evModel[0]) : 2
+                var shutterNow = liveShutterValue()
+                var isoNow = liveIsoValue()
+                var focusModes = Settings.camera2SelectableFocusModeModel()
+                var temperature = Settings.mode.rawCaptureColorTemperature
+                var last = function(model) { return model[model.length - 1] }
+                return [
+                    { key: "ev", label: pro ? "AE" : "EV",
+                      valueText: pro ? evText(Settings.global.exposureCompensation) : "",
+                      available: evAvailable, count: evModel.length,
+                      index: indexOfChoice(evModel, Settings.global.exposureCompensation),
+                      startLabel: evText(evModel[0]), endLabel: evText(last(evModel)),
+                      currentLabel: evText(Settings.global.exposureCompensation) + " EV",
+                      majorStep: Math.max(1, Math.round(2 / Math.max(0.01, evUnit))) },
+                    { key: "tv", label: "Tv", valueText: pro ? shutterText(shutterNow) : "",
+                      available: manualReady, count: shutterModel.length,
+                      index: indexOfChoice(shutterModel, shutterNow),
+                      startLabel: shutterModel.length ? shutterText(shutterModel[0]) : "",
+                      endLabel: shutterModel.length ? shutterText(last(shutterModel)) : "",
+                      currentLabel: shutterText(shutterNow), majorStep: 0 },
+                    { key: "iso", label: "ISO", valueText: pro ? isoText(isoNow) : "",
+                      available: manualReady, count: isoModel.length,
+                      index: indexOfChoice(isoModel, isoNow),
+                      startLabel: isoModel.length ? isoText(isoModel[0]) : "",
+                      endLabel: isoModel.length ? isoText(last(isoModel)) : "",
+                      currentLabel: isoText(isoNow), majorStep: 0 },
+                    { key: "af", label: "AF",
+                      valueText: pro ? focusText(Settings.mode.rawCaptureFocusMode) : "",
+                      available: pro && focusModes.length > 1, cycles: true },
+                    { key: "wb", label: pro && temperature > 0 ? "WB" : "AWB",
+                      valueText: pro ? (temperature > 0 ? temperature + "K" : "AUTO") : "",
+                      available: pro, count: _wbChoices.length,
+                      index: indexOfChoice(_wbChoices, temperature),
+                      startLabel: wbText(_wbChoices[0]), endLabel: wbText(last(_wbChoices)),
+                      currentLabel: wbText(temperature), majorStep: 0 }
+                ]
+            }
 
             function focalLengthText() {
                 var focal = camera2Viewfinder && camera2Viewfinder.focalLength
@@ -373,7 +549,10 @@ PinchArea {
                 fill: parent
                 leftMargin: sideMargin
                 rightMargin: sideMargin
-                topMargin: camera2BottomDeck.headerHeight
+                topMargin: camera2ControlGrid.photon
+                           ? photonDeck.height + Theme.paddingSmall
+                           : camera2BottomDeck.headerHeight
+                bottomMargin: camera2ControlGrid.photon ? photonSwitcher.height + Theme.paddingMedium : 0
             }
             columns: 4
             columnSpacing: columnGap
@@ -384,7 +563,7 @@ PinchArea {
 
                 Item {
                     width: parent.width
-                    height: Settings.global.advancedMode
+                    height: Settings.global.advancedMode && !camera2ControlGrid.photon
                             ? parent.height / 3
                             : parent.height
 
@@ -394,6 +573,7 @@ PinchArea {
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
+                        visible: !camera2ControlGrid.photon
                         height: Theme.itemSizeMedium
                         captureBusy: captureView.captureBusy || !overlay.deviceToggleEnabled
                     }
@@ -401,8 +581,8 @@ PinchArea {
 
                 CycleValueButton {
                     width: parent.width
-                    height: Settings.global.advancedMode ? parent.height / 3 : 0
-                    visible: Settings.global.advancedMode
+                    height: Settings.global.advancedMode && !camera2ControlGrid.photon ? parent.height / 3 : 0
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon
                     enabled: visible
                     caption: "FORMAT"
                     settings: Settings.mode
@@ -414,8 +594,8 @@ PinchArea {
 
                 CycleValueButton {
                     width: parent.width
-                    height: Settings.global.advancedMode ? parent.height / 3 : 0
-                    visible: Settings.global.advancedMode && model.length > 0
+                    height: Settings.global.advancedMode && !camera2ControlGrid.photon ? parent.height / 3 : 0
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon && model.length > 0
                     enabled: visible
                     caption: "FOCUS"
                     settings: Settings.mode
@@ -445,7 +625,8 @@ PinchArea {
 
                 Item {
                     width: camera2ControlGrid.experimentalLayout ? camera2ControlGrid.exposureWidth : parent.width
-                    height: parent.height * 0.34
+                    height: camera2ControlGrid.photon ? 0 : parent.height * 0.34
+                    visible: !camera2ControlGrid.photon
 
                     Canvas {
                         id: exposureHistogram
@@ -468,7 +649,8 @@ PinchArea {
 
                     ValueCarousel {
                         anchors.fill: parent
-                        visible: !overlay.exposureControl || !overlay.exposureControl.fullyManual
+                        visible: !camera2ControlGrid.photon
+                                 && (!overlay.exposureControl || !overlay.exposureControl.fullyManual)
                         enabled: visible && overlay.exposureControl && !captureView.captureBusy
                                  && (overlay.exposureControl.partial || overlay.exposureControl.capabilities.compensation_step_ev > 0)
                         orientation: ListView.Horizontal
@@ -497,7 +679,7 @@ PinchArea {
                 Item {
                     id: shutterZoomArea
                     width: parent.width
-                    height: parent.height * 0.66
+                    height: camera2ControlGrid.photon ? parent.height : parent.height * 0.66
 
                     Item {
                         id: bottomShutterAnchor
@@ -509,13 +691,20 @@ PinchArea {
                     }
 
                     Repeater {
-                        model: [1, -1]
+                        model: camera2ControlGrid.photon ? [] : [1, -1]
 
                         MouseArea {
                             readonly property int direction: modelData
-                            width: parent.width
-                            height: (shutterZoomArea.height - bottomShutterAnchor.height) / 2
-                            y: direction > 0 ? 0 : bottomShutterAnchor.y + bottomShutterAnchor.height
+                            // Photon layout: "-" and "+" flank the shutter, since the rows
+                            // above and below it are taken by the parameter row and switcher.
+                            readonly property bool beside: camera2ControlGrid.photon
+                            width: beside ? (shutterZoomArea.width - bottomShutterAnchor.width) / 2
+                                          : parent.width
+                            height: beside ? bottomShutterAnchor.height
+                                           : (shutterZoomArea.height - bottomShutterAnchor.height) / 2
+                            x: beside && direction > 0 ? bottomShutterAnchor.x + bottomShutterAnchor.width : 0
+                            y: beside ? bottomShutterAnchor.y
+                                      : (direction > 0 ? 0 : bottomShutterAnchor.y + bottomShutterAnchor.height)
                             enabled: overlay.zoomButtonsEnabled
                                      && (direction > 0 ? overlay.currentZoom < overlay.maximumZoom
                                                        : overlay.currentZoom > 1)
@@ -534,6 +723,16 @@ PinchArea {
                             }
                         }
                     }
+
+                    PhotonShutterSides {
+                        anchors.fill: parent
+                        visible: camera2ControlGrid.photon
+                        folder: Settings.photoDirectory
+                        flipVisible: overlay.canFlipCamera
+                        flipEnabled: overlay.deviceToggleEnabled
+                        onGalleryRequested: overlay.galleryRequested()
+                        onFlipRequested: overlay.flipCamera()
+                    }
                 }
             }
 
@@ -548,7 +747,7 @@ PinchArea {
                     height: parent.height - y
                     selectionAtTop: camera2ControlGrid.experimentalLayout
                     rowHeight: camera2ControlGrid.wheelRowHeight
-                    visible: Settings.global.advancedMode
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon
                     enabled: visible && overlay.exposureControl && overlay.exposureControl.active && !overlay.exposureControl.busy
                     orientation: ListView.Vertical
                     caption: ""
@@ -613,7 +812,7 @@ PinchArea {
                     height: parent.height - y
                     selectionAtTop: camera2ControlGrid.experimentalLayout
                     rowHeight: camera2ControlGrid.wheelRowHeight
-                    visible: Settings.global.advancedMode
+                    visible: Settings.global.advancedMode && !camera2ControlGrid.photon
                     enabled: visible && overlay.exposureControl && overlay.exposureControl.active && !overlay.exposureControl.busy
                     orientation: ListView.Vertical
                     caption: ""
@@ -676,22 +875,26 @@ PinchArea {
             readonly property bool histogramCollapsed: !Settings.global.simpleHistogramVisible
             readonly property real histogramStripHeight: Theme.itemSizeSmall
             readonly property real histogramOpenHeight: Math.round(height * 0.34)
-            readonly property real histogramHeight: histogramCollapsed
-                                                   ? histogramStripHeight
-                                                   : histogramOpenHeight
+            readonly property real histogramHeight: camera2ControlGrid.photon
+                                                   ? 0
+                                                   : (histogramCollapsed
+                                                      ? histogramStripHeight
+                                                      : histogramOpenHeight)
 
             anchors {
                 fill: parent
                 leftMargin: camera2ControlGrid.sideMargin
                 rightMargin: camera2ControlGrid.sideMargin
-                topMargin: Theme.paddingSmall
+                topMargin: Theme.paddingSmall + (camera2ControlGrid.photon ? photonDeck.height : 0)
                 bottomMargin: Theme.paddingSmall
+                            + (camera2ControlGrid.photon ? photonSwitcher.height + Theme.paddingMedium : 0)
             }
             visible: !Settings.global.advancedMode
             enabled: visible
 
             Item {
                 id: simpleHistogramPanel
+                visible: !camera2ControlGrid.photon
 
                 anchors {
                     left: parent.left
@@ -742,7 +945,8 @@ PinchArea {
             ValueCarousel {
                 id: simpleEv
                 anchors { left: parent.left; right: parent.right; top: simpleHistogramPanel.bottom }
-                height: Theme.itemSizeExtraSmall
+                height: camera2ControlGrid.photon ? 0 : Theme.itemSizeExtraSmall
+                visible: !camera2ControlGrid.photon
                 enabled: overlay.exposureControl && !captureView.captureBusy
                          && overlay.exposureControl.capabilities.compensation_step_ev > 0
                 settings: Settings.global
@@ -776,11 +980,13 @@ PinchArea {
                         font.pixelSize: Theme.fontSizeTiny
                         font.bold: true
                         text: "CAM"
+                        visible: !camera2ControlGrid.photon
                     }
 
                     CameraLensSelector {
                         width: parent.width
                         height: parent.height - y
+                        visible: !camera2ControlGrid.photon
                         captureBusy: captureView.captureBusy || !overlay.deviceToggleEnabled
                     }
                 }
@@ -799,6 +1005,16 @@ PinchArea {
 
                         width: parent.width
                         height: parent.height - y
+
+                        PhotonShutterSides {
+                            anchors.fill: parent
+                            visible: camera2ControlGrid.photon
+                            folder: Settings.photoDirectory
+                            flipVisible: overlay.canFlipCamera
+                            flipEnabled: overlay.deviceToggleEnabled
+                            onGalleryRequested: overlay.galleryRequested()
+                            onFlipRequested: overlay.flipCamera()
+                        }
                     }
 
                 }
@@ -806,6 +1022,7 @@ PinchArea {
                 Column {
                     width: camera2ControlGrid.speedWidth
                     height: parent.height
+                    visible: !camera2ControlGrid.photon
 
                     Label {
                         width: parent.width
@@ -839,6 +1056,7 @@ PinchArea {
                 Column {
                     width: camera2ControlGrid.isoWidth
                     height: parent.height
+                    visible: !camera2ControlGrid.photon
 
                     Label {
                         width: parent.width
@@ -942,15 +1160,7 @@ PinchArea {
         visible: opacity > 0.0 && camera.hasCameraOnBothSides
         enabled: overlay.deviceToggleEnabled
 
-        onClicked: {
-            if (Settings.global.position === Camera.BackFace) {
-                Settings.deviceId = Settings.global.frontFacingDeviceId
-            } else {
-                Settings.deviceId = Settings.global.previousBackFacingDeviceId
-            }
-
-            captureView.resetZoom()
-        }
+        onClicked: overlay.flipCamera()
     }
 
     CaptureModeMenu {
@@ -1957,6 +2167,7 @@ PinchArea {
         spacing: Theme.paddingSmall
         opacity: _commonControlOpacity
         visible: opacity > 0.0
+                 && !Settings.global.photonLayout
                  && (!grid.camera2Still || !Settings.global.advancedMode)
 
         WhiteBalanceMenu {
@@ -2010,6 +2221,52 @@ PinchArea {
                 pageStack.push("QrPage.qml", { text: qrFilter.result })
             }
         }
+    }
+
+    // Photon-style top bar and viewfinder histogram.
+    PhotonTopBar {
+        id: photonTopBar
+
+        anchors {
+            top: parent.top
+            topMargin: overlay._safeTopMargin
+            left: parent.left
+            right: parent.right
+        }
+        z: 6
+        opacity: overlay._exposed ? 0.0 : overlay._commonControlOpacity
+        visible: Settings.global.photonLayout && Settings.global.captureMode === "image"
+                 && opacity > 0.0
+        enabled: opacity > 0.5
+
+        timerSeconds: Settings.mode.timer
+        histogramOn: Settings.global.photonHistogram
+        flashState: Settings.mode.flash === Camera.FlashTorch ? 2
+                    : (Settings.mode.flash === Camera.FlashOn ? 1 : 0)
+
+        onFlashClicked: Settings.mode.flash = (Settings.mode.flash === Camera.FlashOn
+                                               ? Camera.FlashTorch
+                                               : (Settings.mode.flash === Camera.FlashTorch
+                                                  ? Camera.FlashOff : Camera.FlashOn))
+        onTimerClicked: {
+            var delays = [ 0, 3, 10, 15 ]
+            var index = delays.indexOf(Settings.mode.timer)
+            Settings.mode.timer = delays[(index + 1) % delays.length]
+        }
+        onHistogramClicked: Settings.global.photonHistogram = !Settings.global.photonHistogram
+        onSettingsClicked: overlay.topMenuOpen = true
+    }
+
+    PhotonHistogram {
+        anchors {
+            left: parent.left
+            leftMargin: Theme.paddingMedium
+            top: photonTopBar.bottom
+        }
+        z: 5
+        opacity: photonTopBar.opacity
+        visible: photonTopBar.visible && Settings.global.photonHistogram
+        values: camera2ControlGrid.camera2Viewfinder ? camera2ControlGrid.camera2Viewfinder.histogram : []
     }
 
     ColorFilterView {
