@@ -29,6 +29,8 @@ static bool cameraStartupLoggingEnabled()
 #include <QQuickView>
 #include <QQmlComponent>
 
+#include "src/startuplog.h"
+
 #ifdef HAS_BOOSTER
 #include <MDeclarativeCache>
 #endif
@@ -38,6 +40,7 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     QElapsedTimer startupTimer;
     startupTimer.start();
     CAMERA_STARTUP_MARK("app", startupTimer, "main entered");
+    StartupLog::mark(QStringLiteral("main entered"));
 
     QQuickWindow::setDefaultAlphaBuffer(true);
 
@@ -56,6 +59,7 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     view->engine()->setBaseUrl(QUrl::fromLocalFile(path));
     view->setSource(path + QLatin1String("camera.qml"));
     CAMERA_STARTUP_MARK("app", startupTimer, "camera.qml loaded status=%d", view->status());
+    StartupLog::mark(QStringLiteral("camera.qml loaded status=%1").arg(view->status()));
     view->setTitle(QStringLiteral("RAWfish"));
 
     if (app->arguments().contains("-desktop")) {
@@ -66,6 +70,7 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     } else {
         view->showFullScreen();
         CAMERA_STARTUP_MARK("app", startupTimer, "fullscreen window shown");
+        StartupLog::mark(QStringLiteral("fullscreen window shown"));
     }
     return app->exec();
 }

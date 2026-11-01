@@ -685,6 +685,11 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
         return nullptr;
     }
 
+    static bool loggedFirstPaint = false;
+    if (!loggedFirstPaint) {
+        loggedFirstPaint = true;
+        StartupLog::mark(QStringLiteral("preview first frame painted"));
+    }
     QImage textureImage = m_frame;
     // A colour look costs per pixel, so the on-screen preview is drawn from a
     // reduced copy. Saved images are processed at full resolution elsewhere.
@@ -1651,6 +1656,11 @@ void Camera2Preview::parseFrames()
         }
         updateHistogram(frame);
         m_frame = frame;
+        static bool loggedFirstFrame = false;
+        if (!loggedFirstFrame) {
+            loggedFirstFrame = true;
+            StartupLog::mark(QStringLiteral("preview first frame decoded %1x%2").arg(width).arg(height));
+        }
         m_buffer.remove(0, headerBytes + frameBytes);
         updated = true;
     }
