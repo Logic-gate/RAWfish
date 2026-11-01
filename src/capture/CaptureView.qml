@@ -1522,6 +1522,9 @@ FocusScope {
         }
 
         onRawImageCaptured: {
+            console.log("capture-timing qml captured t="
+                        + (Date.now() - captureView._camera2CaptureStartedMs)
+                        + " path=" + path)
             captureView._camera2BracketMerging = false
             camera._finishCamera2ImageCapture(path, mimeType)
         }
