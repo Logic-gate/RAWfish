@@ -626,6 +626,7 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        Settings.camera2Capabilities.startupLog("CaptureView completed")
         loadOverlay()
         camera2ResolveCameraIdTimer.restart()
     }
@@ -1826,10 +1827,12 @@ FocusScope {
                 captureOverlay.orientationTransitionRunning = Qt.binding(function () {
                     return captureView.orientationTransitionRunning
                 })
+                Settings.camera2Capabilities.startupLog("overlay incubated")
                 overlayFadeIn.start()
                 overlayIncubator = null
                 if ((camera.cameraState == Camera.ActiveState || captureView._camera2ViewfinderActive)
                         && captureOverlay) {
+                    Settings.camera2Capabilities.startupLog("captureView.loaded")
                     captureView.loaded()
                 }
             } else if (status == Component.Error) {

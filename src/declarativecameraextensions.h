@@ -34,6 +34,7 @@ public:
     Q_INVOKABLE void disableNotifications(QQuickItem *item, bool disable);
     Q_INVOKABLE QString camera2DeviceConfigDir() const;
     Q_INVOKABLE QString ensureCamera2GeneratedHalConfig(const QString &cameraId);
+    Q_INVOKABLE void startupLog(const QString &event);
     Q_INVOKABLE QStringList camera2RawSizeModel(const QString &cameraId,
                                                 const QString &rawFormat);
     Q_INVOKABLE QStringList camera2JpegSizeModel(const QString &cameraId);

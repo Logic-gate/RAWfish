@@ -15,7 +15,11 @@ ApplicationWindow {
     id: window
 
     // Check once per launch, in RAWfish's application identity (not system Settings).
-    Component.onCompleted: Settings.camera2Capabilities.ensureCamera2GeneratedHalConfig(Settings.deviceId)
+    Component.onCompleted: {
+        Settings.camera2Capabilities.startupLog("camera.qml completed")
+        Settings.camera2Capabilities.ensureCamera2GeneratedHalConfig(Settings.deviceId)
+        Settings.camera2Capabilities.startupLog("camera.qml HAL config done")
+    }
 
     property var captureModel: null
     property bool galleryActive

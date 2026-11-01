@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "declarativecameraextensions.h"
+#include "startuplog.h"
 #include "previewsize.h"
 #include "exifutils.h"
 #include "dnglensshading.h"
@@ -865,9 +866,15 @@ QString DeclarativeCameraExtensions::camera2DeviceConfigDir() const
     return rawfishUserDeviceProfileDir();
 }
 
+void DeclarativeCameraExtensions::startupLog(const QString &event)
+{
+    StartupLog::mark(event);
+}
+
 QString DeclarativeCameraExtensions::ensureCamera2GeneratedHalConfig(
         const QString &cameraId)
 {
+    StartupLog::mark(QStringLiteral("ensureCamera2GeneratedHalConfig begin"));
     Q_UNUSED(cameraId);
     const auto fail = [this](const QString &reason) {
         const QString message = QStringLiteral("Could not generate HAL config: %1").arg(reason);
@@ -916,12 +923,15 @@ QString DeclarativeCameraExtensions::ensureCamera2GeneratedHalConfig(
         if (!rawImageCaptureAvailable()) {
             return fail(QStringLiteral("Camera2 helper is not installed"));
         }
+        StartupLog::mark(QStringLiteral("HAL-config probe begin"));
         QProcess probe;
         probe.start(rawCaptureProbePath());
         if (!probe.waitForStarted(3000)) {
             return fail(QStringLiteral("Camera2 helper did not start"));
         }
-        if (!probe.waitForFinished(5000) || probe.exitStatus() != QProcess::NormalExit || probe.exitCode() != 0) {
+        const bool halProbeDone = probe.waitForFinished(5000);
+        StartupLog::mark(QStringLiteral("HAL-config probe end"));
+        if (!halProbeDone || probe.exitStatus() != QProcess::NormalExit || probe.exitCode() != 0) {
             const QString helperError = filterCamera2HelperErrors(
                         QString::fromLocal8Bit(probe.readAllStandardError()));
             return fail(QStringLiteral("Camera2 probe failed: %1").arg(helperError));
@@ -979,9 +989,12 @@ bool DeclarativeCameraExtensions::loadCamera2Capabilities(const QString &cameraI
         return false;
     }
 
+    StartupLog::mark(QStringLiteral("capabilities probe begin camera=%1").arg(effectiveCameraId));
     QProcess probe;
     probe.start(rawCaptureProbePath());
-    if (!probe.waitForStarted(3000) || !probe.waitForFinished(5000) ||
+    const bool probeDone = probe.waitForStarted(3000) && probe.waitForFinished(5000);
+    StartupLog::mark(QStringLiteral("capabilities probe end camera=%1 ok=%2").arg(effectiveCameraId).arg(probeDone));
+    if (!probeDone ||
             probe.exitStatus() != QProcess::NormalExit ||
             probe.exitCode() != 0) {
         m_camera2ProbeJson = probe.readAllStandardOutput();

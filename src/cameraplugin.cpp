@@ -13,6 +13,7 @@
 
 #include "capturemodel.h"
 #include "latestcapture.h"
+#include "startuplog.h"
 #include "camera2preview.h"
 #include "declarativecameraextensions.h"
 #include "declarativesettings.h"
@@ -66,6 +67,7 @@ public:
     {
         Q_UNUSED(uri)
         Q_ASSERT(QLatin1String(uri) == QLatin1String("com.vivid.camera"));
+        StartupLog::mark(QStringLiteral("plugin registerTypes"));
 
         qmlRegisterType<CaptureModel>("com.vivid.camera", 1, 0, "CaptureModel");
         qmlRegisterType<LatestCapture>("com.vivid.camera", 1, 0, "LatestCapture");

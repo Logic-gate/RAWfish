@@ -1,4 +1,5 @@
 #include "camera2preview.h"
+#include "startuplog.h"
 #include "colorlut.h"
 #include "exifutils.h"
 #include "imageadjustments.h"
@@ -1210,6 +1211,11 @@ void Camera2Preview::readFrames()
         return;
     }
     m_buffer.append(m_process->readAllStandardOutput());
+    static bool loggedFirstOutput = false;
+    if (!loggedFirstOutput && !m_buffer.isEmpty()) {
+        loggedFirstOutput = true;
+        StartupLog::mark(QStringLiteral("preview first output from helper (%1 bytes)").arg(m_buffer.size()));
+    }
     parseFrames();
 }
 
@@ -1444,6 +1450,7 @@ void Camera2Preview::startPreview()
             static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
             this, &Camera2Preview::processFinished);
     m_sentFlashMode = 0;
+    StartupLog::mark(QStringLiteral("preview process start"));
     m_process->start();
     if (m_process->waitForStarted(1000)) {
         m_running = true;
