@@ -509,6 +509,16 @@ static void preview_configure_request(ACaptureRequest *request,
         return;
     }
 
+    // Vendor scene modes (HDR) make the HAL ignore aeMode, so the shot would never
+    // flash. Use plain auto control for flash stills.
+    struct preview_context flash_context;
+    if (context->flash_mode == 2 && still &&
+            context->scene_mode != SFOS_CAMERA2_SCENE_MANUAL) {
+        flash_context = *context;
+        flash_context.scene_mode = SFOS_CAMERA2_SCENE_MANUAL;
+        context = &flash_context;
+    }
+
     if (context->focus_hold_active) {
         sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AF_MODE,
                                     ACAMERA_CONTROL_AF_MODE_OFF);
@@ -1283,6 +1293,15 @@ static void preview_jpeg_capture_completed(void *opaque,
         result, ACAMERA_CONTROL_MODE, -1);
     context->jpeg_scene_mode = sfos_camera2_first_u8(
         result, ACAMERA_CONTROL_SCENE_MODE, -1);
+    fprintf(stderr,
+            "capture-flash warm-jpeg requested=%d result_flash_mode=%d flash_state=%d "
+            "ae_mode=%d ae_state=%d control_mode=%d\n",
+            context->flash_mode,
+            sfos_camera2_first_u8(result, ACAMERA_FLASH_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_FLASH_STATE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_STATE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_MODE, -1));
     fprintf(stderr,
             "capture-exposure warm-jpeg requested_iso=%d "
             "requested_shutter=%lld actual_iso=%d actual_shutter=%lld "
