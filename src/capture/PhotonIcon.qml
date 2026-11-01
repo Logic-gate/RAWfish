@@ -20,7 +20,6 @@ Canvas {
     onHeightChanged: requestPaint()
     onVisibleChanged: if (visible) requestPaint()
     onAvailableChanged: if (available) requestPaint()
-    onPainterChanged: requestPaint()
 
     onPaint: {
         var ctx = getContext("2d")
