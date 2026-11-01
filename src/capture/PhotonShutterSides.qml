@@ -23,13 +23,13 @@ Item {
 
     Rectangle {
         id: thumb
-        width: 36 * PhotonTheme.dp
+        width: 44 * PhotonTheme.dp
         height: width
-        radius: 4 * PhotonTheme.dp
+        radius: 8 * PhotonTheme.dp
         color: PhotonTheme.surfaceVariant
         border.width: Math.max(1, PhotonTheme.dp)
         border.color: PhotonTheme.textSecondary
-        x: sides.width / 2 - 108 * PhotonTheme.dp - width / 2
+        x: sides.width * 0.137 - width / 2
         y: (sides.height - height) / 2
         visible: latest.url.toString().length > 0
 
@@ -53,12 +53,18 @@ Item {
 
     Item {
         id: flip
-        width: 36 * PhotonTheme.dp
+        width: 44 * PhotonTheme.dp
         height: width
-        x: sides.width / 2 + 106 * PhotonTheme.dp - width / 2
+        x: sides.width * 0.844 - width / 2
         y: (sides.height - height) / 2
         visible: sides.flipVisible
         opacity: sides.flipEnabled ? 1.0 : 0.4
+
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: PhotonTheme.surfaceVariant
+        }
 
         PhotonIcon {
             anchors.centerIn: parent

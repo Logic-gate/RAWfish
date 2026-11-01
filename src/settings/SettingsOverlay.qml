@@ -71,14 +71,11 @@ PinchArea {
         }
     }
 
-    // True when there is something to flip to: either RAWfish knows both sides, or the
-    // camera2 probe lists the usual front (1) and back (0) ids.
-    readonly property bool canFlipCamera: {
-        if (camera.hasCameraOnBothSides)
-            return true
-        var ids = Settings.camera2Capabilities.camera2LensModel(Settings.deviceId)
-        return ids.indexOf("0") >= 0 && ids.indexOf("1") >= 0
-    }
+    // Photon's camera-change button: with a known front/back pair it swaps sides,
+    // otherwise it steps through the camera2 ids (back lens(es) and front) like the old
+    // lens label did.
+    readonly property var _cameraIds: Settings.camera2Capabilities.camera2LensModel(Settings.deviceId)
+    readonly property bool canFlipCamera: camera.hasCameraOnBothSides || _cameraIds.length > 1
 
     function flipCamera() {
         if (camera.hasCameraOnBothSides) {
@@ -87,8 +84,9 @@ PinchArea {
             } else {
                 Settings.deviceId = Settings.global.previousBackFacingDeviceId
             }
-        } else {
-            Settings.deviceId = Settings.deviceId === "1" ? "0" : "1"
+        } else if (_cameraIds.length > 1) {
+            var current = _cameraIds.indexOf(Settings.deviceId || camera.deviceId)
+            Settings.deviceId = _cameraIds[(current + 1) % _cameraIds.length]
         }
 
         captureView.resetZoom()
@@ -396,7 +394,7 @@ PinchArea {
                                                 - 2 * sideMargin - 3 * columnGap
             // Photon layout: the speed/ISO wheels give way to the ruler and parameter row.
             readonly property bool photon: Settings.global.photonLayout
-            readonly property real leftWidth: Math.round(usableWidth * (photon ? 0.30 : 0.20))
+            readonly property real leftWidth: photon ? 0 : Math.round(usableWidth * 0.20)
             readonly property real centerWidth: photon ? usableWidth - leftWidth
                                                        : Math.round(usableWidth * 0.41)
             readonly property real speedWidth: photon ? 0 : Math.round(usableWidth * 0.19)
@@ -575,6 +573,7 @@ PinchArea {
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
+                        visible: !camera2ControlGrid.photon
                         height: Theme.itemSizeMedium
                         captureBusy: captureView.captureBusy || !overlay.deviceToggleEnabled
                     }
@@ -692,7 +691,7 @@ PinchArea {
                     }
 
                     Repeater {
-                        model: [1, -1]
+                        model: camera2ControlGrid.photon ? [] : [1, -1]
 
                         MouseArea {
                             readonly property int direction: modelData
@@ -987,6 +986,7 @@ PinchArea {
                     CameraLensSelector {
                         width: parent.width
                         height: parent.height - y
+                        visible: !camera2ControlGrid.photon
                         captureBusy: captureView.captureBusy || !overlay.deviceToggleEnabled
                     }
                 }
@@ -1014,34 +1014,6 @@ PinchArea {
                             flipEnabled: overlay.deviceToggleEnabled
                             onGalleryRequested: overlay.galleryRequested()
                             onFlipRequested: overlay.flipCamera()
-                        }
-
-                        // Photon layout: zoom "-" and "+" flank the shutter.
-                        Repeater {
-                            model: camera2ControlGrid.photon ? [1, -1] : []
-
-                            MouseArea {
-                                readonly property int direction: modelData
-                                width: 44 * PhotonTheme.dp
-                                height: parent.height
-                                x: parent.width / 2 + direction * 70 * PhotonTheme.dp - width / 2
-                                enabled: overlay.zoomButtonsEnabled
-                                         && (direction > 0 ? overlay.currentZoom < overlay.maximumZoom
-                                                           : overlay.currentZoom > 1)
-                                onPressed: overlay.zoomPressed(direction)
-                                onDoubleClicked: if (direction < 0) overlay.zoomResetRequested()
-                                onReleased: overlay.zoomReleased()
-                                onCanceled: overlay.zoomCanceled()
-                                onExited: if (pressed) overlay.zoomCanceled()
-
-                                Label {
-                                    anchors.centerIn: parent
-                                    text: direction > 0 ? "+" : "\u2212"
-                                    font.pixelSize: Theme.fontSizeLarge
-                                    color: parent.pressed ? Theme.highlightColor : Theme.primaryColor
-                                    opacity: parent.enabled ? 1 : Theme.opacityLow
-                                }
-                            }
                         }
                     }
 
