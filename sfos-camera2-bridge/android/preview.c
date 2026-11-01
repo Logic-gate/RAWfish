@@ -134,6 +134,7 @@ struct preview_context {
     int focus_hold_active;
     float focus_hold_distance;
     atomic_int live_af_state;
+    atomic_int live_ae_state; // newest AE state from any preview-target result
     atomic_int live_focus_distance_micros;
     int exposure_compensation;
     int original_scene_mode;
@@ -1244,6 +1245,7 @@ static void preview_capture_completed(void *opaque,
         sample->iso = sfos_camera2_first_i32(result, ACAMERA_SENSOR_SENSITIVITY, 0);
         sample->shutter = sfos_camera2_first_i64(result, ACAMERA_SENSOR_EXPOSURE_TIME, 0);
         sample->ae = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_STATE, -1);
+        atomic_store_explicit(&context->live_ae_state, sample->ae, memory_order_release);
         sample->ae_mode = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_MODE, -1);
         sample->compensation = sfos_camera2_first_i32(result, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION, 0);
         sample->flicker = sfos_camera2_first_u8(result, ACAMERA_STATISTICS_SCENE_FLICKER, 0);
@@ -1898,6 +1900,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     struct preview_context context;
     memset(&context, 0, sizeof(context));
     sfos_camera2_status_init(&context.status);
+    atomic_init(&context.live_ae_state, -1);
     atomic_init(&context.frames_written, 0);
     atomic_init(&context.jpeg_status, -1);
     atomic_init(&context.raw_status, -1);
@@ -2415,6 +2418,53 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 context.jpeg_hal_frame_duration_ns = -1;
                 context.jpeg_hal_sensitivity = -1;
                 context.jpeg_effective_logged = 0;
+                if (context.flash_mode == 2) {
+                    // Flash stills need an AE precapture run first or the HAL never fires.
+                    struct preview_context pre_context = context;
+                    pre_context.scene_mode = SFOS_CAMERA2_SCENE_MANUAL;
+                    preview_configure_request(request, &pre_context, characteristics, 1);
+                    ACameraMetadata_const_entry ae_entry = { 0 };
+                    const bool ae_on =
+                        ACaptureRequest_getConstEntry(request, ACAMERA_CONTROL_AE_MODE,
+                                                      &ae_entry) == ACAMERA_OK &&
+                        ae_entry.count > 0 &&
+                        ae_entry.data.u8[0] == ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+                    if (ae_on) {
+                        sfos_camera2_set_request_u8(
+                            request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
+                            ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
+                        atomic_store_explicit(&context.live_ae_state, -1,
+                                              memory_order_release);
+                        ACaptureRequest *pre_requests[] = { request };
+                        ACameraCaptureSession_capture(session, &preview_callbacks, 1,
+                                                      pre_requests, NULL);
+                        const int64_t pre_start = sfos_camera2_now_ms();
+                        int seen_precapture = 0;
+                        while (sfos_camera2_now_ms() - pre_start < 2500) {
+                            usleep(30000);
+                            const int state = atomic_load_explicit(
+                                &context.live_ae_state, memory_order_acquire);
+                            if (state == ACAMERA_CONTROL_AE_STATE_PRECAPTURE) {
+                                seen_precapture = 1;
+                            } else if (seen_precapture ||
+                                       sfos_camera2_now_ms() - pre_start > 500) {
+                                break;
+                            }
+                        }
+                        fprintf(stderr,
+                                "capture-exposure flash precapture seen=%d waited_ms=%lld\n",
+                                seen_precapture,
+                                (long long)(sfos_camera2_now_ms() - pre_start));
+                        sfos_camera2_set_request_u8(
+                            request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
+                            ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+                    }
+                    // Back to the normal preview request and keep the repeat running.
+                    preview_configure_request(request, &context, characteristics, 0);
+                    ACaptureRequest *repeat_requests[] = { request };
+                    ACameraCaptureSession_setRepeatingRequest(
+                        session, &preview_callbacks, 1, repeat_requests, NULL);
+                }
                 fprintf(stderr, "capture-timing bridge warm-jpeg command\n");
                 fprintf(stderr,
                         "capture-exposure warm-jpeg submit requested_iso=%d "
