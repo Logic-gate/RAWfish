@@ -2418,52 +2418,27 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                 context.jpeg_hal_frame_duration_ns = -1;
                 context.jpeg_hal_sensitivity = -1;
                 context.jpeg_effective_logged = 0;
-                if (context.flash_mode == 2) {
-                    // Flash stills need an AE precapture run first or the HAL never fires.
-                    struct preview_context pre_context = context;
-                    pre_context.scene_mode = SFOS_CAMERA2_SCENE_MANUAL;
-                    preview_configure_request(request, &pre_context, characteristics, 1);
-                    ACameraMetadata_const_entry ae_entry = { 0 };
-                    const bool ae_on =
-                        ACaptureRequest_getConstEntry(request, ACAMERA_CONTROL_AE_MODE,
-                                                      &ae_entry) == ACAMERA_OK &&
-                        ae_entry.count > 0 &&
-                        ae_entry.data.u8[0] == ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
-                    if (ae_on) {
-                        sfos_camera2_set_request_u8(
-                            request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
-                            ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
-                        atomic_store_explicit(&context.live_ae_state, -1,
-                                              memory_order_release);
-                        ACaptureRequest *pre_requests[] = { request };
-                        ACameraCaptureSession_capture(session, &preview_callbacks, 1,
-                                                      pre_requests, NULL);
-                        const int64_t pre_start = sfos_camera2_now_ms();
-                        int seen_precapture = 0;
-                        while (sfos_camera2_now_ms() - pre_start < 2500) {
-                            usleep(30000);
-                            const int state = atomic_load_explicit(
-                                &context.live_ae_state, memory_order_acquire);
-                            if (state == ACAMERA_CONTROL_AE_STATE_PRECAPTURE) {
-                                seen_precapture = 1;
-                            } else if (seen_precapture ||
-                                       sfos_camera2_now_ms() - pre_start > 500) {
-                                break;
-                            }
-                        }
-                        fprintf(stderr,
-                                "capture-exposure flash precapture seen=%d waited_ms=%lld\n",
-                                seen_precapture,
-                                (long long)(sfos_camera2_now_ms() - pre_start));
-                        sfos_camera2_set_request_u8(
-                            request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
-                            ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+                const int flash_still = context.flash_mode == 2;
+                if (flash_still) {
+                    // This HAL never fires the LED for still requests (flash state stays
+                    // "ready"), so light the torch, give auto exposure time to adapt, and
+                    // keep it lit through the capture.
+                    struct preview_context torch_context = context;
+                    torch_context.flash_mode = 1;
+                    preview_configure_request(request, &torch_context, characteristics, 0);
+                    preview_configure_request(focus_request, &torch_context,
+                                              characteristics, 0);
+                    preview_configure_request(jpeg_request, &torch_context,
+                                              characteristics, 1);
+                    if (raw_request) {
+                        preview_configure_request(raw_request, &torch_context,
+                                                  characteristics, 1);
                     }
-                    // Back to the normal preview request and keep the repeat running.
-                    preview_configure_request(request, &context, characteristics, 0);
-                    ACaptureRequest *repeat_requests[] = { request };
+                    ACaptureRequest *torch_requests[] = { request };
                     ACameraCaptureSession_setRepeatingRequest(
-                        session, &preview_callbacks, 1, repeat_requests, NULL);
+                        session, &preview_callbacks, 1, torch_requests, NULL);
+                    usleep(700000);
+                    fprintf(stderr, "capture-exposure flash torch-lit before warm-jpeg\n");
                 }
                 fprintf(stderr, "capture-timing bridge warm-jpeg command\n");
                 fprintf(stderr,
@@ -2503,6 +2478,25 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                     fprintf(stderr,
                             "capture-timing bridge warm-jpeg submit-failed status=%d\n",
                             jpeg_status);
+                }
+                if (flash_still) {
+                    for (int i = 0; i < 100 &&
+                            atomic_load_explicit(&context.jpeg_status,
+                                                 memory_order_acquire) == 0; ++i) {
+                        usleep(30000);
+                    }
+                    preview_configure_request(request, &context, characteristics, 0);
+                    preview_configure_request(focus_request, &context,
+                                              characteristics, 0);
+                    preview_configure_request(jpeg_request, &context,
+                                              characteristics, 1);
+                    if (raw_request) {
+                        preview_configure_request(raw_request, &context,
+                                                  characteristics, 1);
+                    }
+                    ACaptureRequest *restore_requests[] = { request };
+                    ACameraCaptureSession_setRepeatingRequest(
+                        session, &preview_callbacks, 1, restore_requests, NULL);
                 }
             } else if (command.type == PREVIEW_COMMAND_CAPTURE_RAW &&
                     raw_request) {
