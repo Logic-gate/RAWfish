@@ -45,7 +45,7 @@ SettingsBase {
                                                  "rawCaptureRotation": 90,
                                                  "rawCaptureScene": "manual",
                                                  "rawCaptureProgressiveJpeg": false,
-                                                 "rawRenderEngine": "internal",
+                                                 "rawRenderEngine": "fastjpeg",
                                                  "rawCaptureRawFormat": "raw16",
                                                  "rawCaptureColorTemperature": 0,
                                                  "rawCaptureColorTint": 0,
@@ -140,7 +140,7 @@ SettingsBase {
         property bool simpleHistogramVisible: true
         property bool experimentalExposureLayout: false
         // Opt-in Photon-style exposure ruler and parameter row (advanced mode).
-        property bool photonLayout: false
+        property bool photonLayout: true
         // Photon-style histogram overlay on the viewfinder (top bar toggle).
         property bool photonHistogram: true
         property bool advancedMode: false
@@ -162,7 +162,7 @@ SettingsBase {
         property int advancedRawCaptureRotation: 90
         property string advancedRawCaptureScene: "manual"
         property bool advancedRawCaptureProgressiveJpeg: false
-        property string advancedRawRenderEngine: "internal"
+        property string advancedRawRenderEngine: "fastjpeg"
         property string advancedRawCaptureRawFormat: "raw16"
         property int advancedRawCaptureColorTemperature: 0
         property int advancedRawCaptureColorTint: 0
@@ -220,7 +220,7 @@ SettingsBase {
             property int rawCaptureRotation: 90
             property string rawCaptureScene: "manual"
             property bool rawCaptureProgressiveJpeg: false
-            property string rawRenderEngine: "internal"
+            property string rawRenderEngine: "fastjpeg"
             property string rawCaptureRawFormat: "raw16"
             property int rawCaptureColorTemperature: 0
             property int rawCaptureColorTint: 0
