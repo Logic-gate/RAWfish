@@ -146,6 +146,18 @@ private:
         RawCaptureJpegCapturing
     };
 
+    // A warm RAW capture that arrived while an earlier one was still rendering.
+    struct PendingRawJob {
+        QString targetPath, rawPath, metadataPath, exposure, saveFormat, engine;
+        int jpegQuality = 92;
+        int rotationDegrees = 0;
+        int colorTemperature = 0;
+        int colorTint = 0;
+        bool progressiveJpeg = false;
+    };
+    QList<PendingRawJob> m_pendingRawJobs;
+    void startNextPendingRawJob();
+
     QJsonObject m_captureMetadata;
     QScopedPointer<QProcess> m_rawCaptureProcess;
     QScopedPointer<QFutureWatcher<bool> > m_rawRenderWatcher;

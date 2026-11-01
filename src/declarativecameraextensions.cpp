@@ -1988,6 +1988,26 @@ bool DeclarativeCameraExtensions::processRawImage(
         const QString &rawRenderEngine,
         int colorTemperature, int colorTint, bool progressiveJpeg)
 {
+    if (m_rawRenderWatcher && !m_rawCaptureProcess && !m_bracketCombineWatcher) {
+        // The previous shot is still being rendered in the background; the
+        // RAW is already on disk, so run this one when the renderer is free.
+        PendingRawJob job;
+        job.targetPath = targetPath;
+        job.rawPath = rawPath;
+        job.metadataPath = metadataPath;
+        job.exposure = exposure;
+        job.saveFormat = rawSaveFormat;
+        job.engine = rawRenderEngine;
+        job.jpegQuality = jpegQuality;
+        job.rotationDegrees = rotationDegrees;
+        job.colorTemperature = colorTemperature;
+        job.colorTint = colorTint;
+        job.progressiveJpeg = progressiveJpeg;
+        m_pendingRawJobs.append(job);
+        qDebug() << "capture-timing app queued raw render, pending"
+                 << m_pendingRawJobs.size();
+        return true;
+    }
     if (m_rawCaptureProcess || m_rawRenderWatcher || m_bracketCombineWatcher) {
         emit rawImageCaptureFailed(QStringLiteral("Camera2 image capture is already running"));
         return false;
@@ -2058,6 +2078,18 @@ bool DeclarativeCameraExtensions::processRawImage(
                 ? renderRawImageWithFastJpegConverter() : renderRawImage();
     }));
     return true;
+}
+
+void DeclarativeCameraExtensions::startNextPendingRawJob()
+{
+    if (m_pendingRawJobs.isEmpty() || m_rawRenderWatcher || m_rawCaptureProcess
+            || m_bracketCombineWatcher)
+        return;
+    const PendingRawJob job = m_pendingRawJobs.takeFirst();
+    processRawImage(job.targetPath, job.rawPath, job.metadataPath, job.exposure,
+                    job.jpegQuality, job.rotationDegrees, job.saveFormat,
+                    job.engine, job.colorTemperature, job.colorTint,
+                    job.progressiveJpeg);
 }
 
 void DeclarativeCameraExtensions::discardRawBracket()
@@ -2268,6 +2300,8 @@ void DeclarativeCameraExtensions::finishRawImageRender()
     if (watcher) {
         watcher->deleteLater();
     }
+    // Whatever happens to this shot, the next queued one may start afterwards.
+    QTimer::singleShot(0, this, [this]() { startNextPendingRawJob(); });
     if (!renderOk) {
         const QString error = m_rawCaptureErrors.isEmpty()
                 ? QStringLiteral("RAW image conversion failed")
