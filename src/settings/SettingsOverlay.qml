@@ -971,6 +971,34 @@ PinchArea {
 
                         width: parent.width
                         height: parent.height - y
+
+                        // Photon layout: zoom "-" and "+" flank the shutter.
+                        Repeater {
+                            model: camera2ControlGrid.photon ? [1, -1] : []
+
+                            MouseArea {
+                                readonly property int direction: modelData
+                                width: 80 * PhotonTheme.dp
+                                height: parent.height
+                                x: parent.width / 2 + direction * 70 * PhotonTheme.dp - width / 2
+                                enabled: overlay.zoomButtonsEnabled
+                                         && (direction > 0 ? overlay.currentZoom < overlay.maximumZoom
+                                                           : overlay.currentZoom > 1)
+                                onPressed: overlay.zoomPressed(direction)
+                                onDoubleClicked: if (direction < 0) overlay.zoomResetRequested()
+                                onReleased: overlay.zoomReleased()
+                                onCanceled: overlay.zoomCanceled()
+                                onExited: if (pressed) overlay.zoomCanceled()
+
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: direction > 0 ? "+" : "\u2212"
+                                    font.pixelSize: Theme.fontSizeLarge
+                                    color: parent.pressed ? Theme.highlightColor : Theme.primaryColor
+                                    opacity: parent.enabled ? 1 : Theme.opacityLow
+                                }
+                            }
+                        }
                     }
 
                 }
