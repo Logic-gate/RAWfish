@@ -135,6 +135,9 @@ struct preview_context {
     float focus_hold_distance;
     atomic_int live_af_state;
     atomic_int live_ae_state; // newest AE state from any preview-target result
+    atomic_int live_flash_state; // newest FLASH_STATE / FLASH_MODE / AE_MODE results
+    atomic_int live_flash_mode;
+    atomic_int live_ae_mode;
     atomic_int live_focus_distance_micros;
     int exposure_compensation;
     int original_scene_mode;
@@ -1246,6 +1249,14 @@ static void preview_capture_completed(void *opaque,
         sample->shutter = sfos_camera2_first_i64(result, ACAMERA_SENSOR_EXPOSURE_TIME, 0);
         sample->ae = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_STATE, -1);
         atomic_store_explicit(&context->live_ae_state, sample->ae, memory_order_release);
+        atomic_store_explicit(&context->live_flash_state,
+                             sfos_camera2_first_u8(result, ACAMERA_FLASH_STATE, -1),
+                             memory_order_release);
+        atomic_store_explicit(&context->live_flash_mode,
+                             sfos_camera2_first_u8(result, ACAMERA_FLASH_MODE, -1),
+                             memory_order_release);
+        atomic_store_explicit(&context->live_ae_mode, sample->ae_mode,
+                             memory_order_release);
         sample->ae_mode = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_MODE, -1);
         sample->compensation = sfos_camera2_first_i32(result, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION, 0);
         sample->flicker = sfos_camera2_first_u8(result, ACAMERA_STATISTICS_SCENE_FLICKER, 0);
@@ -1901,6 +1912,9 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     memset(&context, 0, sizeof(context));
     sfos_camera2_status_init(&context.status);
     atomic_init(&context.live_ae_state, -1);
+    atomic_init(&context.live_flash_state, -1);
+    atomic_init(&context.live_flash_mode, -1);
+    atomic_init(&context.live_ae_mode, -1);
     atomic_init(&context.frames_written, 0);
     atomic_init(&context.jpeg_status, -1);
     atomic_init(&context.raw_status, -1);
@@ -2434,6 +2448,57 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                         preview_configure_request(raw_request, &torch_context,
                                                   characteristics, 1);
                     }
+                    // Diagnostic: try the usual ways of asking for a flash and log what the
+                    // HAL reports for each. Watch whether the LED pulses for any of them.
+                    static const char *const variant_names[] = {
+                        "always-flash/off", "auto-flash/off", "ae-on/single",
+                        "always-flash/single", "precapture+always-flash/single"
+                    };
+                    for (int variant = 0; variant < 5; ++variant) {
+                        preview_configure_request(request, &context, characteristics, 0);
+                        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_CAPTURE_INTENT,
+                                                    ACAMERA_CONTROL_CAPTURE_INTENT_STILL_CAPTURE);
+                        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
+                                                    ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+                        uint8_t ae_mode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+                        uint8_t flash_value = ACAMERA_FLASH_MODE_OFF;
+                        if (variant == 1) ae_mode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
+                        if (variant == 2) { ae_mode = ACAMERA_CONTROL_AE_MODE_ON; flash_value = ACAMERA_FLASH_MODE_SINGLE; }
+                        if (variant >= 3) flash_value = ACAMERA_FLASH_MODE_SINGLE;
+                        sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE, ae_mode);
+                        sfos_camera2_set_request_u8(request, ACAMERA_FLASH_MODE, flash_value);
+                        ACaptureRequest *probe_requests[] = { request };
+                        if (variant == 4) {
+                            sfos_camera2_set_request_u8(
+                                request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
+                                ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
+                            ACameraCaptureSession_capture(session, &preview_callbacks, 1,
+                                                          probe_requests, NULL);
+                            usleep(1500000);
+                            sfos_camera2_set_request_u8(
+                                request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER,
+                                ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+                        }
+                        atomic_store_explicit(&context.live_flash_state, -1, memory_order_release);
+                        ACameraCaptureSession_capture(session, &preview_callbacks, 1,
+                                                      probe_requests, NULL);
+                        int peak_flash_state = -1;
+                        for (int i = 0; i < 20; ++i) {
+                            usleep(40000);
+                            const int fs = atomic_load_explicit(&context.live_flash_state,
+                                                                memory_order_acquire);
+                            if (fs > peak_flash_state) peak_flash_state = fs;
+                        }
+                        fprintf(stderr,
+                                "capture-exposure flash variant=%d (%s) peak_flash_state=%d "
+                                "result_flash_mode=%d result_ae_mode=%d ae_state=%d\n",
+                                variant, variant_names[variant], peak_flash_state,
+                                atomic_load_explicit(&context.live_flash_mode, memory_order_acquire),
+                                atomic_load_explicit(&context.live_ae_mode, memory_order_acquire),
+                                atomic_load_explicit(&context.live_ae_state, memory_order_acquire));
+                        usleep(600000);
+                    }
+                    preview_configure_request(request, &torch_context, characteristics, 0);
                     ACaptureRequest *torch_requests[] = { request };
                     ACameraCaptureSession_setRepeatingRequest(
                         session, &preview_callbacks, 1, torch_requests, NULL);
