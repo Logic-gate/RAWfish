@@ -360,7 +360,7 @@ void Camera2Preview::setFill(bool fill)
 
 void Camera2Preview::setFlashMode(int mode)
 {
-    const int clamped = mode == 1 ? 1 : 0;
+    const int clamped = qBound(0, mode, 2);
     if (m_flashMode == clamped) {
         return;
     }

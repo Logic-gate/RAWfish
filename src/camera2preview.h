@@ -300,7 +300,7 @@ private:
     int m_noiseReduction = 0;
     QString m_lutPath;
     qreal m_lutStrength = 1.0;
-    int m_flashMode = 0;      // 0 off, 1 torch
+    int m_flashMode = 0;      // 0 off, 1 torch, 2 flash with the shot
     int m_sentFlashMode = 0;  // last value written to the preview process
     QString m_lutError;
     void applyLut();

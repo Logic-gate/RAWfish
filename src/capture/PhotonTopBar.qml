@@ -11,7 +11,7 @@ Item {
 
     property int timerSeconds: 0
     property bool histogramOn: true
-    property bool flashOn: false
+    property int flashState: 0           // 0 off, 1 flash with the shot, 2 flashlight
 
     signal flashClicked()
     signal timerClicked()
@@ -38,8 +38,8 @@ Item {
 
             PhotonIcon {
                 anchors.centerIn: parent
-                kind: bar.flashOn ? "flash" : "flashoff"
-                color: bar.flashOn ? PhotonTheme.hud : PhotonTheme.textPrimary
+                kind: bar.flashState === 2 ? "flashlight" : (bar.flashState === 1 ? "flash" : "flashoff")
+                color: bar.flashState > 0 ? PhotonTheme.hud : PhotonTheme.textPrimary
             }
 
             MouseArea { anchors.fill: parent; onClicked: bar.flashClicked() }

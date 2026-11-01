@@ -52,7 +52,7 @@ Canvas {
             var xs = [ w * 0.18, w * 0.42, w * 0.66 ]
             for (var i = 0; i < 3; ++i)
                 ctx.fillRect(xs[i], base - h * heights[i], bw, h * heights[i])
-        } else if (kind === "flash" || kind === "flashoff") {
+        } else if (kind === "flash" || kind === "flashoff" || kind === "flashlight") {
             ctx.beginPath()
             ctx.moveTo(w * 0.58, h * 0.08)
             ctx.lineTo(w * 0.28, h * 0.55)
@@ -62,6 +62,11 @@ Canvas {
             ctx.lineTo(w * 0.54, h * 0.42)
             ctx.closePath()
             ctx.fill()
+            if (kind === "flashlight") {
+                ctx.beginPath()
+                ctx.arc(cx, cy, w * 0.46, 0, 2 * Math.PI)
+                ctx.stroke()
+            }
             if (kind === "flashoff") {
                 ctx.beginPath()
                 ctx.moveTo(w * 0.16, h * 0.14)

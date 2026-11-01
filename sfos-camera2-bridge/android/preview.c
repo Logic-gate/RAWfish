@@ -125,7 +125,7 @@ struct preview_context {
     int raw_height;
     pthread_mutex_t output_lock;
     float zoom_ratio;
-    int flash_mode; // 0 = off, 1 = torch (lit through preview and capture)
+    int flash_mode; // 0 = off, 1 = torch (always lit), 2 = flash with the shot
     float focal_length;
     float focus_x;
     float focus_y;
@@ -604,9 +604,24 @@ static void preview_configure_request(ACaptureRequest *request,
     sfos_camera2_set_zoom_ratio(metadata, request, context->zoom_ratio);
     if (sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
                                       ACAMERA_FLASH_MODE)) {
-        sfos_camera2_set_request_u8(request, ACAMERA_FLASH_MODE,
-                                    context->flash_mode == 1 ? ACAMERA_FLASH_MODE_TORCH
-                                                             : ACAMERA_FLASH_MODE_OFF);
+        uint8_t flash = ACAMERA_FLASH_MODE_OFF;
+        if (context->flash_mode == 1) {
+            flash = ACAMERA_FLASH_MODE_TORCH;          // flashlight, always lit
+        } else if (context->flash_mode == 2 && still) {
+            // Fire with the shot. With auto exposure the HAL fires it through
+            // ALWAYS_FLASH; with manual exposure (AE off) a single flash is requested.
+            ACameraMetadata_const_entry ae = { 0 };
+            const bool ae_on =
+                ACaptureRequest_getConstEntry(request, ACAMERA_CONTROL_AE_MODE, &ae) == ACAMERA_OK &&
+                ae.count > 0 && ae.data.u8[0] != ACAMERA_CONTROL_AE_MODE_OFF;
+            if (ae_on) {
+                sfos_camera2_set_request_u8(request, ACAMERA_CONTROL_AE_MODE,
+                                            ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH);
+            } else {
+                flash = ACAMERA_FLASH_MODE_SINGLE;
+            }
+        }
+        sfos_camera2_set_request_u8(request, ACAMERA_FLASH_MODE, flash);
     }
 }
 
@@ -667,7 +682,7 @@ static bool preview_parse_command_line(const char *line,
 
     int flash_mode = 0;
     if (sscanf(line, "flash %d", &flash_mode) == 1 &&
-            (flash_mode == 0 || flash_mode == 1)) {
+            (flash_mode >= 0 && flash_mode <= 2)) {
         command->type = PREVIEW_COMMAND_FLASH;
         command->flash_mode = flash_mode;
         return true;

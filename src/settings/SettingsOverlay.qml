@@ -2241,10 +2241,13 @@ PinchArea {
 
         timerSeconds: Settings.mode.timer
         histogramOn: Settings.global.photonHistogram
-        flashOn: Settings.mode.flash === Camera.FlashTorch
+        flashState: Settings.mode.flash === Camera.FlashTorch ? 2
+                    : (Settings.mode.flash === Camera.FlashOn ? 1 : 0)
 
-        onFlashClicked: Settings.mode.flash = (Settings.mode.flash === Camera.FlashTorch
-                                               ? Camera.FlashOff : Camera.FlashTorch)
+        onFlashClicked: Settings.mode.flash = (Settings.mode.flash === Camera.FlashOn
+                                               ? Camera.FlashTorch
+                                               : (Settings.mode.flash === Camera.FlashTorch
+                                                  ? Camera.FlashOff : Camera.FlashOn))
         onTimerClicked: {
             var delays = [ 0, 3, 10, 15 ]
             var index = delays.indexOf(Settings.mode.timer)
