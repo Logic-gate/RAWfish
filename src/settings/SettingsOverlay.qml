@@ -30,6 +30,7 @@ PinchArea {
 
     property real currentZoom: 1
     property real maximumZoom: 1
+    signal galleryRequested()
     signal zoomPressed(int direction)
     signal zoomReleased()
     signal zoomCanceled()
@@ -68,6 +69,16 @@ PinchArea {
                   ? overlay.exposureControl.limitStatus + " · " + overlay.exposureControl.residualEv.toFixed(1) + " EV shortfall"
                   : (overlay.exposureControl.notice || overlay.exposureControl.status)) : ""
         }
+    }
+
+    function flipCamera() {
+        if (Settings.global.position === Camera.BackFace) {
+            Settings.deviceId = Settings.global.frontFacingDeviceId
+        } else {
+            Settings.deviceId = Settings.global.previousBackFacingDeviceId
+        }
+
+        captureView.resetZoom()
     }
 
     property bool _pinchActive
@@ -700,6 +711,16 @@ PinchArea {
                             }
                         }
                     }
+
+                    PhotonShutterSides {
+                        anchors.fill: parent
+                        visible: camera2ControlGrid.photon
+                        folder: Settings.photoDirectory
+                        flipVisible: camera.hasCameraOnBothSides
+                        flipEnabled: overlay.deviceToggleEnabled
+                        onGalleryRequested: overlay.galleryRequested()
+                        onFlipRequested: overlay.flipCamera()
+                    }
                 }
             }
 
@@ -972,13 +993,23 @@ PinchArea {
                         width: parent.width
                         height: parent.height - y
 
+                        PhotonShutterSides {
+                            anchors.fill: parent
+                            visible: camera2ControlGrid.photon
+                            folder: Settings.photoDirectory
+                            flipVisible: camera.hasCameraOnBothSides
+                            flipEnabled: overlay.deviceToggleEnabled
+                            onGalleryRequested: overlay.galleryRequested()
+                            onFlipRequested: overlay.flipCamera()
+                        }
+
                         // Photon layout: zoom "-" and "+" flank the shutter.
                         Repeater {
                             model: camera2ControlGrid.photon ? [1, -1] : []
 
                             MouseArea {
                                 readonly property int direction: modelData
-                                width: 80 * PhotonTheme.dp
+                                width: 44 * PhotonTheme.dp
                                 height: parent.height
                                 x: parent.width / 2 + direction * 70 * PhotonTheme.dp - width / 2
                                 enabled: overlay.zoomButtonsEnabled
@@ -1144,15 +1175,7 @@ PinchArea {
         visible: opacity > 0.0 && camera.hasCameraOnBothSides
         enabled: overlay.deviceToggleEnabled
 
-        onClicked: {
-            if (Settings.global.position === Camera.BackFace) {
-                Settings.deviceId = Settings.global.frontFacingDeviceId
-            } else {
-                Settings.deviceId = Settings.global.previousBackFacingDeviceId
-            }
-
-            captureView.resetZoom()
-        }
+        onClicked: overlay.flipCamera()
     }
 
     CaptureModeMenu {

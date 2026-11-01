@@ -28,6 +28,7 @@ SettingsOverlay {
     currentZoom: captureView._camera2ViewfinderActive ? captureView.camera2Zoom : camera.digitalZoom
     maximumZoom: zoomController.limit
     zoomButtonsEnabled: zoomController.allowed && maximumZoom > 1
+    onGalleryRequested: captureView.galleryRequested()
     onZoomPressed: zoomController.press(direction)
     onZoomReleased: zoomController.release()
     onZoomCanceled: zoomController.cancel()

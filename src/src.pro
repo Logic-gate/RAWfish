@@ -19,6 +19,7 @@ SOURCES += rawbracket.cpp \
         camera2preview.cpp \
         cameraplugin.cpp \
         capturemodel.cpp \
+        latestcapture.cpp \
         declarativecameraextensions.cpp \
         exifutils.cpp \
         dnglensshading.cpp \
@@ -31,6 +32,7 @@ HEADERS += rawbracket.h rawbracketmath.h colorlut.h \
         previewsize.h previewaids.h \
         camera2preview.h \
         capturemodel.h \
+        latestcapture.h \
         declarativecameraextensions.h \
         exifutils.h \
         dnglensshading.h \

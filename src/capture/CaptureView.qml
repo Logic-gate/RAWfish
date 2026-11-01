@@ -199,6 +199,7 @@ FocusScope {
     signal recordingStopped(url url, string mimeType)
     signal loaded
     signal captured
+    signal galleryRequested
 
     Item {
         id: captureSnapshot

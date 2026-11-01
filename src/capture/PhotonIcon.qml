@@ -52,6 +52,25 @@ Canvas {
             var xs = [ w * 0.18, w * 0.42, w * 0.66 ]
             for (var i = 0; i < 3; ++i)
                 ctx.fillRect(xs[i], base - h * heights[i], bw, h * heights[i])
+        } else if (kind === "flip") {              // two arrows chasing round a circle
+            var fr = w * 0.34
+            var arrow = function (a0, a1) {
+                ctx.beginPath()
+                ctx.arc(cx, cy, fr, a0, a1, false)
+                ctx.stroke()
+                var ex = cx + Math.cos(a1) * fr, ey = cy + Math.sin(a1) * fr
+                var tx = -Math.sin(a1), ty = Math.cos(a1)       // tangent
+                var nx = Math.cos(a1), ny = Math.sin(a1)        // outward
+                var hs = w * 0.14
+                ctx.beginPath()
+                ctx.moveTo(ex + tx * hs, ey + ty * hs)
+                ctx.lineTo(ex + nx * hs * 0.8, ey + ny * hs * 0.8)
+                ctx.lineTo(ex - nx * hs * 0.8, ey - ny * hs * 0.8)
+                ctx.closePath()
+                ctx.fill()
+            }
+            arrow(Math.PI * 0.1, Math.PI * 0.85)
+            arrow(Math.PI * 1.1, Math.PI * 1.85)
         } else {                                   // gear
             var teeth = 8
             var ro = w * 0.46, ri = w * 0.34
