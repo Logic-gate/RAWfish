@@ -11,7 +11,9 @@ Item {
 
     property int timerSeconds: 0
     property bool histogramOn: true
+    property bool flashOn: false
 
+    signal flashClicked()
     signal timerClicked()
     signal histogramClicked()
     signal settingsClicked()
@@ -31,7 +33,20 @@ Item {
         anchors.fill: parent
 
         Item {
-            width: bar.width / 3
+            width: bar.width / 4
+            height: bar.height
+
+            PhotonIcon {
+                anchors.centerIn: parent
+                kind: bar.flashOn ? "flash" : "flashoff"
+                color: bar.flashOn ? PhotonTheme.hud : PhotonTheme.textPrimary
+            }
+
+            MouseArea { anchors.fill: parent; onClicked: bar.flashClicked() }
+        }
+
+        Item {
+            width: bar.width / 4
             height: bar.height
 
             PhotonIcon {
@@ -54,7 +69,7 @@ Item {
         }
 
         Item {
-            width: bar.width / 3
+            width: bar.width / 4
             height: bar.height
 
             PhotonIcon {
@@ -67,7 +82,7 @@ Item {
         }
 
         Item {
-            width: bar.width / 3
+            width: bar.width / 4
             height: bar.height
 
             PhotonIcon {

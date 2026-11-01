@@ -358,6 +358,17 @@ void Camera2Preview::setFill(bool fill)
     update();
 }
 
+void Camera2Preview::setFlashMode(int mode)
+{
+    const int clamped = mode == 1 ? 1 : 0;
+    if (m_flashMode == clamped) {
+        return;
+    }
+    m_flashMode = clamped;
+    emit flashModeChanged();
+    sendSettings();
+}
+
 qreal Camera2Preview::zoom() const
 {
     return m_zoom;
@@ -1432,6 +1443,7 @@ void Camera2Preview::startPreview()
     connect(m_process,
             static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
             this, &Camera2Preview::processFinished);
+    m_sentFlashMode = 0;
     m_process->start();
     if (m_process->waitForStarted(1000)) {
         m_running = true;
@@ -1516,6 +1528,11 @@ void Camera2Preview::sendSettings(bool captureExposure)
                      .arg(m_noiseReduction)
                      .arg(m_zoom, 0, 'f', 4)
                      .toLocal8Bit());
+
+    if (m_flashMode != m_sentFlashMode) {
+        m_process->write(QStringLiteral("flash %1\n").arg(m_flashMode).toLocal8Bit());
+        m_sentFlashMode = m_flashMode;
+    }
 }
 
 void Camera2Preview::sendExposureSettings(bool captureExposure)

@@ -107,6 +107,7 @@ ApplicationWindow {
         jpegQuality: Settings.mode.rawCaptureJpegQuality
         lutPath: Settings.mode.colorLookPath
         lutStrength: Settings.mode.colorLookStrength / 100.0
+        flashMode: Settings.mode.flash === Camera.FlashTorch ? 1 : 0
         // The selected side is the reliable signal: frontFacingDeviceId comes from
         // QtMultimedia's camera list, is never stored for RAWfish and need not equal the
         // Camera2 id, so it can only add to the position check.

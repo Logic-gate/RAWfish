@@ -21,6 +21,7 @@ enum preview_command_type {
     PREVIEW_COMMAND_EXPOSURE_SETTINGS,
     PREVIEW_COMMAND_FOCUS_HOLD,
     PREVIEW_COMMAND_FOCUS_HOLD_RELEASE,
+    PREVIEW_COMMAND_FLASH,
 };
 
 struct preview_command {
@@ -28,6 +29,7 @@ struct preview_command {
     float focus_x;
     float focus_y;
     float zoom_ratio;
+    int flash_mode;
     int focus_mode;
     float focus_distance;
     int exposure_compensation;

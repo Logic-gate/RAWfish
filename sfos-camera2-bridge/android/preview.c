@@ -125,6 +125,7 @@ struct preview_context {
     int raw_height;
     pthread_mutex_t output_lock;
     float zoom_ratio;
+    int flash_mode; // 0 = off, 1 = torch (lit through preview and capture)
     float focal_length;
     float focus_x;
     float focus_y;
@@ -601,6 +602,12 @@ static void preview_configure_request(ACaptureRequest *request,
                                      context->jpeg_orientation);
     }
     sfos_camera2_set_zoom_ratio(metadata, request, context->zoom_ratio);
+    if (sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
+                                      ACAMERA_FLASH_MODE)) {
+        sfos_camera2_set_request_u8(request, ACAMERA_FLASH_MODE,
+                                    context->flash_mode == 1 ? ACAMERA_FLASH_MODE_TORCH
+                                                             : ACAMERA_FLASH_MODE_OFF);
+    }
 }
 
 static void preview_configure_raw_bracket_request(
@@ -655,6 +662,14 @@ static bool preview_parse_command_line(const char *line,
             zoom_ratio >= 1.0f && zoom_ratio <= 100.0f) {
         command->type = PREVIEW_COMMAND_ZOOM;
         command->zoom_ratio = zoom_ratio;
+        return true;
+    }
+
+    int flash_mode = 0;
+    if (sscanf(line, "flash %d", &flash_mode) == 1 &&
+            (flash_mode == 0 || flash_mode == 1)) {
+        command->type = PREVIEW_COMMAND_FLASH;
+        command->flash_mode = flash_mode;
         return true;
     }
 
@@ -2222,6 +2237,23 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                               NULL);
             } else if (command.type == PREVIEW_COMMAND_ZOOM) {
                 context.zoom_ratio = command.zoom_ratio;
+                preview_configure_request(request, &context, characteristics,
+                                          0);
+                preview_configure_request(focus_request, &context,
+                                          characteristics, 0);
+                if (jpeg_request) {
+                    preview_configure_request(jpeg_request, &context,
+                                              characteristics, 1);
+                }
+                if (raw_request) {
+                    preview_configure_request(raw_request, &context,
+                                              characteristics, 1);
+                }
+                ACaptureRequest *requests[] = { request };
+                ACameraCaptureSession_setRepeatingRequest(
+                    session, &preview_callbacks, 1, requests, NULL);
+            } else if (command.type == PREVIEW_COMMAND_FLASH) {
+                context.flash_mode = command.flash_mode;
                 preview_configure_request(request, &context, characteristics,
                                           0);
                 preview_configure_request(focus_request, &context,
