@@ -1294,7 +1294,7 @@ static void preview_jpeg_capture_completed(void *opaque,
     context->jpeg_scene_mode = sfos_camera2_first_u8(
         result, ACAMERA_CONTROL_SCENE_MODE, -1);
     fprintf(stderr,
-            "capture-flash warm-jpeg requested=%d result_flash_mode=%d flash_state=%d "
+            "capture-exposure flash warm-jpeg requested=%d result_flash_mode=%d flash_state=%d "
             "ae_mode=%d ae_state=%d control_mode=%d\n",
             context->flash_mode,
             sfos_camera2_first_u8(result, ACAMERA_FLASH_MODE, -1),
