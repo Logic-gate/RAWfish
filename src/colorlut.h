@@ -23,6 +23,8 @@ public:
 
     int size() const { return m_size; }
     bool isValid() const { return m_size >= 2; }
+    // size^3 RGB floats in 0..1, red varying fastest, then green, then blue.
+    const std::vector<float> &table() const { return m_table; }
 
     // Detects PLUT (binary) or .cube (text). Returns false and fills *error on failure.
     static bool parse(const char *data, size_t length, ColorLut *out, std::string *error)

@@ -2,6 +2,7 @@
 #define CAMERA2PREVIEW_H
 
 #include <QImage>
+#include <memory>
 #include <QJsonObject>
 #include <QMap>
 #include <QProcess>
@@ -9,6 +10,8 @@
 #include <QSize>
 #include <QTimer>
 #include <QVariant>
+
+class ColorLut;
 
 class Camera2Preview : public QQuickItem
 {
@@ -29,6 +32,8 @@ class Camera2Preview : public QQuickItem
     Q_PROPERTY(int orientation READ orientation WRITE setOrientation NOTIFY orientationChanged)
     Q_PROPERTY(bool mirror READ mirror WRITE setMirror NOTIFY mirrorChanged)
     Q_PROPERTY(bool fill READ fill WRITE setFill NOTIFY fillChanged)
+    // True when the camera applies the zoom itself, so frames arrive already cropped.
+    Q_PROPERTY(bool hardwareZoom READ hardwareZoom WRITE setHardwareZoom NOTIFY hardwareZoomChanged)
     Q_PROPERTY(qreal zoom READ zoom WRITE setZoom NOTIFY zoomChanged)
     Q_PROPERTY(QString focusMode READ focusMode WRITE setFocusMode NOTIFY focusModeChanged)
     Q_PROPERTY(qreal focusDistance READ focusDistance WRITE setFocusDistance NOTIFY focusDistanceChanged)
@@ -98,6 +103,8 @@ public:
 
     bool fill() const;
     void setFill(bool fill);
+    bool hardwareZoom() const { return m_hardwareZoom; }
+    void setHardwareZoom(bool hardwareZoom);
 
     qreal zoom() const;
     void setZoom(qreal zoom);
@@ -215,6 +222,7 @@ signals:
     void orientationChanged();
     void mirrorChanged();
     void fillChanged();
+    void hardwareZoomChanged();
     void zoomChanged();
     void focusModeChanged();
     void focusDistanceChanged();
@@ -288,6 +296,10 @@ private:
     int m_orientation = 90;
     bool m_mirror = false;
     bool m_fill = false;
+    bool m_hardwareZoom = false;
+    // Look table packed for the GPU; rebuilt when the active look changes (render thread only).
+    QImage m_lutStrip;
+    std::shared_ptr<const ColorLut> m_lutStripSource;
     qreal m_zoom = 1.0;
     qreal m_focusX = -1.0;
     qreal m_focusY = -1.0;

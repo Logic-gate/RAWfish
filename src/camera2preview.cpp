@@ -1,5 +1,6 @@
 #include "camera2preview.h"
 #include "startuplog.h"
+#include "lutpreviewnode.h"
 #include "colorlut.h"
 #include "exifutils.h"
 #include "imageadjustments.h"
@@ -375,6 +376,16 @@ qreal Camera2Preview::zoom() const
     return m_zoom;
 }
 
+void Camera2Preview::setHardwareZoom(bool hardwareZoom)
+{
+    if (m_hardwareZoom == hardwareZoom) {
+        return;
+    }
+    m_hardwareZoom = hardwareZoom;
+    emit hardwareZoomChanged();
+    update();
+}
+
 void Camera2Preview::setZoom(qreal zoom)
 {
     const qreal clamped = qMax<qreal>(1.0, zoom);
@@ -690,15 +701,73 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
         loggedFirstPaint = true;
         StartupLog::mark(QStringLiteral("preview first frame painted"));
     }
+
+    // Where the (possibly cropped) source lands on screen. With hardware zoom the
+    // frame is already cropped by the camera; cropping it again would zoom twice and
+    // throw away resolution.
+    auto layout = [this](const QSizeF &imageSize, QRectF *draw, QRectF *source) {
+        const QRectF target(0, 0, width(), height());
+        const qreal zoom = m_hardwareZoom ? 1.0 : qMax<qreal>(1.0, m_zoom);
+        const QSizeF sourceSize(imageSize.width() / zoom, imageSize.height() / zoom);
+        *source = QRectF((imageSize.width() - sourceSize.width()) / 2,
+                         (imageSize.height() - sourceSize.height()) / 2,
+                         sourceSize.width(), sourceSize.height());
+        const qreal scale = m_fill
+                ? qMax(target.width() / sourceSize.width(),
+                       target.height() / sourceSize.height())
+                : qMin(target.width() / sourceSize.width(),
+                       target.height() / sourceSize.height());
+        const QSizeF drawSize(sourceSize.width() * scale, sourceSize.height() * scale);
+        *draw = QRectF(target.center().x() - drawSize.width() / 2,
+                       target.center().y() - drawSize.height() / 2,
+                       drawSize.width(), drawSize.height());
+    };
+
+    // A colour look runs on the GPU at the full preview size when nothing else needs
+    // the CPU copy of the frame. RAWFISH_CPU_LUT=1 forces the CPU path for comparison.
+    float lutStrength = 1.0f;
+    const std::shared_ptr<const ColorLut> lut = ColorLut::active(&lutStrength);
+    static const bool forceCpuLut = qEnvironmentVariableIsSet("RAWFISH_CPU_LUT");
+    const bool needsCpuImage =
+            ImageAdjustments::requested(m_renderExposure, m_colorTemperature, m_colorTint)
+            || m_focusPeaking || m_exposureZebras;
+    if (lut && lutStrength > 0.0f && !forceCpuLut && !needsCpuImage
+            && LutPreview::supported(*lut)) {
+        if (m_lutStripSource != lut) {
+            m_lutStrip = LutPreview::buildStrip(*lut);
+            m_lutStripSource = lut;   // keeps the address from being reused by a new look
+        }
+        QSGTexture *frameTexture = window()->createTextureFromImage(m_frame);
+        QSGTexture *lutTexture = window()->createTextureFromImage(m_lutStrip);
+        if (frameTexture && lutTexture) {
+            frameTexture->setFiltering(QSGTexture::Linear);
+            lutTexture->setFiltering(QSGTexture::Linear);
+            lutTexture->setHorizontalWrapMode(QSGTexture::ClampToEdge);
+            lutTexture->setVerticalWrapMode(QSGTexture::ClampToEdge);
+            QRectF drawRect, sourceRect;
+            const QSizeF imageSize = m_frame.size();
+            layout(imageSize, &drawRect, &sourceRect);
+            const QRectF normalized(sourceRect.x() / imageSize.width(),
+                                    sourceRect.y() / imageSize.height(),
+                                    sourceRect.width() / imageSize.width(),
+                                    sourceRect.height() / imageSize.height());
+            return new LutPreview::Node(frameTexture, lutTexture, float(lut->size()),
+                                        qMin(lutStrength, 1.0f), drawRect, normalized);
+        }
+        delete frameTexture;
+        delete lutTexture;
+    }
+
     QImage textureImage = m_frame;
-    // A colour look costs per pixel, so the on-screen preview is drawn from a
-    // reduced copy. Saved images are processed at full resolution elsewhere.
+    // On the CPU a colour look costs per pixel, so the on-screen preview is drawn
+    // from a reduced copy. Saved images are processed at full resolution elsewhere.
     constexpr int kLutPreviewLongSide = 640;
     if (ColorLut::hasActive() &&
             qMax(textureImage.width(), textureImage.height()) > kLutPreviewLongSide) {
+        // Averaging (not nearest-neighbour) keeps sensor grain from aliasing into the look.
         textureImage = textureImage.scaled(kLutPreviewLongSide, kLutPreviewLongSide,
                                            Qt::KeepAspectRatio,
-                                           Qt::FastTransformation);
+                                           Qt::SmoothTransformation);
     }
     if (ImageAdjustments::requested(m_renderExposure, m_colorTemperature,
                                     m_colorTint)) {
@@ -719,27 +788,10 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
     node->setOwnsTexture(true);
     node->setTexture(texture);
 
-    const QRectF target(0, 0, width(), height());
     // Map from the texture that was actually uploaded: with a colour look active it is
     // a reduced copy of m_frame, and using m_frame's size would sample only a corner.
-    const QSizeF imageSize = textureImage.size();
-    const qreal zoom = qMax<qreal>(1.0, m_zoom);
-    const QSizeF sourceSize(imageSize.width() / zoom,
-                            imageSize.height() / zoom);
-    const QRectF sourceRect((imageSize.width() - sourceSize.width()) / 2,
-                            (imageSize.height() - sourceSize.height()) / 2,
-                            sourceSize.width(), sourceSize.height());
-    const qreal scale = m_fill
-            ? qMax(target.width() / sourceSize.width(),
-                   target.height() / sourceSize.height())
-            : qMin(target.width() / sourceSize.width(),
-                   target.height() / sourceSize.height());
-    const QSizeF drawSize(sourceSize.width() * scale,
-                          sourceSize.height() * scale);
-    const QRectF drawRect(target.center().x() - drawSize.width() / 2,
-                          target.center().y() - drawSize.height() / 2,
-                          drawSize.width(), drawSize.height());
-
+    QRectF drawRect, sourceRect;
+    layout(textureImage.size(), &drawRect, &sourceRect);
     node->setRect(drawRect);
     node->setSourceRect(sourceRect);
     return node;

@@ -28,7 +28,7 @@ SOURCES += rawbracket.cpp \
         cameraconfigs.cpp \
         looksmodel.cpp
 
-HEADERS += rawbracket.h rawbracketmath.h colorlut.h \
+HEADERS += rawbracket.h rawbracketmath.h colorlut.h lutpreviewnode.h \
         previewsize.h previewaids.h \
         camera2preview.h \
         capturemodel.h \
