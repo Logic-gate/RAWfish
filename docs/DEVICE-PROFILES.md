@@ -250,12 +250,21 @@ streams are limited, and the app shows it for a few seconds at each start.
 Please report such a phone (the forum thread, or an issue), so that the
 cause can be looked for and a shipped profile written.
 
-The shipped profile of the Xperia 10 III uses `raw_stream` on both cameras,
-with its `_why` recording what was tested; nothing to write on that phone.
+- `"streams": "exclusive"` -- the driver takes a JPEG stream or a RAW
+  stream, not both in one session: the app opens the session for the chosen
+  image type (JPEG + viewfinder, or RAW + viewfinder without JPEG) and
+  reopens it when the type changes; if the RAW session dies at its first
+  frame, the app falls back to JPEG and says so. `"both"` is the default.
+
+The shipped profile of the Xperia 10 III uses `"streams": "exclusive"` on
+both cameras, with its `_why` recording what was tested (and what ProCam
+showed); nothing to write on that phone.
 
 `rawfish-ir-cli streamtest ID` finds which combinations the camera survives
-(four opens, a few seconds each; the camera service is given time to come
-back after a failure) and ends with the override lines to use, if any.
+(five opens, a few seconds each, the last one RAW + viewfinder without JPEG;
+the camera service is given up to 20 s to come back after a failure, and a
+test it could not run is reported as untested) and ends with the override
+lines to use, if any.
 
 ## 3. UI / UX preferences  (device-independent)
 

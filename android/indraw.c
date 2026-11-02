@@ -515,6 +515,8 @@ static struct {
     int64_t override_shutter_max_ns;        /* 0 = none; else the tested ceiling */
     int lim_raw_off;                        /* device profile: no RAW stream      */
     int lim_jw, lim_jh;                     /* device profile: largest JPEG asked (0 = none) */
+    int lim_no_jpeg;                        /* this session: no JPEG stream (RAW + preview) */
+    int lim_exclusive;                      /* device profile: JPEG or RAW, one session each */
     int64_t override_min_frame_ns;          /* 0 = default 1/30 s floor; else set */
     int64_t override_peak_edge;             /* 0 = default 40; peaking gradient threshold */
     int64_t override_zebra_jpeg;            /* 0 = default 250; zebra level, jpg (0..255) */
@@ -2667,14 +2669,18 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Image readers: 4 preview buffers (drained at once), 2 JPEG buffers. */
     ms = AImageReader_new(pw, ph, AIMAGE_FORMAT_YUV_420_888, 4, &g.preview_reader);
     if (ms != AMEDIA_OK) SETUP_FAIL("preview_reader", "AImageReader_new", ms);
-    ms = AImageReader_new(jw, jh, AIMAGE_FORMAT_JPEG, 2, &g.jpeg_reader);
-    if (ms != AMEDIA_OK) SETUP_FAIL("jpeg_reader", "AImageReader_new", ms);
     AImageReader_setImageListener(g.preview_reader, &prev_l);  /* drain + count     */
-    AImageReader_setImageListener(g.jpeg_reader, &jpeg_l);     /* hand to indraw_jpeg   */
     ms = AImageReader_getWindow(g.preview_reader, &g.preview_window); /* its surface */
     if (ms != AMEDIA_OK) SETUP_FAIL("preview_window", "AImageReader_getWindow", ms);
-    ms = AImageReader_getWindow(g.jpeg_reader, &g.jpeg_window);
-    if (ms != AMEDIA_OK) SETUP_FAIL("jpeg_window", "AImageReader_getWindow", ms);
+    /* The JPEG stream is optional (indraw_set_jpeg_stream): a driver that dies
+     * with JPEG and RAW in one session gets RAW + preview alone. */
+    if (!g.lim_no_jpeg) {
+        ms = AImageReader_new(jw, jh, AIMAGE_FORMAT_JPEG, 2, &g.jpeg_reader);
+        if (ms != AMEDIA_OK) SETUP_FAIL("jpeg_reader", "AImageReader_new", ms);
+        AImageReader_setImageListener(g.jpeg_reader, &jpeg_l);     /* hand to indraw_jpeg   */
+        ms = AImageReader_getWindow(g.jpeg_reader, &g.jpeg_window);
+        if (ms != AMEDIA_OK) SETUP_FAIL("jpeg_window", "AImageReader_getWindow", ms);
+    }
     if (rw) {                                                  /* optional RAW16    */
         ms = AImageReader_new(rw, rh, AIMAGE_FORMAT_RAW16, 2, &g.raw_reader);
         if (ms != AMEDIA_OK) SETUP_FAIL("raw_reader", "AImageReader_new", ms);
@@ -2693,10 +2699,12 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     if (st != ACAMERA_OK) SETUP_FAIL("container", "ACaptureSessionOutputContainer_create", st);
     st = ACaptureSessionOutput_create(g.preview_window, &g.preview_output);
     if (st != ACAMERA_OK) SETUP_FAIL("preview_output", "ACaptureSessionOutput_create", st);
-    st = ACaptureSessionOutput_create(g.jpeg_window, &g.jpeg_output);
-    if (st != ACAMERA_OK) SETUP_FAIL("jpeg_output", "ACaptureSessionOutput_create", st);
     ACaptureSessionOutputContainer_add(g.outputs, g.preview_output);
-    ACaptureSessionOutputContainer_add(g.outputs, g.jpeg_output);
+    if (g.jpeg_window) {
+        st = ACaptureSessionOutput_create(g.jpeg_window, &g.jpeg_output);
+        if (st != ACAMERA_OK) SETUP_FAIL("jpeg_output", "ACaptureSessionOutput_create", st);
+        ACaptureSessionOutputContainer_add(g.outputs, g.jpeg_output);
+    }
     if (rw) {
         st = ACaptureSessionOutput_create(g.raw_window, &g.raw_output);
         if (st != ACAMERA_OK) SETUP_FAIL("raw_output", "ACaptureSessionOutput_create", st);
@@ -2734,8 +2742,10 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Targets say which outputs a request fills. */
     st = ACameraOutputTarget_create(g.preview_window, &g.preview_target);
     if (st != ACAMERA_OK) SETUP_FAIL("preview_target", "ACameraOutputTarget_create", st);
-    st = ACameraOutputTarget_create(g.jpeg_window, &g.jpeg_target);
-    if (st != ACAMERA_OK) SETUP_FAIL("jpeg_target", "ACameraOutputTarget_create", st);
+    if (g.jpeg_window) {
+        st = ACameraOutputTarget_create(g.jpeg_window, &g.jpeg_target);
+        if (st != ACAMERA_OK) SETUP_FAIL("jpeg_target", "ACameraOutputTarget_create", st);
+    }
     if (rw) {
         st = ACameraOutputTarget_create(g.raw_window, &g.raw_target);
         if (st != ACAMERA_OK) SETUP_FAIL("raw_target", "ACameraOutputTarget_create", st);
@@ -2749,7 +2759,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Still request: JPEG + preview, so the viewfinder keeps flowing during a photo. */
     st = ACameraDevice_createCaptureRequest(g.device, g.still_template_preview ? TEMPLATE_PREVIEW : TEMPLATE_STILL_CAPTURE, &g.still_request);
     if (st != ACAMERA_OK) SETUP_FAIL("still_request", "createCaptureRequest", st);
-    ACaptureRequest_addTarget(g.still_request, g.jpeg_target);
+    if (g.jpeg_target) ACaptureRequest_addTarget(g.still_request, g.jpeg_target);
     ACaptureRequest_addTarget(g.still_request, g.preview_target);
     g.tpl_nr = template_u8(g.still_request, ACAMERA_NOISE_REDUCTION_MODE);
     g.tpl_edge = template_u8(g.still_request, ACAMERA_EDGE_MODE);
@@ -2880,13 +2890,13 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     jw_add(&w, ",\"jpeg_size\":[%d,%d],\"preview_size\":[%d,%d],"
                "\"raw16_size\":[%d,%d],\"shading_map\":%s,"
                "\"af_continuous\":%s,\"template\":{\"noise\":\"%s\",\"edge\":\"%s\"},"
-               "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\"},"
+               "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\",\"jpeg_stream\":%s,\"exclusive\":%s},"
                "\"ms\":{\"open\":%.1f,\"session\":%.1f,\"first_frame\":%.1f}}",
            jw, jh, pw, ph, rw, rh, g.shading_map ? "true" : "false",
            g.af_continuous ? "true" : "false",
            g.tpl_nr >= 0 ? nr_name(g.tpl_nr) : "none", g.tpl_edge >= 0 ? edge_name(g.tpl_edge) : "none",
            g.session_params_used < 0 ? "unsupported" : g.session_params_used ? "applied" : "none",
-           g.lim_raw_off ? "false" : "true", g.lim_jw, g.lim_jh,
+           g.lim_raw_off ? "false" : "true", g.lim_jw, g.lim_jh, g.lim_no_jpeg ? "false" : "true", g.lim_exclusive ? "true" : "false",
            t_open - t0, t_session - t0, t_first - t0);
     return IR_OK;
 #undef SETUP_FAIL
@@ -3410,6 +3420,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
     if (!path || !out || !out_size || quality < 1 || quality > 100 || timeout_ms <= 0)
         return IR_EARG;
     if (!g.session) return fail(out, out_size, IR_ESTATE, "jpeg", "camera not open", 0);
+    if (!g.jpeg_reader) return fail(out, out_size, IR_ESTATE, "jpeg", "no jpeg stream in this session", 0);
     if (nr >= 0 && !u8_list_has(g.chars, ACAMERA_NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES, nr))
         return fail(out, out_size, IR_EARG, "check", "noise reduction mode not listed", nr);
     if (edge >= 0 && !u8_list_has(g.chars, ACAMERA_EDGE_AVAILABLE_EDGE_MODES, edge))
@@ -4823,6 +4834,7 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
     jw_t w;
     if (!paths || n < 2 || n > 8 || !out || !out_size || quality < 1 || quality > 100) return IR_EARG;
     if (!g.session) return fail(out, out_size, IR_ESTATE, "burst", "camera not open", 0);
+    if (!g.jpeg_reader) return fail(out, out_size, IR_ESTATE, "burst", "no jpeg stream in this session", 0);
     if (exposure_ns <= 0) {                        /* automatic: freeze the live pair */
         pthread_mutex_lock(&g.lock);
         exposure_ns = g.live_exp_ns; iso = g.live_iso_v;
@@ -5253,11 +5265,12 @@ static void emit_caps(void)
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, sizes, awb, scenes);
-    if (g.lim_raw_off || g.lim_jw > 0) {            /* a limited phone says so (the app shows it) */
+    if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
         if (n && line[n - 1] == '\n') line[--n] = '\0';
-        snprintf(line + n, sizeof line - n, " limits=%s%s%s\n", g.lim_raw_off ? "raw_off" : "",
-                 g.lim_raw_off && g.lim_jw > 0 ? "+" : "", g.lim_jw > 0 ? "jpeg_max" : "");
+        snprintf(line + n, sizeof line - n, " limits=%s%s%s%s%s\n", g.lim_raw_off ? "raw_off" : "",
+                 g.lim_raw_off && g.lim_jw > 0 ? "+" : "", g.lim_jw > 0 ? "jpeg_max" : "",
+                 (g.lim_raw_off || g.lim_jw > 0) && g.lim_exclusive ? "+" : "", g.lim_exclusive ? "exclusive" : "");
     }
     emit_event(line);
 }
@@ -6413,6 +6426,23 @@ IR_API int indraw_set_stream_limits(int raw_off, int jpeg_max_w, int jpeg_max_h)
     if (jpeg_max_w < 0 || jpeg_max_h < 0 || (jpeg_max_w > 0) != (jpeg_max_h > 0)) return IR_EARG;
     g.lim_raw_off = raw_off ? 1 : 0;
     g.lim_jw = jpeg_max_w; g.lim_jh = jpeg_max_h;
+    return IR_OK;
+}
+
+/* Before indraw_open: on = 0 opens the session without a JPEG stream (RAW +
+ * preview only; jpeg and burst then answer "no jpeg stream"). */
+IR_API int indraw_set_jpeg_stream(int on)
+{
+    g.lim_no_jpeg = on ? 0 : 1;
+    return IR_OK;
+}
+
+/* Before indraw_open: the device profile says JPEG or RAW, one session each
+ * ("streams": "exclusive"); the caps line carries it so the app reopens the
+ * session when the image type changes. */
+IR_API int indraw_set_streams_exclusive(int on)
+{
+    g.lim_exclusive = on ? 1 : 0;
     return IR_OK;
 }
 

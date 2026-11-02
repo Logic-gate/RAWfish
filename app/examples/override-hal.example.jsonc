@@ -59,6 +59,10 @@
         // the phone. "rawfish-ir-cli streamtest ID" tells which one to use.
         // "raw_stream": false,
         // "jpeg_max": "3264x2448",
+        // A driver that takes JPEG or RAW but not both in one session (the
+        // Xperia 10 III): the app opens the session for the chosen type and
+        // reopens it when the type changes. "both" is the default.
+        // "streams": "exclusive",
       },
 
       // Measured points "real distance -> the lens value the HAL needs", so

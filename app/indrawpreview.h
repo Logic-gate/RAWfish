@@ -51,6 +51,10 @@ class IndrawPreview : public QQuickItem
     Q_PROPERTY(QString cameraId READ cameraId WRITE setCameraId NOTIFY cameraIdChanged)
     Q_PROPERTY(QSize previewSize READ previewSize WRITE setPreviewSize NOTIFY previewSizeChanged)
     Q_PROPERTY(QSize captureSize READ captureSize WRITE setCaptureSize NOTIFY captureSizeChanged)
+    /* The image type's session, for a profile with "streams": "exclusive":
+     * true opens RAW + viewfinder without JPEG, false JPEG + viewfinder.
+     * Ignored by the engine on every other phone. */
+    Q_PROPERTY(bool rawSession READ rawSession WRITE setRawSession NOTIFY rawSessionChanged)
     /* The size of the frames the engine streams (sensor orientation): their
      * proportions are the photo's; the page shapes the viewfinder on them. */
     Q_PROPERTY(QSize frameSize READ frameSize NOTIFY frameSizeChanged)
@@ -159,6 +163,8 @@ public:
 
     QSize captureSize() const;
     void setCaptureSize(const QSize &size);
+    bool rawSession() const { return m_rawSession; }
+    void setRawSession(bool raw);
 
     bool fill() const;
     void setFill(bool fill);
@@ -255,6 +261,9 @@ public:
     Q_INVOKABLE void installExamples();
 
 signals:
+    void rawSessionChanged();
+    void rawSessionFailed();       /* exclusive streams: the RAW session died, back to JPEG */
+
     void activeChanged();
     void runningChanged();
     void cameraIdChanged();
@@ -336,6 +345,11 @@ private:
     QString m_errorString;
     int m_restarts = 0;            /* unexpected exits restarted in a row        */
     bool m_gotCaps = false;        /* this engine reached its caps line          */
+    bool m_rawSession = false;     /* what the page wants                          */
+    bool m_sessionRaw = false;     /* what the running engine was started with     */
+    bool m_rawFellBack = false;    /* a RAW session died before its caps: the next
+                                      start is JPEG; if that one says "exclusive",
+                                      the page is told (rawSessionFailed)          */
     bool m_sizeFallback = false;   /* the last engine died before its caps: the
                                     * next one opens at "max" (a size this camera
                                     * does not list stops the engine at open)    */

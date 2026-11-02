@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "187"                             // shown in the deck
+    readonly property string uiVersion: "188"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -192,7 +192,10 @@ ApplicationWindow {
             // type and the Σ speeds (a stack is a DNG) are not offered, and a
             // RAW type chosen before is set aside until a camera with RAW comes
             // back (ui 169). Unknown (no caps yet): assumed available.
-            readonly property bool rawAvailable: viewfinder.caps.rawW === undefined || viewfinder.caps.rawW > 0
+            // A phone whose profile says "streams": "exclusive" has RAW in its
+            // own session: available, even while the JPEG session runs.
+            readonly property bool exclusiveStreams: String(viewfinder.caps.limits || "").indexOf("exclusive") >= 0
+            readonly property bool rawAvailable: exclusiveStreams || viewfinder.caps.rawW === undefined || viewfinder.caps.rawW > 0
             property string imageTypeSetAside: ""         // "raw" set aside by a camera without RAW
             onRawAvailableChanged: {
                 if (!rawAvailable && imageType === "raw") { imageTypeSetAside = "raw"; imageType = "jpg" }
@@ -750,7 +753,10 @@ ApplicationWindow {
                                                      : (c.zebraJpeg > 0 ? c.zebraJpeg : 250)
                 viewfinder.zebraLevel = Math.round(255 - (255 - level) * zb)
             }
-            onImageTypeChanged: applyAidThresholds()
+            onImageTypeChanged: {
+                applyAidThresholds()
+                viewfinder.rawSession = (imageType === "raw")   // exclusive streams: the session follows the type
+            }
 
             // Build and send the capture command from the exposure state: in
             // full auto the engine's AE (with the EV wheel's compensation)
@@ -1314,12 +1320,28 @@ ApplicationWindow {
                         if (l.indexOf("raw_off") >= 0 && l.indexOf("jpeg_max") >= 0) return qsTr("Device profile: no RAW, JPEG size limited")
                         if (l.indexOf("raw_off") >= 0) return qsTr("Device profile: RAW stream off")
                         if (l.indexOf("jpeg_max") >= 0) return qsTr("Device profile: JPEG size limited")
+                        if (l.indexOf("exclusive") >= 0) return qsTr("Device profile: JPEG or RAW, one session each")
                         return ""
                     }
                     color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
                     style: Text.Outline; styleColor: "black"
                     onTextChanged: if (text !== "") limitsTimer.restart()
                     Timer { id: limitsTimer; interval: 6000 }
+                }
+                // Exclusive streams: the RAW session died at its first frame;
+                // the viewfinder came back as JPEG, and the type follows.
+                Label {
+                    id: rawFailNotice
+                    anchors { bottom: limitsNotice.top; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingSmall }
+                    visible: rawFailTimer.running
+                    text: qsTr("RAW failed on this camera: back to JPEG")
+                    color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
+                    style: Text.Outline; styleColor: "black"
+                    Timer { id: rawFailTimer; interval: 6000 }
+                    Connections {
+                        target: viewfinder
+                        onRawSessionFailed: { page.imageType = "jpg"; rawFailTimer.restart() }
+                    }
                 }
                 // Stacking is still being validated on the device: say so while
                 // a Σ speed is selected (and not during the shot's black screen).

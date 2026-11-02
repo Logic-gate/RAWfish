@@ -1,12 +1,29 @@
 {
   "name": "Sony Xperia 10 III (XQ-BT52)",
   "_comment": "Shipped device profile (docs/DEVICE-PROFILES.md). A key in your own override-hal.json replaces the same key here.",
-  "_why": "On this port the camera driver dies at the first frame as soon as a RAW16 stream is in the session, on both cameras (tested 31 Oct 2026: JPEG 4000x3000 + preview ok; the same + RAW16 4032x3016 -> device error; camera 1: 3264x2448 ok, + RAW16 -> device error). JPEG and the viewfinder work. A stopgap: to be lifted when the RAW stream is understood (rawfish-ir-cli streamtest).",
-  "match": { "make": "Sony", "models": ["Xperia 10 III", "XQ-BT52", "XQ-BT41"] },
+  "_why": "On this port the camera driver dies at the first frame as soon as a JPEG stream and a RAW16 stream are in the same session, on both cameras (31 Oct - 2 Nov 2026: JPEG 4000x3000 + preview ok; the same + RAW16 4032x3016 -> device error; JPEG 640x480 + RAW16 -> device error too, so not a matter of size). ProCam 1.3.1 captures RAW16 4032x3016 on this phone with a session of viewfinder + RAW and no JPEG stream (its logs, 1 Nov 2026): the driver takes JPEG or RAW, not both at once. Hence \"streams\": \"exclusive\": the app opens the session for the chosen type and reopens it when the type changes.",
+  "match": {
+    "make": "Sony",
+    "models": [
+      "Xperia 10 III",
+      "XQ-BT52",
+      "XQ-BT41"
+    ]
+  },
   "_match_note": "By model only: the Xperia 10 II has the same sensor and RAW size (4032x3016) but its RAW stream works, so it must not get this profile.",
   "notch": false,
   "cameras": [
-    { "camera_id": "0", "overrides": { "raw_stream": false } },
-    { "camera_id": "1", "overrides": { "raw_stream": false } }
+    {
+      "camera_id": "0",
+      "overrides": {
+        "streams": "exclusive"
+      }
+    },
+    {
+      "camera_id": "1",
+      "overrides": {
+        "streams": "exclusive"
+      }
+    }
   ]
 }

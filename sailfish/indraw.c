@@ -339,7 +339,7 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "real_m", "hal_diopters", "cameras",
                                            "vendor_request", "tag", "type", "value", "on",
                                            "shading", "still_template", "session_request",
-                                           "raw_stream", "jpeg_max",
+                                           "raw_stream", "jpeg_max", "streams",
                                            /* a shipped device profile's own keys */
                                            "match", "make", "models", "raw", "notch", "shading_file",
                                            "name", NULL };
@@ -445,14 +445,33 @@ static int ov_bool(const char *id, const char *key, int *val)
  * "raw_stream": false (no RAW stream) and "jpeg_max": "WxH" (the largest
  * JPEG asked for). For a camera driver that dies with the full combination
  * (the Xperia 10 III). Logged, so a limited phone is never silent. */
-static void apply_stream_limits(void *bridge, const char *id)
+static void apply_stream_limits(void *bridge, const char *id, int type_raw)
 {
     typedef int (*lim_fn)(int, int, int);
+    typedef int (*flag_fn)(int);
     lim_fn lf = (lim_fn)a_dlsym(bridge, "indraw_set_stream_limits");
+    flag_fn jsf = (flag_fn)a_dlsym(bridge, "indraw_set_jpeg_stream");
+    flag_fn exf = (flag_fn)a_dlsym(bridge, "indraw_set_streams_exclusive");
     char v[32], msg[200];
     int raw_on = 1, jw = 0, jh = 0;
     if (!lf) return;
     ov_bool(id, "raw_stream", &raw_on);
+    /* "streams": "exclusive": JPEG or RAW, one session each, by the type asked
+     * (type=raw|jpeg on the command line; JPEG without it). The driver of the
+     * Xperia 10 III dies with both streams in one session, takes either alone. */
+    if (ov_string(id, "streams", v, sizeof v)) {
+        if (!strcmp(v, "exclusive")) {
+            if (exf) exf(1);
+            if (type_raw) { if (jsf) jsf(0); }
+            else raw_on = 0;
+            snprintf(msg, sizeof msg, "streams exclusive (device profile) for camera %s: this session is %s only",
+                     id, type_raw ? "RAW + viewfinder" : "JPEG + viewfinder");
+            log_line("# ", msg);
+        } else if (strcmp(v, "both")) {
+            snprintf(msg, sizeof msg, "streams: \"%s\" is not \"exclusive\" or \"both\" -- ignored", v);
+            ov_log(msg);
+        }
+    }
     if (ov_string(id, "jpeg_max", v, sizeof v) && !parse_size(v, &jw, &jh)) {
         snprintf(msg, sizeof msg, "jpeg_max: \"%s\" is not WxH -- ignored", v);
         ov_log(msg); jw = jh = 0;
@@ -1026,9 +1045,10 @@ static void usage(void)
             "usage: rawfish-ir-cli [--log FILE] [--jpgdir DIR] [--dngdir DIR] caps ID\n"
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
-            "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives; the override to use)\n"
-            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]   (default preview 1280x960)\n"
-            "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]   (SF2P frames on stdout)\n"
+            "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
+            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (default preview 1280x960)\n"
+            "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
+            "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
             "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS_mmm.EXT\n"
             "  stdin: jpeg NAME [q=95] [default_noise|off_noise|fast_noise|hq_noise|minimal_noise|zsl_noise]\n"
@@ -1743,7 +1763,7 @@ int main(int argc, char **argv)
     const char *lib = getenv("INDRAW_LIB");     /* override for tests            */
     char cmdline[512] = "";
     void *bridge;
-    int jw, jh, pw = 1280, ph = 960, rw = 0, rh = 0, rc, i;  /* viewfinder-grade default */
+    int jw, jh, pw = 1280, ph = 960, rw = 0, rh = 0, rc, i, type_raw = 0;  /* viewfinder-grade default */
 
     /* Options before the command, in any order: --log FILE, --jpgdir DIR,
      * --dngdir DIR ("~/" = HOME). A folder that cannot be used is an error
@@ -1832,38 +1852,54 @@ int main(int argc, char **argv)
         indraw_cameras_fn cams = (indraw_cameras_fn)a_dlsym(bridge, "indraw_cameras");
         typedef int (*lim_fn)(int, int, int);
         lim_fn lf = (lim_fn)a_dlsym(bridge, "indraw_set_stream_limits");
-        struct { const char *name; int jw, jh, rw, rh, raw_off, lim_jw, lim_jh; } tests[] = {
-            { "jpeg max + preview + raw max (what the app asks)", -1, -1, -1, -1, 0, 0, 0 },
-            { "jpeg max + preview, no raw",                        -1, -1,  0,  0, 1, 0, 0 },
-            { "jpeg 640x480 + preview + raw max",                 640, 480, -1, -1, 0, 0, 0 },
-            { "jpeg within 3264x2448 + preview + raw max",         -1, -1, -1, -1, 0, 3264, 2448 },
+        typedef int (*flag_fn)(int);
+        flag_fn jsf = (flag_fn)a_dlsym(bridge, "indraw_set_jpeg_stream");
+        struct { const char *name; int jw, jh, rw, rh, raw_off, lim_jw, lim_jh, no_jpeg; } tests[] = {
+            { "jpeg max + preview + raw max (what the app asks)", -1, -1, -1, -1, 0, 0, 0, 0 },
+            { "jpeg max + preview, no raw",                        -1, -1,  0,  0, 1, 0, 0, 0 },
+            { "jpeg 640x480 + preview + raw max",                 640, 480, -1, -1, 0, 0, 0, 0 },
+            { "jpeg within 3264x2448 + preview + raw max",         -1, -1, -1, -1, 0, 3264, 2448, 0 },
+            { "preview + raw max, no jpeg stream",                 -1, -1, -1, -1, 0, 0, 0, 1 },
         };
-        int ok[4] = { 0, 0, 0, 0 }, i, needle_len;
+        enum { NTESTS = 5 };
+        int ok[NTESTS] = { 0 }, untested[NTESTS] = { 0 }, i, needle_len, back = 1;
         char needle[40];
         if (argc < 3) { usage(); return EXIT_USAGE; }
         if (!op || !cl || !cams || !lf) return EXIT_BRIDGE;
         needle_len = snprintf(needle, sizeof needle, "\"%s\"", argv[2]);
         (void)needle_len;
-        emit("{\"streamtest\":\"start\",\"note\":\"four opens, a few seconds each; nothing is written\"}");
-        for (i = 0; i < 4; ++i) {
+        emit("{\"streamtest\":\"start\",\"note\":\"five opens, a few seconds each; nothing is written\"}");
+        for (i = 0; i < NTESTS; ++i) {
             int rc;
+            if (!back) {                        /* the service never came back: this one is untested */
+                untested[i] = 1;
+                snprintf(out, sizeof out, "{\"streamtest\":\"untested\",\"test\":\"%s\",\"reason\":\"camera service not back\"}", tests[i].name);
+                emit(out);
+                continue;
+            }
             lf(tests[i].raw_off, tests[i].lim_jw, tests[i].lim_jh);
+            if (jsf) jsf(!tests[i].no_jpeg);
             rc = op(argv[2], tests[i].jw, tests[i].jh, -1, -1, tests[i].rw, tests[i].rh, out, sizeof out);
             ok[i] = rc == 0;
             log_line("# streamtest ", tests[i].name);
             emit(out);
             cl(out, sizeof out);
-            if (!ok[i]) {                       /* let the camera service come back */
+            if (!ok[i]) {                       /* let the camera service come back (up to 20 s) */
                 int t;
-                for (t = 0; t < 10; ++t) {
+                back = 0;
+                for (t = 0; t < 20 && !back; ++t) {
                     sleep(1);
-                    if (cams(out, sizeof out) == 0 && strstr(out, needle)) break;
+                    if (cams(out, sizeof out) == 0 && strstr(out, needle)) back = 1;
                 }
             }
         }
         lf(0, 0, 0);
+        if (jsf) jsf(1);
         if (ok[0])
             snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"the app's streams work on this camera: no override needed\"}", argv[2]);
+        else if (ok[1] && ok[4])
+            snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"JPEG and RAW each work alone, not together: one session per type\","
+                     "\"override\":{\"camera_id\":\"%s\",\"overrides\":{\"streams\":\"exclusive\"}}}", argv[2], argv[2]);
         else if (ok[1] && (ok[2] || ok[3]))
             snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"RAW fails with the largest JPEG, not with a smaller one\","
                      "\"override\":{\"camera_id\":\"%s\",\"overrides\":{\"jpeg_max\":\"3264x2448\"}}}", argv[2], argv[2]);
@@ -1872,6 +1908,11 @@ int main(int argc, char **argv)
                      "\"override\":{\"camera_id\":\"%s\",\"overrides\":{\"raw_stream\":false}}}", argv[2], argv[2]);
         else
             snprintf(out, sizeof out, "{\"streamtest\":\"done\",\"camera_id\":\"%s\",\"verdict\":\"even JPEG + preview fails: not a matter of streams; the log says at which stage\"}", argv[2]);
+        if (untested[1] || untested[4]) {
+            size_t k = strlen(out);
+            if (k > 0 && out[k - 1] == '}') out[--k] = '\0';
+            snprintf(out + k, sizeof out - k, ",\"note\":\"a test was skipped: the camera service did not come back; run streamtest again after a minute\"}");
+        }
         emit(out);
         return 0;
     }
@@ -2025,9 +2066,13 @@ int main(int argc, char **argv)
 
         if (!op || !jpeg || !cl) return EXIT_BRIDGE;
         if (argc < 4 || !parse_size(argv[3], &jw, &jh)) { usage(); return EXIT_USAGE; }
-        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH]       */
+        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg] */
             if (!strncmp(argv[i], "raw=", 4)) {
                 if (!parse_size(argv[i] + 4, &rw, &rh)) { usage(); return EXIT_USAGE; }
+            } else if (!strncmp(argv[i], "type=", 5)) {
+                if (!strcmp(argv[i] + 5, "raw")) type_raw = 1;
+                else if (!strcmp(argv[i] + 5, "jpeg")) type_raw = 0;
+                else { usage(); return EXIT_USAGE; }
             } else if (!parse_size(argv[i], &pw, &ph)) { usage(); return EXIT_USAGE; }
         }
 
@@ -2041,7 +2086,7 @@ int main(int argc, char **argv)
         find_shipped_profile(bridge, argv[2]);
         g_ov_user_ok = check_override(argv[2]);
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
-        apply_stream_limits(bridge, argv[2]);      /* raw_stream / jpeg_max, before open */
+        apply_stream_limits(bridge, argv[2], type_raw);   /* raw_stream / jpeg_max / streams, before open */
         {   /* device-profile switch, read BEFORE open: the photo/RAW template */
             typedef int (*set_tpl_fn)(int);
             set_tpl_fn stp = (set_tpl_fn)a_dlsym(bridge, "indraw_set_still_template");

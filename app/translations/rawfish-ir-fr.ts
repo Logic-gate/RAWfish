@@ -34,12 +34,12 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+909" />
+        <location filename="../indrawpreview.cpp" line="+935" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
     <message>
-        <location line="+24" />
+        <location line="+25" />
         <source>engine stopped</source>
         <translation>moteur arrêté</translation>
     </message>
@@ -791,7 +791,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+209" />
+        <location filename="../qml/indraw.qml" line="+212" />
         <source>raw</source>
         <translation>raw</translation>
     </message>
@@ -808,13 +808,13 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     <message>
         <location line="+10" />
         <location line="+127" />
-        <location line="+1643" />
+        <location line="+1662" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-1796" />
+        <location line="-1815" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -902,31 +902,31 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>bulle : pas de mesure</translation>
     </message>
     <message>
-        <location line="+204" />
-        <location line="+715" />
+        <location line="+207" />
+        <location line="+731" />
         <source>zebra</source>
         <translation>zébra</translation>
     </message>
     <message>
-        <location line="-715" />
-        <location line="+715" />
+        <location line="-731" />
+        <location line="+731" />
         <source>peak</source>
         <translation>peaking</translation>
     </message>
     <message>
-        <location line="-689" />
-        <location line="+689" />
+        <location line="-705" />
+        <location line="+705" />
         <source>level</source>
         <translation>bulle</translation>
     </message>
     <message>
-        <location line="-689" />
-        <location line="+689" />
+        <location line="-705" />
+        <location line="+705" />
         <source>AE</source>
         <translation>AE</translation>
     </message>
     <message>
-        <location line="-616" />
+        <location line="-632" />
         <source>failed, see the log</source>
         <translation>échec, voir le journal</translation>
     </message>
@@ -966,7 +966,17 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>Profil de l'appareil : taille JPEG limitée</translation>
     </message>
     <message>
-        <location line="+15" />
+        <location line="+1" />
+        <source>Device profile: JPEG or RAW, one session each</source>
+        <translation>Profil de l'appareil : JPEG ou RAW, une session chacun</translation>
+    </message>
+    <message>
+        <location line="+14" />
+        <source>RAW failed on this camera: back to JPEG</source>
+        <translation>Le RAW a échoué sur cette caméra : retour en JPEG</translation>
+    </message>
+    <message>
+        <location line="+16" />
         <source>Σ stacking: experimental feature</source>
         <translation>Empilement Σ : fonction expérimentale</translation>
     </message>

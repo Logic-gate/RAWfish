@@ -35,12 +35,12 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+909"/>
+        <location filename="../indrawpreview.cpp" line="+935"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+25"/>
         <source>engine stopped</source>
         <translation type="unfinished"></translation>
     </message>
@@ -786,7 +786,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+209"/>
+        <location filename="../qml/indraw.qml" line="+212"/>
         <source>raw</source>
         <translation type="unfinished"></translation>
     </message>
@@ -803,13 +803,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+10"/>
         <location line="+127"/>
-        <location line="+1643"/>
+        <location line="+1662"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1796"/>
+        <location line="-1815"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -897,31 +897,31 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+204"/>
-        <location line="+715"/>
+        <location line="+207"/>
+        <location line="+731"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-715"/>
-        <location line="+715"/>
+        <location line="-731"/>
+        <location line="+731"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-689"/>
-        <location line="+689"/>
+        <location line="-705"/>
+        <location line="+705"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-689"/>
-        <location line="+689"/>
+        <location line="-705"/>
+        <location line="+705"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-616"/>
+        <location line="-632"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -961,7 +961,17 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+1"/>
+        <source>Device profile: JPEG or RAW, one session each</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>RAW failed on this camera: back to JPEG</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
         <source>Σ stacking: experimental feature</source>
         <translation type="unfinished"></translation>
     </message>

@@ -6,13 +6,22 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.12)
+## Known issues (as of 0.1.13)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.13 — JPEG or RAW sessions for drivers that refuse both (patch 0291)
+- "streams": "exclusive" in a camera's profile: the session holds the
+  stream of the chosen type only, and reopens when the type changes; if
+  RAW fails, the app falls back to JPEG and says so.
+- The Xperia 10 III profile uses it: RAW (DNG) works again there, as
+  ProCam showed it can; JPEG and RAW each in their own session.
+- streamtest: a fifth combination (viewfinder + RAW, no JPEG), a longer
+  wait for the camera service, and "untested" instead of a false failure.
 
 ## 0.1.12 — the Xperia 10 III profile no longer catches the 10 II (patch 0290)
 - The 10 III profile matched by RAW size as a fallback; the Xperia 10 II

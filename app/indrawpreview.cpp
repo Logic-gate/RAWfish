@@ -87,6 +87,19 @@ void IndrawPreview::setPreviewSize(const QSize &size)
 }
 
 QSize IndrawPreview::captureSize() const { return m_captureSize; }
+void IndrawPreview::setRawSession(bool raw)
+{
+    if (m_rawSession == raw) return;
+    m_rawSession = raw;
+    m_rawFellBack = false;
+    emit rawSessionChanged();
+    /* "streams": "exclusive" (from the caps): the session holds one type's
+     * stream, so the type's change reopens it; elsewhere nothing to do. */
+    if (m_active && m_gotCaps && m_caps.value(QStringLiteral("limits")).toString().contains(QLatin1String("exclusive"))
+            && m_sessionRaw != raw)
+        restart();
+}
+
 void IndrawPreview::setCaptureSize(const QSize &size)
 {
     if (m_captureSize == size) return;
@@ -198,11 +211,16 @@ void IndrawPreview::start()
      * size, or opens without RAW when it lists none (front camera). Tying it
      * to the JPEG size failed on every camera but the back one ("raw16 size
      * not listed") and on 16:9 JPEG sizes. */
+    /* The type's session ("streams": "exclusive" phones only; the engine
+     * ignores it elsewhere). A RAW session that died before its caps is not
+     * tried again: JPEG, and the page is told once the caps confirm. */
+    m_sessionRaw = m_rawSession && !m_rawFellBack;
     args << QStringLiteral("--log") << log
          << QStringLiteral("--jpgdir") << m_jpgDir << QStringLiteral("--dngdir") << m_dngDir
          << QStringLiteral("stream")
          << m_cameraId
-         << cap << prev << QStringLiteral("raw=max");
+         << cap << prev << QStringLiteral("raw=max")
+         << (m_sessionRaw ? QStringLiteral("type=raw") : QStringLiteral("type=jpeg"));
 
     m_buffer.clear();
     /* Inside the Sailjail sandbox /usr/bin only holds the app binary
@@ -606,6 +624,14 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         m_gotCaps = true;
         m_sizeFallback = false;
         emit capsChanged();
+        if (m_caps.value(QStringLiteral("limits")).toString().contains(QLatin1String("exclusive"))) {
+            if (m_rawFellBack) {
+                m_rawFellBack = false;         /* the page switches to JPEG: rawSession follows */
+                emit rawSessionFailed();
+            } else if (m_sessionRaw != m_rawSession) {
+                restart();                     /* the type was set before the caps said "exclusive" */
+            }
+        }
     } else if (name == "ae") {
         m_liveIso = f.value("iso").toInt();
         m_wbCct = f.value("cct").toInt();
@@ -930,6 +956,7 @@ void IndrawPreview::onProcessFinished(int code, QProcess::ExitStatus status)
      * stops after the third try instead of looping). */
     if (m_active) {
         if (!m_gotCaps) m_sizeFallback = true;   /* it never opened: retry at "max" */
+        if (!m_gotCaps && m_sessionRaw) m_rawFellBack = true;   /* and as JPEG, if the RAW session died */
         setError(tr("engine stopped"));
         scheduleRestart();
     }
