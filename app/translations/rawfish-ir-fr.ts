@@ -57,7 +57,7 @@
 <context>
     <name>MenuColumn</name>
     <message>
-        <location filename="../qml/MenuColumn.qml" line="+33" />
+        <location filename="../qml/MenuColumn.qml" line="+38" />
         <source>Tap again to confirm: %1</source>
         <translation>Touchez encore pour confirmer : %1</translation>
     </message>
@@ -160,14 +160,14 @@
         <location line="+19" />
         <location line="+2" />
         <location line="+276" />
-        <location line="+65" />
+        <location line="+72" />
         <location line="+13" />
         <location line="+12" />
         <source>off</source>
         <translation>off</translation>
     </message>
     <message>
-        <location line="-387" />
+        <location line="-394" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -443,7 +443,13 @@
         <translation>Retardateur %1 secondes</translation>
     </message>
     <message>
-        <location line="+5" />
+        <location line="+7" />
+        <location line="+17" />
+        <source>RAW: the sensor's format and size</source>
+        <translation>RAW : le format et la taille du capteur</translation>
+    </message>
+    <message>
+        <location line="-16" />
         <source>Format</source>
         <translation>Format</translation>
     </message>
@@ -463,12 +469,17 @@
         <translation>Aucune taille %1 disponible</translation>
     </message>
     <message>
-        <location line="+3" />
+        <location line="+4" />
         <source>Resolution</source>
         <translation>Résolution</translation>
     </message>
     <message>
         <location line="+7" />
+        <source>RAW: no JPEG quality</source>
+        <translation>RAW : pas de qualité JPEG</translation>
+    </message>
+    <message>
+        <location line="+1" />
         <source>Quality</source>
         <translation>Qualité</translation>
     </message>
@@ -484,6 +495,12 @@
     </message>
     <message>
         <location line="+8" />
+        <location line="+6" />
+        <source>RAW: the camera's processing does not apply</source>
+        <translation>RAW : le traitement de l'appareil ne s'applique pas</translation>
+    </message>
+    <message>
+        <location line="-5" />
         <source>Noise</source>
         <translation>Bruit</translation>
     </message>
@@ -493,7 +510,7 @@
         <translation>Réduction du bruit de la photo : %1</translation>
     </message>
     <message>
-        <location line="+4" />
+        <location line="+5" />
         <source>Sharpen</source>
         <translation>Netteté</translation>
     </message>

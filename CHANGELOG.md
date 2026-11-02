@@ -22,6 +22,9 @@ repository). Newest first.
   ProCam showed it can; JPEG and RAW each in their own session.
 - streamtest: a fifth combination (viewfinder + RAW, no JPEG), a longer
   wait for the camera service, and "untested" instead of a false failure.
+- Menu: in RAW, the JPEG-only columns (Format, Resolution, Quality,
+  Noise, Sharpen) are greyed out; a tap says why. They used to restart
+  the engine for a size the DNG never has.
 
 ## 0.1.12 — the Xperia 10 III profile no longer catches the 10 II (patch 0290)
 - The 10 III profile matched by RAW size as a fallback; the Xperia 10 II

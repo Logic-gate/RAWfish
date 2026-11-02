@@ -58,7 +58,7 @@
 <context>
     <name>MenuColumn</name>
     <message>
-        <location filename="../qml/MenuColumn.qml" line="+33"/>
+        <location filename="../qml/MenuColumn.qml" line="+38"/>
         <source>Tap again to confirm: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -161,14 +161,14 @@
         <location line="+19"/>
         <location line="+2"/>
         <location line="+276"/>
-        <location line="+65"/>
+        <location line="+72"/>
         <location line="+13"/>
         <location line="+12"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-387"/>
+        <location line="-394"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -444,7 +444,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+7"/>
+        <location line="+17"/>
+        <source>RAW: the sensor&apos;s format and size</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-16"/>
         <source>Format</source>
         <translation type="unfinished"></translation>
     </message>
@@ -464,12 +470,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>Resolution</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+7"/>
+        <source>RAW: no JPEG quality</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Quality</source>
         <translation type="unfinished"></translation>
     </message>
@@ -485,6 +496,12 @@
     </message>
     <message>
         <location line="+8"/>
+        <location line="+6"/>
+        <source>RAW: the camera&apos;s processing does not apply</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-5"/>
         <source>Noise</source>
         <translation type="unfinished"></translation>
     </message>
@@ -494,7 +511,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>Sharpen</source>
         <translation type="unfinished"></translation>
     </message>
