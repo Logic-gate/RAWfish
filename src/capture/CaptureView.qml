@@ -817,6 +817,7 @@ FocusScope {
             if (camera.lockStatus != Camera.Searching) {
                 _completeCapture()
             } else {
+                console.log("capture-timing qml shutter waiting for focus lock")
                 captureView._captureOnFocus = true
             }
         }
@@ -1205,11 +1206,25 @@ FocusScope {
 
         function _completeCapture() {
             if (captureBusy) {
+                console.log("capture-timing qml shutter ignored: busy"
+                            + " running=" + captureView._camera2CaptureRunning
+                            + " liveJpegRunning=" + captureView._camera2LiveJpegCaptureRunning
+                            + " background=" + captureView._backgroundRenders)
                 _captureQueued = true
                 return
             }
 
             if (captureView._camera2ViewfinderActive && !exposureLogic.captureReady) {
+                console.log("capture-timing qml shutter ignored: exposure not ready"
+                            + " fresh=" + exposureLogic.fresh
+                            + " autoReady=" + exposureLogic.autoReady
+                            + " partial=" + exposureLogic.partial
+                            + " fullyManual=" + exposureLogic.fullyManual
+                            + " acknowledged=" + exposureLogic.acknowledged
+                            + " applied=" + exposureLogic.appliedIso + "/" + exposureLogic.appliedTime
+                            + " resultExposure=" + exposureLogic.capabilities.result_exposure_supported
+                            + " aeState=" + exposureLogic.resultAeState
+                            + " status=" + exposureLogic.status)
                 exposureLogic.status = "Waiting for requested exposure before capture"
                 return
             }

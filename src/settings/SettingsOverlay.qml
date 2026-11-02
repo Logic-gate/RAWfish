@@ -712,8 +712,15 @@ PinchArea {
                     Item {
                         id: bottomShutterAnchor
 
-                        width: Math.min(parent.width, Theme.itemSizeExtraLarge * 1.18,
-                                        Math.max(0, parent.height - 2 * Theme.itemSizeSmall))
+                        // The original layout leaves room above and below the shutter for
+                        // the zoom buttons. The Photon layout puts the parameter row and mode
+                        // switcher elsewhere, so there the shutter just takes the cell height;
+                        // subtracting two button heights left nothing once the zoom row
+                        // was added, and a 0x0 container never received the touch.
+                        width: camera2ControlGrid.photon
+                               ? Math.min(parent.width, parent.height)
+                               : Math.min(parent.width, Theme.itemSizeExtraLarge * 1.18,
+                                          Math.max(0, parent.height - 2 * Theme.itemSizeSmall))
                         height: width
                         anchors.centerIn: parent
                     }
