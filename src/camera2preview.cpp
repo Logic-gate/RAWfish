@@ -1,4 +1,7 @@
 #include "camera2preview.h"
+#include "startuplog.h"
+#include "lutpreviewnode.h"
+#include "colorlut.h"
 #include "exifutils.h"
 #include "imageadjustments.h"
 #include "previewaids.h"
@@ -24,6 +27,7 @@
 #include <QtGlobal>
 
 #include <climits>
+#include <memory>
 #include <cmath>
 #include <thread>
 
@@ -356,9 +360,30 @@ void Camera2Preview::setFill(bool fill)
     update();
 }
 
+void Camera2Preview::setFlashMode(int mode)
+{
+    const int clamped = qBound(0, mode, 2);
+    if (m_flashMode == clamped) {
+        return;
+    }
+    m_flashMode = clamped;
+    emit flashModeChanged();
+    sendSettings();
+}
+
 qreal Camera2Preview::zoom() const
 {
     return m_zoom;
+}
+
+void Camera2Preview::setHardwareZoom(bool hardwareZoom)
+{
+    if (m_hardwareZoom == hardwareZoom) {
+        return;
+    }
+    m_hardwareZoom = hardwareZoom;
+    emit hardwareZoomChanged();
+    update();
 }
 
 void Camera2Preview::setZoom(qreal zoom)
@@ -499,6 +524,55 @@ void Camera2Preview::setNoiseReduction(int noiseReduction)
     sendSettings();
 }
 
+void Camera2Preview::setLutPath(const QString &path)
+{
+    if (m_lutPath == path) return;
+    m_lutPath = path;
+    emit lutPathChanged();
+    applyLut();
+}
+
+void Camera2Preview::setLutStrength(qreal strength)
+{
+    strength = qBound<qreal>(0.0, strength, 1.0);
+    if (qFuzzyCompare(m_lutStrength, strength)) return;
+    m_lutStrength = strength;
+    emit lutStrengthChanged();
+    applyLut();
+}
+
+// Loads the selected look (.cube or .plut) and publishes it for the preview and
+// every saved image. An empty path or a load failure leaves colours untouched.
+void Camera2Preview::applyLut()
+{
+    QString error;
+    std::shared_ptr<const ColorLut> lut;
+    if (!m_lutPath.isEmpty()) {
+        QFile file(m_lutPath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            error = QStringLiteral("Could not open LUT: %1").arg(m_lutPath);
+        } else if (file.size() > 32 * 1024 * 1024) {
+            error = QStringLiteral("LUT file is too large");
+        } else {
+            const QByteArray data = file.readAll();
+            auto parsed = std::make_shared<ColorLut>();
+            std::string parseError;
+            if (ColorLut::parse(data.constData(), size_t(data.size()),
+                                parsed.get(), &parseError)) {
+                lut = parsed;
+            } else {
+                error = QString::fromStdString(parseError);
+            }
+        }
+    }
+    ColorLut::setActive(lut, float(m_lutStrength));
+    if (m_lutError != error) {
+        m_lutError = error;
+        emit lutErrorChanged();
+    }
+    update();
+}
+
 void Camera2Preview::setFocusPeaking(bool enabled)
 {
     if (m_focusPeaking == enabled) return;
@@ -622,10 +696,82 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
         return nullptr;
     }
 
+    static bool loggedFirstPaint = false;
+    if (!loggedFirstPaint) {
+        loggedFirstPaint = true;
+        StartupLog::mark(QStringLiteral("preview first frame painted"));
+    }
+
+    // Where the (possibly cropped) source lands on screen. With hardware zoom the
+    // frame is already cropped by the camera; cropping it again would zoom twice and
+    // throw away resolution.
+    auto layout = [this](const QSizeF &imageSize, QRectF *draw, QRectF *source) {
+        const QRectF target(0, 0, width(), height());
+        const qreal zoom = m_hardwareZoom ? 1.0 : qMax<qreal>(1.0, m_zoom);
+        const QSizeF sourceSize(imageSize.width() / zoom, imageSize.height() / zoom);
+        *source = QRectF((imageSize.width() - sourceSize.width()) / 2,
+                         (imageSize.height() - sourceSize.height()) / 2,
+                         sourceSize.width(), sourceSize.height());
+        const qreal scale = m_fill
+                ? qMax(target.width() / sourceSize.width(),
+                       target.height() / sourceSize.height())
+                : qMin(target.width() / sourceSize.width(),
+                       target.height() / sourceSize.height());
+        const QSizeF drawSize(sourceSize.width() * scale, sourceSize.height() * scale);
+        *draw = QRectF(target.center().x() - drawSize.width() / 2,
+                       target.center().y() - drawSize.height() / 2,
+                       drawSize.width(), drawSize.height());
+    };
+
+    // A colour look runs on the GPU at the full preview size when nothing else needs
+    // the CPU copy of the frame. RAWFISH_CPU_LUT=1 forces the CPU path for comparison.
+    float lutStrength = 1.0f;
+    const std::shared_ptr<const ColorLut> lut = ColorLut::active(&lutStrength);
+    static const bool forceCpuLut = qEnvironmentVariableIsSet("RAWFISH_CPU_LUT");
+    const bool needsCpuImage =
+            ImageAdjustments::requested(m_renderExposure, m_colorTemperature, m_colorTint)
+            || m_focusPeaking || m_exposureZebras;
+    if (lut && lutStrength > 0.0f && !forceCpuLut && !needsCpuImage
+            && LutPreview::supported(*lut)) {
+        if (m_lutStripSource != lut) {
+            m_lutStrip = LutPreview::buildStrip(*lut);
+            m_lutStripSource = lut;   // keeps the address from being reused by a new look
+        }
+        QSGTexture *frameTexture = window()->createTextureFromImage(m_frame);
+        QSGTexture *lutTexture = window()->createTextureFromImage(m_lutStrip);
+        if (frameTexture && lutTexture) {
+            frameTexture->setFiltering(QSGTexture::Linear);
+            lutTexture->setFiltering(QSGTexture::Linear);
+            lutTexture->setHorizontalWrapMode(QSGTexture::ClampToEdge);
+            lutTexture->setVerticalWrapMode(QSGTexture::ClampToEdge);
+            QRectF drawRect, sourceRect;
+            const QSizeF imageSize = m_frame.size();
+            layout(imageSize, &drawRect, &sourceRect);
+            const QRectF normalized(sourceRect.x() / imageSize.width(),
+                                    sourceRect.y() / imageSize.height(),
+                                    sourceRect.width() / imageSize.width(),
+                                    sourceRect.height() / imageSize.height());
+            return new LutPreview::Node(frameTexture, lutTexture, float(lut->size()),
+                                        qMin(lutStrength, 1.0f), drawRect, normalized);
+        }
+        delete frameTexture;
+        delete lutTexture;
+    }
+
     QImage textureImage = m_frame;
+    // On the CPU a colour look costs per pixel, so the on-screen preview is drawn
+    // from a reduced copy. Saved images are processed at full resolution elsewhere.
+    constexpr int kLutPreviewLongSide = 640;
+    if (ColorLut::hasActive() &&
+            qMax(textureImage.width(), textureImage.height()) > kLutPreviewLongSide) {
+        // Averaging (not nearest-neighbour) keeps sensor grain from aliasing into the look.
+        textureImage = textureImage.scaled(kLutPreviewLongSide, kLutPreviewLongSide,
+                                           Qt::KeepAspectRatio,
+                                           Qt::SmoothTransformation);
+    }
     if (ImageAdjustments::requested(m_renderExposure, m_colorTemperature,
                                     m_colorTint)) {
-        textureImage = m_frame.copy();
+        textureImage = textureImage.copy();
         ImageAdjustments::apply(&textureImage, m_renderExposure,
                                 m_colorTemperature, m_colorTint);
     }
@@ -642,25 +788,10 @@ QSGNode *Camera2Preview::updatePaintNode(QSGNode *oldNode,
     node->setOwnsTexture(true);
     node->setTexture(texture);
 
-    const QRectF target(0, 0, width(), height());
-    const QSizeF imageSize = m_frame.size();
-    const qreal zoom = qMax<qreal>(1.0, m_zoom);
-    const QSizeF sourceSize(imageSize.width() / zoom,
-                            imageSize.height() / zoom);
-    const QRectF sourceRect((imageSize.width() - sourceSize.width()) / 2,
-                            (imageSize.height() - sourceSize.height()) / 2,
-                            sourceSize.width(), sourceSize.height());
-    const qreal scale = m_fill
-            ? qMax(target.width() / sourceSize.width(),
-                   target.height() / sourceSize.height())
-            : qMin(target.width() / sourceSize.width(),
-                   target.height() / sourceSize.height());
-    const QSizeF drawSize(sourceSize.width() * scale,
-                          sourceSize.height() * scale);
-    const QRectF drawRect(target.center().x() - drawSize.width() / 2,
-                          target.center().y() - drawSize.height() / 2,
-                          drawSize.width(), drawSize.height());
-
+    // Map from the texture that was actually uploaded: with a colour look active it is
+    // a reduced copy of m_frame, and using m_frame's size would sample only a corner.
+    QRectF drawRect, sourceRect;
+    layout(textureImage.size(), &drawRect, &sourceRect);
     node->setRect(drawRect);
     node->setSourceRect(sourceRect);
     return node;
@@ -1137,6 +1268,11 @@ void Camera2Preview::readFrames()
         return;
     }
     m_buffer.append(m_process->readAllStandardOutput());
+    static bool loggedFirstOutput = false;
+    if (!loggedFirstOutput && !m_buffer.isEmpty()) {
+        loggedFirstOutput = true;
+        StartupLog::mark(QStringLiteral("preview first output from helper (%1 bytes)").arg(m_buffer.size()));
+    }
     parseFrames();
 }
 
@@ -1370,6 +1506,8 @@ void Camera2Preview::startPreview()
     connect(m_process,
             static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
             this, &Camera2Preview::processFinished);
+    m_sentFlashMode = 0;
+    StartupLog::mark(QStringLiteral("preview process start"));
     m_process->start();
     if (m_process->waitForStarted(1000)) {
         m_running = true;
@@ -1454,6 +1592,11 @@ void Camera2Preview::sendSettings(bool captureExposure)
                      .arg(m_noiseReduction)
                      .arg(m_zoom, 0, 'f', 4)
                      .toLocal8Bit());
+
+    if (m_flashMode != m_sentFlashMode) {
+        m_process->write(QStringLiteral("flash %1\n").arg(m_flashMode).toLocal8Bit());
+        m_sentFlashMode = m_flashMode;
+    }
 }
 
 void Camera2Preview::sendExposureSettings(bool captureExposure)
@@ -1565,6 +1708,11 @@ void Camera2Preview::parseFrames()
         }
         updateHistogram(frame);
         m_frame = frame;
+        static bool loggedFirstFrame = false;
+        if (!loggedFirstFrame) {
+            loggedFirstFrame = true;
+            StartupLog::mark(QStringLiteral("preview first frame decoded %1x%2").arg(width).arg(height));
+        }
         m_buffer.remove(0, headerBytes + frameBytes);
         updated = true;
     }
