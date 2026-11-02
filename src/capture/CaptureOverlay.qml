@@ -33,6 +33,7 @@ SettingsOverlay {
     onZoomReleased: zoomController.release()
     onZoomCanceled: zoomController.cancel()
     onZoomResetRequested: if (zoomController.allowed) zoomController.setDirect(1)
+    onZoomValueRequested: zoomController.setDirect(value)
 
     function cancelZoom() {
         zoomController.cancel()
@@ -532,6 +533,7 @@ SettingsOverlay {
         y: captureView.camera2TopInset + captureView._camera2PreviewHeight - height
         visible: captureView._camera2ViewfinderActive
                  && isPortrait
+                 && Settings.global.looksStripVisible
                  && Settings.global.captureMode === "image"
         opacity: 1.0 - settingsOverlay.settingsOpacity
         enabled: opacity > 0.5

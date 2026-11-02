@@ -92,6 +92,27 @@ Canvas {
             }
             arrow(Math.PI * 0.1, Math.PI * 0.85)
             arrow(Math.PI * 1.1, Math.PI * 1.85)
+        } else if (kind === "swap") {              // two opposed horizontal arrows
+            var sx0 = w * 0.14, sx1 = w * 0.86, ah = w * 0.13
+            ctx.beginPath()
+            ctx.moveTo(sx0, h * 0.36); ctx.lineTo(sx1, h * 0.36)
+            ctx.moveTo(sx1 - ah, h * 0.36 - ah); ctx.lineTo(sx1, h * 0.36); ctx.lineTo(sx1 - ah, h * 0.36 + ah)
+            ctx.moveTo(sx1, h * 0.64); ctx.lineTo(sx0, h * 0.64)
+            ctx.moveTo(sx0 + ah, h * 0.64 - ah); ctx.lineTo(sx0, h * 0.64); ctx.lineTo(sx0 + ah, h * 0.64 + ah)
+            ctx.stroke()
+        } else if (kind === "sparkle") {           // a large and a small four-point star
+            var star = function (x, y, r) {
+                ctx.beginPath()
+                ctx.moveTo(x, y - r)
+                ctx.quadraticCurveTo(x, y, x + r, y)
+                ctx.quadraticCurveTo(x, y, x, y + r)
+                ctx.quadraticCurveTo(x, y, x - r, y)
+                ctx.quadraticCurveTo(x, y, x, y - r)
+                ctx.closePath()
+                ctx.fill()
+            }
+            star(w * 0.42, h * 0.56, w * 0.36)
+            star(w * 0.77, h * 0.24, w * 0.17)
         } else {                                   // gear
             var teeth = 8
             var ro = w * 0.46, ri = w * 0.34

@@ -286,6 +286,16 @@ static qreal camera2ZoomMaximum(const QJsonObject &camera)
     return maxDigitalZoom > 1.0 ? maxDigitalZoom : 1.0;
 }
 
+// Mirrors sfos_camera2_set_zoom_ratio(): the camera crops only if it takes a zoom
+// ratio with a range above 1.
+static bool camera2HardwareZoom(const QJsonObject &camera)
+{
+    const QJsonObject zoom = cameraZoomObject(camera);
+    const QJsonArray range = zoom.value(QStringLiteral("zoom_ratio_range")).toArray();
+    return zoom.value(QStringLiteral("zoom_ratio_supported")).toBool()
+            && range.count() >= 2 && range.at(1).toDouble() > 1.0;
+}
+
 static qreal clampCamera2Zoom(const QJsonObject &camera, qreal zoom)
 {
     qreal minZoom = 1.0;
@@ -1471,10 +1481,32 @@ QStringList DeclarativeCameraExtensions::camera2FocusDistanceModel(
     return values;
 }
 
+bool DeclarativeCameraExtensions::camera2HardwareZoom(const QString &cameraId)
+{
+    return loadCamera2Capabilities(cameraId)
+            && ::camera2HardwareZoom(m_camera2SelectedCamera);
+}
+
 qreal DeclarativeCameraExtensions::camera2MaximumZoom(const QString &cameraId)
 {
     return loadCamera2Capabilities(cameraId)
             ? camera2ZoomMaximum(m_camera2SelectedCamera) : 1.0;
+}
+
+qreal DeclarativeCameraExtensions::camera2EquivalentFocalLength(const QString &cameraId)
+{
+    if (!loadCamera2Capabilities(cameraId)) {
+        return 0.0;
+    }
+    const QJsonObject lens = cameraLensObject(m_camera2SelectedCamera);
+    const qreal focalLength = lens.value(QStringLiteral("focal_length_mm")).toDouble();
+    const qreal width = lens.value(QStringLiteral("sensor_width_mm")).toDouble();
+    const qreal height = lens.value(QStringLiteral("sensor_height_mm")).toDouble();
+    if (focalLength <= 0.0 || width <= 0.0 || height <= 0.0) {
+        return 0.0;
+    }
+    // 35 mm film diagonal is 43.27 mm.
+    return focalLength * 43.2666 / std::hypot(width, height);
 }
 
 QStringList DeclarativeCameraExtensions::rawCaptureExposureModel(

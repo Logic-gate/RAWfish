@@ -18,5 +18,6 @@ PhotonDeck 1.0 capture/PhotonDeck.qml
 PhotonModeSwitcher 1.0 capture/PhotonModeSwitcher.qml
 PhotonIcon 1.0 capture/PhotonIcon.qml
 PhotonTopBar 1.0 capture/PhotonTopBar.qml
+PhotonZoomRow 1.0 capture/PhotonZoomRow.qml
 PhotonHistogram 1.0 capture/PhotonHistogram.qml
 PhotonShutterSides 1.0 capture/PhotonShutterSides.qml

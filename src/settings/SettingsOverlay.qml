@@ -35,6 +35,7 @@ PinchArea {
     signal zoomReleased()
     signal zoomCanceled()
     signal zoomResetRequested()
+    signal zoomValueRequested(real value)
 
     function evChoices() {
         if (!exposureControl) return [0]
@@ -314,6 +315,33 @@ PinchArea {
             }
         }
 
+        // Zoom stops between the viewfinder and the exposure ruler, as in PhotonCamera.
+        PhotonZoomRow {
+            id: photonZoomRow
+
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                topMargin: Theme.paddingSmall
+                leftMargin: Theme.paddingSmall
+                rightMargin: Theme.paddingSmall
+            }
+            z: 3
+            visible: camera2ControlGrid.photon && Settings.global.captureMode === "image"
+            enabled: visible
+            zoom: overlay.currentZoom
+            maximumZoom: overlay.maximumZoom
+            equivalentFocalLength: Settings.camera2EquivalentFocalLength()
+            showFocalLength: Settings.global.zoomDisplayMode === "focal"
+            looksActive: Settings.global.looksStripVisible
+
+            onZoomRequested: overlay.zoomValueRequested(value)
+            onDisplayModeToggled: Settings.global.zoomDisplayMode =
+                                  (Settings.global.zoomDisplayMode === "focal" ? "ratio" : "focal")
+            onLooksClicked: Settings.global.looksStripVisible = !Settings.global.looksStripVisible
+        }
+
         PhotonDeck {
             id: photonDeck
 
@@ -321,7 +349,7 @@ PinchArea {
                 left: parent.left
                 right: parent.right
                 top: parent.top
-                topMargin: Theme.paddingSmall
+                topMargin: Theme.paddingSmall + (photonZoomRow.visible ? photonZoomRow.height + Theme.paddingSmall : 0)
             }
             z: 3
             visible: camera2ControlGrid.photon
@@ -550,7 +578,7 @@ PinchArea {
                 leftMargin: sideMargin
                 rightMargin: sideMargin
                 topMargin: camera2ControlGrid.photon
-                           ? photonDeck.height + Theme.paddingSmall
+                           ? photonDeck.y + photonDeck.height + Theme.paddingSmall
                            : camera2BottomDeck.headerHeight
                 bottomMargin: camera2ControlGrid.photon ? photonSwitcher.height + Theme.paddingMedium : 0
             }
@@ -885,7 +913,7 @@ PinchArea {
                 fill: parent
                 leftMargin: camera2ControlGrid.sideMargin
                 rightMargin: camera2ControlGrid.sideMargin
-                topMargin: Theme.paddingSmall + (camera2ControlGrid.photon ? photonDeck.height : 0)
+                topMargin: Theme.paddingSmall + (camera2ControlGrid.photon ? photonDeck.y + photonDeck.height : 0)
                 bottomMargin: Theme.paddingSmall
                             + (camera2ControlGrid.photon ? photonSwitcher.height + Theme.paddingMedium : 0)
             }

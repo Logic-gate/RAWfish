@@ -143,6 +143,10 @@ SettingsBase {
         property bool photonLayout: true
         // Photon-style histogram overlay on the viewfinder (top bar toggle).
         property bool photonHistogram: true
+        // Zoom bar labels: "focal" shows 35 mm equivalent focal lengths, "ratio" shows 1x, 2x.
+        property string zoomDisplayMode: "focal"
+        // The sparkle button on the zoom bar shows or hides the looks strip.
+        property bool looksStripVisible: true
         property bool advancedMode: false
         property string advancedCamera2CaptureFormat: "jpeg"
         property string advancedRawCaptureSize: "4096x3072"
@@ -682,6 +686,14 @@ SettingsBase {
 
     function camera2MaximumZoom() {
         return camera2Capabilities.camera2MaximumZoom(deviceId)
+    }
+
+    function camera2HardwareZoom() {
+        return camera2Capabilities.camera2HardwareZoom(deviceId)
+    }
+
+    function camera2EquivalentFocalLength() {
+        return camera2Capabilities.camera2EquivalentFocalLength(deviceId)
     }
 
     function rawCaptureApertureText(aperture) {

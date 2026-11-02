@@ -123,6 +123,7 @@ ApplicationWindow {
                          cameraId, frontFacing ? 270 : 90)
         mirror: Settings.camera2PreviewMirror(cameraId, frontFacing)
         fill: true
+        hardwareZoom: Settings.camera2HardwareZoom()
 
         Behavior on y {
             enabled: !galleryVisible

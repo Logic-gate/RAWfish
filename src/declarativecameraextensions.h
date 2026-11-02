@@ -57,6 +57,9 @@ public:
     Q_INVOKABLE QStringList camera2ShutterModel(const QString &cameraId);
     Q_INVOKABLE QStringList camera2FocusDistanceModel(const QString &cameraId);
     Q_INVOKABLE qreal camera2MaximumZoom(const QString &cameraId);
+    Q_INVOKABLE bool camera2HardwareZoom(const QString &cameraId);
+    // 35 mm equivalent focal length at 1x, or 0 when the sensor size is unknown.
+    Q_INVOKABLE qreal camera2EquivalentFocalLength(const QString &cameraId);
     Q_INVOKABLE QStringList rawCaptureExposureModel(const QString &cameraId);
     Q_INVOKABLE QVariantList rawCaptureRotationModel(const QString &cameraId,
                                                      const QString &mode);
