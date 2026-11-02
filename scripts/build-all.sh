@@ -69,7 +69,10 @@ case "$target" in
     *) echo "sfdk target '$target': cannot tell its architecture (aarch64 or armv7hl)" >&2; exit 1 ;;
 esac
 echo "== engine (library with the NDK, CLI + RPM with sfdk) =="
-if [ -n "$clean" ]; then rm -rf build/android RPMS sailfish/rawfish-ir-cli; fi
+# --clean removes this architecture's RPMs only: with --all, the other
+# architecture's were built a minute ago and must stay (wiping RPMS/ left
+# only the last architecture's engine package).
+if [ -n "$clean" ]; then rm -rf build/android sailfish/rawfish-ir-cli; rm -f RPMS/*."$arch".rpm; fi
 ./scripts/build-engine-rpm.sh
 echo "== app (sfdk) =="
 ( cd app && "$sfdk" -c no-fix-version build $clean )      # the app's spec always builds from clean
