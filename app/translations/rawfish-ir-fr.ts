@@ -445,8 +445,8 @@
     <message>
         <location line="+7" />
         <location line="+17" />
-        <source>RAW: the sensor's format and size</source>
-        <translation>RAW : le format et la taille du capteur</translation>
+        <source>RAW has one size and one format: the sensor's</source>
+        <translation>Le RAW n'a qu'une taille et un format : ceux du capteur</translation>
     </message>
     <message>
         <location line="-16" />

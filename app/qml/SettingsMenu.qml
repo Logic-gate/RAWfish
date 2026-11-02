@@ -388,7 +388,7 @@ Item {
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).
             MenuColumn { visible: menu.simpleMenuHas("format"); width: band.colW; header: header
-                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the sensor's format and size")
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Format"); values: ["4:3", "16:9"]; current: menu.format
                 // "as the RAW" is whichever format has the RAW stream's shape
                 // (4:3 on the JP2, 16:9 on the XA2); the other one crops. Up to
@@ -405,7 +405,7 @@ Item {
                     if (sz === "") { header.show(qsTr("No %1 size listed").arg(value)); return }
                     menu.formatSaved = value; menu.save("format", value); menu.setSize(sz) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the sensor's format and size")
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Resolution")
                 values: menu.sizesFor(menu.format)
                 current: menu.effectiveSize()

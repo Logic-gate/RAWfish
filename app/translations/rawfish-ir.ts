@@ -446,7 +446,7 @@
     <message>
         <location line="+7"/>
         <location line="+17"/>
-        <source>RAW: the sensor&apos;s format and size</source>
+        <source>RAW has one size and one format: the sensor&apos;s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
