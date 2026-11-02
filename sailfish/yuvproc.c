@@ -68,44 +68,87 @@ static void box_filter(const float *src, float *dst, int w, int h, int r)
     free(tmp);
 }
 
-/* Colour noise: each chroma plane is smoothed by a guided filter whose
- * guide is the luminance at the same resolution. Where the luminance has
- * an edge, the colour keeps it; elsewhere the colour blotches average
- * out. Radius 2 (chroma pixels): larger blurs the colour edges. */
-static int guided_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t *v)
+/* Colour noise: a cross bilateral on the two chroma planes together. The
+ * chroma noise is measured per brightness band (the median deviation of a
+ * pixel from its four neighbours), then each pixel is averaged with its
+ * neighbours weighted by how far their colour is from its own, against
+ * 2.5 times that noise: blotches fall within it and merge, colour edges do
+ * not and stay, even where the luminance is flat or textured. Two
+ * separable passes, +-8 pixels. After ProCam's chromaBilateral (BSD-3). */
+#define CB_BANDS 16
+#define CB_RADIUS 8
+typedef struct { const float *inu, *inv, *k; float *outu, *outv; int w, h, axis; const float *sp; } bil_ctx_t;
+static void bilateral_rows(void *p, int y0, int y1)
 {
-    const int cw = w / 2, ch = h / 2, r = 2;
-    const float eps = 100.0f;
-    size_t n = (size_t)cw * ch;
-    float *I = malloc(n * sizeof *I), *mI = malloc(n * sizeof *mI), *II = malloc(n * sizeof *II);
-    float *p = malloc(n * sizeof *p), *mp = malloc(n * sizeof *mp), *Ip = malloc(n * sizeof *Ip), *a = malloc(n * sizeof *a), *b = malloc(n * sizeof *b);
-    int plane, x, yy;
-    size_t i;
-    if (!I || !mI || !II || !p || !mp || !Ip || !a || !b) { free(I); free(mI); free(II); free(p); free(mp); free(Ip); free(a); free(b); return -1; }
-    for (yy = 0; yy < ch; ++yy)                  /* the guide: Y averaged 2x2 */
+    bil_ctx_t *c = p; int w = c->w, h = c->h, x, y, t;
+    for (y = y0; y < y1; ++y)
+        for (x = 0; x < w; ++x) {
+            size_t i = (size_t)y * w + x;
+            float u0 = c->inu[i], v0 = c->inv[i], kk = c->k[i], sw = 0, su = 0, sv = 0;
+            for (t = -CB_RADIUS; t <= CB_RADIUS; ++t) {
+                int xx = x, yy = y;
+                size_t j; float du, dv, e, wgt;
+                if (c->axis) { xx = x + t; if (xx < 0) xx = -xx; if (xx >= w) xx = 2 * w - 2 - xx; }
+                else { yy = y + t; if (yy < 0) yy = -yy; if (yy >= h) yy = 2 * h - 2 - yy; }
+                j = (size_t)yy * w + xx;
+                du = c->inu[j] - u0; dv = c->inv[j] - v0;
+                e = (du * du + dv * dv) * kk;           /* (d / sigma)^2 / 2 */
+                wgt = e < 8.0f ? c->sp[t + CB_RADIUS] * expf(-e) : 0.0f;
+                sw += wgt; su += wgt * c->inu[j]; sv += wgt * c->inv[j];
+            }
+            c->outu[i] = sw > 0 ? su / sw : u0; c->outv[i] = sw > 0 ? sv / sw : v0;
+        }
+}
+static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t *v)
+{
+    const int cw = w / 2, ch = h / 2;
+    size_t n = (size_t)cw * ch, i;
+    float *a = malloc(n * sizeof *a), *b = malloc(n * sizeof *b), *c2 = malloc(n * sizeof *c2), *d = malloc(n * sizeof *d), *k = malloc(n * sizeof *k);
+    uint8_t *band = malloc(n);
+    float noise[CB_BANDS], sp[2 * CB_RADIUS + 1], last = -1;
+    unsigned hist[CB_BANDS][256]; unsigned long cnt[CB_BANDS];
+    int x, yy, bnd, t, pass;
+    if (!a || !b || !c2 || !d || !k || !band) { free(a); free(b); free(c2); free(d); free(k); free(band); return -1; }
+    for (yy = 0; yy < ch; ++yy)                 /* the brightness band of each chroma pixel */
         for (x = 0; x < cw; ++x) {
             const uint8_t *s = y + (size_t)(2 * yy) * w + 2 * x;
-            I[(size_t)yy * cw + x] = (s[0] + s[1] + s[w] + s[w + 1]) * 0.25f;
+            band[(size_t)yy * cw + x] = (uint8_t)(((s[0] + s[1] + s[w] + s[w + 1]) / 4) * CB_BANDS / 256);
         }
-    box_filter(I, mI, cw, ch, r);
-    for (i = 0; i < n; ++i) II[i] = I[i] * I[i];
-    box_filter(II, II, cw, ch, r);               /* in place: src is read into tmp first */
-    for (plane = 0; plane < 2; ++plane) {
-        uint8_t *c = plane ? v : u;
-        for (i = 0; i < n; ++i) { p[i] = c[i]; Ip[i] = I[i] * c[i]; }
-        box_filter(p, mp, cw, ch, r);
-        box_filter(Ip, Ip, cw, ch, r);
-        for (i = 0; i < n; ++i) {
-            float var = II[i] - mI[i] * mI[i], cov = Ip[i] - mI[i] * mp[i];
-            a[i] = cov / (var + eps); b[i] = mp[i] - a[i] * mI[i];
+    memset(hist, 0, sizeof hist); memset(cnt, 0, sizeof cnt);
+    for (yy = 1; yy < ch - 1; yy += 2)          /* the noise per band: residual against the 4 neighbours */
+        for (x = 1; x < cw - 1; x += 2) {
+            size_t p = (size_t)yy * cw + x;
+            float ru = u[p] - 0.25f * (u[p - 1] + u[p + 1] + u[p - cw] + u[p + cw]);
+            float rv = v[p] - 0.25f * (v[p - 1] + v[p + 1] + v[p - cw] + v[p + cw]);
+            int r = (int)(sqrtf(0.5f * (ru * ru + rv * rv)) * 8.0f + 0.5f);   /* eighths */
+            if (r > 255) r = 255;
+            hist[band[p]][r]++; cnt[band[p]]++;
         }
-        box_filter(a, a, cw, ch, r); box_filter(b, b, cw, ch, r);
-        for (i = 0; i < n; ++i) {
-            float o = a[i] * I[i] + b[i];
-            c[i] = (uint8_t)(o < 0 ? 0 : o > 255 ? 255 : o + 0.5f);
-        }
+    for (bnd = 0; bnd < CB_BANDS; ++bnd) {
+        unsigned long acc = 0; int r;
+        if (cnt[bnd] < 32) { noise[bnd] = -1; continue; }
+        for (r = 0; r < 256; ++r) { acc += hist[bnd][r]; if (acc * 2 >= cnt[bnd]) break; }
+        noise[bnd] = (r / 8.0f) * 1.4826f / sqrtf(1.25f) * 1.2f;   /* MAD -> sigma; 4-neighbour residual has 1.25 sigma^2 */
     }
-    free(I); free(mI); free(II); free(p); free(mp); free(Ip); free(a); free(b);
+    for (bnd = 0; bnd < CB_BANDS; ++bnd) if (noise[bnd] >= 0) { last = noise[bnd]; break; }
+    if (last < 0) last = 1.0f;
+    for (bnd = 0; bnd < CB_BANDS; ++bnd) {
+        if (noise[bnd] < 0) noise[bnd] = last;
+        if (noise[bnd] < 0.05f) noise[bnd] = 0.05f;    /* a clipped area has no residual at all */
+        last = noise[bnd];
+    }
+    for (i = 0; i < n; ++i) { float s = 2.5f * noise[band[i]]; k[i] = 1.0f / (2.0f * s * s); a[i] = u[i]; b[i] = v[i]; }
+    for (t = -CB_RADIUS; t <= CB_RADIUS; ++t) sp[t + CB_RADIUS] = expf(-0.5f * (float)t * t / 16.0f);   /* spatial sigma 4 */
+    for (pass = 0; pass < 2; ++pass) {
+        bil_ctx_t bc = { a, b, k, c2, d, cw, ch, pass == 0, sp };
+        parallel_rows(bilateral_rows, &bc, ch);
+        { float *tmp = a; a = c2; c2 = tmp; tmp = b; b = d; d = tmp; }
+    }
+    for (i = 0; i < n; ++i) {
+        u[i] = (uint8_t)(a[i] < 0 ? 0 : a[i] > 255 ? 255 : a[i] + 0.5f);
+        v[i] = (uint8_t)(b[i] < 0 ? 0 : b[i] > 255 ? 255 : b[i] + 0.5f);
+    }
+    free(a); free(b); free(c2); free(d); free(k); free(band);
     return 0;
 }
 
@@ -277,7 +320,7 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_de
     }
     if (colour) {
         t0 = now_ms();
-        if (guided_chroma(out->y, w, h, out->u, out->v)) return -1;
+        if (bilateral_chroma(out->y, w, h, out->u, out->v)) return -1;
         rep->ms_colour = now_ms() - t0;
     }
     return 0;

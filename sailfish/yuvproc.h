@@ -1,5 +1,6 @@
 /* yuvproc.h -- our own noise reduction on the engine's YUV frames: colour by
- * a guided filter, grain by merging several frames (never by smoothing). */
+ * a cross bilateral filter, grain by merging several frames (never by
+ * smoothing). */
 #ifndef INDRAW_YUVPROC_H
 #define INDRAW_YUVPROC_H
 #include "../android/yuvframe.h"
@@ -12,8 +13,8 @@ typedef struct {
 } yuv_denoise_report_t;
 
 /* n frames (1..4), the first the reference. Writes the result into out (its
- * planes malloc'd here: free them with free()). colour: the guided filter on
- * U and V. 0 on success. */
+ * planes malloc'd here: free them with free()). colour: the bilateral filter
+ * on U and V. 0 on success. */
 int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_denoise_report_t *rep);
 
 /* Sharpening of a frame's luminance, in place: level 1..3 (0.6, 1.2, 1.8 of
