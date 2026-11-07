@@ -14,7 +14,16 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.1.14 — settings kept when the camera restarts (patch 0296)
+## 0.1.14 — settings kept when the camera restarts; focus calibration shipped; the focal button (patches 0296–0297)
+- Focus calibration: the JP2's measured table (7 points) ships in its
+  profile for camera 0; the engine takes a camera's table from the
+  shipped profile when the user's files have none (a fresh install no
+  longer loses it). The manual distance on the deck is red while the
+  camera has no table, white once one is in force.
+- Focal button: a tap cycles the back cameras, a long press goes to the
+  front camera, a tap from the front returns to the last back camera;
+  with one back and one front camera a tap toggles them. The caps line
+  now gives each camera's facing.
 - Back from the background (a photo opened in another app, the screen
   off) or after a size or type change, the camera came back in automatic
   exposure, with the manual focus at a default distance and no metering

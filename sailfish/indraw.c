@@ -829,14 +829,21 @@ static int read_focus_calibration(const char *id, float *real_d, float *hal_d, i
     char dir[1024], file[1100];
     float r2[16], h2[16];
     int n, n2, i, j;
-    if (profile_dir(dir, sizeof dir) != 0) return 0;
-    snprintf(file, sizeof file, "%s/override-hal.json", dir);
-    n = read_focus_calibration_file(file, id, real_d, hal_d, max);
-    snprintf(file, sizeof file, "%s/focus-calibration.json", dir);
-    n2 = read_focus_calibration_file(file, id, r2, h2, 16);
-    for (i = 0; i < n2; ++i) {
-        for (j = 0; j < n; ++j) if (fabsf(real_d[j] - r2[i]) < 1e-4f) { hal_d[j] = h2[i]; break; }
-        if (j == n && n < max) { real_d[n] = r2[i]; hal_d[n] = h2[i]; ++n; }
+    /* The shipped profile's table first (the JP2's measured one), then the
+     * user's override-hal.json, then the assistant's focus-calibration.json:
+     * a later source replaces a distance it also has, and adds the others. */
+    n = g_ov_shipped[0] ? read_focus_calibration_file(g_ov_shipped, id, real_d, hal_d, max) : 0;
+    if (profile_dir(dir, sizeof dir) != 0) return n;
+    {
+        int pass;
+        for (pass = 0; pass < 2; ++pass) {
+            snprintf(file, sizeof file, "%s/%s", dir, pass == 0 ? "override-hal.json" : "focus-calibration.json");
+            n2 = read_focus_calibration_file(file, id, r2, h2, 16);
+            for (i = 0; i < n2; ++i) {
+                for (j = 0; j < n; ++j) if (fabsf(real_d[j] - r2[i]) < 1e-4f) { hal_d[j] = h2[i]; break; }
+                if (j == n && n < max) { real_d[n] = r2[i]; hal_d[n] = h2[i]; ++n; }
+            }
+        }
     }
     for (i = 1; i < n; ++i)                        /* keep it sorted               */
         for (j = i; j > 0 && real_d[j] < real_d[j - 1]; --j) {

@@ -89,6 +89,14 @@ that was sharpest for it. The values above are the JP2's approximate starting
 table. Without a table, manual distances use the uncalibrated 1:1 mapping and
 the tool warns in the log.
 
+A shipped profile can carry a `focus_calibration` table per camera (the
+JP2's measured one ships for its camera 0): the engine reads it first,
+then the user's override-hal.json, then the assistant's
+focus-calibration.json, a later source replacing a distance it also has
+and adding the others. Each camera needs its own table: the JP2's 18 mm
+camera focuses too and has none yet. The deck shows the manual distance
+in red on a camera without a table.
+
 ### Calibrating the focus yourself, the simple way
 
 You do not need to know any diopter. The idea: let the autofocus find the

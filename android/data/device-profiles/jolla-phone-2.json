@@ -18,7 +18,38 @@
       "overrides": {
         "_hal_exposure_max_ns": 16000000000,
         "observed_shutter_max_ns": 500000000
-      }
+      },
+      "focus_calibration": [
+        {
+          "real_m": null,
+          "hal_diopters": 2.0
+        },
+        {
+          "real_m": 5.0,
+          "hal_diopters": 2.299
+        },
+        {
+          "real_m": 2.0,
+          "hal_diopters": 2.597
+        },
+        {
+          "real_m": 1.0,
+          "hal_diopters": 3.497
+        },
+        {
+          "real_m": 0.5,
+          "hal_diopters": 4.808
+        },
+        {
+          "real_m": 0.25,
+          "hal_diopters": 6.494
+        },
+        {
+          "real_m": 0.1,
+          "hal_diopters": 14.085
+        }
+      ],
+      "_focus_calibration_note": "Measured on one JP2 (scripts/focus-calib.sh, October 2026): the HAL's lens value for each real distance, interpolated in diopters. A user's own table (override-hal.json or the calibration assistant) replaces these distances and adds others. Camera 2 (the 18 mm) focuses too and has no table yet."
     }
   ]
 }

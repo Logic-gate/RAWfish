@@ -5184,7 +5184,7 @@ static void emit_caps(void)
     long long iso_min = -1, iso_max = -1, iso_analog = -1, exp_min = -1, exp_max = -1, shutter_max;
     int ev_min = 0, ev_max = 0, ev_n = 0, ev_d = 1, black = 64, white = 1023;
     float zoom_max = 1.0f, focal = 0.0f, focal_eq = 0.0f;
-    char cams[64] = "", sizes[300] = "", awb[64] = "", scenes[96] = "";
+    char cams[64] = "", sizes[300] = "", awb[64] = "", scenes[96] = "", facing[64] = "";
     long long peak_edge, zebra_jpeg, zebra_raw, peak_width;
     int has_flash = 0, crop_free = 0;
     float aperture = 0.0f, min_focus = 0.0f;    /* the closest lens position, HAL diopters */
@@ -5202,8 +5202,20 @@ static void emit_caps(void)
         ACameraIdList *list = NULL;
         if (ACameraManager_getCameraIdList(g.manager, &list) == ACAMERA_OK && list) {
             int i; size_t n = 0;
-            for (i = 0; i < list->numCameras && n < sizeof cams - 8; ++i)
+            for (i = 0; i < list->numCameras && n < sizeof cams - 8; ++i) {
+                ACameraMetadata *ch = NULL;
+                const char *fc = "?";
                 n += (size_t)snprintf(cams + n, sizeof cams - n, "%s%s", i ? "," : "", list->cameraIds[i]);
+                /* each camera's facing, for the app's focal button (back ones
+                 * by a tap, the front one by a long press) */
+                if (ACameraManager_getCameraCharacteristics(g.manager, list->cameraIds[i], &ch) == ACAMERA_OK && ch) {
+                    ACameraMetadata_const_entry fe;
+                    if (ACameraMetadata_getConstEntry(ch, ACAMERA_LENS_FACING, &fe) == ACAMERA_OK && fe.count)
+                        fc = fe.data.u8[0] == ACAMERA_LENS_FACING_FRONT ? "front" : fe.data.u8[0] == ACAMERA_LENS_FACING_BACK ? "back" : "external";
+                    ACameraMetadata_free(ch);
+                }
+                if (strlen(facing) + 10 < sizeof facing) snprintf(facing + strlen(facing), sizeof facing - strlen(facing), "%s%s", i ? "," : "", fc);
+            }
             ACameraManager_deleteCameraIdList(list);
         }
     }
@@ -5261,10 +5273,10 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s facing=%s focus_cal=%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
-             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, sizes, awb, scenes);
+             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, facing, g.focus_cal_n, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
         if (n && line[n - 1] == '\n') line[--n] = '\0';

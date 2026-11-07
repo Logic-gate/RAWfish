@@ -593,6 +593,11 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         for (const QByteArray &id : f.value("cameras").split(','))
             if (!id.isEmpty()) cams.append(QString::fromLatin1(id));
         m_caps.insert(QStringLiteral("cameras"), cams);
+        QVariantList facing;                       /* each camera's side, in the order of "cameras" */
+        for (const QByteArray &fc : f.value("facing").split(','))
+            if (!fc.isEmpty()) facing.append(QString::fromLatin1(fc));
+        m_caps.insert(QStringLiteral("facing"), facing);
+        m_caps.insert(QStringLiteral("focusCal"), f.value("focus_cal", "0").toInt());   /* calibration points in force */
         QVariantList sizes;
         for (const QByteArray &sz : f.value("jpeg_sizes").split(','))
             if (!sz.isEmpty()) sizes.append(QString::fromLatin1(sz));

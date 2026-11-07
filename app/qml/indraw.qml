@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "191"                             // shown in the deck
+    readonly property string uiVersion: "192"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -764,13 +764,41 @@ ApplicationWindow {
                 else if (imageType === "raw" && typeBeforeStack !== "raw") imageType = typeBeforeStack
             }
             // The HAL's camera ids, remembered from the first caps line (a
-            // restart on another camera reports the same list).
+            // restart on another camera reports the same list), with their
+            // facings; and the last back camera, to return to from the front.
             property var cameraIds: []
+            property var cameraFacing: []
+            property string lastBackCamera: ""
+            function switchCamera(longPress) {
+                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1","2"]
+                var fc = page.cameraFacing
+                if (fc.length !== ids.length) {                       // no facings: cycle all
+                    viewfinder.cameraId = ids[(ids.indexOf(viewfinder.cameraId)+1) % ids.length]
+                    return
+                }
+                var backs = [], fronts = [], i
+                for (i = 0; i < ids.length; i++) { if (fc[i] === "front") fronts.push(ids[i]); else backs.push(ids[i]) }
+                var cur = viewfinder.cameraId
+                var onFront = fronts.indexOf(cur) >= 0
+                if (onFront) {                                        // back to the last back camera
+                    if (longPress) return
+                    viewfinder.cameraId = backs.indexOf(page.lastBackCamera) >= 0 ? page.lastBackCamera : (backs.length > 0 ? backs[0] : cur)
+                    return
+                }
+                page.lastBackCamera = cur
+                if (longPress || (backs.length === 1 && fronts.length > 0)) {   // the front one
+                    if (fronts.length > 0) viewfinder.cameraId = fronts[0]
+                    return
+                }
+                if (backs.length > 1) viewfinder.cameraId = backs[(backs.indexOf(cur)+1) % backs.length]
+            }
             Connections {
                 target: viewfinder
                 onCapsChanged: {
-                    if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0)
+                    if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0) {
                         page.cameraIds = viewfinder.caps.cameras
+                        page.cameraFacing = viewfinder.caps.facing ? viewfinder.caps.facing : []
+                    }
                     page.applyAidThresholds()
                     if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()
                     // The caps line is on stdout, not in the engine's log: echo
@@ -1737,11 +1765,13 @@ ApplicationWindow {
                                    ? qsTr("%1mm").arg(Math.round(viewfinder.caps.focalEq))
                                    : qsTr("cam %1").arg(viewfinder.cameraId)
                             subCaption: viewfinder.caps.focalEq > 0 ? qsTr("(=35)") : ""
-                            onCycle: {
-                                // Cycle through the ids the HAL lists (caps), else 0/1/2.
-                                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1","2"]
-                                viewfinder.cameraId = ids[(ids.indexOf(viewfinder.cameraId)+1) % ids.length]
-                            }
+                            // A tap cycles the back cameras; a long press goes to
+                            // the front one; from the front, a tap returns to the
+                            // last back camera. With one back and one front camera
+                            // a tap toggles them. Without facings (an old engine),
+                            // a tap cycles every camera as before.
+                            onCycle: page.switchCamera(false)
+                            onHeld: page.switchCamera(true)
                         }
                         CycleButton {
                             width: parent.width; height: (parent.height - parent.topPadding) / 3
@@ -1763,7 +1793,11 @@ ApplicationWindow {
                             caption: qsTr("FOCUS")
                             enabled: !page.sceneOn; opacity: page.sceneOn ? Theme.opacityLow : 1.0
                             // Manual focus shows the distance; the others a short label.
+                            // The distance is red while this camera has no focus
+                            // calibration (the HAL's lens value taken as 1:1), white
+                            // once a table is in force (caps focus_cal).
                             value: page.focusModeLabel(page.focusMode)
+                            textColor: page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
                             onCycle: {
                                 var f = ["auto", "cont", "manual"]    // macro: engine only
                                 page.focusMode = f[(f.indexOf(page.focusMode)+1) % f.length]
