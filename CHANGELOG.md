@@ -6,13 +6,25 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.13)
+## Known issues (as of 0.1.14)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.14 — settings kept when the camera restarts (patch 0296)
+- Back from the background (a photo opened in another app, the screen
+  off) or after a size or type change, the camera came back in automatic
+  exposure, with the manual focus at a default distance and no metering
+  circle. The manual ISO, speed and EV, the manual distance and the
+  circle's point are now given back (the measure at the circle is made
+  again). On another camera the exposure mode and the light stay: the
+  ISO as it was, the speed scaled by the apertures' ratio; the focus
+  mode stays but the distance starts afresh; the circle follows the
+  focal lengths' ratio while it stays in the field. The loupe stays
+  closed.
 
 ## 0.1.13 — JPEG or RAW sessions for drivers that refuse both (patch 0291)
 - "streams": "exclusive" in a camera's profile: the session holds the

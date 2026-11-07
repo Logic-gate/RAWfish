@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "190"                             // shown in the deck
+    readonly property string uiVersion: "191"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -287,7 +287,10 @@ ApplicationWindow {
                 meterCircle.x = p.u * viewfinderZone.width - meterCircle.width / 2
                 meterCircle.y = p.v * viewfinderZone.height - meterCircle.height / 2
             }
-            onVwsChanged: placeCircle()
+            onVwsChanged: {
+                placeCircle()
+                if (viewfinder.running && !pendingRestore && vws.hasRef !== undefined && !restoreTimer.running) { keptRef = vws.hasRef; keptRefU = vws.refU; keptRefV = vws.refV; keptCamera = viewfinder.cameraId; if (viewfinder.caps.focalEq > 0) keptFocalEq = viewfinder.caps.focalEq }
+            }
             // A tap on the viewfinder: the reference point, in display-window
             // coordinates; the controller maps it and runs the focus / light
             // sequence, then reports the circle to draw.
@@ -419,16 +422,61 @@ ApplicationWindow {
                 viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
             }
             onFocusModeChanged: { applyFocus(); meterCircle.opacity = 0 }
+            // Kept across an engine restart: the manual focus distance and the
+            // reference point (the circle). Both live in the engine's process;
+            // a restarted engine gets them back once its capabilities are in.
+            // On another camera the distance is not carried (another lens, its
+            // own range: the mode stays, the distance starts afresh); the
+            // circle's point is carried through the focal lengths' ratio, if it
+            // stays in the field.
+            property real keptDiopters: -1
+            property bool keptRef: false
+            property real keptRefU: 0.5
+            property real keptRefV: 0.5
+            property string keptCamera: ""
+            property real keptFocalEq: 0
+            property bool pendingRestore: false
+            onFcsChanged: if (viewfinder.running && !pendingRestore && page.focusMode === "manual" && fcs.diopters !== undefined && !restoreTimer.running) { keptDiopters = fcs.diopters; keptCamera = viewfinder.cameraId; if (viewfinder.caps.focalEq > 0) keptFocalEq = viewfinder.caps.focalEq }
+            function restoreAtCaps() {
+                pendingRestore = false
+                var c = viewfinder.caps
+                var other = page.keptCamera !== "" && page.keptCamera !== viewfinder.cameraId
+                if (page.focusMode === "manual" && page.keptDiopters >= 0 && !other)
+                    viewfinder.sendCommand("fc distance " + page.keptDiopters.toFixed(3))
+                if (page.keptRef) {
+                    if (other && page.keptFocalEq > 0 && c.focalEq > 0) {
+                        var r = c.focalEq / page.keptFocalEq          // a longer lens magnifies: the point moves out from the centre
+                        page.keptRefU = 0.5 + (page.keptRefU - 0.5) * r
+                        page.keptRefV = 0.5 + (page.keptRefV - 0.5) * r
+                        if (page.keptRefU < 0.02 || page.keptRefU > 0.98 || page.keptRefV < 0.02 || page.keptRefV > 0.98) page.keptRef = false
+                    }
+                    if (page.keptRef) { meterCircle.opacity = 1.0; restoreTimer.restart() } else meterCircle.opacity = 0
+                }
+            }
+            // The circle's tap is replayed a moment after the restart, once the
+            // exposure has its manual choices back (a tap in automatic holds a
+            // spot measure): the measure at that point is made again.
+            Timer {
+                id: restoreTimer
+                interval: 400
+                onTriggered: {
+                    if (!viewfinder.running) return
+                    if (page.keptRef) viewfinder.sendCommand("vw tap " + page.keptRefU.toFixed(4) + " " + page.keptRefV.toFixed(4))
+                }
+            }
             Connections {
                 target: viewfinder
                 // A (re)started engine -- another camera, another size, back from
-                // the background -- is a new session that knows no circle and no
-                // loupe: the page starts clean too, so the two never disagree.
+                // the background -- is a new session that knows no circle, no
+                // manual distance and no loupe. The loupe stays closed; the
+                // distance and the circle are given back once the caps are in.
                 onRunningChanged: if (viewfinder.running) {
-                    meterCircle.opacity = 0                           // the controller starts clean too
+                    meterCircle.opacity = 0
+                    page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
                     page.applyZoom(); page.applyFocus()
                     viewfinder.sendCommand("fc scene " + (page.sceneOn ? "on" : "off"))
+                    if (viewfinder.caps.focalEq !== undefined) page.restoreAtCaps()   // the caps come before the first frame
                     if (orientLoader.item && orientLoader.item.valid) viewfinder.sendCommand("orient " + orientLoader.item.degrees)
                     if (!page.wbKeptOffered) {
                         page.wbKeptOffered = true; wbKeptBanner.offer(); startManualTimer.start()
@@ -724,6 +772,7 @@ ApplicationWindow {
                     if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0)
                         page.cameraIds = viewfinder.caps.cameras
                     page.applyAidThresholds()
+                    if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()
                     // The caps line is on stdout, not in the engine's log: echo
                     // the parts worth having there (sizes, scenes, thresholds).
                     viewfinder.sendCommand("# caps jpeg_sizes=" + viewfinder.caps.jpegSizes

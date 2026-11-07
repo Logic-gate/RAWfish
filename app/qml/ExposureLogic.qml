@@ -71,15 +71,76 @@ Item {
     onPausedChanged: send("pause " + (paused ? "on" : "off"))
     onRawSourceChanged: send("source " + (rawSource ? "raw" : "vf"))
 
+    // --- Kept across an engine restart ------------------------------------------
+    // The controller lives in the engine's process: a restart (back from the
+    // background, a size or type change, another camera) starts it in
+    // automatic. The mode and the manual values are kept here and sent again
+    // once the new engine's capabilities are known. On another camera the
+    // mode stays and the light is kept: the ISO as it was, the speed scaled
+    // by the square of the apertures' ratio, within the new camera's ranges.
+    property bool kIsoManual: false
+    property int kIso: 0
+    property bool kShutterManual: false
+    property real kShutterNs: 0
+    property int kEv: 0
+    property string kCamera: ""
+    property real kAperture: 0
+    property bool synced: false              // the state shown is the user's, not a fresh engine's
+    property bool pendingRestore: false      // a fresh engine: restore at its first caps
+    function keep() {
+        if (!viewfinder || !viewfinder.running || st.fullAuto === undefined) return
+        kIsoManual = !!st.isoManual; kShutterManual = !!st.shutterManual
+        if (kIsoManual && st.iso > 0) kIso = st.iso
+        if (kShutterManual && st.expNs > 0) kShutterNs = st.expNs
+        kEv = st.ev !== undefined ? st.ev : 0
+        kCamera = viewfinder.cameraId
+        if (caps.aperture > 0) kAperture = caps.aperture
+    }
+    onStChanged: {
+        if (!viewfinder || !viewfinder.running || st.fullAuto === undefined || pendingRestore) return
+        if (!synced) {                       // a fresh engine: wait until the restored modes show
+            if (!!st.isoManual !== kIsoManual || !!st.shutterManual !== kShutterManual) return
+            synced = true; syncTimer.stop()
+        }
+        keep()
+    }
+    // A state that never matches the restored modes (refused by the engine):
+    // follow what the engine says from then on.
+    Timer { id: syncTimer; interval: 2000; onTriggered: { logic.synced = true; logic.keep() } }
+
+    function restore() {
+        pendingRestore = false
+        var iso = kIso, ns = kShutterNs
+        if (kCamera !== "" && kCamera !== viewfinder.cameraId) {
+            // another camera: the same light; the ISO kept, the speed scaled
+            if (kAperture > 0 && caps.aperture > 0) ns = ns * Math.pow(caps.aperture / kAperture, 2)
+            if (caps.isoMin > 0 && iso < caps.isoMin) iso = caps.isoMin
+            if (caps.isoMax > 0 && iso > caps.isoMax) iso = caps.isoMax
+            if (caps.expMinNs > 0 && ns < caps.expMinNs) ns = caps.expMinNs
+            if (ns > 16000000000) ns = 16000000000
+            viewfinder.sendCommand("# exposure carried to camera " + viewfinder.cameraId + ": iso " + iso + " speed " + Math.round(ns) + " ns (aperture " + kAperture + " -> " + caps.aperture + ")")
+        }
+        if (kIsoManual && iso > 0) send("iso " + iso)
+        if (kShutterManual && ns > 0) send("speed " + Math.round(ns))
+        if (kEv !== 0) send("ev " + kEv)
+        send("state")
+        syncTimer.restart()
+    }
+
     // A (re)started engine: tell it what it cannot know (source, pause), and
-    // ask the state once so the deck shows it before the first change.
+    // give it back the mode and the values (its capabilities come before its
+    // first frame; should they come later, the restore waits for them).
     Connections {
         target: viewfinder
         onRunningChanged: if (viewfinder.running) {
             logic.send("source " + (logic.rawSource ? "raw" : "vf"))
             logic.send("pause " + (logic.paused ? "on" : "off"))
             logic.send("pvfps " + logic.previewFps)
-            logic.send("state")
+            logic.pendingRestore = true
+            if (caps.isoMax !== undefined) logic.restore()   // the caps come before the first frame
+        } else {
+            logic.synced = false
         }
+        onCapsChanged: if (logic.pendingRestore && viewfinder.running && caps.isoMax !== undefined) logic.restore()
     }
 }
