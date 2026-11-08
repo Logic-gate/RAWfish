@@ -1,5 +1,5 @@
 # (AI written, human written user-guite should be made)
-# RAWfish-indRAW user guide
+# RAWfish-ir user guide
 
 How to use the camera, screen by screen. For installing it, see
 `BUILDING.md`; for the reasons behind each behaviour, `UI-NOTES.md`.
@@ -232,7 +232,7 @@ natural orientation is assumed.)
 Press both volume keys at once: the screen is saved to
 `~/Pictures/Screenshots/`, with a flash.
 
-## Settings (Settings app > Apps > RAWfish-indRAW)
+## Settings (Settings app > Apps > RAWfish-ir)
 
 | Setting | Meaning |
 |---|---|
@@ -244,7 +244,7 @@ Press both volume keys at once: the screen is saved to
 | Mode at start | simple, advanced, or as left (the last mode used) |
 | Viewfinder processing in the camera menu | shows the "Vf noise" and "Vf sharpen" columns |
 | Focus calibration in the camera menu | shows the "Focus cal." column |
-| Create the device profile files | RAWfish-indRAW writes them the next time it opens (the date is shown once done) |
+| Create the device profile files | RAWfish-ir writes them the next time it opens (the date is shown once done) |
 
 Changes take effect the next time the camera starts.
 

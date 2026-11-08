@@ -1,5 +1,5 @@
 # (AI written, human thought)
-# RAWfish-indRAW UI & behaviour specification
+# RAWfish-ir UI & behaviour specification
 
 Reference for the Qt/Sailfish app and the engine's UI-facing behaviour. The
 engine (rawfish-ir-cli; indraw in the sources) exposes every control atomically; the UI composes them.
@@ -275,7 +275,7 @@ they drive). The full list with explanations: docs/USER-GUIDE.md.
 
 ## Output folders and names
 
-The RAWfish-indRAW page of the system Settings app (dconf `/apps/rawfish-ir/output`, see
+The RAWfish-ir page of the system Settings app (dconf `/apps/rawfish-ir/output`, see
 README): `prefix` (default `photo`), `jpgDir` and `dngDir` (default
 `~/Pictures/RAWfish-ir` for both, under `~/Pictures` for the sandbox). The gallery merges both folders, newest first; DNG previews
 sit in `<dngDir>/.previews/` with a `.nomedia` marker.
@@ -284,7 +284,7 @@ sit in `<dngDir>/.previews/` with a `.nomedia` marker.
 
 - `raw`       : RAW16 DNG (brut, linear). Each DNG gets a NAME_vf.jpg preview
                 in the hidden .previews/ subfolder, rendered by the engine from
-                the DNG's own pixels (half size, as-shot white balance): RAWfish-indRAW's
+                the DNG's own pixels (half size, as-shot white balance): RAWfish-ir's
                 gallery shows it in the DNG's place, with a "DNG quick preview"
                 banner on its top edge saying that deleting it deletes the DNG
                 (share/details/delete act on the DNG); the system gallery never
@@ -469,7 +469,7 @@ SAME MECHANISM AS RAWFISH:
   and the JPEG, never to the RAW (as-shot neutral is metadata only). The
   presets are CONTROL_AWB_MODE in both. Manual WB differs in HOW the HAL is
   told: RAWfish sends a Kelvin value through a MediaTek vendor tag
-  (MTK_3A_AWB_VALUE, AWB off); RAWfish-indRAW shifts the AWB's own gains through
+  (MTK_3A_AWB_VALUE, AWB off); RAWfish-ir shifts the AWB's own gains through
   the standard colour-correction keys (device-independent, no Kelvin scale,
   "warmer/cooler than the AWB chose"). The vendor Kelvin tag is noted for a
   possible later addition where the HAL offers it.
@@ -614,7 +614,7 @@ itself a PagedView, RightToLeft, no wrap, newest at index 0 next to the
 camera. Nested PagedViews hand the gesture over: a swipe past the newest
 capture carries on into the camera in the same movement, and back.
 
-RAWfish-indRAW now does the same: the camera page is the root page; its four
+RAWfish-ir now does the same: the camera page is the root page; its four
 visual blocks (notch band, viewfinder zone, settings menu, deck) are the
 second item of the switcher, GalleryView.qml (ex GalleryPage.qml) the
 first, loaded asynchronously. The switcher is not interactive while a

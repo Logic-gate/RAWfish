@@ -3,7 +3,7 @@
 
 ## What was measured (Jolla Phone 2, October 2026)
 
-Flat fields through a diffuser, RAW (RAWfish-indRAW 0.47.32), manual focus at known
+Flat fields through a diffuser, RAW (RAWfish-ir 0.47.32), manual focus at known
 lens positions, a 12 x 16 grid (edge-anchored), the gain that makes each
 point equal to a 6 % patch at the centre. Repeatability between frames of a
 position: better than 0.5 %.

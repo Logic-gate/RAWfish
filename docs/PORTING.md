@@ -1,10 +1,10 @@
 # (AI generated)
-# Porting RAWfish-indRAW to another device
+# Porting RAWfish-ir to another device
 
-RAWfish-indRAW was built and tested on the Jolla Phone 2 (JP2, MediaTek HAL, Sony
+RAWfish-ir was built and tested on the Jolla Phone 2 (JP2, MediaTek HAL, Sony
 IMX766). Everything device-specific was pushed into data the engine reads at
 run time. This page says what to expect, what RAWfish's README lists as porting
-work and how RAWfish-indRAW stands on each point, and the steps.
+work and how RAWfish-ir stands on each point, and the steps.
 
 ## Prerequisites the device must meet (no way around them)
 
@@ -30,7 +30,7 @@ work and how RAWfish-indRAW stands on each point, and the steps.
 
 ## RAWfish's porting list, point by point
 
-| RAWfish's point | RAWfish-indRAW |
+| RAWfish's point | RAWfish-ir |
 |---|---|
 | Camera2 through libhybris | same requirement (above) |
 | RAW16 output from the HAL | same; absent RAW is handled (JPEG only) |
@@ -42,7 +42,7 @@ work and how RAWfish-indRAW stands on each point, and the steps.
 | vendor library namespace issues | the engine uses only standard Camera2 keys (no vendor tags); loading problems would show at `rawfish-ir-cli cameras` |
 | performance varies | the meter rate, the peaking and the stack latency are measured or adjustable, not assumed |
 
-What RAWfish-indRAW adds that is device-specific and must be measured: the single
+What RAWfish-ir adds that is device-specific and must be measured: the single
 exposure ceiling, the focus calibration, the aid thresholds (below).
 
 ## Steps
@@ -100,7 +100,7 @@ Device profiles are data: they can be added without touching the code.
   raw requests kept the setup's continuous AF and this HAL started a scan
   at the capture, undoing the lock (0.47.51).
 - A 16:9 RAW stream (the HAL's 20 MP 16:9 readout of the 4:3 IMX300:
-  RAWfish-indRAW never sees more than the HAL delivers): "4:3" asked for the
+  RAWfish-ir never sees more than the HAL delivers): "4:3" asked for the
   largest size of all, which is 16:9 -- the format did nothing. The format
   now takes the largest size of its own ratio, the binning judged on the
   dimension the format does not crop, and the menu says which format is

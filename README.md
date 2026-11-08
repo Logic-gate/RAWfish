@@ -49,7 +49,7 @@ Tests are also being conducted on the Xperia 10 IV community port.
 
 Beta version. We still have some bug hunting work + UI/functions improvements to do.
 
-RAWfish-indRAW is a rebuild based on RAWfish, itself a fork of Jolla Camera.\
+RAWfish-ir is a rebuild based on RAWfish, itself a fork of Jolla Camera.\
 Nothing would have been possible without Mad_Dev's big work on how to make raw pics with the Jolla Phone 2 and its IMX766 sensor.
 
 ## References, credits
@@ -64,15 +64,15 @@ https://forum.sailfishos.org/t/next-gen-native-camera-app-rawfish/34150
 
 ## LLM description
 
-## RAWfish-indRAW
+## RAWfish-ir
 
-Names: **RAWfish-indRAW** is the project (this branch of RAWfish); **RAWfish-ir**
+Names: **RAWfish-ir** is the project (this branch of RAWfish); **RAWfish-ir**
 is what you see on the phone (the app grid, Settings); `rawfish-ir` is the
 technical name (packages `rawfish-ir-cli` and `rawfish-ir-gui`, binaries,
 paths, settings); `indraw` stays the engine's development name in the sources.
 
 
-RAWfish-indRAW
+RAWfish-ir
 
 A camera for Sailfish OS built on Android's Camera2 through libhybris: fast JPEG, true RAW
 (DNG) with manual shutter / ISO / focus, a strictly WYSIWYG viewfinder, and an engine that only
@@ -88,7 +88,7 @@ frame protocol it reuses; what it deliberately does differently is listed in `do
 being reviewed and tested on the device by a person; contributions are welcome on the same terms.
 License: BSD-3-Clause (`LICENSE`); lineage and credits in `CREDITS.md`; what changed when in `CHANGELOG.md`.
 The project was called **rawbar**, then **indRAW**, before joining RAWfish as this branch in
-October 2026 (RAWfish-indRAW); the sources keep `indraw` as the engine's name.
+October 2026 (RAWfish-ir); the sources keep `indraw` as the engine's name.
 
 ## Engine
 
@@ -256,7 +256,7 @@ removes the vignetting (the RAW itself is not corrected; `--no-shading` omits it
 `writeGainMapOpcode`), the layout darktable actually reads on this phone: in `OpcodeList2`, with
 region Top/Left/Bottom/Right as uint32 pixels (Bottom/Right = height/width), MapSpacing/MapOrigin
 as float64, and the gains as float32. This mixed int/float64/float32 layout is not obvious from
-the spec text and was taken from that source. RAWfish-indRAW targets the format the installed tools apply,
+the spec text and was taken from that source. RAWfish-ir targets the format the installed tools apply,
 not the newest spec (1.7.x), which installed versions would not read.
 
 ## Noise profile (darktable)
@@ -352,7 +352,7 @@ result -- the frame is read, before any encoding -- or the image, once), `writte
 is on disk) and `written kind=preview path=NAME_vf.ppm orientation=N` (a half-size RGB render of
 the DNG's own pixels -- black-subtracted, white-balanced with the as-shot neutral, gamma 1/2.2 --
 written in the hidden `.previews/` subfolder, which the app converts to `NAME_vf.jpg` rotated
-upright; RAWfish-indRAW's gallery pairs it with its DNG, the system's indexer skips the folder, so it
+upright; RAWfish-ir's gallery pairs it with its DNG, the system's indexer skips the folder, so it
 never shows up as a photo of its own), and besides:
 `caps` once at stream start (ISO range and analog ceiling, exposure range, the single-exposure
 ceiling after `override-hal.json`, EV range/step, orientation, black/white levels), `ae` about
@@ -411,7 +411,7 @@ Porting to another phone: `docs/PORTING.md`.
 
 ## Device profiles (multi-device)
 
-RAWfish-indRAW keeps per-device data out of the code, split by nature (see
+RAWfish-ir keeps per-device data out of the code, split by nature (see
 `docs/DEVICE-PROFILES.md`): what the HAL claims (`generated-hal.json`, read-only),
 corrections to it (`override-hal.json`, atomic sensor fixes only -- today
 `observed_shutter_max_ns`, the tested long-exposure ceiling, replacing the hard-coded 1/2 s), and UI

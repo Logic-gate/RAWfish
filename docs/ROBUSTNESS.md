@@ -2,7 +2,7 @@
 # Robustness and safety review (October 2026)
 
 What was examined, what it relies on, and what remains. Written for whoever
-installs RAWfish-indRAW on a device that is not the author's.
+installs RAWfish-ir on a device that is not the author's.
 
 ## Privilege and reach
 
