@@ -467,7 +467,8 @@ static void apply_stream_limits(void *bridge, const char *id, int type_raw)
             if (exf) exf(1);
             if (type_raw) { if (jsf) jsf(0); }
             else raw_on = 0;
-            snprintf(msg, sizeof msg, "streams exclusive (device profile) for camera %s: this session is %s only",
+            snprintf(msg, sizeof msg, "streams exclusive (device profile) for camera %s: this session is %s only"
+                     " (no YUV stream: JPG is the camera's JPEG)",
                      id, type_raw ? "RAW + viewfinder" : "JPEG + viewfinder");
             log_line("# ", msg);
         } else if (strcmp(v, "both")) {

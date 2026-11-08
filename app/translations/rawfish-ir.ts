@@ -35,12 +35,12 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+950"/>
+        <location filename="../indrawpreview.cpp" line="+946"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+32"/>
         <source>engine stopped</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,18 +160,14 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+280"/>
-        <location line="+52"/>
-        <location line="+5"/>
-        <location line="+5"/>
-        <location line="+31"/>
+        <location line="+279"/>
+        <location line="+48"/>
         <location line="+13"/>
-        <location line="+12"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-419"/>
+        <location line="-361"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -367,7 +363,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+146"/>
+        <location line="+145"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -498,109 +494,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
-        <source>Frames</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>One frame: colour filter only</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>%1 frames merged (less grain, no texture lost)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+3"/>
-        <source>Colour</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Colour filter off</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>Moiré</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>False colour: nothing removed</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+5"/>
-        <source>RAWfish sharpening off</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <location line="+6"/>
-        <source>RAW: the camera&apos;s processing does not apply</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-5"/>
-        <source>Noise</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Photo noise reduction: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-7"/>
-        <location line="+12"/>
-        <source>Sharpen</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-21"/>
-        <source>Colour filter: %1 x the noise</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+5"/>
-        <source>False colour: a %1 median on the colour</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+5"/>
-        <source>RAWfish sharpening: %1 x the fine detail</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+12"/>
-        <source>Photo sharpening: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+6"/>
-        <source>Vf noise</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Viewfinder noise reduction: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>Vf sharpen</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Viewfinder sharpening: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
+        <location line="+8"/>
         <source>Bracket</source>
         <translation type="unfinished"></translation>
     </message>
@@ -670,22 +564,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
-        <source>Σ denoise</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Stacks: no extra frames</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>Stacks: %1× frames, %1× longer, noise ÷%2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+11"/>
+        <location line="+14"/>
         <source>Focus cal.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -862,13 +741,14 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+212"/>
+        <location filename="../qml/indraw.qml" line="+217"/>
         <source>raw</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>YUV</source>
+        <source>HAL
+JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -879,13 +759,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+10"/>
         <location line="+130"/>
-        <location line="+1761"/>
+        <location line="+1737"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1917"/>
+        <location line="-1893"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -973,31 +853,31 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+250"/>
-        <location line="+732"/>
+        <location line="+238"/>
+        <location line="+722"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-732"/>
-        <location line="+732"/>
+        <location line="-722"/>
+        <location line="+722"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-706"/>
-        <location line="+706"/>
+        <location line="-696"/>
+        <location line="+696"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-706"/>
-        <location line="+706"/>
+        <location line="-696"/>
+        <location line="+696"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-633"/>
+        <location line="-623"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1072,12 +952,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+29"/>
-        <source>YUV: RAWfish processing (experiment)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+27"/>
+        <location line="+47"/>
         <source>%1 / %2 frames · %3 left</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1092,7 +967,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+192"/>
+        <location line="+191"/>
         <source>CAM</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1137,7 +1012,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+16"/>
         <source>FOCUS</source>
         <translation type="unfinished"></translation>
     </message>

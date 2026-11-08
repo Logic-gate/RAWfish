@@ -11,7 +11,6 @@
 ;   /apps/rawfish-ir/menu/startMode     last | simple | advanced   mode at start
 ;   /apps/rawfish-ir/menu/startManual   true | false               start in manual focus + exposure
 ;   /apps/rawfish-ir/menu/showScenes    true | false               scenes in the camera menu
-;   /apps/rawfish-ir/menu/previewColumns true | false              Vf noise / Vf sharpen columns
 ;   output folders and file prefix (the [output] settings of the Settings page)
 
 [General]
@@ -24,22 +23,12 @@ format=4:3
 ; JPEG size, WIDTHxHEIGHT among the sizes the camera lists ("" = the largest).
 ;                                               e.g. 4096x3072          default ""
 captureSize=
-; JPEG quality.                                 values: 80, 90, 95, 100 default 95
-jpegQuality=95
+; JPEG quality (JPG and HAL JPG).               values: 80, 90, 96, 100 default 96
+jpegQuality=96
 ; White-balance preset: 1 auto, 2 incandescent, 3 fluorescent, 4 warm fluorescent,
 ; 5 daylight, 6 cloudy, 7 twilight, 8 shade (only those the camera lists).
 ;                                               range 1..8              default 1
 awbMode=1
-; The photo's noise reduction: 0 default, 1 off, 2 fast, 3 high quality,
-; 4 minimal.                                     range 0..4              default 1 (off)
-noiseIndex=1
-; The photo's sharpening: 0 default, 1 off, 2 fast, 3 high quality.
-;                                               range 0..3              default 1 (off)
-edgeIndex=1
-; The viewfinder's own noise reduction / sharpening (same lists).
-;                                               ranges 0..5 / 0..4      defaults 2 (fast) / 1 (off)
-previewNoiseIndex=2
-previewEdgeIndex=1
 ; Bracketing: off; 0 = three shots at the same exposure (x3); 1, 2, 3 = three
 ; shots at -N, 0, +N stops.                     values: off, 0, 1, 2, 3 default off
 bracket=off
@@ -53,6 +42,40 @@ advanced=1
 sceneMode=0
 ; Flash.                                        values: off, auto, on, torch   default off
 flash=off
+
+; --- Processing (only here, not in the menu) ---------------------------------
+; JPG is RAWfish-ir's JPEG: the camera's image before its own noise reduction
+; and sharpening (its YUV stream), processed by RAWfish-ir, then compressed.
+; Frames taken and merged: less grain, no texture lost, a little more time.
+;                                               values: 1, 2, 4         default 1
+jpgFrames=1
+; Colour noise filter: 0 off, 1..5 = 1, 2, 3, 5, 8 times the measured noise
+; (4 and 5 are deliberately too much, to see the effect).
+;                                               range 0..5              default 2
+jpgColour=2
+; False colour on fine textures (a zipper, a weave): a median on the colour,
+; 0 off, 1..4 = 3x3, 5x5, 7x7, 9x9; it also removes real colour dots that small.
+;                                               range 0..4              default 0
+jpgMoire=0
+; RAWfish-ir's sharpening of the fine detail above the noise: 0 off, 1..5 =
+; 0.5, 1, 1.5, 2.5, 4 times the detail (4 and 5 deliberately too much).
+;                                               range 0..5              default 3
+jpgSharpen=3
+
+; HAL JPG: the camera driver's own JPEG, offered in TYPE when this is true.
+; Stacks, brackets and bursts use the HAL JPEG and its settings below even
+; when it is not offered. On a phone whose session cannot hold the YUV stream
+; (exclusive streams), JPG is the HAL JPEG.
+;                                               values: false, true     default false
+halJpeg=false
+; The HAL JPEG's noise reduction.               values: default, off, fast, hq, minimal   default off
+halJpegNoise=off
+; The HAL JPEG's sharpening.                    values: default, off, fast, hq            default hq
+halJpegSharpen=hq
+; The viewfinder's noise reduction (the HAL's).  values: default, off, fast, hq, minimal   default fast
+viewfinderNoise=fast
+; The viewfinder's sharpening (the HAL's).      values: default, off, fast, hq            default off
+viewfinderSharpen=off
 ; Σ stacks: 1 = the stack's own frames; 2 or 4 = that many times more frames,
 ; divided out (less noise, 2x or 4x the time).  values: 1, 2, 4         default 1
 stackDenoise=1

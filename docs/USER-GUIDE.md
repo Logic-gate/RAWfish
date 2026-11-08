@@ -40,7 +40,7 @@ While the loupe is on, the menu and gallery swipes are off.
 | Part | What it is |
 |---|---|
 | **FOCAL** | the camera, shown by its 35 mm-equivalent focal length; tap to switch camera |
-| **TYPE** | raw (DNG) or jpg (the camera's JPEG) |
+| **TYPE** | raw (DNG) or jpg (RAWfish-ir's JPEG, from the camera's image before its noise reduction and sharpening); "HAL JPG", the camera's own JPEG, when rawfish-ir.conf has halJpeg=true |
 | **FOCUS** | circle, auto, or a distance (see "Focus") |
 | histogram | the tones of **what the viewfinder shows** (zoomed or in the loupe: that area), per colour, with clipping bars at each end. In **jpg** it is measured on the processed image; in **raw** on the sensor data itself, so it sits further left and narrower (no tone curve lifting the shadows), and its left bar is bigger: it counts photosites at or below black, where noise puts about half of the truly dark ones -- shadows with no information, as the DNG will hold them. With a reference circle, the circle's own tones are drawn as bright outlines over it |
 | **EV** wheel | brightness correction, in the camera's steps |

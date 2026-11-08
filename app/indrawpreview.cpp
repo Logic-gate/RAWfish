@@ -74,6 +74,9 @@ void IndrawPreview::setCameraId(const QString &id)
     if (m_cameraId == id) return;
     m_cameraId = id;
     emit cameraIdChanged();
+    /* Another camera may hold the YUV stream: try it again. */
+    m_yuvFails = 0;
+    if (m_yuvFellBack) { m_yuvFellBack = false; emit yuvFellBackChanged(); }
     /* The camera is an argument of the engine: switch by restarting it. */
     if (m_active) { stop(); start(); }
 }
@@ -98,14 +101,6 @@ void IndrawPreview::setRawSession(bool raw)
     if (m_active && m_gotCaps && m_caps.value(QStringLiteral("limits")).toString().contains(QLatin1String("exclusive"))
             && m_sessionRaw != raw)
         restart();
-}
-
-void IndrawPreview::setYuvSession(bool yuv)
-{
-    if (m_yuvSession == yuv) return;
-    m_yuvSession = yuv;
-    emit yuvSessionChanged();
-    if (m_active && m_gotCaps && m_sessionYuv != yuv) restart();   /* the stream has to be in the session */
 }
 
 void IndrawPreview::setCaptureSize(const QSize &size)
@@ -223,7 +218,7 @@ void IndrawPreview::start()
      * ignores it elsewhere). A RAW session that died before its caps is not
      * tried again: JPEG, and the page is told once the caps confirm. */
     m_sessionRaw = m_rawSession && !m_rawFellBack;
-    m_sessionYuv = m_yuvSession;
+    m_sessionYuv = !m_yuvFellBack;
     args << QStringLiteral("--log") << log
          << QStringLiteral("--jpgdir") << m_jpgDir << QStringLiteral("--dngdir") << m_dngDir
          << QStringLiteral("stream")
@@ -638,6 +633,7 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         m_caps.insert(QStringLiteral("notch"), f.value("notch", "-1").toInt());
         m_gotCaps = true;
         m_sizeFallback = false;
+        m_yuvFails = 0;
         emit capsChanged();
         if (m_caps.value(QStringLiteral("limits")).toString().contains(QLatin1String("exclusive"))) {
             if (m_rawFellBack) {
@@ -972,6 +968,13 @@ void IndrawPreview::onProcessFinished(int code, QProcess::ExitStatus status)
     if (m_active) {
         if (!m_gotCaps) m_sizeFallback = true;   /* it never opened: retry at "max" */
         if (!m_gotCaps && m_sessionRaw) m_rawFellBack = true;   /* and as JPEG, if the RAW session died */
+        /* A session with the YUV stream that dies twice before its caps is
+         * retried without it (JPG = the camera's JPEG); once could be a
+         * camera service hiccup, which must not change the photos. */
+        if (!m_gotCaps && m_sessionYuv && !m_yuvFellBack && ++m_yuvFails >= 2) {
+            m_yuvFellBack = true;
+            emit yuvFellBackChanged();
+        }
         setError(tr("engine stopped"));
         scheduleRestart();
     }

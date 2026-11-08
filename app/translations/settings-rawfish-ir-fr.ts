@@ -4,7 +4,7 @@
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="+65"/>
+        <location filename="../settings/SettingsPage.qml" line="+64"/>
         <source>Captures</source>
         <translation>Photos</translation>
     </message>
@@ -92,16 +92,6 @@
         <location line="+1"/>
         <source>Advanced</source>
         <translation>Avancé</translation>
-    </message>
-    <message>
-        <location line="+6"/>
-        <source>Viewfinder processing in the camera menu</source>
-        <translation>Traitement du viseur dans le menu de l&apos;appareil</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Shows two columns, &quot;Vf noise&quot; and &quot;Vf sharpen&quot;: the viewfinder&apos;s own noise reduction and sharpening, separate from the photos&apos;. By default the viewfinder has light noise reduction and no sharpening.</source>
-        <translation>Affiche deux colonnes, « Bruit visée » et « Netteté visée » : la réduction du bruit et l&apos;accentuation propres au viseur, distinctes de celles des photos. Par défaut, le viseur a une légère réduction du bruit et aucune accentuation.</translation>
     </message>
     <message>
         <location line="+5"/>

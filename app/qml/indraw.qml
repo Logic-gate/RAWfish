@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "192"                             // shown in the deck
+    readonly property string uiVersion: "193"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -56,7 +56,6 @@ ApplicationWindow {
     ConfigurationGroup {
         id: menuConf
         path: "/apps/rawfish-ir/menu"
-        property bool previewColumns: false
         property string startMode: "last"            // last | simple | advanced
         property bool showScenes: false              // scenes in the camera menu
         property bool startManual: false             // start in manual focus + exposure
@@ -202,7 +201,13 @@ ApplicationWindow {
                 else if (rawAvailable && imageTypeSetAside !== "") { imageType = imageTypeSetAside; imageTypeSetAside = "" }
             }
             // UI state. Internal values are plain keys; qsTr() only on display.
-            property string imageType: "jpg"             // raw | jpg | jpg yuv
+            // raw | jpg (RAWfish-ir's JPEG, from the ISP's image) | haljpg (the
+            // camera driver's own JPEG, offered when rawfish-ir.conf says halJpeg=true)
+            property string imageType: "jpg"
+            // JPG is RAWfish-ir's own processing where the session holds the YUV
+            // stream; elsewhere (exclusive streams, or a session that refused it)
+            // it is the camera's JPEG, without a word: the photo is still a JPEG.
+            readonly property bool ownJpeg: !page.exclusiveStreams && !viewfinder.yuvFellBack
             // Starts in continuous focus (the "auto" label): the camera follows
             // the scene by itself until the user asks for more. ("auto" here is
             // Camera2's AUTO, one scan then hold: the "once" label.)
@@ -210,7 +215,7 @@ ApplicationWindow {
             function imageTypeLabel(t) {
                 switch (t) {
                 case "raw":     return qsTr("raw")
-                case "yuv":     return qsTr("YUV")
+                case "haljpg":  return qsTr("HAL\nJPG")
                 default:        return qsTr("jpg")
                 }
             }
@@ -833,7 +838,6 @@ ApplicationWindow {
             onImageTypeChanged: {
                 applyAidThresholds()
                 viewfinder.rawSession = (imageType === "raw")   // exclusive streams: the session follows the type
-                viewfinder.yuvSession = (imageType === "yuv")   // the full-size YUV stream, only when the type needs it
             }
 
             // Build and send the capture command from the exposure state: in
@@ -872,20 +876,9 @@ ApplicationWindow {
             // (sailfish/ctl_shoot.c, step 6) -- the held pair with the photo,
             // the manual distance, a stack for a Σ speed, a burst or three
             // shots for a bracket -- from the settings sent here.
-            // A YUV photo's name says its settings, so that the files of a
-            // comparison tell themselves apart:
-            //   photo-yuv-frames_4-colour_2-moire_3x3-sharpen_2_<date>.jpg
-            // ("-" between the settings, "_" between a setting and its value)
-            function yuvName() {
-                var m = settingsMenu
-                return viewfinder.capturePrefix + "-yuv-frames_" + m.yuvFrames
-                     + "-colour_" + m.yuvColour
-                     + "-moire_" + ["off", "3x3", "5x5", "7x7", "9x9"][m.yuvMedian]
-                     + "-sharpen_" + m.yuvSharpen
-            }
             function shoot() {
-                var isRaw = (page.imageType === "raw"), isYuv = (page.imageType === "yuv")
-                viewfinder.sendCommand("sh name=" + (isYuv ? page.yuvName() : viewfinder.capturePrefix)
+                var isRaw = (page.imageType === "raw"), isYuv = (page.imageType === "jpg" && page.ownJpeg)
+                viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix
                                        + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
@@ -1499,15 +1492,6 @@ ApplicationWindow {
                         remaining = 1.0; shown = true; wbKeptTimer.startMs = Date.now(); wbKeptTimer.start()
                     }
                 }
-                // The YUV type is an experiment: the ISP's image before the
-                // camera's noise reduction and sharpening, processed by us.
-                Label {
-                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: Theme.paddingLarge }
-                    visible: page.imageType === "yuv"
-                    text: qsTr("YUV: RAWfish processing (experiment)")
-                    color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
-                    style: Text.Outline; styleColor: "black"
-                }
 
                 // A stack in progress: the preview is paused by the engine, so
                 // show black (nothing stale, and an OLED saves power) with the
@@ -1604,7 +1588,6 @@ ApplicationWindow {
                 id: settingsMenu
                 viewfinder: viewfinder
                 focusCalibrationMenu: deviceConf.focusCalibrationMenu
-                previewColumns: menuConf.previewColumns
                 startMode: menuConf.startMode
                 showScenes: menuConf.showScenes
                 imageType: page.imageType
@@ -1795,14 +1778,12 @@ ApplicationWindow {
                             visible: !settingsMenu.simpleHides("type")   // simple mode: JPEG only
                             // Greyed on a Σ speed (stacking writes a DNG only) and on a
                             // camera without RAW (nothing to cycle to).
-                            enabled: !page.stackSelected && page.rawAvailable
-                            opacity: page.stackSelected || !page.rawAvailable ? Theme.opacityLow : 1.0
+                            enabled: !page.stackSelected && (page.rawAvailable || settingsMenu.halJpeg)
+                            opacity: page.stackSelected || !(page.rawAvailable || settingsMenu.halJpeg) ? Theme.opacityLow : 1.0
                             onCycle: {
-                                // YUV (our processing of the ISP's image) is offered
-                                // where the session can hold its stream: not with
-                                // exclusive streams.
+                                // RAW and JPG; HAL JPG too when rawfish-ir.conf offers it.
                                 var t = page.rawAvailable ? ["raw", "jpg"] : ["jpg"]
-                                if (!page.exclusiveStreams) t.push("yuv")
+                                if (settingsMenu.halJpeg) t.push("haljpg")
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
                             }
                         }

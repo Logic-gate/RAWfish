@@ -29,7 +29,6 @@ Page {
     ConfigurationGroup {
         id: menuGroup
         path: "/apps/rawfish-ir/menu"
-        property bool previewColumns: false
         property string startMode: "last"
         property bool showScenes: false
         property bool startManual: false
@@ -141,13 +140,6 @@ Page {
                     MenuItem { text: qsTr("Advanced") }
                 }
                 onCurrentIndexChanged: menuGroup.startMode = currentIndex === 1 ? "simple" : currentIndex === 2 ? "advanced" : "last"
-            }
-
-            TextSwitch {
-                text: qsTr("Viewfinder processing in the camera menu")
-                description: qsTr("Shows two columns, \"Vf noise\" and \"Vf sharpen\": the viewfinder's own noise reduction and sharpening, separate from the photos'. By default the viewfinder has light noise reduction and no sharpening.")
-                checked: menuGroup.previewColumns
-                onCheckedChanged: menuGroup.previewColumns = checked
             }
 
             SectionHeader { text: qsTr("Device tuning") }

@@ -51,7 +51,6 @@ Item {
     // turns into a maze at high ISO; focus is judged with the peaking).
     property int previewNoiseIndex: 2
     property int previewEdgeIndex: 1
-    property bool previewColumns: false              // the Settings page's switch
     // The mode at start (Settings page): "last" = as left, else "simple" or "advanced".
     property string startMode: "last"
     // Bracketing: "off", "0" (three shots in a row at the same exposure, for a
@@ -59,11 +58,12 @@ Item {
     property string bracket: "off"
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
-    // The YUV type: RAWfish's own processing of the ISP's image (experiment).
+    // JPG: RAWfish-ir's own processing of the ISP's image (rawfish-ir.conf only).
+    property bool halJpeg: false                   // offer "HAL JPG" (the camera driver's JPEG) in TYPE
     property int yuvFrames: 1                      // 1, 2 or 4 frames merged
     property int yuvColour: 2                      // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
     property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
-    property int yuvSharpen: 0                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
+    property int yuvSharpen: 3                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
     property bool advanced: true                   // simple = jpg only, no wheels
     // The Σ preview's target frame rate (rawfish-ir.conf, hand-edited): the ISO is
@@ -155,17 +155,20 @@ Item {
         var sz = String(viewfinder.setting("captureSize", ""))
         captureSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(sz) ? sz : ""
         formatSaved = pick("format", "", ["4:3", "16:9"])   /* "" = the RAW's shape (format) */
-        jpegQuality = pick("jpegQuality", "95", ["80", "90", "95", "100"]) * 1
+        jpegQuality = pick("jpegQuality", "96", ["80", "90", "96", "100"]) * 1
         awbMode = num("awbMode", 1, 1, 8)
-        noiseIndex = num("noiseIndex", 1, 0, noiseModes.length - 1)
-        edgeIndex = num("edgeIndex", 1, 0, edgeModes.length - 1)
-        previewNoiseIndex = num("previewNoiseIndex", 2, 0, noiseModes.length - 1)
-        previewEdgeIndex = num("previewEdgeIndex", 1, 0, edgeModes.length - 1)
+        // Set in rawfish-ir.conf only (not in the menu): the processing.
+        halJpeg = pick("halJpeg", "false", ["false", "true"]) === "true"
+        noiseIndex = Math.max(0, noiseModes.indexOf(pick("halJpegNoise", "off", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
+        edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
+        previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "fast", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
+        previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "off", ["default", "off", "fast", "hq"]) + "_edge"))
         bracket = pick("bracket", "off", ["off", "0", "1", "2", "3"])
-        yuvFrames = pick("yuvFrames", "1", ["1", "2", "4"]) * 1
-        yuvColour = num("yuvColour", 2, 0, 5)
-        yuvMedian = num("yuvMedian", 0, 0, 4)
-        yuvSharpen = num("yuvSharpen", 0, 0, 5)
+        yuvFrames = pick("jpgFrames", "1", ["1", "2", "4"]) * 1
+        yuvColour = num("jpgColour", 2, 0, 5)
+        yuvMedian = num("jpgMoire", 0, 0, 4)
+        yuvSharpen = num("jpgSharpen", 3, 0, 5)
+        stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         gridOn = num("gridOn", 0, 0, 1) === 1
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)
@@ -174,7 +177,6 @@ Item {
         peakTweak = pick("peakTweak", "0", ["-30", "0", "30"]) * 1
         zebraTweak = pick("zebraTweak", "0", ["-30", "0", "30"]) * 1
         flash = pick("flash", "off", ["off", "auto", "on", "torch"])
-        stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         frameLatencyMs = num("frameLatencyMs", 200, 0, 5000)
         wbShift = num("wbShift", 0, -20, 20)
         wbFixed = String(viewfinder.setting("wbFixed", "") || "")
@@ -232,18 +234,15 @@ Item {
     function resetTint() { tint = 0; save("tint", 0); applyLive() }
     function stepWarmth(d) { wbShift = Math.max(-20, Math.min(20, wbShift + d * fineWarmthStep)); save("wbShift", wbShift); applyLive() }
     function stepTint(d) { tint = Math.max(-100, Math.min(100, tint + d * fineTintStep)); save("tint", tint); applyLive() }
-    // The noise and edge options a JPEG / burst command carries: the photo
-    // columns in advanced mode, simple.json's in simple mode.
+    // The noise and edge options a HAL JPEG / burst command carries.
     function photoProcessing() {
-        var ni = advanced ? noiseIndex : Math.max(0, noiseModes.indexOf(simple.noise || "minimal_noise"))
-        var ei = advanced ? edgeIndex : Math.max(0, edgeModes.indexOf(simple.edge || "hq_edge"))
-        return " " + noiseModes[ni] + " " + edgeModes[ei]
+        return " " + noiseModes[noiseIndex] + " " + edgeModes[edgeIndex]
     }
     // The same two modes as "noise=... edge=..." fields (the controller's "sh").
+    // The HAL JPEG's processing, from rawfish-ir.conf (halJpegNoise,
+    // halJpegSharpen); stacks, brackets and bursts use it too.
     function photoProcessingFields() {
-        var ni = advanced ? noiseIndex : Math.max(0, noiseModes.indexOf(simple.noise || "minimal_noise"))
-        var ei = advanced ? edgeIndex : Math.max(0, edgeModes.indexOf(simple.edge || "hq_edge"))
-        return " noise=" + noiseModes[ni] + " edge=" + edgeModes[ei]
+        return " noise=" + noiseModes[noiseIndex] + " edge=" + edgeModes[edgeIndex]
     }
     function applyLive() {
         if (!viewfinder || !viewfinder.running) return
@@ -423,7 +422,7 @@ Item {
                 onPicked: menu.setSize(value) }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: no JPEG quality")
-                caption: qsTr("Quality"); values: [80, 90, 95, 100]; current: menu.jpegQuality
+                caption: qsTr("Quality"); values: [80, 90, 96, 100]; current: menu.jpegQuality
                 labelFor: function(v) { return qsTr("JPEG quality %1").arg(v) }
                 onPicked: { menu.jpegQuality = value; menu.save("jpegQuality", value) } }
             MenuColumn { visible: menu.simpleMenuHas("wb"); width: band.colW; header: header
@@ -434,51 +433,6 @@ Item {
                 // A preset also clears the manual shift and tint.
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
-            // The YUV type's own columns (RAWfish's processing), in place of
-            // the camera's noise and sharpening columns.
-            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
-                caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
-                labelFor: function(v) { return v === 1 ? qsTr("One frame: colour filter only") : qsTr("%1 frames merged (less grain, no texture lost)").arg(v) }
-                onPicked: { menu.yuvFrames = value; menu.save("yuvFrames", value) } }
-            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
-                caption: qsTr("Colour"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
-                labelFor: function(v) { return v === 0 ? qsTr("Colour filter off") : qsTr("Colour filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
-                shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                onPicked: { menu.yuvColour = value; menu.save("yuvColour", value) } }
-            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
-                caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
-                labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
-                shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
-                onPicked: { menu.yuvMedian = value; menu.save("yuvMedian", value) } }
-            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
-                caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
-                labelFor: function(v) { return v === 0 ? qsTr("RAWfish sharpening off") : qsTr("RAWfish sharpening: %1 x the fine detail").arg([0, 0.5, 1, 1.5, 2.5, 4][v]) }
-                shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                onPicked: { menu.yuvSharpen = value; menu.save("yuvSharpen", value) } }
-            MenuColumn { visible: menu.advanced && menu.imageType !== "yuv"; width: band.colW; header: header
-                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the camera's processing does not apply")
-                caption: qsTr("Noise"); values: [0, 1, 2, 3, 4]; current: menu.noiseIndex
-                labelFor: function(v) { return qsTr("Photo noise reduction: %1").arg(menu.modeName(menu.noiseModes[v])) }
-                shortFor: function(v) { return menu.modeShortName(menu.noiseModes[v]) }
-                onPicked: { menu.noiseIndex = value; menu.save("noiseIndex", value) } }
-            MenuColumn { visible: menu.advanced && menu.imageType !== "yuv"; width: band.colW; header: header
-                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the camera's processing does not apply")
-                caption: qsTr("Sharpen"); values: [0, 1, 2, 3]; current: menu.edgeIndex
-                labelFor: function(v) { return qsTr("Photo sharpening: %1").arg(menu.modeName(menu.edgeModes[v])) }
-                shortFor: function(v) { return menu.modeShortName(menu.edgeModes[v]) }
-                onPicked: { menu.edgeIndex = value; menu.save("edgeIndex", value) } }
-            // The viewfinder's processing (Vf), separate from the photos' (shown
-            // when "Viewfinder processing in the camera menu" is on in Settings).
-            MenuColumn { visible: menu.advanced && menu.previewColumns; width: band.colW; header: header
-                caption: qsTr("Vf noise"); values: [0, 1, 2, 3, 4]; current: menu.previewNoiseIndex
-                labelFor: function(v) { return qsTr("Viewfinder noise reduction: %1").arg(menu.modeName(menu.noiseModes[v])) }
-                shortFor: function(v) { return menu.modeShortName(menu.noiseModes[v]) }
-                onPicked: { menu.previewNoiseIndex = value; menu.save("previewNoiseIndex", value); menu.applyLive() } }
-            MenuColumn { visible: menu.advanced && menu.previewColumns; width: band.colW; header: header
-                caption: qsTr("Vf sharpen"); values: [0, 1, 2, 3]; current: menu.previewEdgeIndex
-                labelFor: function(v) { return qsTr("Viewfinder sharpening: %1").arg(menu.modeName(menu.edgeModes[v])) }
-                shortFor: function(v) { return menu.modeShortName(menu.edgeModes[v]) }
-                onPicked: { menu.previewEdgeIndex = value; menu.save("previewEdgeIndex", value); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.bracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
@@ -503,14 +457,6 @@ Item {
                 // settings file used to break a binding, so a second tap on "off"
                 // was taken for no change and the grid stayed on.
                 onPicked: { menu.gridOn = value; menu.save("gridOn", value ? 1 : 0) } }
-            // Stacked exposures: more frames than the brightness needs, divided
-            // out -- same exposure, noise divided by the square root of the
-            // factor, at the price of the shot taking that many times longer.
-            MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                caption: qsTr("Σ denoise"); values: [1, 2, 4]; current: menu.stackDenoise
-                labelFor: function(v) { return v === 1 ? qsTr("Stacks: no extra frames") : qsTr("Stacks: %1× frames, %1× longer, noise ÷%2").arg(v).arg(Math.sqrt(v).toFixed(1).replace(".0", "")) }
-                shortFor: function(v) { return v === 1 ? qsTr("off") : "÷" + Math.sqrt(v).toFixed(1).replace(".0", "") }
-                onPicked: { menu.stackDenoise = value; menu.save("stackDenoise", value) } }
             // Focus calibration assistant. Focus (circle) on a target at one of
             // these distances, wait for the solid circle, then tap the distance:
             // the engine records "this distance = the lens value it has now" in

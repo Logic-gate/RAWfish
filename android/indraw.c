@@ -2665,6 +2665,9 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     }
     if (rw == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_RAW16, 0, &rw, &rh))
         rw = rh = 0;                                /* no RAW on this camera: skip   */
+    if (g.lim_exclusive && g.yuv_w != 0) {        /* JPEG or RAW alone in a session: no third stream */
+        g.yuv_w = g.yuv_h = 0;
+    }
     if (g.yuv_w == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &g.yuv_w, &g.yuv_h))
         g.yuv_w = g.yuv_h = 0;
     if (g.yuv_w == -2) {                         /* "as the JPEG": the size the user chose */

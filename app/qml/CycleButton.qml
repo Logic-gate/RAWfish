@@ -42,7 +42,10 @@ MouseArea {
             horizontalAlignment: Text.AlignHCenter
             truncationMode: TruncationMode.Fade
             color: root.pressed ? Theme.highlightColor : root.textColor
-            font { pixelSize: root.compact ? Theme.fontSizeMedium : Theme.fontSizeLarge; bold: true }
+            // A value on two lines ("HAL" over "JPG") is set small, to fit.
+            readonly property bool twoLines: root.value.indexOf("\n") >= 0
+            font { pixelSize: twoLines ? Theme.fontSizeExtraSmall : root.compact ? Theme.fontSizeMedium : Theme.fontSizeLarge; bold: true }
+            lineHeight: twoLines ? 0.85 : 1.0
             text: root.value
         }
         Label {
