@@ -586,6 +586,7 @@ static struct {
     AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
+    double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
     int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, 0 none) */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
@@ -1040,6 +1041,7 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
      * is known (looked up by timestamp), else 0 -- the reader then uses the
      * live values. Tagging the measure with its own pair lets the exposure
      * loop know at once whether a frame already shows the pair it sent. */
+    g.vf_last_mean = sum / wsum; g.vf_last_clip_hi = 100.0 * hi / n;   /* for a capture's report: viewfinder vs photo */
     p += snprintf(p, (size_t)(end - p), "vfmeter mean=%.5f clip_lo=%.3f clip_hi=%.3f iso=%d exp_ns=%lld hist=",
                   sum / wsum, 100.0 * lo / n, 100.0 * hi / n, iso, (long long)exp_ns);
     for (c = 0; c < 3 && p < end; ++c) {
@@ -6891,6 +6893,27 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
     jw_add(&w, "],\"ms\":{\"capture\":%.1f}", t_cap - t0);
+    {   /* Viewfinder vs photo: the same measures on the first frame (linear
+         * mean of the green, % of pixels with a channel at 255, and at 250+),
+         * beside the viewfinder's last, so that the zebra and the histogram,
+         * computed on the viewfinder, can be checked against what the photo
+         * holds. Every 8th pixel, the frame's own YUV to RGB conversion. */
+        const ir_yuv_t *f0 = &frames[0];
+        long cnt = 0, hi255 = 0, hi250 = 0; double sum = 0; int x, y;
+        for (y = 0; y + 1 < f0->h; y += 8)
+            for (x = 0; x + 1 < f0->w; x += 8) {
+                int Y = f0->y[(size_t)y * f0->w + x];
+                int U = f0->u[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128, V = f0->v[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128;
+                int r = Y + ((91881 * V) >> 16), gch = Y - ((22554 * U + 46802 * V) >> 16), b = Y + ((116130 * U) >> 16), m;
+                r = r < 0 ? 0 : r > 255 ? 255 : r; gch = gch < 0 ? 0 : gch > 255 ? 255 : gch; b = b < 0 ? 0 : b > 255 ? 255 : b;
+                m = r > gch ? (r > b ? r : b) : (gch > b ? gch : b);
+                if (m >= 255) hi255++;
+                if (m >= 250) hi250++;
+                sum += pow(gch / 255.0, 2.2); cnt++;
+            }
+        if (cnt) jw_add(&w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f}",
+                        g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
+    }
     if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\",\"preview_err\":%d}", dng_state, dng_preview_err); }
     jw_add(&w, "}");
     g.yuv_dng_path[0] = '\0';
