@@ -2438,6 +2438,8 @@ int main(int argc, char **argv)
                     else if (!strcmp(ccmd, "raw")) failures += cmd_raw(raw, &csave, out);
                     else if (!strcmp(ccmd, "stack")) failures += cmd_stack(stack, &csave, out);
                     else if (!strcmp(ccmd, "burst")) failures += cmd_burst(bf, &csave, out);
+                    else if (!strcmp(ccmd, "yuv")) failures += cmd_yuv(bridge, &csave, out);
+                    else { log_line("# ", "controller: unknown capture line (not run)"); ++failures; }
                     ctl_engine_busy(0);
                 }
                 continue;
