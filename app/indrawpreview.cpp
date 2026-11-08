@@ -330,30 +330,38 @@ void IndrawPreview::installExamples()
         QFile::remove(to);                               /* refreshed: the version's own */
         QFile::copy(from, to);
     }
-    writeDefaultSettings();
 }
 
 /* rawfish-ir.conf holds every setting, written out even at its default, so
  * that a user who opens it sees them all without the example:
- *  - no file (a new install, a reset): it is written from the example,
- *    every key at its default and every comment in place;
+ *  - no file (a new install): it is written from the example, every key at
+ *    its default and every comment in place;
  *  - a file without some keys (one from an older version, or a key a new
  *    version adds): those keys are added at their defaults, the values
  *    already there untouched.
- * The kept "last" focus and exposure values are left out (absent, the
- * start takes the automatic ones). */
+ * Called from main(), before the interface reads any setting: QSettings
+ * keeps one cached copy of the file per process, and a file written behind
+ * it after a first read would be overwritten from that copy at the next
+ * save (which left a new file with three lines). The kept "last" focus and
+ * exposure values are left out (absent, the start takes the automatic ones). */
+static bool keptLastValue(const QByteArray &l)
+{
+    return l.startsWith("lastFocusD=") || l.startsWith("lastIso=") || l.startsWith("lastShutterNs=");
+}
+static QList<QByteArray> exampleLines()
+{
+    QFile ex(QStringLiteral("/usr/share/rawfish-ir/examples/rawfish-ir.conf.example"));
+    if (!ex.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+    return ex.readAll().split('\n');
+}
 void IndrawPreview::writeDefaultSettings()
 {
     const QString path = settingsPath();
-    QFile ex(QStringLiteral("/usr/share/rawfish-ir/examples/rawfish-ir.conf.example"));
-    if (!ex.open(QIODevice::ReadOnly | QIODevice::Text)) return;
-    const QList<QByteArray> lines = ex.readAll().split('\n');
-    auto kept = [](const QByteArray &l) {
-        return l.startsWith("lastFocusD=") || l.startsWith("lastIso=") || l.startsWith("lastShutterNs=");
-    };
+    const QList<QByteArray> lines = exampleLines();
+    if (lines.isEmpty()) return;                          /* not installed (a dev build) */
     if (!QFile::exists(path)) {
         QByteArray outText;
-        for (const QByteArray &line : lines) if (!kept(line)) outText += line + '\n';
+        for (const QByteArray &line : lines) if (!keptLastValue(line)) outText += line + '\n';
         outText.chop(1);
         QFile out(path);
         if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write(outText);
@@ -363,13 +371,28 @@ void IndrawPreview::writeDefaultSettings()
     int added = 0;
     for (const QByteArray &line : lines) {
         const int eq = line.indexOf('=');
-        if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || kept(line)) continue;
+        if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || keptLastValue(line)) continue;
         const QString key = QString::fromUtf8(line.left(eq)).trimmed();
         if (s.contains(key)) continue;
         s.setValue(key, QString::fromUtf8(line.mid(eq + 1)).trimmed());
         ++added;
     }
     if (added) s.sync();
+}
+
+/* The reset, while the interface runs: through QSettings itself (its cached
+ * copy stays right), every key of the example at its default; the comments
+ * of a reset file are lost, the example keeps them. */
+static void resetToDefaults(const QString &path)
+{
+    QSettings s(path, QSettings::IniFormat);
+    s.clear();
+    for (const QByteArray &line : exampleLines()) {
+        const int eq = line.indexOf('=');
+        if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || keptLastValue(line)) continue;
+        s.setValue(QString::fromUtf8(line.left(eq)).trimmed(), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+    }
+    s.sync();
 }
 
 QString IndrawPreview::configDir() const
@@ -383,8 +406,8 @@ QString IndrawPreview::resetSettingsFile()
     const QString path = settingsPath(), bak = path + QStringLiteral(".bak");
     if (!QFile::exists(path)) return QString();
     QFile::remove(bak);
-    if (!QFile::rename(path, bak)) return QString();
-    writeDefaultSettings();                              /* a fresh file, every key at its default */
+    if (!QFile::copy(path, bak)) return QString();       /* the previous file kept */
+    resetToDefaults(path);                               /* every key at its default */
     return bak;
 }
 
