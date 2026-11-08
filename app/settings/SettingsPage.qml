@@ -21,6 +21,7 @@ Page {
         property string prefix: "photo"
         property string jpgDir: "~/Pictures/RAWfish-ir"
         property string dngDir: "~/Pictures/RAWfish-ir"
+        property bool jpgWithDng: false        // a DNG of the same instant with each JPG
     }
 
     // Tuning helpers: the calibration column in the camera's menu, and a
@@ -63,6 +64,13 @@ Page {
             PageHeader { title: "RAWfish-ir" }
 
             SectionHeader { text: qsTr("Captures") }
+
+            TextSwitch {
+                text: qsTr("A DNG with each JPG")
+                description: qsTr("Each JPG photo also writes a DNG of the same exposure, with the same file name, in the DNG folder. Not with the camera's own JPEG (HAL JPG), on long exposures (Σ, a DNG only) or on phones whose camera takes JPEG or RAW but not both.")
+                checked: output.jpgWithDng
+                onCheckedChanged: output.jpgWithDng = checked
+            }
 
             TextField {
                 id: prefixField

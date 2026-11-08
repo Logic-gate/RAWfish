@@ -746,7 +746,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+218" />
+        <location filename="../qml/indraw.qml" line="+219" />
         <source>raw</source>
         <translation>raw</translation>
     </message>
@@ -765,13 +765,13 @@ JPG</translation>
     <message>
         <location line="+10" />
         <location line="+130" />
-        <location line="+1744" />
+        <location line="+1745" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-1900" />
+        <location line="-1901" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -859,7 +859,7 @@ JPG</translation>
         <translation>bulle : pas de mesure</translation>
     </message>
     <message>
-        <location line="+238" />
+        <location line="+239" />
         <location line="+729" />
         <source>zebra</source>
         <translation>zébra</translation>

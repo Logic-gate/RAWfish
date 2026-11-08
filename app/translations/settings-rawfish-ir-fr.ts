@@ -3,12 +3,22 @@
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="+65" />
+        <location filename="../settings/SettingsPage.qml" line="+66" />
         <source>Captures</source>
         <translation>Photos</translation>
     </message>
     <message>
-        <location line="+5" />
+        <location line="+3" />
+        <source>A DNG with each JPG</source>
+        <translation>Un DNG avec chaque JPG</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Each JPG photo also writes a DNG of the same exposure, with the same file name, in the DNG folder. Not with the camera's own JPEG (HAL JPG), on long exposures (Σ, a DNG only) or on phones whose camera takes JPEG or RAW but not both.</source>
+        <translation>Chaque photo JPG écrit aussi un DNG de la même exposition, sous le même nom, dans le dossier des DNG. Pas avec le JPEG de l'appareil (HAL JPG), ni en pose longue (Σ, un DNG seulement), ni sur les téléphones dont la caméra prend le JPEG ou le RAW mais pas les deux.</translation>
+    </message>
+    <message>
+        <location line="+8" />
         <source>File name prefix</source>
         <translation>Préfixe des noms de fichiers</translation>
     </message>

@@ -240,7 +240,7 @@ static int view_command(const char *line)
 }
 
 /* "sh name=N type=jpg|raw|yuv q=Q noise=M edge=M bracket=off|0|1|2|3 denoise_sigma=D
- *     frames=1|2|4 colour=0..3 median=0..2 sharpen=0..3" (the last four for yuv):
+ *     frames=1|2|4 colour=0..5 median=0..4 sharpen=0..5 dng=0|1" (the last five for yuv):
  * a press of the shutter (the self-timer is the interface's). The capture
  * lines go to the queue the CLI drains. */
 static int shoot_command(const char *line)
@@ -258,6 +258,7 @@ static int shoot_command(const char *line)
     if ((v = field(line, "colour"))) r.colour = atoi(v);
     if ((v = field(line, "median"))) r.median = atoi(v);
     if ((v = field(line, "sharpen"))) r.sharpen = atoi(v);
+    r.dng = (v = field(line, "dng")) && atoi(v) == 1;
     if ((v = field(line, "q"))) r.quality = atoi(v);
     if ((v = field(line, "noise"))) sscanf(v, "%23s", r.noise);
     if ((v = field(line, "edge"))) sscanf(v, "%23s", r.edge);

@@ -46,6 +46,7 @@ ApplicationWindow {
         property string prefix: "photo"
         property string jpgDir: "~/Pictures/RAWfish-ir"
         property string dngDir: "~/Pictures/RAWfish-ir"
+        property bool jpgWithDng: false        // Settings: a DNG of the same instant with each JPG
     }
     function applyOutput(item) { item.setOutput(outputConf.prefix, outputConf.jpgDir, outputConf.dngDir) }
     // Device tuning flags from the same Settings page: whether the camera menu
@@ -886,7 +887,8 @@ ApplicationWindow {
                                        + " bracket=" + settingsMenu.bracket
                                        + " denoise_sigma=" + settingsMenu.stackDenoise
                                        + (isYuv ? " frames=" + settingsMenu.yuvFrames + " colour=" + settingsMenu.yuvColour
-                                                  + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen : ""))
+                                                  + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
+                                                  + (outputConf.jpgWithDng && page.rawAvailable ? " dng=1" : "") : ""))
             }
 
             // --- Gallery: the first item of the switcher strip (below), as in

@@ -741,7 +741,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+218"/>
+        <location filename="../qml/indraw.qml" line="+219"/>
         <source>raw</source>
         <translation type="unfinished"></translation>
     </message>
@@ -759,13 +759,13 @@ JPG</source>
     <message>
         <location line="+10"/>
         <location line="+130"/>
-        <location line="+1744"/>
+        <location line="+1745"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1900"/>
+        <location line="-1901"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -853,7 +853,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+238"/>
+        <location line="+239"/>
         <location line="+729"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>

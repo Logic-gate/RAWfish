@@ -30,6 +30,10 @@ repository). Newest first.
   menu keeps the JPEG quality (default 96). The Settings page's
   "viewfinder processing" switch is gone with its two columns.
 - Stacks, brackets and bursts still use the HAL JPEG.
+- Settings > Captures > "A DNG with each JPG": each JPG also writes a
+  DNG of the same exposure (the RAW16 of the same request), with the
+  same file name. With several frames, the DNG is the burst's last
+  frame. Not with HAL JPG, on Σ, or with exclusive streams.
 - Settings > Camera settings > "Reset the camera settings": at the next
   start, rawfish-ir.conf is set aside as rawfish-ir.conf.bak and every
   camera setting is back to its default.

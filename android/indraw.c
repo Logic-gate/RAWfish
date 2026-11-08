@@ -584,6 +584,7 @@ static struct {
     ACaptureRequest *yuv_request;           /* YUV + preview, the HAL's NR/edge off */
     ACaptureRequest *yuv_burst_req[4];      /* the same, one per frame of a burst (own exposure each) */
     AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
+    char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, 0 none) */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
@@ -6659,9 +6660,53 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* JPG + DNG: the next indraw_yuv_burst also writes a DNG of the same
+ * instant (path ".dng"), from the RAW16 stream of the same session: the
+ * last frame of the burst carries the RAW target too, so one exposure gives
+ * both. Used once, then cleared. 0 on success, IR_ESTATE without a RAW
+ * stream in this session. */
+IR_API int indraw_yuv_dng_next(const char *path, const char *datetime)
+{
+    if (!path || !path[0]) { g.yuv_dng_path[0] = '\0'; return IR_OK; }
+    if (!g.raw_target || !g.yuv_burst_req[0]) return IR_ESTATE;
+    snprintf(g.yuv_dng_path, sizeof g.yuv_dng_path, "%s", path);
+    snprintf(g.yuv_dng_dt, sizeof g.yuv_dng_dt, "%s", datetime ? datetime : "");
+    return IR_OK;
+}
+
+/* A RAW16 image and its result, paired, written as a DNG (the same steps as
+ * indraw_raw's). 0 on success, else an errno or -1. */
+static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char *path, const char *datetime)
+{
+    uint8_t *data = NULL; int data_len = 0, stride = 0, w_px = 0, h_px = 0, y, err, sh_cols = 0, sh_rows = 0;
+    int64_t a_exposure = 0; int32_t a_iso = 0;
+    ACameraMetadata_const_entry e;
+    uint16_t *px; float *sh;
+    dng_params_t dp;
+    char sw[32], dt[24];
+    AImage_getWidth(img, &w_px); AImage_getHeight(img, &h_px);
+    if (AImage_getPlaneData(img, 0, &data, &data_len) != AMEDIA_OK || AImage_getPlaneRowStride(img, 0, &stride) != AMEDIA_OK ||
+        w_px <= 0 || h_px <= 0 || stride < w_px * 2 || (int64_t)stride * (h_px - 1) + w_px * 2 > data_len) return -1;
+    if (ACameraMetadata_getConstEntry(rmeta, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count) a_exposure = e.data.i64[0];
+    if (ACameraMetadata_getConstEntry(rmeta, ACAMERA_SENSOR_SENSITIVITY, &e) == ACAMERA_OK && e.count) a_iso = e.data.i32[0];
+    px = malloc((size_t)w_px * h_px * 2);
+    if (!px) return ENOMEM;
+    for (y = 0; y < h_px; ++y) memcpy(px + (size_t)y * w_px, data + (size_t)y * stride, (size_t)w_px * 2);
+    sh = copy_shading(rmeta, &sh_cols, &sh_rows);
+    snprintf(sw, sizeof sw, "RAWfish-ir %s", IR_VERSION);
+    dng_params_from(&dp, rmeta, px, w_px, h_px, sh, sh_cols, sh_rows, a_exposure, a_iso, sw);
+    if (datetime && datetime[0]) dp.datetime = datetime; else { exif_datetime(dt, sizeof dt); dp.datetime = dt; }
+    err = dng_write(path, &dp);
+    if (!err) write_dng_preview(path, &dp);
+    free(px); free(sh);
+    return err;
+}
+
 IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
                             ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
 {
+    int with_dng = g.yuv_dng_path[0] && g.raw_target, dng_err = 0;
+    const char *dng_state = "none";
     ACaptureRequest *reqs[4];
     int k, got = 0, rc = IR_OK;
     int64_t exp_min = 0, exp_max = 0, exp_ceiling;
@@ -6699,16 +6744,20 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         reqs[k] = g.yuv_burst_req[k];
         frames[k].exposure_ns = ex; frames[k].iso = is;
     }
+    if (with_dng) { meter_quiesce(); ACaptureRequest_addTarget(reqs[n - 1], g.raw_target); }   /* the same exposure, as RAW too */
     pthread_mutex_lock(&g.lock);
     for (k = 0; k < g.yuv_qn; ++k) AImage_delete(g.yuv_q[k]);
     g.yuv_qn = 0; g.yuv_burst_on = 1;
     g.capture_failed = 0; g.result_ready = 0;
     g.captured_owed = NULL;
+    if (with_dng && g.raw_image) { AImage_delete(g.raw_image); g.raw_image = NULL; }
     pthread_mutex_unlock(&g.lock);
     t0 = now_ms();
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, n, reqs, NULL);
+    if (with_dng) ACaptureRequest_removeTarget(reqs[n - 1], g.raw_target);
     if (st != ACAMERA_OK) {
         pthread_mutex_lock(&g.lock); g.yuv_burst_on = 0; pthread_mutex_unlock(&g.lock);
+        if (with_dng) { meter_release(); g.yuv_dng_path[0] = '\0'; }
         return fail(out, out_size, IR_ECAPTURE, "yuv", "capture refused", st);
     }
     dl = deadline_in(timeout_ms + 500 * n);
@@ -6737,6 +6786,32 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     g.yuv_qn = 0;
     pthread_mutex_unlock(&g.lock);
     emit_event("captured kind=yuv\n");
+    if (with_dng) {
+        /* The RAW of the last frame and ITS result (same timestamp): a DNG
+         * without its own metadata would lie, so it is skipped instead. */
+        AImage *img = NULL; ACameraMetadata *rmeta = NULL; int64_t its = -1, rts = -2;
+        struct timespec dl2 = deadline_in(2000);
+        pthread_mutex_lock(&g.lock);
+        for (;;) {
+            if (g.raw_image && g.result_ready && g.r_meta) {
+                if (its < 0) AImage_getTimestamp(g.raw_image, &its);
+                if (ACameraMetadata_getConstEntry(g.r_meta, ACAMERA_SENSOR_TIMESTAMP, &e) == ACAMERA_OK && e.count) rts = e.data.i64[0];
+                if (rts == its) break;
+            }
+            if (g.capture_failed || g.device_error) break;
+            if (pthread_cond_timedwait(&g.cond, &g.lock, &dl2) == ETIMEDOUT) break;
+        }
+        if (g.raw_image && rts == its) { img = g.raw_image; g.raw_image = NULL; rmeta = ACameraMetadata_copy(g.r_meta); }
+        pthread_mutex_unlock(&g.lock);
+        if (img && rmeta) {
+            dng_err = write_dng_pair(img, rmeta, g.yuv_dng_path, g.yuv_dng_dt);
+            dng_state = dng_err ? "write failed" : "written";
+            if (!dng_err) emit_written("dng", g.yuv_dng_path);
+        } else dng_state = img ? "no matching result" : "no raw image";
+        if (img) AImage_delete(img);
+        if (rmeta) ACameraMetadata_free(rmeta);
+        meter_release();
+    }
     for (k = 0; k < n; ++k) {
         frames[k].exposure_manual = 1;
         frames[k].wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
@@ -6757,7 +6832,10 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     for (k = 0; k < got; ++k)
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
-    jw_add(&w, "],\"ms\":{\"capture\":%.1f}}", t_cap - t0);
+    jw_add(&w, "],\"ms\":{\"capture\":%.1f}", t_cap - t0);
+    if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\"}", dng_state); }
+    jw_add(&w, "}");
+    g.yuv_dng_path[0] = '\0';
     return got == n ? rc : (rc == IR_OK ? IR_ECAPTURE : rc);
 }
 

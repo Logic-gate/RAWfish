@@ -1619,7 +1619,8 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
     char file[1200];
     static char cap[OUT_SIZE];
-    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0;
+    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0, want_dng = 0;
+    char dngfile[1200] = "";
     ir_yuv_t dn; yuv_denoise_report_t rep;
     memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
     float focus_diopters = 0.0f, ev[4] = { 0, 0, 0, 0 };
@@ -1650,6 +1651,8 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             if (*q) { emit("{\"ok\":false,\"error\":\"yuv: ev= takes 4 values at most\"}"); return 1; }
         }
         else if (!strcmp(tok, "save=yuv")) do_save = 1;
+        else if (!strcmp(tok, "dng=1")) want_dng = 1;     /* a DNG of the same instant, same name */
+        else if (!strcmp(tok, "dng=0")) want_dng = 0;
         else if (!strcmp(tok, "denoise=on")) denoise = 1;
         else if (!strncmp(tok, "colour=", 7)) { colour = atoi(tok + 7); if (colour < 0 || colour > 5) { emit("{\"ok\":false,\"error\":\"yuv: colour=0..5\"}"); return 1; } denoise = 1; }
         else if (!strncmp(tok, "median=", 7)) { median = atoi(tok + 7); if (median < 0 || median > 4) { emit("{\"ok\":false,\"error\":\"yuv: median=0..4\"}"); return 1; } denoise = 1; }
@@ -1658,6 +1661,19 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     }
     if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
     if (nev > 0) { if (nev != n) { emit("{\"ok\":false,\"error\":\"yuv: ev= needs one value per frame (n=)\"}"); return 1; } }
+    if (want_dng) {
+        /* JPG + DNG from one exposure: the burst path (one frame is a burst of
+         * one), its last frame also read as RAW16 and written as the DNG. */
+        typedef int (*dngnext_fn)(const char *, const char *);
+        dngnext_fn dn_next = (dngnext_fn)a_dlsym(bridge, "indraw_yuv_dng_next");
+        char ddt[24]; struct tm dtm;
+        localtime_r(&now.tv_sec, &dtm);
+        strftime(ddt, sizeof ddt, "%Y:%m:%d %H:%M:%S", &dtm);
+        if (build_output_path(prefix, "dng", &now, dngfile, sizeof dngfile) || !dn_next || dn_next(dngfile, ddt)) {
+            log_line("# ", "yuv: no DNG with this JPG (no RAW stream in this session)");
+            dngfile[0] = '\0';
+        } else if (n == 1 && nev == 0) { nev = 1; ev[0] = 0.0f; }
+    }
     if (n == 1 && nev == 0) {
         if (yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE)) { emit(out); return 1; }
     } else {
