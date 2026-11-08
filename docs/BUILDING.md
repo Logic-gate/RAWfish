@@ -1,10 +1,10 @@
 #(AI generated)
-# Building RAWfish-indRAW from scratch
+# Building RAWfish-ir from scratch
 
 A step-by-step guide for someone who has never built a Sailfish app. It takes
 about an hour the first time (most of it downloads), five minutes afterwards.
 
-RAWfish-indRAW is two packages, built by two different toolchains, because the phone
+RAWfish-ir is two packages, built by two different toolchains, because the phone
 runs two worlds at once:
 
 | Package | What is in it | Built with | Why |
@@ -62,7 +62,7 @@ with a library of another version, so always install both packages together.
 The library is Android code, compiled by the NDK's clang for 64-bit ARM.
 
 1. Download the NDK from https://developer.android.com/ndk/downloads
-   (the Linux zip, version **r27** is what RAWfish-indRAW is built with; newer
+   (the Linux zip, version **r27** is what RAWfish-ir is built with; newer
    versions should work).
 2. Unzip it somewhere permanent, e.g. `~/android-ndk-r27d`.
 3. Tell the scripts where it is, in your shell profile:
@@ -124,7 +124,7 @@ code, with stubbed Android headers): `./scripts/check-host.sh`.
    ```
    To update later, the same command with the new files; to remove:
    `pkcon remove rawfish-ir-gui rawfish-ir-cli`.
-3. RAWfish-indRAW appears in the app grid. The first launch creates
+3. RAWfish-ir appears in the app grid. The first launch creates
    `~/Pictures/RAWfish-ir/` for the photos and `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`,
    the engine's log -- the first thing to look at if something is wrong.
 

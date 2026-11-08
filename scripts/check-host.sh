@@ -158,7 +158,7 @@ PYEOF
 else
     echo "translations: lupdate not installed, not checked"
 fi
-# One version number for the two packages and the library (RAWfish-indRAW 0.1.0+).
+# One version number for the two packages and the library (RAWfish-ir 0.1.0+).
 v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/indraw_version.h")
 v_cli=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir-cli.spec")
 v_gui=$(sed -n 's/^Version: *//p' "$root/app/rpm/rawfish-ir-gui.spec")

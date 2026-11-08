@@ -1,16 +1,16 @@
 # Device profiles (AI generated)
 
-RAWfish-indRAW must run on more than the reference phone (Jolla Phone 2), so anything
+RAWfish-ir must run on more than the reference phone (Jolla Phone 2), so anything
 that varies between devices lives in data, not in the code. The data is split
 by **nature**, not by device -- this is the key difference from RAWfish, where a
 single per-device "profile" mixes sensor facts, corrections and UI preferences,
 so changing phone loses your UI choices and you can no longer tell what a value
-means. RAWfish-indRAW keeps three natures strictly apart:
+means. RAWfish-ir keeps three natures strictly apart:
 
 ## 1. What the HAL claims  (read-only, per device)
 
 A snapshot of the sensor's declared capabilities, written by `rawfish-ir-cli probe` to
-`generated-hal.json`. RAWfish-indRAW generates it and never edits it. It is reference
+`generated-hal.json`. RAWfish-ir generates it and never edits it. It is reference
 only: camera ids, sizes, ranges, modes, and the grouped controls (scenes,
 effects) the device lists.
 
@@ -162,7 +162,7 @@ per camera, the HAL's claims as `_hal_` references) and
 override-hal.json exists, so deleting it and running the probe gives it
 back; the app's normal start does not.
 
-**Shipped device profiles (0.47.57).** RAWfish-indRAW ships one profile per camera
+**Shipped device profiles (0.47.57).** RAWfish-ir ships one profile per camera
 module in `/usr/share/rawfish-ir/device-profiles/` (source:
 `android/data/device-profiles/`), the same format as `override-hal.json` plus:
 - `"match": { "make": "Sony", "models": [...], "raw": [W, H] }`: the phone is
@@ -285,7 +285,7 @@ tool has no UI.
 
 ## Everything asked of the HAL is atomic
 
-RAWfish-indRAW never drives a *grouped* control that reconfigures several things at once:
+RAWfish-ir never drives a *grouped* control that reconfigures several things at once:
 no scene mode, no effect, no global "auto" that overrides the atomic settings.
 On open, every request is set to `CONTROL_MODE = AUTO` with `SCENE_MODE =
 DISABLED` and `EFFECT_MODE = OFF`, so a scene or effect can never silently change

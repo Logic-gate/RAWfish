@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+935"/>
+        <location filename="../indrawpreview.cpp" line="+940"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -819,14 +819,14 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+10"/>
-        <location line="+127"/>
-        <location line="+1662"/>
+        <location line="+130"/>
+        <location line="+1742"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1815"/>
+        <location line="-1898"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -841,7 +841,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+94"/>
+        <location line="+97"/>
         <source>warm</source>
         <translation type="unfinished"></translation>
     </message>
@@ -886,7 +886,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+152"/>
+        <location line="+197"/>
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation type="unfinished"></translation>
@@ -914,7 +914,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+207"/>
+        <location line="+236"/>
         <location line="+731"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
@@ -1073,7 +1073,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+12"/>
         <source>TYPE</source>
         <translation type="unfinished"></translation>
     </message>

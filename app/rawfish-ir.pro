@@ -1,4 +1,4 @@
-# RAWfish-indRAW Sailfish application (the interface; package rawfish-ir-gui).
+# RAWfish-ir Sailfish application (the interface; package rawfish-ir-gui).
 TEMPLATE = app
 TARGET = rawfish-ir
 # The engine's program is 'rawfish-ir-cli' (package rawfish-ir-cli); the app

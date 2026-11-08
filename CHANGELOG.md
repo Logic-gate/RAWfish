@@ -138,7 +138,7 @@ repository). Newest first.
 ## 0.1.2 — packaging and documentation from the October 2026 audits (patch 0274)
 - Both packages ship the licence (%license); the duplicate LICENSES/LICENSE
   is gone (the app's build keeps an identical copy, app/LICENSE).
-- CREDITS says plainly what RAWfish-indRAW owes RAWfish: its logic and the
+- CREDITS says plainly what RAWfish-ir owes RAWfish: its logic and the
   look of its interface, modelled on it, without copying its code.
 - The README's examples work again (file names are prefixes; the engine
   writes DNGs), and it says that the command-line tool is not sandboxed.
@@ -164,9 +164,9 @@ repository). Newest first.
 - The settings menu's viewfinder Noise / Sharpen columns had kept the ZSL
   entries removed in 0266 (an error at every menu build).
 
-## 0.1.0 — RAWfish-indRAW: indRAW joins RAWfish as a branch; one version for both packages (patch 0271)
+## 0.1.0 — RAWfish-ir: indRAW joins RAWfish as a branch; one version for both packages (patch 0271)
 - New names, decided with RAWfish's developer: the project is
-  **RAWfish-indRAW** (the `indraw` branch of RAWfish's repository); on the
+  **RAWfish-ir** (the `indraw` branch of RAWfish's repository); on the
   phone it shows as **RAWfish-ir**; the technical name is `rawfish-ir`:
   packages `rawfish-ir-cli` (the engine: library, controller, command
   line; installable alone) and `rawfish-ir-gui` (the interface, which
@@ -1433,7 +1433,7 @@ by the AF outcome (dotted / dashed / solid).
 # Before the first release: the RawBar month (October 2026)
 
 RawBar was the first name of this project (then indRAW, then
-RAWfish-indRAW). The version numbers below are the internal development
+RAWfish-ir). The version numbers below are the internal development
 ones of that time (0.1-0.25, ui 64), the engine's alone; they match the
 "Before 0.26.0 (patches 0001-0064)" entry above, not the published 0.1.x.
 

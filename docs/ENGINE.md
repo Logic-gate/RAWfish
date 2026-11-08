@@ -1,5 +1,5 @@
 # (AI generated)
-# The RAWfish-indRAW engine: command reference
+# The RAWfish-ir engine: command reference
 
 `rawfish-ir-cli` (the command-line tool, `/usr/bin/rawfish-ir-cli`; the sources keep the engine's development name, indraw) loads `librawfish-ir.so`
 through libhybris and drives the camera with Android's Camera2. The app uses

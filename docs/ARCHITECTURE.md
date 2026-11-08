@@ -1,7 +1,7 @@
 # Architecture: engine, controller, interface (AI generated)
 
 **Status: done (0.47.9, October 2026): the seven steps are in.** It
-describes where RAWfish-indRAW is going, so that any interface -- RAWfish-indRAW's or
+describes where RAWfish-ir is going, so that any interface -- RAWfish-ir's or
 RAWfish's -- gets the same camera behaviour by talking to one process.
 
 ## Why
@@ -11,7 +11,7 @@ side) and the interface (its QML and its C++ viewfinder item): the exposure
 modes, the spot measure, the focus sequences, the zoom/loupe geometry and
 part of the measurements live in the interface. That made iteration easy, but:
 - another interface (RAWfish's) would have to re-implement all of it, and
-  would drift from RAWfish-indRAW's;
+  would drift from RAWfish-ir's;
 - the exposure loop goes engine -> pipe -> interface (QML) -> pipe -> engine
   for every measurement, which costs latency;
 - the logic that had the most bugs (exposure, focus, loupe) can only be
@@ -29,7 +29,7 @@ and peaking).
 |---|---|---|
 | **Engine** -- `librawfish-ir.so` | Android (bionic), built with the NDK | commands to the sensor and returns from it: Camera2 requests, frames, metadata, files, and the **raw measurements** made on the buffers only it holds |
 | **Controller** -- new C code in the `rawfish-ir-cli` process | Linux (glibc), built with the Sailfish SDK | the **camera's behaviour**: exposure modes, focus sequences, geometry, decisions; testable on a PC with simulated measurements |
-| **Interface** -- the app (RAWfish-indRAW's, or RAWfish's): its QML, and a C++ item that receives and draws the frames | Qt | showing images and states, gestures, menus, visual aids |
+| **Interface** -- the app (RAWfish-ir's, or RAWfish's): its QML, and a C++ item that receives and draws the frames | Qt | showing images and states, gestures, menus, visual aids |
 
 ### Rules between the layers
 
@@ -144,7 +144,7 @@ bugs so far.
 
 ## Migration, piece by piece
 
-Each step leaves RAWfish-indRAW working, with its own interface as the first client
+Each step leaves RAWfish-ir working, with its own interface as the first client
 (nothing should change for the user):
 
 1. **Event pipe** engine -> controller, and the controller skeleton in the
