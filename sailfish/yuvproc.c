@@ -279,7 +279,7 @@ static void merge_rows(void *p, int y0, int y1)
         for (x = 0; x < w; ++x) {
             int sx = x - c->dx; float wgt;
             if (sy < 0 || sy >= h || sx < 0 || sx >= w) continue;
-            { float dd = c->d[(size_t)y * w + x]; wgt = (2 * c->T - dd) / c->T; wgt = wgt < 0 ? 0 : wgt > 1 ? 1 : wgt; }
+            { float dd = c->d[(size_t)y * w + x]; wgt = c->T > 0 ? (2 * c->T - dd) / c->T : (dd <= 0 ? 1.0f : 0.0f); wgt = wgt < 0 ? 0 : wgt > 1 ? 1 : wgt; }
             c->ay[(size_t)y * w + x] += wgt * c->f->y[(size_t)sy * w + sx];
             c->wy[(size_t)y * w + x] += wgt; m += wgt;
             if (!(y & 1) && !(x & 1)) {
@@ -320,6 +320,10 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
     out->y = malloc(np); out->u = malloc(nc); out->v = malloc(nc);
     if (!out->y || !out->u || !out->v) { free(out->y); free(out->u); free(out->v); out->y = out->u = out->v = NULL; return -1; }
     rep->sigma = luma_sigma(ref->y, w, h);
+    /* A clean, smooth frame (ISO 100, a sky, clipped areas) can measure a
+     * noise of 0: the merge's threshold would be 0 and its weights 0/0. Half
+     * a level is the 8-bit image's own rounding, the least noise there is. */
+    if (!(rep->sigma >= 0.5f)) rep->sigma = 0.5f;
     rep->merged_pct[0] = 100.0f;
     if (n == 1) {
         memcpy(out->y, ref->y, np); memcpy(out->u, ref->u, nc); memcpy(out->v, ref->v, nc);

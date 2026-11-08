@@ -83,6 +83,21 @@ int main(void)
         CHECK(edge1 > edge0 && flat1 < flat0 * 1.6f, "sharpen 2: edge %d -> %d, flat noise %.2f -> %.2f", edge0, edge1, flat0, flat1);
         free(sh.y); free(sh.u); free(sh.v);
     }
+    {   /* a flat, clipped frame (a white sky at ISO 100): no noise to measure;
+         * the merge must not divide by it (it gave 0/0, black-green holes) */
+        ir_yuv_t flat[2], o2; yuv_denoise_report_t r3; int bad = 0; size_t i, ny = (size_t)W * H, nc = ny / 4;
+        for (int k = 0; k < 2; ++k) {
+            memset(&flat[k], 0, sizeof flat[k]); flat[k].w = W; flat[k].h = H;
+            flat[k].y = malloc(ny); flat[k].u = malloc(nc); flat[k].v = malloc(nc);
+            memset(flat[k].y, 255, ny); memset(flat[k].u, 128, nc); memset(flat[k].v, 128, nc);
+        }
+        CHECK(yuv_denoise(flat, 2, 1, 1, &o2, &r3) == 0, "a flat white frame merges (noise floor %.2f)", r3.sigma);
+        for (i = 0; i < ny && !bad; ++i) if (o2.y[i] != 255) bad = 1;
+        for (i = 0; i < nc && !bad; ++i) if (o2.u[i] != 128 || o2.v[i] != 128) bad = 2;
+        CHECK(bad == 0, "a flat white frame stays white (no 0/0 holes), %d", bad);
+        for (int k = 0; k < 2; ++k) { free(flat[k].y); free(flat[k].u); free(flat[k].v); }
+        free(o2.y); free(o2.u); free(o2.v);
+    }
     for (int k = 0; k < 4; ++k) { free(fr[k].y); free(fr[k].u); free(fr[k].v); }
     printf(fails ? "yuvproc: FAILED (%d)\n" : "yuvproc: OK\n", fails);
     return fails ? 1 : 0;
