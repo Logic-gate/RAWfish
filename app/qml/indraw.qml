@@ -1588,7 +1588,12 @@ ApplicationWindow {
                     Behavior on opacity { NumberAnimation { duration: 300 } }
                     readonly property bool settled: afState === 2 || afState === 4 || afState === 5 || afState === 6
                     onSettledChanged: if (opacity > 0) opacity = settled ? 0.6 : 1.0
-                    MouseArea { anchors.fill: parent; onClicked: page.clearTap() }
+                    MouseArea {
+                        anchors.fill: parent
+                        onPressed: viewfinder.sendCommand("# circle: pressed")     // traced: a first tap sometimes did nothing visible
+                        onClicked: { viewfinder.sendCommand("# circle: tap, clearing"); page.clearTap() }
+                        onCanceled: viewfinder.sendCommand("# circle: press cancelled (stolen by another area)")
+                    }
                     // Manual or semi-automatic exposure (a wheel touched): the light
                     // at the circle as an absolute EV (at ISO 100), above it -- a spot
                     // light meter, the way the distance shows below it in manual focus.
