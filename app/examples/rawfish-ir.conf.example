@@ -2,6 +2,9 @@
 ; with what it does, its values and its limits. Written by RAWfish-ir at each start
 ; next to the real file (this copy is refreshed; the real file is never touched).
 ;
+; Back to the defaults: Settings > Apps > RAWfish-ir > "Reset the camera settings"
+; (the file is kept as rawfish-ir.conf.bak), or delete the file with the app closed.
+;
 ; How to edit the real file: CLOSE the app first (it rewrites the file when a
 ; setting changes, and drops any comment), edit, reopen. A value out of its
 ; range is clamped, a value not in its list falls back to the default: a typo

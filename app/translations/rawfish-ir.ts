@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+946"/>
+        <location filename="../indrawpreview.cpp" line="+954"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -741,7 +741,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+217"/>
+        <location filename="../qml/indraw.qml" line="+218"/>
         <source>raw</source>
         <translation type="unfinished"></translation>
     </message>
@@ -759,13 +759,13 @@ JPG</source>
     <message>
         <location line="+10"/>
         <location line="+130"/>
-        <location line="+1737"/>
+        <location line="+1744"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1893"/>
+        <location line="-1900"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -854,30 +854,30 @@ JPG</source>
     </message>
     <message>
         <location line="+238"/>
-        <location line="+722"/>
+        <location line="+729"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-722"/>
-        <location line="+722"/>
+        <location line="-729"/>
+        <location line="+729"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-696"/>
-        <location line="+696"/>
+        <location line="-703"/>
+        <location line="+703"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-696"/>
-        <location line="+696"/>
+        <location line="-703"/>
+        <location line="+703"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-623"/>
+        <location line="-630"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -967,7 +967,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+191"/>
+        <location line="+198"/>
         <source>CAM</source>
         <translation type="unfinished"></translation>
     </message>

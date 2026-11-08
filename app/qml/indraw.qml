@@ -67,6 +67,7 @@ ApplicationWindow {
         property bool probeRequested: false
         property string probeDone: ""
         property bool shadingCalRequested: false   // Settings asked for the lens-shading assistant
+        property bool resetSettingsRequested: false // Settings asked for rawfish-ir.conf back to the defaults
     }
 
     // Cover (the app's tile on the home screen): the newest capture, or the
@@ -1609,6 +1610,13 @@ ApplicationWindow {
                 }
                 onCaptureSizeChosen: applyCaptureSize(wxh, true)
                 Component.onCompleted: {
+                    // Settings asked for the defaults: the file is set aside
+                    // (rawfish-ir.conf.bak) before anything is read from it.
+                    if (deviceConf.resetSettingsRequested) {
+                        var bak = viewfinder.resetSettingsFile()
+                        deviceConf.resetSettingsRequested = false
+                        viewfinder.sendCommand("# settings back to the defaults" + (bak !== "" ? ", the previous file kept as " + bak : " (there was no file)"))
+                    }
                     load()
                     applyCaptureSize(captureSize, false)  // the saved size, before the first start
                 }

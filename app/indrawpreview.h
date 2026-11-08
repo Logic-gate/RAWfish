@@ -252,6 +252,10 @@ public:
     /* UI preferences, persisted in ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf. */
     Q_INVOKABLE QVariant setting(const QString &key, const QVariant &def) const;
     Q_INVOKABLE void setSetting(const QString &key, const QVariant &value);
+    /* rawfish-ir.conf back to the defaults: the file is renamed
+     * rawfish-ir.conf.bak (a previous .bak replaced), so nothing is lost.
+     * Returns the backup's path, "" when there was no file. */
+    Q_INVOKABLE QString resetSettingsFile();
     /* Output settings (validated here; invalid values fall back to the
      * defaults): the prefix charset is the engine's, folders are absolute. */
     Q_INVOKABLE void setOutput(const QString &prefix, const QString &jpgDir, const QString &dngDir);

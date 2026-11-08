@@ -30,6 +30,9 @@ repository). Newest first.
   menu keeps the JPEG quality (default 96). The Settings page's
   "viewfinder processing" switch is gone with its two columns.
 - Stacks, brackets and bursts still use the HAL JPEG.
+- Settings > Camera settings > "Reset the camera settings": at the next
+  start, rawfish-ir.conf is set aside as rawfish-ir.conf.bak and every
+  camera setting is back to its default.
 
 ## 0.1.14 — settings kept when the camera restarts; focus calibration shipped; the focal button (patches 0296–0297)
 - Focus calibration: the JP2's measured table (7 points) ships in its

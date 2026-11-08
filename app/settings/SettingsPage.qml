@@ -40,6 +40,7 @@ Page {
         property bool probeRequested: false
         property string probeDone: ""        // the app writes the date when done
         property bool shadingCalRequested: false   // the lens-shading assistant, at the next start
+        property bool resetSettingsRequested: false // rawfish-ir.conf back to the defaults, at the next start
     }
 
     readonly property string picturesHome: StandardPaths.pictures     // "/home/<user>/Pictures"
@@ -181,6 +182,22 @@ Page {
                 text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
                 enabled: !device.probeRequested
                 onClicked: device.probeRequested = true
+            }
+
+            SectionHeader { text: qsTr("Camera settings") }
+            Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * Theme.horizontalPageMargin
+                wrapMode: Text.Wrap
+                color: Theme.secondaryHighlightColor
+                font.pixelSize: Theme.fontSizeSmall
+                text: qsTr("Puts every setting of the camera and of rawfish-ir.conf back to its default when RAWfish-ir next opens (close it first if it is open). The current file is kept as rawfish-ir.conf.bak in ~/.config/com.rawfish/rawfish-ir/. The settings of this page are not changed.")
+            }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: device.resetSettingsRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Reset the camera settings")
+                enabled: !device.resetSettingsRequested
+                onClicked: device.resetSettingsRequested = true
             }
         }
         VerticalScrollDecorator {}

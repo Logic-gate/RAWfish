@@ -338,6 +338,14 @@ QString IndrawPreview::configDir() const
     QDir().mkpath(dir);
     return dir;
 }
+QString IndrawPreview::resetSettingsFile()
+{
+    const QString path = settingsPath(), bak = path + QStringLiteral(".bak");
+    if (!QFile::exists(path)) return QString();
+    QFile::remove(bak);
+    return QFile::rename(path, bak) ? bak : QString();
+}
+
 QVariant IndrawPreview::setting(const QString &key, const QVariant &def) const
 {
     return QSettings(settingsPath(), QSettings::IniFormat).value(key, def);
