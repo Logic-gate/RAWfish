@@ -52,11 +52,11 @@ jpgFrames=1
 ; Colour noise filter: 0 off, 1..5 = 1, 2, 3, 5, 8 times the measured noise
 ; (4 and 5 are deliberately too much, to see the effect).
 ;                                               range 0..5              default 2
-jpgColour=2
+jpgNoiseColourFilter=2
 ; False colour on fine textures (a zipper, a weave): a median on the colour,
 ; 0 off, 1..4 = 3x3, 5x5, 7x7, 9x9; it also removes real colour dots that small.
 ;                                               range 0..4              default 0
-jpgMoire=0
+jpgMoireFilter=0
 ; RAWfish-ir's sharpening of the fine detail above the noise: 0 off, 1..5 =
 ; 0.5, 1, 1.5, 2.5, 4 times the detail (4 and 5 deliberately too much).
 ;                                               range 0..5              default 3
@@ -67,7 +67,7 @@ jpgSharpen=3
 ; when it is not offered. On a phone whose session cannot hold the YUV stream
 ; (exclusive streams), JPG is the HAL JPEG.
 ;                                               values: false, true     default false
-halJpeg=false
+useHalJpeg=false
 ; The HAL JPEG's noise reduction.               values: default, off, fast, hq, minimal   default off
 halJpegNoise=off
 ; The HAL JPEG's sharpening.                    values: default, off, fast, hq            default hq

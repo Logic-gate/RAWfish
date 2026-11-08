@@ -158,15 +158,15 @@ Item {
         jpegQuality = pick("jpegQuality", "96", ["80", "90", "96", "100"]) * 1
         awbMode = num("awbMode", 1, 1, 8)
         // Set in rawfish-ir.conf only (not in the menu): the processing.
-        halJpeg = pick("halJpeg", "false", ["false", "true"]) === "true"
+        halJpeg = pick("useHalJpeg", "false", ["false", "true"]) === "true"
         noiseIndex = Math.max(0, noiseModes.indexOf(pick("halJpegNoise", "off", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "fast", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "off", ["default", "off", "fast", "hq"]) + "_edge"))
         bracket = pick("bracket", "off", ["off", "0", "1", "2", "3"])
         yuvFrames = pick("jpgFrames", "1", ["1", "2", "4"]) * 1
-        yuvColour = num("jpgColour", 2, 0, 5)
-        yuvMedian = num("jpgMoire", 0, 0, 4)
+        yuvColour = num("jpgNoiseColourFilter", 2, 0, 5)
+        yuvMedian = num("jpgMoireFilter", 0, 0, 4)
         yuvSharpen = num("jpgSharpen", 3, 0, 5)
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         gridOn = num("gridOn", 0, 0, 1) === 1

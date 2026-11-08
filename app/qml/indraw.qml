@@ -202,7 +202,7 @@ ApplicationWindow {
             }
             // UI state. Internal values are plain keys; qsTr() only on display.
             // raw | jpg (RAWfish-ir's JPEG, from the ISP's image) | haljpg (the
-            // camera driver's own JPEG, offered when rawfish-ir.conf says halJpeg=true)
+            // camera driver's own JPEG, offered when rawfish-ir.conf says useHalJpeg=true)
             property string imageType: "jpg"
             // JPG is RAWfish-ir's own processing where the session holds the YUV
             // stream; elsewhere (exclusive streams, or a session that refused it)

@@ -21,10 +21,10 @@ repository). Newest first.
   (frames merged, colour noise filter, optional false-colour median,
   sharpening above the noise) and compressed with the same Exif. The
   camera's own JPEG is "HAL JPG", offered in TYPE when rawfish-ir.conf
-  says halJpeg=true. On a phone whose session cannot hold the YUV stream,
+  says useHalJpeg=true. On a phone whose session cannot hold the YUV stream,
   JPG is the camera's JPEG.
 - The processing settings are in rawfish-ir.conf only, under explicit
-  names (jpgFrames 1, jpgColour 2, jpgMoire 0, jpgSharpen 3; halJpegNoise
+  names (jpgFrames 1, jpgNoiseColourFilter 2, jpgMoireFilter 0, jpgSharpen 3; halJpegNoise
   off, halJpegSharpen hq; viewfinderNoise fast, viewfinderSharpen off;
   stackDenoise 1), described in rawfish-ir.conf.example. The camera
   menu keeps the JPEG quality (default 96). The Settings page's
