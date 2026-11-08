@@ -55,6 +55,9 @@ class IndrawPreview : public QQuickItem
      * true opens RAW + viewfinder without JPEG, false JPEG + viewfinder.
      * Ignored by the engine on every other phone. */
     Q_PROPERTY(bool rawSession READ rawSession WRITE setRawSession NOTIFY rawSessionChanged)
+    /* The YUV type: the session gets a full-size YUV stream (yuv=max), and
+     * loses it again when the type changes: a restart either way. */
+    Q_PROPERTY(bool yuvSession READ yuvSession WRITE setYuvSession NOTIFY yuvSessionChanged)
     /* The size of the frames the engine streams (sensor orientation): their
      * proportions are the photo's; the page shapes the viewfinder on them. */
     Q_PROPERTY(QSize frameSize READ frameSize NOTIFY frameSizeChanged)
@@ -165,6 +168,8 @@ public:
     void setCaptureSize(const QSize &size);
     bool rawSession() const { return m_rawSession; }
     void setRawSession(bool raw);
+    bool yuvSession() const { return m_yuvSession; }
+    void setYuvSession(bool yuv);
 
     bool fill() const;
     void setFill(bool fill);
@@ -262,6 +267,7 @@ public:
 
 signals:
     void rawSessionChanged();
+    void yuvSessionChanged();
     void rawSessionFailed();       /* exclusive streams: the RAW session died, back to JPEG */
 
     void activeChanged();
@@ -346,6 +352,8 @@ private:
     int m_restarts = 0;            /* unexpected exits restarted in a row        */
     bool m_gotCaps = false;        /* this engine reached its caps line          */
     bool m_rawSession = false;     /* what the page wants                          */
+    bool m_yuvSession = false;     /* the full-size YUV stream in the session      */
+    bool m_sessionYuv = false;     /* what the running engine was started with     */
     bool m_sessionRaw = false;     /* what the running engine was started with     */
     bool m_rawFellBack = false;    /* a RAW session died before its caps: the next
                                       start is JPEG; if that one says "exclusive",

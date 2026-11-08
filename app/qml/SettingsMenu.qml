@@ -59,6 +59,11 @@ Item {
     property string bracket: "off"
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
+    // The YUV type: RAWfish's own processing of the ISP's image (experiment).
+    property int yuvFrames: 1                      // 1, 2 or 4 frames merged
+    property int yuvColour: 2                      // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
+    property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
+    property int yuvSharpen: 0                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
     property bool advanced: true                   // simple = jpg only, no wheels
     // The Σ preview's target frame rate (rawfish-ir.conf, hand-edited): the ISO is
@@ -157,6 +162,10 @@ Item {
         previewNoiseIndex = num("previewNoiseIndex", 2, 0, noiseModes.length - 1)
         previewEdgeIndex = num("previewEdgeIndex", 1, 0, edgeModes.length - 1)
         bracket = pick("bracket", "off", ["off", "0", "1", "2", "3"])
+        yuvFrames = pick("yuvFrames", "1", ["1", "2", "4"]) * 1
+        yuvColour = num("yuvColour", 2, 0, 5)
+        yuvMedian = num("yuvMedian", 0, 0, 4)
+        yuvSharpen = num("yuvSharpen", 0, 0, 5)
         gridOn = num("gridOn", 0, 0, 1) === 1
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)
@@ -425,13 +434,34 @@ Item {
                 // A preset also clears the manual shift and tint.
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
-            MenuColumn { visible: menu.advanced; width: band.colW; header: header
+            // The YUV type's own columns (RAWfish's processing), in place of
+            // the camera's noise and sharpening columns.
+            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
+                caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
+                labelFor: function(v) { return v === 1 ? qsTr("One frame: colour filter only") : qsTr("%1 frames merged (less grain, no texture lost)").arg(v) }
+                onPicked: { menu.yuvFrames = value; menu.save("yuvFrames", value) } }
+            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
+                caption: qsTr("Colour"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
+                labelFor: function(v) { return v === 0 ? qsTr("Colour filter off") : qsTr("Colour filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
+                shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
+                onPicked: { menu.yuvColour = value; menu.save("yuvColour", value) } }
+            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
+                caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
+                labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
+                shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
+                onPicked: { menu.yuvMedian = value; menu.save("yuvMedian", value) } }
+            MenuColumn { visible: menu.advanced && menu.imageType === "yuv"; width: band.colW; header: header
+                caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
+                labelFor: function(v) { return v === 0 ? qsTr("RAWfish sharpening off") : qsTr("RAWfish sharpening: %1 x the fine detail").arg([0, 0.5, 1, 1.5, 2.5, 4][v]) }
+                shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
+                onPicked: { menu.yuvSharpen = value; menu.save("yuvSharpen", value) } }
+            MenuColumn { visible: menu.advanced && menu.imageType !== "yuv"; width: band.colW; header: header
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the camera's processing does not apply")
                 caption: qsTr("Noise"); values: [0, 1, 2, 3, 4]; current: menu.noiseIndex
                 labelFor: function(v) { return qsTr("Photo noise reduction: %1").arg(menu.modeName(menu.noiseModes[v])) }
                 shortFor: function(v) { return menu.modeShortName(menu.noiseModes[v]) }
                 onPicked: { menu.noiseIndex = value; menu.save("noiseIndex", value) } }
-            MenuColumn { visible: menu.advanced; width: band.colW; header: header
+            MenuColumn { visible: menu.advanced && menu.imageType !== "yuv"; width: band.colW; header: header
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the camera's processing does not apply")
                 caption: qsTr("Sharpen"); values: [0, 1, 2, 3]; current: menu.edgeIndex
                 labelFor: function(v) { return qsTr("Photo sharpening: %1").arg(menu.modeName(menu.edgeModes[v])) }

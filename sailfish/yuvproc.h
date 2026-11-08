@@ -14,11 +14,14 @@ typedef struct {
 
 /* n frames (1..4), the first the reference. Writes the result into out (its
  * planes malloc'd here: free them with free()). colour: the bilateral filter
- * on U and V. 0 on success. */
-int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_denoise_report_t *rep);
+ * on U and V, 0 off, 1..5 at 1, 2, 3, 5 and 8 times the measured noise;
+ * median: 0 none, 1..4 a 3x3 .. 9x9 on U and V before it (false colour).
+ * 0 on success. */
+int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t *out, yuv_denoise_report_t *rep);
 
-/* Sharpening of a frame's luminance, in place: level 1..3 (0.6, 1.2, 1.8 of
- * the fine detail added back), sigma the noise the detail must exceed. */
+/* Sharpening of a frame's luminance, in place: level 1..5 (0.5, 1, 1.5, 2.5
+ * and 4 times the fine detail added back), sigma the noise the detail must
+ * exceed. */
 void yuv_sharpen(ir_yuv_t *f, int level, float sigma);
 
 #endif

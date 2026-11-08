@@ -32,6 +32,14 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
                  req->noise[0] ? " " : "", req->noise, req->edge[0] ? " " : "", req->edge);
     }
     focus_arg(fs, farg, sizeof farg);
+    /* Our JPEG from the YUV stream: one command, the frames merged there. */
+    if (req->yuv) {
+        n = snprintf(lines[0], CTL_SHOOT_LINE, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s", req->name,
+                     req->frames == 2 || req->frames == 4 ? req->frames : 1, req->colour, req->median, req->sharpen,
+                     req->quality > 0 ? req->quality : 95, farg);
+        if (xs->fixed_pair) snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " exp=%.7f iso=%d", ns / 1e9, iso);
+        return 1;
+    }
     /* A stacked shutter with a pair: a stack. */
     if (!xs->full_auto && is_stacked(ns, smax)) {
         snprintf(lines[0], CTL_SHOOT_LINE, "stack %s film=%.3f iso=%d stk_denoise=%d",

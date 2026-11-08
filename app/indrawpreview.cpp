@@ -100,6 +100,14 @@ void IndrawPreview::setRawSession(bool raw)
         restart();
 }
 
+void IndrawPreview::setYuvSession(bool yuv)
+{
+    if (m_yuvSession == yuv) return;
+    m_yuvSession = yuv;
+    emit yuvSessionChanged();
+    if (m_active && m_gotCaps && m_sessionYuv != yuv) restart();   /* the stream has to be in the session */
+}
+
 void IndrawPreview::setCaptureSize(const QSize &size)
 {
     if (m_captureSize == size) return;
@@ -215,12 +223,14 @@ void IndrawPreview::start()
      * ignores it elsewhere). A RAW session that died before its caps is not
      * tried again: JPEG, and the page is told once the caps confirm. */
     m_sessionRaw = m_rawSession && !m_rawFellBack;
+    m_sessionYuv = m_yuvSession;
     args << QStringLiteral("--log") << log
          << QStringLiteral("--jpgdir") << m_jpgDir << QStringLiteral("--dngdir") << m_dngDir
          << QStringLiteral("stream")
          << m_cameraId
          << cap << prev << QStringLiteral("raw=max")
          << (m_sessionRaw ? QStringLiteral("type=raw") : QStringLiteral("type=jpeg"));
+    if (m_sessionYuv) args << QStringLiteral("yuv=max");
 
     m_buffer.clear();
     /* Inside the Sailjail sandbox /usr/bin only holds the app binary

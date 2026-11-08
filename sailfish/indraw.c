@@ -1067,8 +1067,10 @@ static void usage(void)
             "                   [exp=T] [iso=N]\n"
             "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N]   (- = measure only)\n"
             "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
-            "                                (denoise=on: our colour filter; with n=2|4 the frames aligned and merged;\n"
-            "                                 sharpen=1|2|3: our sharpening, light to strong, after the merge)\n"
+            "                                [colour=0..5] [median=0..4] [sharpen=0..5]\n"
+            "                                (colour: our colour filter, 1, 2, 3, 5, 8 x the noise (denoise=on = 2); median:\n"
+            "                                 a 3x3 .. 9x9 on the colour first (false colour); with n=2|4 the frames are\n"
+            "                                 aligned and merged; sharpen: ours, 0.5 .. 4 x the fine detail, after the merge)\n"
             "                                (N YUV frames in one burst, 1..4, the camera's NR and sharpening off; the\n"
             "                                 first compressed by us; save=yuv keeps every frame as NAME-fK.yuv + .json)\n"
             "         stack NAME film=T [sub=T] [stk_denoise=1|2|4] [iso=N]\n"
@@ -1616,7 +1618,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
     char file[1200];
     static char cap[OUT_SIZE];
-    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0;
+    int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0;
     ir_yuv_t dn; yuv_denoise_report_t rep;
     memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
     float focus_diopters = 0.0f, ev[4] = { 0, 0, 0, 0 };
@@ -1648,7 +1650,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         }
         else if (!strcmp(tok, "save=yuv")) do_save = 1;
         else if (!strcmp(tok, "denoise=on")) denoise = 1;
-        else if (!strncmp(tok, "sharpen=", 8)) { sharpen = atoi(tok + 8); if (sharpen < 0 || sharpen > 3) { emit("{\"ok\":false,\"error\":\"yuv: sharpen=0..3\"}"); return 1; } }
+        else if (!strncmp(tok, "colour=", 7)) { colour = atoi(tok + 7); if (colour < 0 || colour > 5) { emit("{\"ok\":false,\"error\":\"yuv: colour=0..5\"}"); return 1; } denoise = 1; }
+        else if (!strncmp(tok, "median=", 7)) { median = atoi(tok + 7); if (median < 0 || median > 4) { emit("{\"ok\":false,\"error\":\"yuv: median=0..4\"}"); return 1; } denoise = 1; }
+        else if (!strncmp(tok, "sharpen=", 8)) { sharpen = atoi(tok + 8); if (sharpen < 0 || sharpen > 5) { emit("{\"ok\":false,\"error\":\"yuv: sharpen=0..5\"}"); return 1; } }
         else { emit("{\"ok\":false,\"error\":\"yuv: unknown option\"}"); return 1; }
     }
     if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
@@ -1665,16 +1669,17 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     }
     memcpy(cap, out, OUT_SIZE);                          /* the engine's report      */
     cap[OUT_SIZE - 1] = '\0';
+    if (colour < 0) colour = denoise ? 2 : 0;                /* denoise=on alone: the normal colour filter */
     if (denoise) {                                        /* our own: colour, and the frames merged */
         const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
         int nin = (n == 1 && nev == 0) ? 1 : n;
-        if (yuv_denoise(in, nin, 1, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"denoise failed (memory)\"}"); return 1; }
+        if (yuv_denoise(in, nin, colour, median, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"denoise failed (memory)\"}"); return 1; }
     }
     if (sharpen) {                                        /* ours, on the merged frame */
         double ts = mono_ms();
         if (!denoise) {                                    /* no merge asked: sharpen the frame as it is */
             const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
-            if (yuv_denoise(in, 1, 0, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"sharpen failed (memory)\"}"); return 1; }
+            if (yuv_denoise(in, 1, 0, 0, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"sharpen failed (memory)\"}"); return 1; }
             denoise = -1;                                  /* dn holds a plain copy */
         }
         yuv_sharpen(&dn, sharpen, rep.sigma);
@@ -1717,15 +1722,20 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f", jlen, quality, t1 - t0);
         if (do_save) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"saved_frames\":%d", saved);
         if (denoise == 1) snprintf(out + strlen(out), OUT_SIZE - strlen(out),
-                              ",\"denoise\":{\"frames\":%d,\"sigma\":%.2f,\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
+                              ",\"denoise\":{\"frames\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
                               "\"shifts\":[[%d,%d],[%d,%d],[%d,%d]],\"merged_pct\":[%.0f,%.0f,%.0f]}",
-                              (n == 1 && nev == 0) ? 1 : n, rep.sigma, rep.ms_align, rep.ms_merge, rep.ms_colour,
+                              (n == 1 && nev == 0) ? 1 : n, colour, median, rep.sigma, rep.ms_align, rep.ms_merge, rep.ms_colour,
                               rep.shift_dy[1], rep.shift_dx[1], rep.shift_dy[2], rep.shift_dx[2], rep.shift_dy[3], rep.shift_dx[3],
                               rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
         if (sharpen) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"sharpen\":{\"level\":%d,\"ms\":%.0f}", sharpen, rep.ms_sharpen);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
     }
     emit(out);
+    {   /* the interface's gallery: the file is on disk (as the engine says for its own JPEGs) */
+        indraw_emit_fn em = (indraw_emit_fn)a_dlsym(bridge, "indraw_emit");
+        char ev[1300];
+        if (em && snprintf(ev, sizeof ev, "written kind=jpeg path=%s\n", file) < (int)sizeof ev) em(ev);
+    }
     return 0;
 }
 

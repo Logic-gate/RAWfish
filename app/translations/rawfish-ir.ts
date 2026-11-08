@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+935"/>
+        <location filename="../indrawpreview.cpp" line="+950"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -66,7 +66,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+82"/>
+        <location filename="../qml/SettingsMenu.qml" line="+87"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,15 +160,18 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+276"/>
-        <location line="+72"/>
+        <location line="+280"/>
+        <location line="+52"/>
+        <location line="+5"/>
+        <location line="+5"/>
+        <location line="+31"/>
         <location line="+13"/>
         <location line="+12"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-394"/>
+        <location line="-419"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -364,7 +367,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+142"/>
+        <location line="+146"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -495,7 +498,47 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+10"/>
+        <source>Frames</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>One frame: colour filter only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>%1 frames merged (less grain, no texture lost)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Colour filter off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Moiré</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>False colour: nothing removed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>RAWfish sharpening off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <location line="+6"/>
         <source>RAW: the camera&apos;s processing does not apply</source>
         <translation type="unfinished"></translation>
@@ -511,12 +554,28 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="-7"/>
+        <location line="+12"/>
         <source>Sharpen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-21"/>
+        <source>Colour filter: %1 x the noise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>False colour: a %1 median on the colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>RAWfish sharpening: %1 x the fine detail</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
         <source>Photo sharpening: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -809,7 +868,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+1"/>
-        <source>jpg yuv</source>
+        <source>YUV</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -819,14 +878,14 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+10"/>
-        <location line="+127"/>
-        <location line="+1662"/>
+        <location line="+130"/>
+        <location line="+1761"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1815"/>
+        <location line="-1917"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -841,7 +900,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+94"/>
+        <location line="+97"/>
         <source>warm</source>
         <translation type="unfinished"></translation>
     </message>
@@ -886,7 +945,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+152"/>
+        <location line="+197"/>
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation type="unfinished"></translation>
@@ -914,31 +973,31 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+207"/>
-        <location line="+731"/>
+        <location line="+250"/>
+        <location line="+732"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-731"/>
-        <location line="+731"/>
+        <location line="-732"/>
+        <location line="+732"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-705"/>
-        <location line="+705"/>
+        <location line="-706"/>
+        <location line="+706"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-705"/>
-        <location line="+705"/>
+        <location line="-706"/>
+        <location line="+706"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-632"/>
+        <location line="-633"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1013,8 +1072,8 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+28"/>
-        <source>jpg yuv: not yet implemented (a HAL JPEG is taken)</source>
+        <location line="+29"/>
+        <source>YUV: RAWfish processing (experiment)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1073,12 +1132,12 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+12"/>
         <source>TYPE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+18"/>
         <source>FOCUS</source>
         <translation type="unfinished"></translation>
     </message>

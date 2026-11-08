@@ -48,7 +48,7 @@ int main(void)
     fr[0] = make(W, H, 0, 0, 500, SIG, 1); fr[1] = make(W, H, 3, -5, 560, SIG, 2);
     fr[2] = make(W, H, -2, 4, 620, SIG, 3); fr[3] = make(W, H, 6, 2, 680, SIG, 4);
     float n1 = noise_in(fr[0].y, W, 100, 100, 400, 250);
-    CHECK(yuv_denoise(fr, 4, 0, &out, &rep) == 0, "merge of 4 frames runs (%.0f ms merge, %.0f ms align)", rep.ms_merge, rep.ms_align);
+    CHECK(yuv_denoise(fr, 4, 0, 0, &out, &rep) == 0, "merge of 4 frames runs (%.0f ms merge, %.0f ms align)", rep.ms_merge, rep.ms_align);
     /* the reported shift is the one to APPLY to the frame (minus the scene's motion) */
     CHECK(rep.shift_dy[1] == -3 && rep.shift_dx[1] == 5 && rep.shift_dy[3] == -6 && rep.shift_dx[3] == -2, "shifts found: (%d,%d) (%d,%d) (%d,%d)", rep.shift_dy[1], rep.shift_dx[1], rep.shift_dy[2], rep.shift_dx[2], rep.shift_dy[3], rep.shift_dx[3]);
     CHECK(fabsf(rep.sigma - SIG) < 1.5f, "noise measured %.1f (true %.1f)", rep.sigma, SIG);
@@ -62,7 +62,7 @@ int main(void)
     }
     free(out.y); free(out.u); free(out.v);
     float cu1 = noise_in(fr[0].u, W / 2, 20, 20, 200, 300);
-    CHECK(yuv_denoise(fr, 1, 1, &out, &rep) == 0, "colour filter on one frame runs (%.0f ms)", rep.ms_colour);
+    CHECK(yuv_denoise(fr, 1, 2, 0, &out, &rep) == 0, "colour filter on one frame runs (%.0f ms)", rep.ms_colour);
     float cu2 = noise_in(out.u, W / 2, 20, 20, 200, 300);
     CHECK(cu2 < cu1 * 0.5f, "colour noise %.2f -> %.2f", cu1, cu2);
     {   /* the colour edge at x = W/4 (chroma): still a step of ~60 within a few pixels */
@@ -74,7 +74,7 @@ int main(void)
     free(out.y); free(out.u); free(out.v);
     {   /* sharpening: the square's edge gets steeper, a flat area's noise barely moves */
         ir_yuv_t sh; yuv_denoise_report_t r2;
-        CHECK(yuv_denoise(fr, 4, 0, &sh, &r2) == 0, "a merged frame to sharpen");
+        CHECK(yuv_denoise(fr, 4, 0, 0, &sh, &r2) == 0, "a merged frame to sharpen");
         float flat0 = noise_in(sh.y, W, 100, 100, 400, 250);
         int edge0 = abs((int)sh.y[(size_t)360 * W + 502] - (int)sh.y[(size_t)360 * W + 500]);   /* across the square's edge at x = 500/501 */
         yuv_sharpen(&sh, 2, r2.sigma);

@@ -33,6 +33,11 @@ int main(void)
     r.raw = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && !strcmp(lines[0], "raw photo focus=0.500m exp=0.0166667 iso=400"), "raw: no q, no modes");
+    /* 3b. yuv: our command, the frames and filters, the pair and the distance. */
+    r.raw = 0; r.yuv = 1; r.frames = 4; r.colour = 2; r.median = 1; r.sharpen = 2;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && !strcmp(lines[0], "yuv photo n=4 colour=2 median=1 sharpen=2 q=95 focus=0.500m exp=0.0166667 iso=400"), "yuv: frames, filters, quality, focus, pair");
+    r.yuv = 0;
     /* 4. a stacked shutter with a pair: a stack with the denoise factor. */
     xs.shutter_ns = 2e9; r.denoise = 2;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);

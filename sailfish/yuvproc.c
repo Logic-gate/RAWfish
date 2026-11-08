@@ -99,7 +99,7 @@ static void bilateral_rows(void *p, int y0, int y1)
             c->outu[i] = sw > 0 ? su / sw : u0; c->outv[i] = sw > 0 ? sv / sw : v0;
         }
 }
-static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t *v)
+static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t *v, float strength)
 {
     const int cw = w / 2, ch = h / 2;
     size_t n = (size_t)cw * ch, i;
@@ -137,7 +137,7 @@ static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t 
         if (noise[bnd] < 0.05f) noise[bnd] = 0.05f;    /* a clipped area has no residual at all */
         last = noise[bnd];
     }
-    for (i = 0; i < n; ++i) { float s = 2.5f * noise[band[i]]; k[i] = 1.0f / (2.0f * s * s); a[i] = u[i]; b[i] = v[i]; }
+    for (i = 0; i < n; ++i) { float s = strength * noise[band[i]]; k[i] = 1.0f / (2.0f * s * s); a[i] = u[i]; b[i] = v[i]; }
     for (t = -CB_RADIUS; t <= CB_RADIUS; ++t) sp[t + CB_RADIUS] = expf(-0.5f * (float)t * t / 16.0f);   /* spatial sigma 4 */
     for (pass = 0; pass < 2; ++pass) {
         bil_ctx_t bc = { a, b, k, c2, d, cw, ch, pass == 0, sp };
@@ -149,6 +149,41 @@ static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t 
         v[i] = (uint8_t)(b[i] < 0 ? 0 : b[i] > 255 ? 255 : b[i] + 0.5f);
     }
     free(a); free(b); free(c2); free(d); free(k); free(band);
+    return 0;
+}
+
+/* False colour: a median on each chroma plane (3x3 or 5x5) removes the
+ * colour specks of one or two pixels that the ISP's demosaicing invents on
+ * fine periodic textures (a zipper's teeth, a weave). It also removes any
+ * real colour detail of that size, which is why it is an option. */
+typedef struct { const uint8_t *in; uint8_t *out; int w, h, r; } med_ctx_t;
+static void median_rows(void *p, int y0, int y1)
+{
+    med_ctx_t *c = p; int w = c->w, h = c->h, r = c->r, x, y, i, j;
+    for (y = y0; y < y1; ++y)
+        for (x = 0; x < w; ++x) {
+            unsigned hist[256] = { 0 }; int cnt = 0, acc = 0, v;
+            for (j = -r; j <= r; ++j) {
+                int yy = y + j; if (yy < 0) yy = -yy; if (yy >= h) yy = 2 * h - 2 - yy;
+                for (i = -r; i <= r; ++i) {
+                    int xx = x + i; if (xx < 0) xx = -xx; if (xx >= w) xx = 2 * w - 2 - xx;
+                    hist[c->in[(size_t)yy * w + xx]]++; cnt++;
+                }
+            }
+            for (v = 0; v < 256; ++v) { acc += hist[v]; if (acc * 2 > cnt) break; }
+            c->out[(size_t)y * w + x] = (uint8_t)v;
+        }
+}
+static int median_chroma(int w, int h, uint8_t *u, uint8_t *v, int radius)
+{
+    const int cw = w / 2, ch = h / 2;
+    uint8_t *tmp = malloc((size_t)cw * ch);
+    med_ctx_t c;
+    if (!tmp) return -1;
+    c.w = cw; c.h = ch; c.r = radius;
+    c.in = u; c.out = tmp; parallel_rows(median_rows, &c, ch); memcpy(u, tmp, (size_t)cw * ch);
+    c.in = v; c.out = tmp; parallel_rows(median_rows, &c, ch); memcpy(v, tmp, (size_t)cw * ch);
+    free(tmp);
     return 0;
 }
 
@@ -272,8 +307,9 @@ static void diff_rows(void *p, int y0, int y1)
     }
 }
 
-int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_denoise_report_t *rep)
+int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t *out, yuv_denoise_report_t *rep)
 {
+    static const float strengths[6] = { 0.0f, 1.0f, 2.0f, 3.0f, 5.0f, 8.0f };   /* times the measured noise; 5 and 8 are deliberately too much */
     const ir_yuv_t *ref = &frames[0];
     int w = ref->w, h = ref->h, k;
     size_t np = (size_t)w * h, nc = (size_t)(w / 2) * (h / 2);
@@ -318,9 +354,10 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, ir_yuv_t *out, yuv_de
         }
         free(ay); free(au); free(av); free(wy); free(wc); free(d); free(db);
     }
-    if (colour) {
+    if (median > 0 || colour > 0) {
         t0 = now_ms();
-        if (bilateral_chroma(out->y, w, h, out->u, out->v)) return -1;
+        if (median > 0 && median_chroma(w, h, out->u, out->v, median > 4 ? 4 : median)) return -1;   /* 3x3 .. 9x9 */
+        if (colour > 0 && bilateral_chroma(out->y, w, h, out->u, out->v, strengths[colour > 5 ? 5 : colour])) return -1;
         rep->ms_colour = now_ms() - t0;
     }
     return 0;
@@ -351,9 +388,9 @@ static void sharpen_rows(void *p, int y0, int y1)
 }
 void yuv_sharpen(ir_yuv_t *f, int level, float sigma)
 {
-    static const float amounts[4] = { 0.0f, 0.6f, 1.2f, 1.8f };
+    static const float amounts[6] = { 0.0f, 0.5f, 1.0f, 1.5f, 2.5f, 4.0f };   /* 2.5 and 4 are deliberately too much */
     sharp_ctx_t c; uint8_t *out;
-    if (!f || !f->y || level < 1 || level > 3) return;
+    if (!f || !f->y || level < 1 || level > 5) return;
     out = malloc((size_t)f->w * f->h);
     if (!out) return;
     c.src = f->y; c.dst = out; c.w = f->w; c.h = f->h; c.amount = amounts[level];

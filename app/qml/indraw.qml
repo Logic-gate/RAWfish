@@ -210,7 +210,7 @@ ApplicationWindow {
             function imageTypeLabel(t) {
                 switch (t) {
                 case "raw":     return qsTr("raw")
-                case "jpg yuv": return qsTr("jpg yuv")
+                case "yuv":     return qsTr("YUV")
                 default:        return qsTr("jpg")
                 }
             }
@@ -833,6 +833,7 @@ ApplicationWindow {
             onImageTypeChanged: {
                 applyAidThresholds()
                 viewfinder.rawSession = (imageType === "raw")   // exclusive streams: the session follows the type
+                viewfinder.yuvSession = (imageType === "yuv")   // the full-size YUV stream, only when the type needs it
             }
 
             // Build and send the capture command from the exposure state: in
@@ -871,14 +872,27 @@ ApplicationWindow {
             // (sailfish/ctl_shoot.c, step 6) -- the held pair with the photo,
             // the manual distance, a stack for a Σ speed, a burst or three
             // shots for a bracket -- from the settings sent here.
+            // A YUV photo's name says its settings, so that the files of a
+            // comparison tell themselves apart:
+            //   photo-yuv-frames_4-colour_2-moire_3x3-sharpen_2_<date>.jpg
+            // ("-" between the settings, "_" between a setting and its value)
+            function yuvName() {
+                var m = settingsMenu
+                return viewfinder.capturePrefix + "-yuv-frames_" + m.yuvFrames
+                     + "-colour_" + m.yuvColour
+                     + "-moire_" + ["off", "3x3", "5x5", "7x7", "9x9"][m.yuvMedian]
+                     + "-sharpen_" + m.yuvSharpen
+            }
             function shoot() {
-                var isRaw = (page.imageType === "raw")
-                viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix
-                                       + " type=" + (isRaw ? "raw" : "jpg")
+                var isRaw = (page.imageType === "raw"), isYuv = (page.imageType === "yuv")
+                viewfinder.sendCommand("sh name=" + (isYuv ? page.yuvName() : viewfinder.capturePrefix)
+                                       + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
                                        + " bracket=" + settingsMenu.bracket
-                                       + " denoise_sigma=" + settingsMenu.stackDenoise)
+                                       + " denoise_sigma=" + settingsMenu.stackDenoise
+                                       + (isYuv ? " frames=" + settingsMenu.yuvFrames + " colour=" + settingsMenu.yuvColour
+                                                  + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen : ""))
             }
 
             // --- Gallery: the first item of the switcher strip (below), as in
@@ -1485,11 +1499,12 @@ ApplicationWindow {
                         remaining = 1.0; shown = true; wbKeptTimer.startMs = Date.now(); wbKeptTimer.start()
                     }
                 }
-                // Not done yet: the home JPEG from the raw YUV.
+                // The YUV type is an experiment: the ISP's image before the
+                // camera's noise reduction and sharpening, processed by us.
                 Label {
                     anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: Theme.paddingLarge }
-                    visible: page.imageType === "jpg yuv"
-                    text: qsTr("jpg yuv: not yet implemented (a HAL JPEG is taken)")
+                    visible: page.imageType === "yuv"
+                    text: qsTr("YUV: RAWfish processing (experiment)")
                     color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
                     style: Text.Outline; styleColor: "black"
                 }
@@ -1783,7 +1798,11 @@ ApplicationWindow {
                             enabled: !page.stackSelected && page.rawAvailable
                             opacity: page.stackSelected || !page.rawAvailable ? Theme.opacityLow : 1.0
                             onCycle: {
-                                var t = page.rawAvailable ? ["raw", "jpg"] : ["jpg"]   // "jpg yuv" when it exists
+                                // YUV (our processing of the ISP's image) is offered
+                                // where the session can hold its stream: not with
+                                // exclusive streams.
+                                var t = page.rawAvailable ? ["raw", "jpg"] : ["jpg"]
+                                if (!page.exclusiveStreams) t.push("yuv")
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
                             }
                         }

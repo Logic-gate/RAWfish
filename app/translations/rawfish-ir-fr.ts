@@ -34,7 +34,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+935" />
+        <location filename="../indrawpreview.cpp" line="+950" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
@@ -65,7 +65,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+82" />
+        <location filename="../qml/SettingsMenu.qml" line="+87" />
         <source>Off</source>
         <translation>Off</translation>
     </message>
@@ -159,15 +159,18 @@
         <location line="-4" />
         <location line="+19" />
         <location line="+2" />
-        <location line="+276" />
-        <location line="+72" />
+        <location line="+280" />
+        <location line="+52" />
+        <location line="+5" />
+        <location line="+5" />
+        <location line="+31" />
         <location line="+13" />
         <location line="+12" />
         <source>off</source>
         <translation>off</translation>
     </message>
     <message>
-        <location line="-394" />
+        <location line="-419" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -363,7 +366,7 @@
         <translation>omb</translation>
     </message>
     <message>
-        <location line="+142" />
+        <location line="+146" />
         <source>max</source>
         <translation>max</translation>
     </message>
@@ -494,7 +497,47 @@
         <translation>Bal. blancs</translation>
     </message>
     <message>
-        <location line="+8" />
+        <location line="+10" />
+        <source>Frames</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>One frame: colour filter only</source>
+        <translation>Une image : filtre de couleur seul</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>%1 frames merged (less grain, no texture lost)</source>
+        <translation>%1 images fusionnées (moins de grain, texture intacte)</translation>
+    </message>
+    <message>
+        <location line="+3" />
+        <source>Colour</source>
+        <translation>Couleur</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Colour filter off</source>
+        <translation>Filtre de couleur désactivé</translation>
+    </message>
+    <message>
+        <location line="+4" />
+        <source>Moiré</source>
+        <translation>Moiré</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>False colour: nothing removed</source>
+        <translation>Fausses couleurs : rien d'enlevé</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>RAWfish sharpening off</source>
+        <translation>Accentuation RAWfish désactivée</translation>
+    </message>
+    <message>
+        <location line="+4" />
         <location line="+6" />
         <source>RAW: the camera's processing does not apply</source>
         <translation>RAW : le traitement de l'appareil ne s'applique pas</translation>
@@ -510,12 +553,28 @@
         <translation>Réduction du bruit de la photo : %1</translation>
     </message>
     <message>
-        <location line="+5" />
+        <location line="-7" />
+        <location line="+12" />
         <source>Sharpen</source>
         <translation>Netteté</translation>
     </message>
     <message>
-        <location line="+1" />
+        <location line="-21" />
+        <source>Colour filter: %1 x the noise</source>
+        <translation>Filtre de couleur : %1 × le bruit</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>False colour: a %1 median on the colour</source>
+        <translation>Fausses couleurs : médian %1 sur la couleur</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>RAWfish sharpening: %1 x the fine detail</source>
+        <translation>Accentuation RAWfish : %1 × le détail fin</translation>
+    </message>
+    <message>
+        <location line="+12" />
         <source>Photo sharpening: %1</source>
         <translation>Accentuation de la photo : %1</translation>
     </message>
@@ -814,8 +873,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+1" />
-        <source>jpg yuv</source>
-        <translation>jpg yuv</translation>
+        <source>YUV</source>
+        <translation>YUV</translation>
     </message>
     <message>
         <location line="+1" />
@@ -824,14 +883,14 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+10" />
-        <location line="+127" />
-        <location line="+1662" />
+        <location line="+130" />
+        <location line="+1761" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-1815" />
+        <location line="-1917" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -846,7 +905,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation> m</translation>
     </message>
     <message>
-        <location line="+94" />
+        <location line="+97" />
         <source>warm</source>
         <translation>chaud</translation>
     </message>
@@ -891,7 +950,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>teinte</translation>
     </message>
     <message>
-        <location line="+152" />
+        <location line="+197" />
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation>%1s</translation>
@@ -919,31 +978,31 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>bulle : pas de mesure</translation>
     </message>
     <message>
-        <location line="+207" />
-        <location line="+731" />
+        <location line="+250" />
+        <location line="+732" />
         <source>zebra</source>
         <translation>zébra</translation>
     </message>
     <message>
-        <location line="-731" />
-        <location line="+731" />
+        <location line="-732" />
+        <location line="+732" />
         <source>peak</source>
         <translation>peaking</translation>
     </message>
     <message>
-        <location line="-705" />
-        <location line="+705" />
+        <location line="-706" />
+        <location line="+706" />
         <source>level</source>
         <translation>bulle</translation>
     </message>
     <message>
-        <location line="-705" />
-        <location line="+705" />
+        <location line="-706" />
+        <location line="+706" />
         <source>AE</source>
         <translation>AE</translation>
     </message>
     <message>
-        <location line="-632" />
+        <location line="-633" />
         <source>failed, see the log</source>
         <translation>échec, voir le journal</translation>
     </message>
@@ -1018,9 +1077,9 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>Garder la BB manuelle précédente</translation>
     </message>
     <message>
-        <location line="+28" />
-        <source>jpg yuv: not yet implemented (a HAL JPEG is taken)</source>
-        <translation>jpg yuv : pas encore au point (un JPEG du HAL est pris)</translation>
+        <location line="+29" />
+        <source>YUV: RAWfish processing (experiment)</source>
+        <translation>YUV : traitement RAWfish (expérimental)</translation>
     </message>
     <message>
         <location line="+27" />
@@ -1078,12 +1137,12 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>(=35)</translation>
     </message>
     <message>
-        <location line="+10" />
+        <location line="+12" />
         <source>TYPE</source>
         <translation>TYPE</translation>
     </message>
     <message>
-        <location line="+14" />
+        <location line="+18" />
         <source>FOCUS</source>
         <translation>MàP</translation>
     </message>
