@@ -23,9 +23,14 @@ Column {
     // the SAME item within 4 s carries it out. Anything else disarms it.
     property bool confirm: false
     property var armed: undefined
+    // Greyed out: shown, but a tap only says why (dimmedHint) and changes
+    // nothing -- a choice that means nothing for the current image type.
+    property bool dimmed: false
+    property string dimmedHint: ""
     signal picked(var value)
     Timer { id: disarm; interval: 4000; onTriggered: col.armed = undefined }
     function tap(v) {
+        if (dimmed) { if (header && dimmedHint !== "") header.show(dimmedHint); return }
         if (!confirm) { picked(v); return }
         if (armed !== undefined && armed === v) { armed = undefined; disarm.stop(); picked(v); return }
         armed = v
@@ -34,6 +39,7 @@ Column {
     }
 
     spacing: 0
+    opacity: dimmed ? Theme.opacityLow : 1.0
     Label {
         width: parent.width
         horizontalAlignment: Text.AlignHCenter

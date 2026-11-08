@@ -89,6 +89,14 @@ that was sharpest for it. The values above are the JP2's approximate starting
 table. Without a table, manual distances use the uncalibrated 1:1 mapping and
 the tool warns in the log.
 
+A shipped profile can carry a `focus_calibration` table per camera (the
+JP2's measured one ships for its camera 0): the engine reads it first,
+then the user's override-hal.json, then the assistant's
+focus-calibration.json, a later source replacing a distance it also has
+and adding the others. Each camera needs its own table: the JP2's 18 mm
+camera focuses too and has none yet. The deck shows the manual distance
+in red on a camera without a table.
+
 ### Calibrating the focus yourself, the simple way
 
 You do not need to know any diopter. The idea: let the autofocus find the
@@ -232,6 +240,39 @@ prints what it applied. Field reference for the generated file:
   ]
 }
 ```
+
+### Limiting the streams: a stopgap for a camera driver that dies
+
+Some ports' camera drivers accept the full combination of streams the app
+asks for (JPEG at its largest size + viewfinder + RAW) and then die at the
+first frame (the Xperia 10 III: the RAW stream kills it; JPEG alone works).
+Two keys in a camera's `overrides` limit what is asked:
+
+- `"raw_stream": false` -- no RAW stream for this camera (the app behaves
+  as with a camera without RAW: JPEG only);
+- `"jpeg_max": "WxH"` -- the largest JPEG asked for; `max` becomes it, and
+  the menu offers no larger size.
+
+They are a **stopgap**, not a setting: the log says at each open that the
+streams are limited, and the app shows it for a few seconds at each start.
+Please report such a phone (the forum thread, or an issue), so that the
+cause can be looked for and a shipped profile written.
+
+- `"streams": "exclusive"` -- the driver takes a JPEG stream or a RAW
+  stream, not both in one session: the app opens the session for the chosen
+  image type (JPEG + viewfinder, or RAW + viewfinder without JPEG) and
+  reopens it when the type changes; if the RAW session dies at its first
+  frame, the app falls back to JPEG and says so. `"both"` is the default.
+
+The shipped profile of the Xperia 10 III uses `"streams": "exclusive"` on
+both cameras, with its `_why` recording what was tested (and what ProCam
+showed); nothing to write on that phone.
+
+`rawfish-ir-cli streamtest ID` finds which combinations the camera survives
+(five opens, a few seconds each, the last one RAW + viewfinder without JPEG;
+the camera service is given up to 20 s to come back after a failure, and a
+test it could not run is reported as untested) and ends with the override
+lines to use, if any.
 
 ## 3. UI / UX preferences  (device-independent)
 

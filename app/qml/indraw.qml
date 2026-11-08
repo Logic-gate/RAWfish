@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "186"                             // shown in the deck
+    readonly property string uiVersion: "192"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -192,7 +192,10 @@ ApplicationWindow {
             // type and the Σ speeds (a stack is a DNG) are not offered, and a
             // RAW type chosen before is set aside until a camera with RAW comes
             // back (ui 169). Unknown (no caps yet): assumed available.
-            readonly property bool rawAvailable: viewfinder.caps.rawW === undefined || viewfinder.caps.rawW > 0
+            // A phone whose profile says "streams": "exclusive" has RAW in its
+            // own session: available, even while the JPEG session runs.
+            readonly property bool exclusiveStreams: String(viewfinder.caps.limits || "").indexOf("exclusive") >= 0
+            readonly property bool rawAvailable: exclusiveStreams || viewfinder.caps.rawW === undefined || viewfinder.caps.rawW > 0
             property string imageTypeSetAside: ""         // "raw" set aside by a camera without RAW
             onRawAvailableChanged: {
                 if (!rawAvailable && imageType === "raw") { imageTypeSetAside = "raw"; imageType = "jpg" }
@@ -284,7 +287,10 @@ ApplicationWindow {
                 meterCircle.x = p.u * viewfinderZone.width - meterCircle.width / 2
                 meterCircle.y = p.v * viewfinderZone.height - meterCircle.height / 2
             }
-            onVwsChanged: placeCircle()
+            onVwsChanged: {
+                placeCircle()
+                if (viewfinder.running && !pendingRestore && vws.hasRef !== undefined && !restoreTimer.running) { keptRef = vws.hasRef; keptRefU = vws.refU; keptRefV = vws.refV; keptCamera = viewfinder.cameraId; if (viewfinder.caps.focalEq > 0) keptFocalEq = viewfinder.caps.focalEq }
+            }
             // A tap on the viewfinder: the reference point, in display-window
             // coordinates; the controller maps it and runs the focus / light
             // sequence, then reports the circle to draw.
@@ -416,16 +422,61 @@ ApplicationWindow {
                 viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
             }
             onFocusModeChanged: { applyFocus(); meterCircle.opacity = 0 }
+            // Kept across an engine restart: the manual focus distance and the
+            // reference point (the circle). Both live in the engine's process;
+            // a restarted engine gets them back once its capabilities are in.
+            // On another camera the distance is not carried (another lens, its
+            // own range: the mode stays, the distance starts afresh); the
+            // circle's point is carried through the focal lengths' ratio, if it
+            // stays in the field.
+            property real keptDiopters: -1
+            property bool keptRef: false
+            property real keptRefU: 0.5
+            property real keptRefV: 0.5
+            property string keptCamera: ""
+            property real keptFocalEq: 0
+            property bool pendingRestore: false
+            onFcsChanged: if (viewfinder.running && !pendingRestore && page.focusMode === "manual" && fcs.diopters !== undefined && !restoreTimer.running) { keptDiopters = fcs.diopters; keptCamera = viewfinder.cameraId; if (viewfinder.caps.focalEq > 0) keptFocalEq = viewfinder.caps.focalEq }
+            function restoreAtCaps() {
+                pendingRestore = false
+                var c = viewfinder.caps
+                var other = page.keptCamera !== "" && page.keptCamera !== viewfinder.cameraId
+                if (page.focusMode === "manual" && page.keptDiopters >= 0 && !other)
+                    viewfinder.sendCommand("fc distance " + page.keptDiopters.toFixed(3))
+                if (page.keptRef) {
+                    if (other && page.keptFocalEq > 0 && c.focalEq > 0) {
+                        var r = c.focalEq / page.keptFocalEq          // a longer lens magnifies: the point moves out from the centre
+                        page.keptRefU = 0.5 + (page.keptRefU - 0.5) * r
+                        page.keptRefV = 0.5 + (page.keptRefV - 0.5) * r
+                        if (page.keptRefU < 0.02 || page.keptRefU > 0.98 || page.keptRefV < 0.02 || page.keptRefV > 0.98) page.keptRef = false
+                    }
+                    if (page.keptRef) { meterCircle.opacity = 1.0; restoreTimer.restart() } else meterCircle.opacity = 0
+                }
+            }
+            // The circle's tap is replayed a moment after the restart, once the
+            // exposure has its manual choices back (a tap in automatic holds a
+            // spot measure): the measure at that point is made again.
+            Timer {
+                id: restoreTimer
+                interval: 400
+                onTriggered: {
+                    if (!viewfinder.running) return
+                    if (page.keptRef) viewfinder.sendCommand("vw tap " + page.keptRefU.toFixed(4) + " " + page.keptRefV.toFixed(4))
+                }
+            }
             Connections {
                 target: viewfinder
                 // A (re)started engine -- another camera, another size, back from
-                // the background -- is a new session that knows no circle and no
-                // loupe: the page starts clean too, so the two never disagree.
+                // the background -- is a new session that knows no circle, no
+                // manual distance and no loupe. The loupe stays closed; the
+                // distance and the circle are given back once the caps are in.
                 onRunningChanged: if (viewfinder.running) {
-                    meterCircle.opacity = 0                           // the controller starts clean too
+                    meterCircle.opacity = 0
+                    page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
                     page.applyZoom(); page.applyFocus()
                     viewfinder.sendCommand("fc scene " + (page.sceneOn ? "on" : "off"))
+                    if (viewfinder.caps.focalEq !== undefined) page.restoreAtCaps()   // the caps come before the first frame
                     if (orientLoader.item && orientLoader.item.valid) viewfinder.sendCommand("orient " + orientLoader.item.degrees)
                     if (!page.wbKeptOffered) {
                         page.wbKeptOffered = true; wbKeptBanner.offer(); startManualTimer.start()
@@ -713,14 +764,43 @@ ApplicationWindow {
                 else if (imageType === "raw" && typeBeforeStack !== "raw") imageType = typeBeforeStack
             }
             // The HAL's camera ids, remembered from the first caps line (a
-            // restart on another camera reports the same list).
+            // restart on another camera reports the same list), with their
+            // facings; and the last back camera, to return to from the front.
             property var cameraIds: []
+            property var cameraFacing: []
+            property string lastBackCamera: ""
+            function switchCamera(longPress) {
+                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1","2"]
+                var fc = page.cameraFacing
+                if (fc.length !== ids.length) {                       // no facings: cycle all
+                    viewfinder.cameraId = ids[(ids.indexOf(viewfinder.cameraId)+1) % ids.length]
+                    return
+                }
+                var backs = [], fronts = [], i
+                for (i = 0; i < ids.length; i++) { if (fc[i] === "front") fronts.push(ids[i]); else backs.push(ids[i]) }
+                var cur = viewfinder.cameraId
+                var onFront = fronts.indexOf(cur) >= 0
+                if (onFront) {                                        // back to the last back camera
+                    if (longPress) return
+                    viewfinder.cameraId = backs.indexOf(page.lastBackCamera) >= 0 ? page.lastBackCamera : (backs.length > 0 ? backs[0] : cur)
+                    return
+                }
+                page.lastBackCamera = cur
+                if (longPress || (backs.length === 1 && fronts.length > 0)) {   // the front one
+                    if (fronts.length > 0) viewfinder.cameraId = fronts[0]
+                    return
+                }
+                if (backs.length > 1) viewfinder.cameraId = backs[(backs.indexOf(cur)+1) % backs.length]
+            }
             Connections {
                 target: viewfinder
                 onCapsChanged: {
-                    if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0)
+                    if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0) {
                         page.cameraIds = viewfinder.caps.cameras
+                        page.cameraFacing = viewfinder.caps.facing ? viewfinder.caps.facing : []
+                    }
                     page.applyAidThresholds()
+                    if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()
                     // The caps line is on stdout, not in the engine's log: echo
                     // the parts worth having there (sizes, scenes, thresholds).
                     viewfinder.sendCommand("# caps jpeg_sizes=" + viewfinder.caps.jpegSizes
@@ -750,7 +830,10 @@ ApplicationWindow {
                                                      : (c.zebraJpeg > 0 ? c.zebraJpeg : 250)
                 viewfinder.zebraLevel = Math.round(255 - (255 - level) * zb)
             }
-            onImageTypeChanged: applyAidThresholds()
+            onImageTypeChanged: {
+                applyAidThresholds()
+                viewfinder.rawSession = (imageType === "raw")   // exclusive streams: the session follows the type
+            }
 
             // Build and send the capture command from the exposure state: in
             // full auto the engine's AE (with the EV wheel's compensation)
@@ -1302,6 +1385,41 @@ ApplicationWindow {
                         height: page.portrait ? parent.height : parent.height * cut
                     }
                 }
+                // A phone limited by its device profile (raw_stream / jpeg_max)
+                // says so for six seconds at every start: a limited phone
+                // is a phone still to understand, not a setting to forget.
+                Label {
+                    id: limitsNotice
+                    anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingLarge * 3 }
+                    visible: text !== "" && limitsTimer.running
+                    text: {
+                        var l = String(viewfinder.caps.limits || "")
+                        if (l.indexOf("raw_off") >= 0 && l.indexOf("jpeg_max") >= 0) return qsTr("Device profile: no RAW, JPEG size limited")
+                        if (l.indexOf("raw_off") >= 0) return qsTr("Device profile: RAW stream off")
+                        if (l.indexOf("jpeg_max") >= 0) return qsTr("Device profile: JPEG size limited")
+                        if (l.indexOf("exclusive") >= 0) return qsTr("Device profile: JPEG or RAW, one session each")
+                        return ""
+                    }
+                    color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
+                    style: Text.Outline; styleColor: "black"
+                    onTextChanged: if (text !== "") limitsTimer.restart()
+                    Timer { id: limitsTimer; interval: 6000 }
+                }
+                // Exclusive streams: the RAW session died at its first frame;
+                // the viewfinder came back as JPEG, and the type follows.
+                Label {
+                    id: rawFailNotice
+                    anchors { bottom: limitsNotice.top; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingSmall }
+                    visible: rawFailTimer.running
+                    text: qsTr("RAW failed on this camera: back to JPEG")
+                    color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall
+                    style: Text.Outline; styleColor: "black"
+                    Timer { id: rawFailTimer; interval: 6000 }
+                    Connections {
+                        target: viewfinder
+                        onRawSessionFailed: { page.imageType = "jpg"; rawFailTimer.restart() }
+                    }
+                }
                 // Stacking is still being validated on the device: say so while
                 // a Σ speed is selected (and not during the shot's black screen).
                 Column {
@@ -1647,11 +1765,13 @@ ApplicationWindow {
                                    ? qsTr("%1mm").arg(Math.round(viewfinder.caps.focalEq))
                                    : qsTr("cam %1").arg(viewfinder.cameraId)
                             subCaption: viewfinder.caps.focalEq > 0 ? qsTr("(=35)") : ""
-                            onCycle: {
-                                // Cycle through the ids the HAL lists (caps), else 0/1/2.
-                                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1","2"]
-                                viewfinder.cameraId = ids[(ids.indexOf(viewfinder.cameraId)+1) % ids.length]
-                            }
+                            // A tap cycles the back cameras; a long press goes to
+                            // the front one; from the front, a tap returns to the
+                            // last back camera. With one back and one front camera
+                            // a tap toggles them. Without facings (an old engine),
+                            // a tap cycles every camera as before.
+                            onCycle: page.switchCamera(false)
+                            onHeld: page.switchCamera(true)
                         }
                         CycleButton {
                             width: parent.width; height: (parent.height - parent.topPadding) / 3
@@ -1673,7 +1793,11 @@ ApplicationWindow {
                             caption: qsTr("FOCUS")
                             enabled: !page.sceneOn; opacity: page.sceneOn ? Theme.opacityLow : 1.0
                             // Manual focus shows the distance; the others a short label.
+                            // The distance is red while this camera has no focus
+                            // calibration (the HAL's lens value taken as 1:1), white
+                            // once a table is in force (caps focus_cal).
                             value: page.focusModeLabel(page.focusMode)
+                            textColor: page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
                             onCycle: {
                                 var f = ["auto", "cont", "manual"]    // macro: engine only
                                 page.focusMode = f[(f.indexOf(page.focusMode)+1) % f.length]

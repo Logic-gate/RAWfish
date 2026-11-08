@@ -385,7 +385,10 @@ Item {
                 shortFor: function(v) { return v === 0 ? qsTr("off") : v + "s" }
                 iconFor: function(v) { return v === 0 ? "icon-camera-timer" : "icon-camera-timer-" + v + "s" }
                 onPicked: { menu.timerSec = value; menu.save("timerSec", value) } }
+            // Format, resolution and quality belong to the JPEG: in RAW the DNG
+            // is the sensor's, so the three are greyed out (a tap says so).
             MenuColumn { visible: menu.simpleMenuHas("format"); width: band.colW; header: header
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Format"); values: ["4:3", "16:9"]; current: menu.format
                 // "as the RAW" is whichever format has the RAW stream's shape
                 // (4:3 on the JP2, 16:9 on the XA2); the other one crops. Up to
@@ -402,6 +405,7 @@ Item {
                     if (sz === "") { header.show(qsTr("No %1 size listed").arg(value)); return }
                     menu.formatSaved = value; menu.save("format", value); menu.setSize(sz) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Resolution")
                 values: menu.sizesFor(menu.format)
                 current: menu.effectiveSize()
@@ -409,6 +413,7 @@ Item {
                 shortFor: function(v) { return menu.mp(v) }
                 onPicked: menu.setSize(value) }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: no JPEG quality")
                 caption: qsTr("Quality"); values: [80, 90, 95, 100]; current: menu.jpegQuality
                 labelFor: function(v) { return qsTr("JPEG quality %1").arg(v) }
                 onPicked: { menu.jpegQuality = value; menu.save("jpegQuality", value) } }
@@ -421,11 +426,13 @@ Item {
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the camera's processing does not apply")
                 caption: qsTr("Noise"); values: [0, 1, 2, 3, 4]; current: menu.noiseIndex
                 labelFor: function(v) { return qsTr("Photo noise reduction: %1").arg(menu.modeName(menu.noiseModes[v])) }
                 shortFor: function(v) { return menu.modeShortName(menu.noiseModes[v]) }
                 onPicked: { menu.noiseIndex = value; menu.save("noiseIndex", value) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
+                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: the camera's processing does not apply")
                 caption: qsTr("Sharpen"); values: [0, 1, 2, 3]; current: menu.edgeIndex
                 labelFor: function(v) { return qsTr("Photo sharpening: %1").arg(menu.modeName(menu.edgeModes[v])) }
                 shortFor: function(v) { return menu.modeShortName(menu.edgeModes[v]) }

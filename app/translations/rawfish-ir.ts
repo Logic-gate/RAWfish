@@ -35,12 +35,12 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+908"/>
+        <location filename="../indrawpreview.cpp" line="+935"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+25"/>
         <source>engine stopped</source>
         <translation type="unfinished"></translation>
     </message>
@@ -58,7 +58,7 @@
 <context>
     <name>MenuColumn</name>
     <message>
-        <location filename="../qml/MenuColumn.qml" line="+33"/>
+        <location filename="../qml/MenuColumn.qml" line="+38"/>
         <source>Tap again to confirm: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -161,14 +161,14 @@
         <location line="+19"/>
         <location line="+2"/>
         <location line="+276"/>
-        <location line="+65"/>
+        <location line="+72"/>
         <location line="+13"/>
         <location line="+12"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-387"/>
+        <location line="-394"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -444,7 +444,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+7"/>
+        <location line="+17"/>
+        <source>RAW has one size and one format: the sensor&apos;s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-16"/>
         <source>Format</source>
         <translation type="unfinished"></translation>
     </message>
@@ -464,12 +470,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>Resolution</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+7"/>
+        <source>RAW: no JPEG quality</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Quality</source>
         <translation type="unfinished"></translation>
     </message>
@@ -485,6 +496,12 @@
     </message>
     <message>
         <location line="+8"/>
+        <location line="+6"/>
+        <source>RAW: the camera&apos;s processing does not apply</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-5"/>
         <source>Noise</source>
         <translation type="unfinished"></translation>
     </message>
@@ -494,7 +511,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>Sharpen</source>
         <translation type="unfinished"></translation>
     </message>
@@ -786,7 +803,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+209"/>
+        <location filename="../qml/indraw.qml" line="+212"/>
         <source>raw</source>
         <translation type="unfinished"></translation>
     </message>
@@ -803,13 +820,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+10"/>
         <location line="+127"/>
-        <location line="+1624"/>
+        <location line="+1662"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1777"/>
+        <location line="-1815"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -897,31 +914,31 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+204"/>
-        <location line="+696"/>
+        <location line="+207"/>
+        <location line="+731"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-696"/>
-        <location line="+696"/>
+        <location line="-731"/>
+        <location line="+731"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-670"/>
-        <location line="+670"/>
+        <location line="-705"/>
+        <location line="+705"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-670"/>
-        <location line="+670"/>
+        <location line="-705"/>
+        <location line="+705"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-597"/>
+        <location line="-632"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -946,7 +963,32 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+165"/>
+        <location line="+167"/>
+        <source>Device profile: no RAW, JPEG size limited</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Device profile: RAW stream off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Device profile: JPEG size limited</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Device profile: JPEG or RAW, one session each</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>RAW failed on this camera: back to JPEG</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
         <source>Σ stacking: experimental feature</source>
         <translation type="unfinished"></translation>
     </message>

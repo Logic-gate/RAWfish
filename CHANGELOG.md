@@ -6,13 +6,68 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.9)
+## Known issues (as of 0.1.14)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
+
+## 0.1.14 — settings kept when the camera restarts; focus calibration shipped; the focal button (patches 0296–0297)
+- Focus calibration: the JP2's measured table (7 points) ships in its
+  profile for camera 0; the engine takes a camera's table from the
+  shipped profile when the user's files have none (a fresh install no
+  longer loses it). The manual distance on the deck is red while the
+  camera has no table, white once one is in force.
+- Focal button: a tap cycles the back cameras, a long press goes to the
+  front camera, a tap from the front returns to the last back camera;
+  with one back and one front camera a tap toggles them. The caps line
+  now gives each camera's facing.
+- Back from the background (a photo opened in another app, the screen
+  off) or after a size or type change, the camera came back in automatic
+  exposure, with the manual focus at a default distance and no metering
+  circle. The manual ISO, speed and EV, the manual distance and the
+  circle's point are now given back (the measure at the circle is made
+  again). On another camera the exposure mode and the light stay: the
+  ISO as it was, the speed scaled by the apertures' ratio; the focus
+  mode stays but the distance starts afresh; the circle follows the
+  focal lengths' ratio while it stays in the field. The loupe stays
+  closed.
+
+## 0.1.13 — JPEG or RAW sessions for drivers that refuse both (patch 0291)
+- "streams": "exclusive" in a camera's profile: the session holds the
+  stream of the chosen type only, and reopens when the type changes; if
+  RAW fails, the app falls back to JPEG and says so.
+- The Xperia 10 III profile uses it: RAW (DNG) works again there, as
+  ProCam showed it can; JPEG and RAW each in their own session.
+- streamtest: a fifth combination (viewfinder + RAW, no JPEG), a longer
+  wait for the camera service, and "untested" instead of a false failure.
+- Menu: in RAW, the JPEG-only columns (Format, Resolution, Quality,
+  Noise, Sharpen) are greyed out; a tap says why. They used to restart
+  the engine for a size the DNG never has.
+
+## 0.1.12 — the Xperia 10 III profile no longer catches the 10 II (patch 0290)
+- The 10 III profile matched by RAW size as a fallback; the Xperia 10 II
+  has the same sensor and would have lost its RAW stream, which works.
+  The profile now matches by model only. Other phones are not concerned.
+
+## 0.1.11 — streamtest fixed (patch 0289)
+- "rawfish-ir-cli streamtest" reported "no preview frame" on every try:
+  it opened the camera without starting what lets Android send frames
+  back. Fixed; the app was not concerned.
+
+## 0.1.10 — profile keys to limit the camera's streams (patch 0288)
+- "raw_stream": false and "jpeg_max": "WxH" in a camera's overrides, for
+  phones whose camera driver refuses the full combination of streams
+  (the Xperia 10 III). Documented in override-hal.example.jsonc.
+  The app says so at each start: a limited phone is a phone still to
+  understand.
+- "rawfish-ir-cli streamtest ID": which combinations of streams the
+  camera survives, and the override lines to use.
+- A shipped profile for the Sony Xperia 10 III: no RAW stream on its two
+  cameras (the driver dies with one); JPEG and the viewfinder work. The
+  app says so at each start.
 
 ## 0.1.9 — Settings page: the text before the button (patch 0286)
 - In "Device profile files", the text now comes before its button, as in
@@ -1372,3 +1427,178 @@ by the AF outcome (dotted / dashed / solid).
 - The engine as a command-line tool: Camera2 session, JPEG, RAW16 DNG,
   stacked exposures, noise profiles, device profiles with focus calibration;
   the SF2P frame stream; the first viewfinder app (ui 64).
+
+---
+
+# Before the first release: the RawBar month (October 2026)
+
+RawBar was the first name of this project (then indRAW, then
+RAWfish-indRAW). The version numbers below are the internal development
+ones of that time (0.1-0.25, ui 64), the engine's alone; they match the
+"Before 0.26.0 (patches 0001-0064)" entry above, not the published 0.1.x.
+
+The tests run and the choices made, with their reasons. RawBar was a
+Camera2 camera for Sailfish OS on the Jolla Phone 2 (JP2, MediaTek
+Dimensity): a bionic/NDK engine (librawbar.so) driving Camera2, a glibc
+Sailfish bridge over libhybris, and a Qt/QML app that runs the engine as a
+separate process.
+
+Principles set at the start: everything atomic and reported
+(no hidden/combined settings); a strictly WYSIWYG viewfinder with no cosmetic
+display gain; RAW kept linear and raw; corrections of real sensor bias (white
+balance, tone curve) only on the JPEG.
+
+
+### Engine: warm session, JPEG, RAW (0.1–0.7)
+
+Choice: a single warm Camera2 session, driven by text commands on stdin
+answering in JSON, so that each function can be scripted and tested alone.
+
+- Persistent warm session with JPEG capture; AF lock + AE precapture; edge/noise
+  modes; the applied NR/edge reported back.
+- Mode names carry their family (off_noise, hq_edge…); "default" restores the
+  template value rather than keeping the last one.
+- RAW16 stream in the same warm session, with a metadata sidecar.
+- Manual exposure (exp=, iso=).
+
+Test: a 16 s exposure, which led to the next section.
+
+
+### Long exposure: the HAL's real ceiling (0.8–0.9)
+
+Test: exposure variants and a sweep, with the RAW brightness measured against
+the requested time. Finding: the JP2 HAL declares 16 s but applies at most
+about 1/2 s.
+
+Choice: single exposures capped at the measured ceiling; longer times reached
+by stacking sub-frames (brute sum: film / sub / stk_denoise), not by a gain.
+
+
+### DNG on the phone (0.9–0.10)
+
+Choice: the DNG written by our own C code, without libtiff. Reasons: generic
+TIFF writers drop or misplace DNG-private tags, especially the GainMap opcode
+list (seen with RAWfish/Qt), and the engine runs on the bionic side, where
+libtiff would have to be rebuilt.
+
+Test: the GainMap byte layout checked against a RAWfish capture that renders
+correctly in the phone's darktable: the opcode list is big-endian, the rest of
+the file little-endian.
+
+- A review pass fixed bugs and corrected the brute-sum stacking maths.
+- Noise-profile generator for darktable.
+
+
+### Several devices; review fixes (0.11–0.17)
+
+Choice: files split by nature, not by device: a read-only probe
+(generated-hal.json), atomic sensor corrections (override-hal.json), and UI
+preferences in a separate file. Only atomic HAL controls: grouped modes (scene,
+effect) are neutralised at open.
+
+- Device probe and camera list; overrides read from override-hal.json
+  (observed_shutter_max_ns, later min_frame_ns).
+- Exif capture time and timestamped file names; names validated; decimal-only
+  exposures; name and Exif timestamps aligned.
+- Focus modes separated from AE precapture.
+
+Review: two external code reviews found, and we fixed: a triple double-free in
+stacking, an uninitialised error path, an AF trigger never released (frozen
+viewfinder), the stacking level/noise maths (exact factor, 1/n noise, real
+white level), and JSON truncation never reported. A -O2 -Wall pass added to
+check-host.sh found the uninitialised variable too.
+
+
+### Focus: the lens moved, then calibrated (0.18–0.20)
+
+Test: manual focus distances were requested and confirmed by the HAL, but the
+image did not change. Finding: the distance set on the capture request alone
+does not move the lens; the continuous-AF preview pulls it back.
+
+Choice: manual focus driven on the repeating preview request, with a wait for
+the lens to settle (LENS_STATE), as RAWfish does.
+
+Test: a focus sweep (scripts/focus-calib.sh) at measured distances: the JP2
+reports focus_distance_calibration = uncalibrated; infinity is reached near
+focus=0.5m, and the mapping is not linear.
+
+Choice: a per-device focus_calibration table in override-hal.json, interpolated
+in diopters, extrapolated and clamped to the lens's range. The measured values
+are the JP2's starting table; users can refine them.
+
+- Test captures ignored by git; the DCG dark-frame read-noise analysis added.
+
+
+### Viewfinder stream (0.21–0.23)
+
+Phase 1. Choice: a diagnostic first: YUV to RGB conversion, one preview frame
+saved as PPM. Tests: default preview raised to 1280×960; framing matches the
+capture (RAWfish's viewfinder sometimes did not). An occasional flat,
+colourless frame was taken during 3A convergence: fixed by waiting for AE.
+
+The "watercolour" loss of detail: measured that the noise/edge modes do not
+change the preview and that the loss follows the ISO. It is the HAL's own
+high-ISO preview noise reduction (also in Jolla Camera and RAWfish, as the
+forum confirmed), not our code. Photos (off_noise JPEG, RAW) are not affected.
+
+Phase 2. Choice: a continuous "stream" mode on stdout, like RAWfish's SF2P.
+Test: about 14 fps at 1280×960, 313 MB in 6 s. Fixes found by the tests: the
+binder pool was started only for "run" (no frame in stream mode); JSON mixed
+into the frame channel (moved to --log); the 3A gate could stall the stream.
+Choice: stream at once, without the gate: an image that settles in about a
+second is better than a blank viewfinder.
+
+
+### The app: viewfinder and deck (phase 3)
+
+Choice: a C++ QQuickItem that starts the engine and draws the SF2P frames on
+the GPU; QML above. No renderExposure.
+
+- Packaging fixes found by building: the .desktop installed by the spec, QML
+  loaded by absolute path, an unneeded dependency removed.
+- Orientation: Qt owns the screen orientation; the app compensates the sensor
+  mounting (image = sensorOrientation − screenRotation), so the image is upright
+  in all orientations; notch band reserved; viewfinder area clipped. Each fix
+  was tested on the phone (sign in portrait and landscape, notch height).
+- Deck after RAWfish's: four-column grid (20/41/19/rest), caption header,
+  column-1 cycle buttons (focal/type/focus), Jolla shutter icon, ISO/shutter/EV
+  wheels, zoom +/− (named "zoom", separate from focus_crop internally). Sizes,
+  colours (secondaryHighlightColor notch, white deck text) and positions set on
+  the phone. The shutter wheel marks stacked exposures (> 1/2 s) with a sigma,
+  up to 16 s.
+- Blank screens found only on the phone: Column.topPadding and a bare `bold:`
+  are not supported by this QtQuick.
+
+
+### Orientation of the saved photo, flash, shutter (0.24–0.25, ui 64)
+
+Test: photos appeared rotated by 90° in the gallery. The image content was
+right (same framing and size as Jolla Camera); only the Exif orientation tag
+was wrong. Choice: ACAMERA_JPEG_ORIENTATION set from the sensor mounting angle;
+the gallery shows them upright. (The sensor is landscape and the screen
+portrait, so a vertical photo is a crop of the horizontal frame, as on all
+phones.)
+
+Choice: the capture flash fires when the user may move again, at the end of the
+capture, not after the file is written (a long RAW write must not delay it).
+Rather than mix events into the frame stream, an SF2M metadata/event channel:
+frames and events share stdout, serialised by a lock, told apart by their
+4-byte magic, as in RAWfish. The engine sends "captured" before writing the
+file; the app flashes on it. Later live data uses the same channel.
+
+- Viewfinder crop fixed in C++: the component knows the QML display rotation
+  and swaps width and height in its fit, so the rotated frame fills the width
+  with no crop and no borders.
+- Shutter wired to a capture command (raw/jpg by type, focus= from the focus
+  mode, exp=/iso= from the wheels; a stacked speed sends a stack command). UI
+  rotation set aside (portrait only) for now.
+
+
+### Status (late October 2026, before the first release)
+
+Engine done and reviewed (sanitizers and -O2 clean). The app shows a live
+viewfinder with the RAWfish-style deck, takes photos with a flash at the end of
+the capture, and shows them upright. Next: auto/manual wheel logic, live AE
+values on the wheels (via SF2M), notch-button actions, the metering/focus circle
+with touch mapping, the swipe-down menu, the gallery swipe, then UI rotation.
+Later: the YUV JPEG of our own, bracketing, scenes.

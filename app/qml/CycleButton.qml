@@ -15,9 +15,11 @@ MouseArea {
     property color textColor: "white"      // value colour (deck controls are white)
     property bool compact: false           // a smaller value (a compact deck, the XA2)
     signal cycle()
+    signal held()                          // a long press (when the button uses it)
 
     height: Theme.itemSizeMedium
     onClicked: root.cycle()
+    onPressAndHold: root.held()
 
     Column {
         anchors {
