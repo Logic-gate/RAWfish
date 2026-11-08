@@ -1714,9 +1714,16 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         memset(&ex, 0, sizeof ex);
         localtime_r(&now.tv_sec, &tm);
         strftime(dt, sizeof dt, "%Y:%m:%d %H:%M:%S", &tm);
+        char sw[160];
         ex.make = f.make[0] ? f.make : NULL;
         ex.model = f.model[0] ? f.model : NULL;
-        ex.software = "RAWfish-ir " IR_VERSION;
+        /* Software says which JPEG this is and how it was made, so that a HAL
+         * JPEG ("RAWfish-ir x.y.z (HAL JPEG)") and ours tell apart in any
+         * viewer's Exif panel: frames merged, colour filter, false-colour
+         * median and sharpening levels. */
+        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (JPG from YUV: frames %d, colour %d, moire %d, sharpen %d)",
+                 (n == 1 && nev == 0) ? 1 : n, denoise ? colour : 0, denoise ? median : 0, sharpen);
+        ex.software = sw;
         ex.datetime = dt;
         ex.exposure_ns = f.exposure_ns; ex.iso = f.iso;
         ex.focal_mm = f.focal_mm; ex.focal_eq_mm = f.focal_eq_mm; ex.f_number = f.f_number;

@@ -3649,7 +3649,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
         exif_datetime(dt, sizeof dt);
         ex.make = make[0] ? make : NULL;
         ex.model = model[0] ? model : NULL;
-        ex.software = "RAWfish-ir " IR_VERSION;
+        ex.software = "RAWfish-ir " IR_VERSION " (HAL JPEG)";   /* the camera driver's JPEG, as against ours (JPG from YUV) */
         ex.datetime = dt;
         ex.exposure_ns = g.result_ready ? g.r_exposure_ns : -1;    /* only what the HAL reported */
         ex.iso = g.result_ready ? g.r_iso : -1;
@@ -5014,7 +5014,7 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
         char dt[24];
         memset(&ex, 0, sizeof ex);
         exif_datetime(dt, sizeof dt);
-        ex.datetime = dt; ex.software = "RAWfish-ir " IR_VERSION;
+        ex.datetime = dt; ex.software = "RAWfish-ir " IR_VERSION " (HAL JPEG, burst)";
         ex.wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
         ex.exposure_manual = exposure_ns > 0;
         ex.exposure_ns = exposure_ns; ex.iso = iso;
