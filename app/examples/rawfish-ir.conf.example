@@ -1,8 +1,10 @@
 ; rawfish-ir.conf.example -- every key of ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf,
 ; with what it does, its values and its limits. Written by RAWfish-ir at each start
-; next to the real file (this copy is refreshed). When there is no real file
-; (a new install, or after "Reset the camera settings"), the real file is
-; created from this one, every key at its default.
+; next to the real file (this copy is refreshed). The real file lists every
+; setting, even at its default: when there is none (a new install, or after
+; "Reset the camera settings") it is created from this one; a key it lacks
+; (an older file, a key a new version adds) is added at its default, the
+; values already there untouched.
 ;
 ; Back to the defaults: Settings > Apps > RAWfish-ir > "Reset the camera settings"
 ; (the file is kept as rawfish-ir.conf.bak), or delete the file with the app closed.

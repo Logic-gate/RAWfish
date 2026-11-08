@@ -333,23 +333,43 @@ void IndrawPreview::installExamples()
     writeDefaultSettings();
 }
 
-/* No rawfish-ir.conf (a new install, a reset): it is written from the
- * example, every key at its default and every comment in place, so that a
- * user who opens the folder finds the settings there. The kept "last" values
- * are left out (absent, the start takes the automatic ones). */
+/* rawfish-ir.conf holds every setting, written out even at its default, so
+ * that a user who opens it sees them all without the example:
+ *  - no file (a new install, a reset): it is written from the example,
+ *    every key at its default and every comment in place;
+ *  - a file without some keys (one from an older version, or a key a new
+ *    version adds): those keys are added at their defaults, the values
+ *    already there untouched.
+ * The kept "last" focus and exposure values are left out (absent, the
+ * start takes the automatic ones). */
 void IndrawPreview::writeDefaultSettings()
 {
     const QString path = settingsPath();
     QFile ex(QStringLiteral("/usr/share/rawfish-ir/examples/rawfish-ir.conf.example"));
-    if (QFile::exists(path) || !ex.open(QIODevice::ReadOnly | QIODevice::Text)) return;
-    QByteArray outText;
-    for (const QByteArray &line : ex.readAll().split('\n')) {
-        if (line.startsWith("lastFocusD=") || line.startsWith("lastIso=") || line.startsWith("lastShutterNs=")) continue;
-        outText += line + '\n';
+    if (!ex.open(QIODevice::ReadOnly | QIODevice::Text)) return;
+    const QList<QByteArray> lines = ex.readAll().split('\n');
+    auto kept = [](const QByteArray &l) {
+        return l.startsWith("lastFocusD=") || l.startsWith("lastIso=") || l.startsWith("lastShutterNs=");
+    };
+    if (!QFile::exists(path)) {
+        QByteArray outText;
+        for (const QByteArray &line : lines) if (!kept(line)) outText += line + '\n';
+        outText.chop(1);
+        QFile out(path);
+        if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write(outText);
+        return;
     }
-    outText.chop(1);
-    QFile out(path);
-    if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write(outText);
+    QSettings s(path, QSettings::IniFormat);
+    int added = 0;
+    for (const QByteArray &line : lines) {
+        const int eq = line.indexOf('=');
+        if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || kept(line)) continue;
+        const QString key = QString::fromUtf8(line.left(eq)).trimmed();
+        if (s.contains(key)) continue;
+        s.setValue(key, QString::fromUtf8(line.mid(eq + 1)).trimmed());
+        ++added;
+    }
+    if (added) s.sync();
 }
 
 QString IndrawPreview::configDir() const

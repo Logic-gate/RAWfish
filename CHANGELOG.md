@@ -18,7 +18,9 @@ repository). Newest first.
 - A new install, or "Reset the camera settings", now writes
   ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf at once, from the
   example: every key at its default, with its comment. Before, the file
-  appeared only when a setting was first changed. The example's comments
+  appeared only when a setting was first changed. A file that lacks some
+  keys (an older one, or a key a new version adds) gets them at their
+  defaults at the start, its own values untouched. The example's comments
   all start with ';' (a '#' line with a quote in it made the settings
   library take the whole file for broken); "format" defaults to empty,
   the sensor's own shape, as the code does.
