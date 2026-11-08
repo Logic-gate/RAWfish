@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <QSettings>
 #include <QRegularExpression>
+static QString settingsPath();   /* defined with the settings code below */
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -234,7 +235,15 @@ void IndrawPreview::start()
          << m_cameraId
          << cap << prev << QStringLiteral("raw=max")
          << (m_sessionRaw ? QStringLiteral("type=raw") : QStringLiteral("type=jpeg"));
-    if (m_sessionYuv) args << QStringLiteral("yuv=jpeg");   /* the size the user chose for the photo */
+    if (m_sessionYuv) {
+        /* The YUV stream's size: the photo's (jpeg) unless rawfish-ir.conf says
+         * otherwise (jpgYuvStream = jpeg | max | WxH): a 12-megapixel YUV
+         * stream slows the JP2's viewfinder, a test key while this is sorted out. */
+        QString ys = QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvStream"), QStringLiteral("jpeg")).toString().trimmed();
+        static const QRegularExpression ok(QStringLiteral("^(jpeg|max|[0-9]{3,5}x[0-9]{3,5})$"));
+        if (!ok.match(ys).hasMatch()) ys = QStringLiteral("jpeg");
+        args << QStringLiteral("yuv=") + ys;
+    }
     {   /* only the streams the type and the settings need (yuv dropped after it failed) */
         QStringList want;
         for (const QString &s : m_sessionStreams.split(QLatin1Char(','), QString::SkipEmptyParts))

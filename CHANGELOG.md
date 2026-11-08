@@ -24,6 +24,11 @@ repository). Newest first.
   all start with ';' (a '#' line with a quote in it made the settings
   library take the whole file for broken); "format" defaults to empty,
   the sensor's own shape, as the code does.
+- TYPE reads "DNG (RAW)", "jpg" or "HAL JPG" on two small lines; with
+  "Also save a DNG with each JPG" on, it reads "JPG +RAW", greyed, the
+  type being fixed by the setting.
+- rawfish-ir.conf: jpgYuvStream (jpeg | max | WxH), a test key for the
+  YUV stream's size; the open report says the YUV size (yuv_size).
 - A new install opens in simple mode (the mode last used is kept as
   before; "Mode at start" in Settings still forces one).
 - The yuv command's report says whether the DNG's gallery preview was

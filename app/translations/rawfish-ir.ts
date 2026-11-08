@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1040"/>
+        <location filename="../indrawpreview.cpp" line="+1049"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -741,8 +741,9 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+236"/>
-        <source>raw</source>
+        <location filename="../qml/indraw.qml" line="+240"/>
+        <source>DNG
+(RAW)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -757,7 +758,13 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+0"/>
+        <source>JPG
++RAW</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <location line="+130"/>
         <location line="+1745"/>
         <location line="+27"/>

@@ -34,7 +34,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1040" />
+        <location filename="../indrawpreview.cpp" line="+1049" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
@@ -746,9 +746,11 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+236" />
-        <source>raw</source>
-        <translation>raw</translation>
+        <location filename="../qml/indraw.qml" line="+240" />
+        <source>DNG
+(RAW)</source>
+        <translation>DNG
+(RAW)</translation>
     </message>
     <message>
         <location line="+1" />
@@ -763,7 +765,14 @@ JPG</translation>
         <translation>jpg</translation>
     </message>
     <message>
-        <location line="+10" />
+        <location line="+0" />
+        <source>JPG
++RAW</source>
+        <translation>JPG
++RAW</translation>
+    </message>
+    <message>
+        <location line="+13" />
         <location line="+130" />
         <location line="+1745" />
         <location line="+27" />

@@ -231,13 +231,20 @@ ApplicationWindow {
             // the scene by itself until the user asks for more. ("auto" here is
             // Camera2's AUTO, one scan then hold: the "once" label.)
             property string focusMode: "cont"            // auto | cont | macro | manual
+            // The TYPE button's value: small two-line labels ("DNG" over
+            // "(RAW)", "HAL" over "JPG"); "JPG+RAW" when Settings saves a DNG
+            // with each JPG, the type then being fixed.
+            readonly property bool jpgPlusRaw: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
             function imageTypeLabel(t) {
                 switch (t) {
-                case "raw":     return qsTr("raw")
+                case "raw":     return qsTr("DNG\n(RAW)")
                 case "haljpg":  return qsTr("HAL\nJPG")
-                default:        return qsTr("jpg")
+                default:        return page.jpgPlusRaw ? qsTr("JPG\n+RAW") : qsTr("jpg")
                 }
             }
+            // Settings asks for a DNG with each JPG: JPG is the type, whatever
+            // was chosen before (the button says JPG+RAW and is greyed).
+            onJpgPlusRawChanged: if (jpgPlusRaw && imageType !== "jpg") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
             //   "once"   = one scan where you tap, then hold (Camera2 AUTO)
             //   "auto"   = continuous focus by the HAL; a tap then only meters
@@ -1805,8 +1812,8 @@ ApplicationWindow {
                             visible: !settingsMenu.simpleHides("type")   // simple mode: JPEG only
                             // Greyed on a Σ speed (stacking writes a DNG only) and on a
                             // camera without RAW (nothing to cycle to).
-                            enabled: !page.stackSelected && (page.rawAvailable || settingsMenu.halJpeg)
-                            opacity: page.stackSelected || !(page.rawAvailable || settingsMenu.halJpeg) ? Theme.opacityLow : 1.0
+                            enabled: !page.stackSelected && !page.jpgPlusRaw && (page.rawAvailable || settingsMenu.halJpeg)
+                            opacity: page.stackSelected || page.jpgPlusRaw || !(page.rawAvailable || settingsMenu.halJpeg) ? Theme.opacityLow : 1.0
                             onCycle: {
                                 // RAW and JPG; HAL JPG too when rawfish-ir.conf offers it.
                                 var t = page.rawAvailable ? ["raw", "jpg"] : ["jpg"]

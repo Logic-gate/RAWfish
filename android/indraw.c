@@ -3006,11 +3006,11 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     jw_add(&w, "{\"ok\":true,\"camera_id\":");
     jw_str(&w, id);
     jw_add(&w, ",\"jpeg_size\":[%d,%d],\"preview_size\":[%d,%d],"
-               "\"raw16_size\":[%d,%d],\"shading_map\":%s,"
+               "\"raw16_size\":[%d,%d],\"yuv_size\":[%d,%d],\"shading_map\":%s,"
                "\"af_continuous\":%s,\"template\":{\"noise\":\"%s\",\"edge\":\"%s\"},"
                "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\",\"jpeg_stream\":%s,\"exclusive\":%s},"
                "\"ms\":{\"open\":%.1f,\"session\":%.1f,\"first_frame\":%.1f}}",
-           jw, jh, pw, ph, rw, rh, g.shading_map ? "true" : "false",
+           jw, jh, pw, ph, rw, rh, g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_h > 0 ? g.yuv_h : 0, g.shading_map ? "true" : "false",
            g.af_continuous ? "true" : "false",
            g.tpl_nr >= 0 ? nr_name(g.tpl_nr) : "none", g.tpl_edge >= 0 ? edge_name(g.tpl_edge) : "none",
            g.session_params_used < 0 ? "unsupported" : g.session_params_used ? "applied" : "none",

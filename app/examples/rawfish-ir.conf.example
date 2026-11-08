@@ -72,6 +72,11 @@ jpgMoireFilter=0
 ;                                               range 0..5              default 3
 jpgSharpen=3
 
+; The YUV stream's size for JPG: jpeg = the photo's size (the normal case),
+; max = the largest the camera lists, or a WIDTHxHEIGHT the camera lists. A
+; test key: on the JP2 a 12-megapixel YUV stream slows the viewfinder down.
+;                                               values: jpeg, max, WxH  default jpeg
+jpgYuvStream=jpeg
 ; HAL JPG: the camera driver's own JPEG, offered in TYPE when this is true.
 ; Stacks, brackets and bursts use the HAL JPEG and its settings below even
 ; when it is not offered. On a phone whose session cannot hold the YUV stream
