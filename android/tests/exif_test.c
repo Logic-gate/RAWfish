@@ -245,6 +245,22 @@ int main(void)
             CHECK(rc == 0 && ne == 64 + 15 && find(exif, ne, 0xA405) && find(exif, ne, 0xA001) && find(exif, ne, 0xA403),
                   "a HAL Exif IFD of 64 entries keeps all of ours too (%d entries, rc %d)", ne, rc);
         }
+        {   /* flash and zoom given: ours replace the HAL's Flash, DigitalZoomRatio is added */
+            static uint8_t out[8192];
+            rent_t ifd0[16], exif[96];
+            unsigned long next; int ne; const rent_t *e;
+            info.flash = 0x19; info.digital_zoom = 2.5f;
+            len = make_hal_jpeg(jpeg, 0);
+            rc = exif_write_jpeg("/tmp/indraw_exif_test.jpg", jpeg, len, &info);
+            FILE *f = fopen("/tmp/indraw_exif_test.jpg", "rb"); size_t n = f ? fread(out, 1, sizeof out, f) : 0; if (f) fclose(f);
+            g_t = out + 12; g_tl = n > 12 ? n - 12 : 0;
+            e = find(ifd0, read_ifd(8, ifd0, 16, &next), 0x8769);
+            ne = e ? read_ifd(e->val, exif, 96, &next) : 0;
+            e = find(exif, ne, 0x9209);
+            CHECK(rc == 0 && e && (e->val & 0xFFFF) == 0x19, "Flash ours when given (auto, fired: 0x19)");
+            CHECK(find(exif, ne, 0xA404) != NULL, "DigitalZoomRatio written when zoomed");
+            info.flash = 0; info.digital_zoom = 0;
+        }
     }
     unlink("/tmp/indraw_exif_test.jpg");
     printf(fails ? "exif: FAILED (%d)\n" : "exif: OK (6 passes)\n", fails);

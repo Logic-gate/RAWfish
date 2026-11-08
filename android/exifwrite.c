@@ -321,6 +321,8 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
     ent_short(&ours, 0xA001, 1); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);                  /* ColorSpace sRGB  */
     ent_short(&ours, 0xA403, (uint16_t)(info->wb_manual ? 1 : 0)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);   /* WhiteBalance */
     if (info->focal_eq_mm > 0) { ent_short(&ours, 0xA405, (uint16_t)info->focal_eq_mm); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }
+    if (info->flash > 0) { ent_short(&ours, 0x9209, (uint16_t)info->flash); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }   /* Flash (ours always has mode bits) */
+    if (info->digital_zoom > 0) { ent_rational(&ours, 0xA404, (uint32_t)(info->digital_zoom * 100 + 0.5), 100, scratch + 48); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }   /* DigitalZoomRatio */
     if (n0 < 0 || ne < 0) { rc = EOVERFLOW; goto out; }          /* a list full: never with these sizes */
     sort_entries(ifd0, n0); sort_entries(exif, ne);
 

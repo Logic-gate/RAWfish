@@ -12,7 +12,7 @@
 <context>
     <name>GalleryView</name>
     <message>
-        <location filename="../qml/GalleryView.qml" line="+212"/>
+        <location filename="../qml/GalleryView.qml" line="+232"/>
         <source>DNG quick preview</source>
         <translation type="unfinished"></translation>
     </message>
@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+954"/>
+        <location filename="../indrawpreview.cpp" line="+1040"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -741,7 +741,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+219"/>
+        <location filename="../qml/indraw.qml" line="+236"/>
         <source>raw</source>
         <translation type="unfinished"></translation>
     </message>

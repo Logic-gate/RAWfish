@@ -11,7 +11,7 @@
 <context>
     <name>GalleryView</name>
     <message>
-        <location filename="../qml/GalleryView.qml" line="+212" />
+        <location filename="../qml/GalleryView.qml" line="+232" />
         <source>DNG quick preview</source>
         <translation>Aperçu rapide du DNG</translation>
     </message>
@@ -34,7 +34,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+954" />
+        <location filename="../indrawpreview.cpp" line="+1040" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
@@ -746,7 +746,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+219" />
+        <location filename="../qml/indraw.qml" line="+236" />
         <source>raw</source>
         <translation>raw</translation>
     </message>

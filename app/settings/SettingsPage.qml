@@ -66,8 +66,8 @@ Page {
             SectionHeader { text: qsTr("Captures") }
 
             TextSwitch {
-                text: qsTr("A DNG with each JPG")
-                description: qsTr("Each JPG photo also writes a DNG of the same exposure, with the same file name, in the DNG folder. Not with the camera's own JPEG (HAL JPG), on long exposures (Σ, a DNG only) or on phones whose camera takes JPEG or RAW but not both.")
+                text: qsTr("Also save a DNG with each JPG")
+                description: qsTr("Same exposure, same file name. Saved in the DNG folder. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.")
                 checked: output.jpgWithDng
                 onCheckedChanged: output.jpgWithDng = checked
             }

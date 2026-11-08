@@ -8,17 +8,7 @@
         <translation>Photos</translation>
     </message>
     <message>
-        <location line="+3" />
-        <source>A DNG with each JPG</source>
-        <translation>Un DNG avec chaque JPG</translation>
-    </message>
-    <message>
-        <location line="+1" />
-        <source>Each JPG photo also writes a DNG of the same exposure, with the same file name, in the DNG folder. Not with the camera's own JPEG (HAL JPG), on long exposures (Σ, a DNG only) or on phones whose camera takes JPEG or RAW but not both.</source>
-        <translation>Chaque photo JPG écrit aussi un DNG de la même exposition, sous le même nom, dans le dossier des DNG. Pas avec le JPEG de l'appareil (HAL JPG), ni en pose longue (Σ, un DNG seulement), ni sur les téléphones dont la caméra prend le JPEG ou le RAW mais pas les deux.</translation>
-    </message>
-    <message>
-        <location line="+8" />
+        <location line="+12" />
         <source>File name prefix</source>
         <translation>Préfixe des noms de fichiers</translation>
     </message>
@@ -155,7 +145,17 @@
         <translation>Ombrage de l'objectif (vignetage)</translation>
     </message>
     <message>
-        <location line="+7" />
+        <location line="-94" />
+        <source>Also save a DNG with each JPG</source>
+        <translation>Enregistrer aussi un DNG avec chaque JPG</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Same exposure, same file name. Saved in the DNG folder. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.</source>
+        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Ne fonctionne pas avec le JPEG de l'appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
+    </message>
+    <message>
+        <location line="+100" />
         <source>Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of RAWfish-ir.</source>
         <translation>Mesure comment l'objectif assombrit les coins, pour corriger chaque DNG. Il faut un diffuseur blanc translucide sur l'objectif et une lumière uniforme ; environ une minute. L'assistant s'ouvre au prochain lancement de RAWfish-ir.</translation>
     </message>

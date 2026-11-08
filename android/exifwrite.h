@@ -23,6 +23,8 @@ typedef struct {
     int orientation;                       /* EXIF 1..8; 0: not written        */
     int wb_manual;                         /* WhiteBalance: 1 manual, 0 auto   */
     int exposure_manual;                   /* ExposureMode: 1 manual pair, 0 auto */
+    int flash;                             /* Exif Flash value (fired bit, mode bits); <= 0: not written, the HAL's kept */
+    float digital_zoom;                    /* DigitalZoomRatio; <= 0: not written */
     int *hal_dropped;                      /* out, optional: HAL entries left out for
                                             * lack of room (its IFD over 64 entries,
                                             * its data over the pool): 0 normally */

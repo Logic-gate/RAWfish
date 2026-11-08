@@ -1729,6 +1729,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         ex.focal_mm = f.focal_mm; ex.focal_eq_mm = f.focal_eq_mm; ex.f_number = f.f_number;
         ex.orientation = o == 90 ? 6 : o == 180 ? 3 : o == 270 ? 8 : 1;   /* our pixels are as read */
         ex.wb_manual = f.wb_manual; ex.exposure_manual = f.exposure_manual;
+        ex.flash = f.flash; ex.digital_zoom = f.digital_zoom;
         rc = exif_write_jpeg(file, jpg, jlen, &ex);
     }
     free(jpg);

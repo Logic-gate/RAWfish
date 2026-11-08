@@ -17,6 +17,8 @@ typedef struct {
     int focal_eq_mm;
     int exposure_manual;        /* a manual pair was asked                       */
     int wb_manual;
+    int flash;                  /* Exif Flash value; 0 unknown (not written)     */
+    float digital_zoom;         /* the zoom in force (1 = none)                  */
     char make[64], model[64];   /* the phone's, for the Exif                     */
 } ir_yuv_t;
 

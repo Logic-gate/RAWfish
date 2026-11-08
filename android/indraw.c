@@ -604,6 +604,7 @@ static struct {
     int r_control;                          /* CONTROL_MODE in the result        */
     int scene_mode;                         /* the scene in force (0 none): captures keep USE_SCENE_MODE */
     int32_t r_iso;
+    int r_flash_fired;                      /* the last still result: flash fired */
     int r_ae_state, r_af_state;
     int r_nr, r_edge;                       /* modes the camera reports applied  */
     float r_focus_diopters;
@@ -884,6 +885,15 @@ IR_API int indraw_set_state_events(int on)
 /* "written kind=KIND path=PATH": the file is on disk (paths never contain
  * spaces: names are validated by the CLI). The UI uses it to save a preview
  * next to a DNG, and to refresh its gallery. */
+/* The Exif Flash value: bit 0 fired; bits 3-4 the mode (01 compulsory firing,
+ * 10 compulsory suppression, 11 auto). Our flash modes: 0 off, 1 auto, 2 on,
+ * 3 torch (a light, written as fired). */
+static int exif_flash_value(int fired)
+{
+    int mode = g.flash_mode == 1 ? 0x18 : g.flash_mode == 2 ? 0x08 : g.flash_mode == 3 ? 0x08 : 0x10;
+    return mode | ((fired || g.flash_mode == 3) ? 1 : 0);
+}
+
 static void emit_written(const char *kind, const char *path)
 {
     char line[1200];
@@ -1553,6 +1563,10 @@ static void on_capture_completed(void *ctx, ACameraCaptureSession *s,
     if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK &&
         e.type == ACAMERA_TYPE_BYTE && e.count)
         g.r_ae_state = e.data.u8[0];
+    g.r_flash_fired = 0;
+    if (ACameraMetadata_getConstEntry(res, ACAMERA_FLASH_STATE, &e) == ACAMERA_OK &&
+        e.type == ACAMERA_TYPE_BYTE && e.count)
+        g.r_flash_fired = e.data.u8[0] == ACAMERA_FLASH_STATE_FIRED;
     if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_STATE, &e) == ACAMERA_OK &&
         e.type == ACAMERA_TYPE_BYTE && e.count)
         g.r_af_state = e.data.u8[0];
@@ -3650,6 +3664,8 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
         ex.make = make[0] ? make : NULL;
         ex.model = model[0] ? model : NULL;
         ex.software = "RAWfish-ir " IR_VERSION " (HAL JPEG)";   /* the camera driver's JPEG, as against ours (JPG from YUV) */
+        ex.flash = exif_flash_value(g.result_ready && g.r_flash_fired);
+        ex.digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
         ex.datetime = dt;
         ex.exposure_ns = g.result_ready ? g.r_exposure_ns : -1;    /* only what the HAL reported */
         ex.iso = g.result_ready ? g.r_iso : -1;
@@ -5015,6 +5031,8 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
         memset(&ex, 0, sizeof ex);
         exif_datetime(dt, sizeof dt);
         ex.datetime = dt; ex.software = "RAWfish-ir " IR_VERSION " (HAL JPEG, burst)";
+        ex.flash = exif_flash_value(g.result_ready && g.r_flash_fired);
+        ex.digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
         ex.wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
         ex.exposure_manual = exposure_ns > 0;
         ex.exposure_ns = exposure_ns; ex.iso = iso;
@@ -6640,6 +6658,8 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     f->exposure_ns = g.result_ready ? g.r_exposure_ns : -1;
     f->iso = g.result_ready ? g.r_iso : -1;
     f->wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+    f->flash = exif_flash_value(0);                         /* a YUV capture never fires the flash */
+    f->digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
     pthread_mutex_unlock(&g.lock);
     f->exposure_manual = exposure_ns > 0;
     {
@@ -6819,6 +6839,8 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     for (k = 0; k < n; ++k) {
         frames[k].exposure_manual = 1;
         frames[k].wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+        frames[k].flash = exif_flash_value(0);              /* a YUV burst never fires the flash (a torch is a light) */
+        frames[k].digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, &e) == ACAMERA_OK && e.count)
             frames[k].focal_mm = e.data.f[0];
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_APERTURES, &e) == ACAMERA_OK && e.count)
