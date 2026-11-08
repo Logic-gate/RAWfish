@@ -271,3 +271,11 @@ for spec in "$root/rpm/rawfish-ir-cli.spec" "$root/app/rpm/rawfish-ir-gui.spec";
          END { exit bad }' "$spec" || { echo "specs: a (64bit) dependency outside %ifarch aarch64"; exit 1; }
 done
 echo "specs: 64-bit dependency names only in %ifarch aarch64 (OK)"
+
+# rawfish-ir.conf.example becomes the real rawfish-ir.conf on a new install:
+# QSettings takes only ';' as a comment, and a '#' line with a quote in it
+# puts the whole file in error (it is then neither read reliably nor saved).
+if grep -n '^#' "$root/app/examples/rawfish-ir.conf.example"; then
+    echo "rawfish-ir.conf.example: comments must start with ';', not '#'"; exit 1
+fi
+echo "rawfish-ir.conf.example: ';' comments only (OK)"

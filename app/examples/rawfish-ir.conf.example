@@ -1,6 +1,8 @@
 ; rawfish-ir.conf.example -- every key of ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf,
 ; with what it does, its values and its limits. Written by RAWfish-ir at each start
-; next to the real file (this copy is refreshed; the real file is never touched).
+; next to the real file (this copy is refreshed). When there is no real file
+; (a new install, or after "Reset the camera settings"), the real file is
+; created from this one, every key at its default.
 ;
 ; Back to the defaults: Settings > Apps > RAWfish-ir > "Reset the camera settings"
 ; (the file is kept as rawfish-ir.conf.bak), or delete the file with the app closed.
@@ -21,8 +23,9 @@
 ; --- The camera menu ------------------------------------------------------
 ; Self-timer before a shot, seconds.            values: 0, 3, 10        default 0
 timerSec=0
-; Image proportion of the JPEG.                 values: 4:3, 16:9       default 4:3
-format=4:3
+; Image proportion of the JPEG ("" = the sensor's own, 4:3 on most phones).
+;                                               values: "", 4:3, 16:9   default ""
+format=
 ; JPEG size, WIDTHxHEIGHT among the sizes the camera lists ("" = the largest).
 ;                                               e.g. 4096x3072          default ""
 captureSize=
@@ -131,13 +134,14 @@ sigmaPreviewFps=10
 frameLatencyMs=200
 
 ; --- Kept for "Start in manual focus and exposure" --------------------------
-; Saved when the app goes to the background or closes; leave them.
+; Saved when the app goes to the background or closes; leave them (absent
+; from a new file: the start then takes the automatic values).
 ; Focus distance in diopters (1/metres; 0 = infinity).   range 0..10
 lastFocusD=1
 ; ISO and shutter (nanoseconds; beyond 500000000 a Σ stack).
 lastIso=100
 lastShutterNs=16666667
-# The level's zero, recorded by holding "level" with the phone upright
-# (degrees; empty or absent = the sensor's own zero).
-# levelRoll0=0.00
-# levelPitch0=0.00
+; The level's zero, recorded by holding "level" with the phone upright
+; (degrees; empty or absent = the sensor's own zero).
+; levelRoll0=0.00
+; levelPitch0=0.00

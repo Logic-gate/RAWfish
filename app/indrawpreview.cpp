@@ -330,6 +330,26 @@ void IndrawPreview::installExamples()
         QFile::remove(to);                               /* refreshed: the version's own */
         QFile::copy(from, to);
     }
+    writeDefaultSettings();
+}
+
+/* No rawfish-ir.conf (a new install, a reset): it is written from the
+ * example, every key at its default and every comment in place, so that a
+ * user who opens the folder finds the settings there. The kept "last" values
+ * are left out (absent, the start takes the automatic ones). */
+void IndrawPreview::writeDefaultSettings()
+{
+    const QString path = settingsPath();
+    QFile ex(QStringLiteral("/usr/share/rawfish-ir/examples/rawfish-ir.conf.example"));
+    if (QFile::exists(path) || !ex.open(QIODevice::ReadOnly | QIODevice::Text)) return;
+    QByteArray outText;
+    for (const QByteArray &line : ex.readAll().split('\n')) {
+        if (line.startsWith("lastFocusD=") || line.startsWith("lastIso=") || line.startsWith("lastShutterNs=")) continue;
+        outText += line + '\n';
+    }
+    outText.chop(1);
+    QFile out(path);
+    if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write(outText);
 }
 
 QString IndrawPreview::configDir() const
@@ -343,7 +363,9 @@ QString IndrawPreview::resetSettingsFile()
     const QString path = settingsPath(), bak = path + QStringLiteral(".bak");
     if (!QFile::exists(path)) return QString();
     QFile::remove(bak);
-    return QFile::rename(path, bak) ? bak : QString();
+    if (!QFile::rename(path, bak)) return QString();
+    writeDefaultSettings();                              /* a fresh file, every key at its default */
+    return bak;
 }
 
 QVariant IndrawPreview::setting(const QString &key, const QVariant &def) const

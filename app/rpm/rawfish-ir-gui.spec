@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-ir camera (the interface)
-Version:    0.2.0
+Version:    0.2.1
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
