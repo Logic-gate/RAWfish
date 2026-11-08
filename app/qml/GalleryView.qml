@@ -164,15 +164,24 @@ Item {
                 // arrives (fitting a large or rotated image), with nobody
                 // pinching: the strip then stayed locked (no swipe back to the
                 // camera) and the overlay hidden, until a tap zoomed out. A
-                // zoom in the first moment of a picture being shown is not
-                // the user's: it is undone at once.
-                onActiveChanged: if (active) arrival.restart()
+                // zoom that nobody has touched the picture for is not the
+                // user's: it is undone at once. The first touch on a picture
+                // (a tap, a pinch) is remembered until another picture shows.
+                property bool touched: false
+                onActiveChanged: if (active) touched = false
                 onZoomedChanged: {
-                    if (zoomed && arrival.running) { zoomOut(); return }
+                    if (zoomed && !touched) { zoomOut(); return }
                     overlay.active = !zoomed
                 }
                 onClicked: { if (zoomed) zoomOut(); else overlay.active = !overlay.active }
-                Timer { id: arrival; interval: 1200 }
+                // Sees every touch first and lets it through (accepted: false),
+                // so a pinch still zooms: it only records that a finger came.
+                MouseArea {
+                    anchors.fill: parent
+                    z: 1
+                    propagateComposedEvents: true
+                    onPressed: { viewer.touched = true; mouse.accepted = false }
+                }
             }
             // A DNG without a preview yet (older files): a tap here still
             // toggles the overlay, so the X is always reachable -- with no
