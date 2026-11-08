@@ -6700,7 +6700,7 @@ IR_API int indraw_yuv_dng_next(const char *path, const char *datetime)
 
 /* A RAW16 image and its result, paired, written as a DNG (the same steps as
  * indraw_raw's). 0 on success, else an errno or -1. */
-static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char *path, const char *datetime)
+static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char *path, const char *datetime, int *preview_err)
 {
     uint8_t *data = NULL; int data_len = 0, stride = 0, w_px = 0, h_px = 0, y, err, sh_cols = 0, sh_rows = 0;
     int64_t a_exposure = 0; int32_t a_iso = 0;
@@ -6721,7 +6721,8 @@ static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char 
     dng_params_from(&dp, rmeta, px, w_px, h_px, sh, sh_cols, sh_rows, a_exposure, a_iso, sw);
     if (datetime && datetime[0]) dp.datetime = datetime; else { exif_datetime(dt, sizeof dt); dp.datetime = dt; }
     err = dng_write(path, &dp);
-    if (!err) write_dng_preview(path, &dp);
+    if (!err && preview_err) *preview_err = write_dng_preview(path, &dp);   /* the gallery's thumbnail */
+    else if (!err) write_dng_preview(path, &dp);
     free(px); free(sh);
     return err;
 }
@@ -6729,7 +6730,7 @@ static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char 
 IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
                             ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
 {
-    int with_dng = g.yuv_dng_path[0] && g.raw_target, dng_err = 0;
+    int with_dng = g.yuv_dng_path[0] && g.raw_target, dng_err = 0, dng_preview_err = 0;
     const char *dng_state = "none";
     ACaptureRequest *reqs[4];
     int k, got = 0, rc = IR_OK;
@@ -6828,7 +6829,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         if (g.raw_image && rts == its) { img = g.raw_image; g.raw_image = NULL; rmeta = ACameraMetadata_copy(g.r_meta); }
         pthread_mutex_unlock(&g.lock);
         if (img && rmeta) {
-            dng_err = write_dng_pair(img, rmeta, g.yuv_dng_path, g.yuv_dng_dt);
+            dng_err = write_dng_pair(img, rmeta, g.yuv_dng_path, g.yuv_dng_dt, &dng_preview_err);
             dng_state = dng_err ? "write failed" : "written";
             if (!dng_err) emit_written("dng", g.yuv_dng_path);
         } else dng_state = img ? "no matching result" : "no raw image";
@@ -6859,7 +6860,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
     jw_add(&w, "],\"ms\":{\"capture\":%.1f}", t_cap - t0);
-    if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\"}", dng_state); }
+    if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\",\"preview_err\":%d}", dng_state, dng_preview_err); }
     jw_add(&w, "}");
     g.yuv_dng_path[0] = '\0';
     return got == n ? rc : (rc == IR_OK ? IR_ECAPTURE : rc);

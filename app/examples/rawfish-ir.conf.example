@@ -44,8 +44,9 @@ bracket=off
 ; Rule-of-thirds grid.                          values: 0, 1            default 0
 gridOn=0
 ; Mode last used (simple 0, advanced 1); read when "Mode at start" is "last".
-;                                               values: 0, 1            default 1
-advanced=1
+; A new install opens in simple mode.
+;                                               values: 0, 1            default 0
+advanced=0
 ; Scene mode (Camera2 number; 0 off). Used only when the scenes are shown.
 ;                                               range 0..18             default 0
 sceneMode=0

@@ -172,7 +172,7 @@ Item {
         gridOn = num("gridOn", 0, 0, 1) === 1
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)
-        advanced = startMode === "simple" ? false : startMode === "advanced" ? true : num("advanced", 1, 0, 1) === 1
+        advanced = startMode === "simple" ? false : startMode === "advanced" ? true : num("advanced", 0, 0, 1) === 1   /* a new install opens in simple mode */
         sceneMode = num("sceneMode", 0, 0, 18)
         peakTweak = pick("peakTweak", "0", ["-30", "0", "30"]) * 1
         zebraTweak = pick("zebraTweak", "0", ["-30", "0", "30"]) * 1

@@ -24,6 +24,10 @@ repository). Newest first.
   all start with ';' (a '#' line with a quote in it made the settings
   library take the whole file for broken); "format" defaults to empty,
   the sensor's own shape, as the code does.
+- A new install opens in simple mode (the mode last used is kept as
+  before; "Mode at start" in Settings still forces one).
+- The yuv command's report says whether the DNG's gallery preview was
+  written (dng.preview_err), to see why a preview is missing.
 - JPEG quality in the menu: 20, 40, 60, 80, 90, 95 or 100 (was 80,
   90, 96, 100); default 95.
 - The session holds only the streams the type needs (RAW for raw; our
