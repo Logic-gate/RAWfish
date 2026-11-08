@@ -2667,6 +2667,13 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         rw = rh = 0;                                /* no RAW on this camera: skip   */
     if (g.yuv_w == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &g.yuv_w, &g.yuv_h))
         g.yuv_w = g.yuv_h = 0;
+    if (g.yuv_w == -2) {                         /* "as the JPEG": the size the user chose */
+        if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh)) { g.yuv_w = jw; g.yuv_h = jh; }
+        else if (!largest_output_size_within(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh, &g.yuv_w, &g.yuv_h)) {
+            close_all();
+            return fail(out, out_size, IR_EARG, "check", "no yuv size within the jpeg size", 0);
+        }
+    }
     if (g.yuv_w > 0 && !has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, g.yuv_w, g.yuv_h)) {
         close_all();
         return fail(out, out_size, IR_EARG, "check", "yuv size not listed", 0);
@@ -5667,6 +5674,7 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     all[n++] = g.still_request;
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
+    if (g.yuv_request) all[n++] = g.yuv_request;   /* our JPEG is a finished photo: it follows the zoom (a DNG does not) */
     for (i = 0; i < n; ++i)
         if (all[i]) ACaptureRequest_setEntry_i32(all[i], ACAMERA_SCALER_CROP_REGION, 4, crop);
     {   /* the preview: the zoom window, and the loupe inside it if one is open.
@@ -6559,7 +6567,8 @@ static int yuv_copy(AImage *img, ir_yuv_t *f)
  * the largest; 0,0 none). For a JPEG compressed by the command line. */
 IR_API int indraw_set_yuv_size(int w, int h)
 {
-    if (!((w == -1 && h == -1) || (w == 0 && h == 0) || (w > 0 && h > 0 && !(w & 1) && !(h & 1)))) return IR_EARG;
+    /* -1,-1: the largest; -2,-2: the JPEG's size (the one the user chose) */
+    if (!((w == -1 && h == -1) || (w == -2 && h == -2) || (w == 0 && h == 0) || (w > 0 && h > 0 && !(w & 1) && !(h & 1)))) return IR_EARG;
     g.yuv_w = w; g.yuv_h = h;
     return IR_OK;
 }

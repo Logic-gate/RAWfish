@@ -55,7 +55,7 @@ class IndrawPreview : public QQuickItem
      * true opens RAW + viewfinder without JPEG, false JPEG + viewfinder.
      * Ignored by the engine on every other phone. */
     Q_PROPERTY(bool rawSession READ rawSession WRITE setRawSession NOTIFY rawSessionChanged)
-    /* The YUV type: the session gets a full-size YUV stream (yuv=max), and
+    /* The YUV type: the session gets a YUV stream at the photo's size (yuv=jpeg), and
      * loses it again when the type changes: a restart either way. */
     Q_PROPERTY(bool yuvSession READ yuvSession WRITE setYuvSession NOTIFY yuvSessionChanged)
     /* The size of the frames the engine streams (sensor orientation): their

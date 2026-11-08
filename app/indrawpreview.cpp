@@ -230,7 +230,7 @@ void IndrawPreview::start()
          << m_cameraId
          << cap << prev << QStringLiteral("raw=max")
          << (m_sessionRaw ? QStringLiteral("type=raw") : QStringLiteral("type=jpeg"));
-    if (m_sessionYuv) args << QStringLiteral("yuv=max");
+    if (m_sessionYuv) args << QStringLiteral("yuv=jpeg");   /* the size the user chose for the photo */
 
     m_buffer.clear();
     /* Inside the Sailjail sandbox /usr/bin only holds the app binary

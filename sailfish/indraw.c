@@ -1056,7 +1056,7 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (default preview 1280x960)\n"
+            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg]   (default preview 1280x960; yuv=jpeg: at the JPEG size)\n"
             "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
@@ -2266,14 +2266,16 @@ int main(int argc, char **argv)
 
         if (!op || !jpeg || !cl) return EXIT_BRIDGE;
         if (argc < 4 || !parse_size(argv[3], &jw, &jh)) { usage(); return EXIT_USAGE; }
-        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH] [yuv=WxH] [type=raw|jpeg] */
+        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg] */
             if (!strncmp(argv[i], "raw=", 4)) {
                 if (!parse_size(argv[i] + 4, &rw, &rh)) { usage(); return EXIT_USAGE; }
             } else if (!strncmp(argv[i], "yuv=", 4)) {
                 int yw, yh;
                 typedef int (*yuvsize_fn)(int, int);
                 yuvsize_fn ys = (yuvsize_fn)a_dlsym(bridge, "indraw_set_yuv_size");
-                if (!parse_size(argv[i] + 4, &yw, &yh) || !ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
+                if (!strcmp(argv[i] + 4, "jpeg")) { yw = yh = -2; }          /* as the JPEG: the chosen size */
+                else if (!parse_size(argv[i] + 4, &yw, &yh)) { usage(); return EXIT_USAGE; }
+                if (!ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
             } else if (!strncmp(argv[i], "type=", 5)) {
                 if (!strcmp(argv[i] + 5, "raw")) type_raw = 1;
                 else if (!strcmp(argv[i] + 5, "jpeg")) type_raw = 0;
