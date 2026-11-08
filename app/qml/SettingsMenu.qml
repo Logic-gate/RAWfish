@@ -155,7 +155,7 @@ Item {
         var sz = String(viewfinder.setting("captureSize", ""))
         captureSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(sz) ? sz : ""
         formatSaved = pick("format", "", ["4:3", "16:9"])   /* "" = the RAW's shape (format) */
-        jpegQuality = pick("jpegQuality", "96", ["80", "90", "96", "100"]) * 1
+        jpegQuality = pick("jpegQuality", "95", ["20", "40", "60", "80", "90", "95", "100"]) * 1
         awbMode = num("awbMode", 1, 1, 8)
         // Set in rawfish-ir.conf only (not in the menu): the processing.
         halJpeg = pick("useHalJpeg", "false", ["false", "true"]) === "true"
@@ -422,7 +422,7 @@ Item {
                 onPicked: menu.setSize(value) }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: no JPEG quality")
-                caption: qsTr("Quality"); values: [80, 90, 96, 100]; current: menu.jpegQuality
+                caption: qsTr("Quality"); values: [20, 40, 60, 80, 90, 95, 100]; current: menu.jpegQuality
                 labelFor: function(v) { return qsTr("JPEG quality %1").arg(v) }
                 onPicked: { menu.jpegQuality = value; menu.save("jpegQuality", value) } }
             MenuColumn { visible: menu.simpleMenuHas("wb"); width: band.colW; header: header

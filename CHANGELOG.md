@@ -14,7 +14,7 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.2.1 — the settings file from the start; the gallery not locked (patches 0299–0300)
+## 0.2.1 — the settings file from the start; the gallery not locked (patches 0299–0301)
 - A new install, or "Reset the camera settings", now writes
   ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf at once, from the
   example: every key at its default, with its comment. Before, the file
@@ -22,6 +22,8 @@ repository). Newest first.
   all start with ';' (a '#' line with a quote in it made the settings
   library take the whole file for broken); "format" defaults to empty,
   the sensor's own shape, as the code does.
+- JPEG quality in the menu: 20, 40, 60, 80, 90, 95 or 100 (was 80,
+  90, 96, 100); default 95.
 - Gallery: a capture that opened "zoomed" by itself locked the strip
   (no swipe back to the camera) until a tap; such a zoom is now undone.
 

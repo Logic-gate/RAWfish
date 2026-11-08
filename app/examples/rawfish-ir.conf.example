@@ -29,8 +29,9 @@ format=
 ; JPEG size, WIDTHxHEIGHT among the sizes the camera lists ("" = the largest).
 ;                                               e.g. 4096x3072          default ""
 captureSize=
-; JPEG quality (JPG and HAL JPG).               values: 80, 90, 96, 100 default 96
-jpegQuality=96
+; JPEG quality (JPG and HAL JPG).
+;                                 values: 20, 40, 60, 80, 90, 95, 100   default 95
+jpegQuality=95
 ; White-balance preset: 1 auto, 2 incandescent, 3 fluorescent, 4 warm fluorescent,
 ; 5 daylight, 6 cloudy, 7 twilight, 8 shade (only those the camera lists).
 ;                                               range 1..8              default 1
