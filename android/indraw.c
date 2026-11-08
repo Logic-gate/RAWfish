@@ -585,6 +585,7 @@ static struct {
     ACaptureRequest *yuv_burst_req[4];      /* the same, one per frame of a burst (own exposure each) */
     AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
+    int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
     int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, 0 none) */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
@@ -2685,8 +2686,18 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     }
     if (g.yuv_w == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &g.yuv_w, &g.yuv_h))
         g.yuv_w = g.yuv_h = 0;
-    if (g.yuv_w == -2) {                         /* "as the JPEG": the size the user chose */
-        if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh)) { g.yuv_w = jw; g.yuv_h = jh; }
+    g.yuv_down = 1;
+    if (g.yuv_w == -2) {
+        /* "As the JPEG": the photo's size, but through the LARGEST listed YUV
+         * size that is a whole multiple of it, averaged down on copy. A
+         * mid-size YUV stream (4096x3072 on the JP2) makes the HAL's
+         * viewfinder lag by a second (a "video" path, it seems), the full
+         * sensor size does not; and the averaging is a free 2x2 binning. */
+        int k, bw = 0, bh = 0, bk = 0;
+        for (k = 4; k >= 2; --k)
+            if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw * k, jh * k)) { bw = jw * k; bh = jh * k; bk = k; break; }
+        if (bk) { g.yuv_w = bw; g.yuv_h = bh; g.yuv_down = bk; }
+        else if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh)) { g.yuv_w = jw; g.yuv_h = jh; }
         else if (!largest_output_size_within(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh, &g.yuv_w, &g.yuv_h)) {
             close_all();
             return fail(out, out_size, IR_EARG, "check", "no yuv size within the jpeg size", 0);
@@ -3006,11 +3017,11 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     jw_add(&w, "{\"ok\":true,\"camera_id\":");
     jw_str(&w, id);
     jw_add(&w, ",\"jpeg_size\":[%d,%d],\"preview_size\":[%d,%d],"
-               "\"raw16_size\":[%d,%d],\"yuv_size\":[%d,%d],\"shading_map\":%s,"
+               "\"raw16_size\":[%d,%d],\"yuv_size\":[%d,%d],\"yuv_down\":%d,\"shading_map\":%s,"
                "\"af_continuous\":%s,\"template\":{\"noise\":\"%s\",\"edge\":\"%s\"},"
                "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\",\"jpeg_stream\":%s,\"exclusive\":%s},"
                "\"ms\":{\"open\":%.1f,\"session\":%.1f,\"first_frame\":%.1f}}",
-           jw, jh, pw, ph, rw, rh, g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_h > 0 ? g.yuv_h : 0, g.shading_map ? "true" : "false",
+           jw, jh, pw, ph, rw, rh, g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_h > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.shading_map ? "true" : "false",
            g.af_continuous ? "true" : "false",
            g.tpl_nr >= 0 ? nr_name(g.tpl_nr) : "none", g.tpl_edge >= 0 ? edge_name(g.tpl_edge) : "none",
            g.session_params_used < 0 ? "unsupported" : g.session_params_used ? "applied" : "none",
@@ -6562,9 +6573,11 @@ static int apply_session_request(ACaptureRequest *req)
  * reader's row and pixel strides), and fills its size and orientation. */
 static int yuv_copy(AImage *img, ir_yuv_t *f)
 {
-    int w = 0, h = 0, p;
-    AImage_getWidth(img, &w); AImage_getHeight(img, &h);
-    w &= ~1; h &= ~1;
+    int sw = 0, sh = 0, w, h, p, k = g.yuv_down > 1 ? g.yuv_down : 1;
+    AImage_getWidth(img, &sw); AImage_getHeight(img, &sh);
+    sw &= ~1; sh &= ~1;
+    if (sw < 16 || sh < 16) return -1;
+    w = (sw / k) & ~1; h = (sh / k) & ~1;        /* the photo's size: the stream's divided by k */
     if (w < 16 || h < 16) return -1;
     f->y = malloc((size_t)w * h);
     f->u = malloc((size_t)(w / 2) * (h / 2));
@@ -6573,15 +6586,33 @@ static int yuv_copy(AImage *img, ir_yuv_t *f)
     for (p = 0; p < 3; ++p) {
         uint8_t *data = NULL, *dst = p == 0 ? f->y : p == 1 ? f->u : f->v;
         int len = 0, rs = 0, ps = 0, x, yy, pw = p ? w / 2 : w, ph = p ? h / 2 : h;
+        int spw = p ? sw / 2 : sw, sph = p ? sh / 2 : sh;
         if (AImage_getPlaneData(img, p, &data, &len) != AMEDIA_OK || AImage_getPlaneRowStride(img, p, &rs) != AMEDIA_OK ||
             AImage_getPlanePixelStride(img, p, &ps) != AMEDIA_OK || !data || ps < 1 ||
-            (long)(ph - 1) * rs + (long)(pw - 1) * ps >= len)
+            (long)(sph - 1) * rs + (long)(spw - 1) * ps >= len)
             return -1;
-        for (yy = 0; yy < ph; ++yy) {
-            const uint8_t *src = data + (size_t)yy * rs;
-            uint8_t *d = dst + (size_t)yy * pw;
-            if (ps == 1) memcpy(d, src, (size_t)pw);
-            else for (x = 0; x < pw; ++x) d[x] = src[(size_t)x * ps];
+        if (k == 1) {
+            for (yy = 0; yy < ph; ++yy) {
+                const uint8_t *src = data + (size_t)yy * rs;
+                uint8_t *d = dst + (size_t)yy * pw;
+                if (ps == 1) memcpy(d, src, (size_t)pw);
+                else for (x = 0; x < pw; ++x) d[x] = src[(size_t)x * ps];
+            }
+        } else {
+            /* k x k box average: the stream's pixels binned down to the photo's
+             * (a k=2 bin halves the noise's standard deviation by 2). */
+            const int kk = k * k, half = kk / 2;
+            for (yy = 0; yy < ph; ++yy) {
+                uint8_t *d = dst + (size_t)yy * pw;
+                for (x = 0; x < pw; ++x) {
+                    int sum = 0, i, j;
+                    for (j = 0; j < k; ++j) {
+                        const uint8_t *src = data + (size_t)(yy * k + j) * rs + (size_t)(x * k) * ps;
+                        for (i = 0; i < k; ++i) sum += src[(size_t)i * ps];
+                    }
+                    d[x] = (uint8_t)((sum + half) / kk);
+                }
+            }
         }
     }
     f->w = w; f->h = h;

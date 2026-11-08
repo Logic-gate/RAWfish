@@ -27,8 +27,13 @@ repository). Newest first.
 - TYPE reads "DNG (RAW)", "jpg" or "HAL JPG" on two small lines; with
   "Also save a DNG with each JPG" on, it reads "JPG +RAW", greyed, the
   type being fixed by the setting.
-- rawfish-ir.conf: jpgYuvStream (jpeg | max | WxH), a test key for the
-  YUV stream's size; the open report says the YUV size (yuv_size).
+- JPG: the YUV stream is opened at the largest listed size that is a
+  whole multiple of the photo's (the full 8192x6144 on the JP2 for a
+  4096x3072 photo) and averaged down on copy (a 2x2 binning, less
+  noise for free). A mid-size YUV stream made the JP2's viewfinder lag
+  by a second; the full size does not. The open report says the stream's
+  size and the factor (yuv_size, yuv_down). rawfish-ir.conf keeps a test
+  key, jpgYuvStream (jpeg | max | WxH).
 - A new install opens in simple mode (the mode last used is kept as
   before; "Mode at start" in Settings still forces one).
 - The yuv command's report says whether the DNG's gallery preview was
