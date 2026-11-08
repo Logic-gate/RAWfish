@@ -14,7 +14,7 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.2.1 — the settings file from the start; the gallery not locked (patches 0299–0301)
+## 0.2.1 — the settings file from the start; the gallery not locked (patches 0299–0305)
 - A new install, or "Reset the camera settings", now writes
   ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf at once, from the
   example: every key at its default, with its comment. Before, the file
@@ -26,6 +26,13 @@ repository). Newest first.
   the sensor's own shape, as the code does.
 - JPEG quality in the menu: 20, 40, 60, 80, 90, 95 or 100 (was 80,
   90, 96, 100); default 95.
+- The session holds only the streams the type needs (RAW for raw; our
+  YUV for jpg, plus RAW when a DNG is asked with it, plus the JPEG one
+  for a bracket; the JPEG one for HAL JPG), and reopens when the type
+  changes (about a second). Every stream costs the camera driver: with
+  JPEG, RAW and a 12-megapixel YUV stream all open, the JP2's viewfinder
+  lagged by a second. RAW is offered from the camera's capability, not
+  from the session.
 - Gallery: a capture that opened "zoomed" by itself locked the strip
   (no swipe back to the camera) until a tap; such a zoom is now undone.
 

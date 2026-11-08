@@ -90,6 +90,14 @@ void IndrawPreview::setPreviewSize(const QSize &size)
 }
 
 QSize IndrawPreview::captureSize() const { return m_captureSize; }
+void IndrawPreview::setSessionStreams(const QString &s)
+{
+    if (m_sessionStreams == s) return;
+    m_sessionStreams = s;
+    emit sessionStreamsChanged();
+    if (m_active && m_gotCaps && m_startedStreams != s) restart();   /* the session is made of its streams */
+}
+
 void IndrawPreview::setRawSession(bool raw)
 {
     if (m_rawSession == raw) return;
@@ -218,7 +226,8 @@ void IndrawPreview::start()
      * ignores it elsewhere). A RAW session that died before its caps is not
      * tried again: JPEG, and the page is told once the caps confirm. */
     m_sessionRaw = m_rawSession && !m_rawFellBack;
-    m_sessionYuv = !m_yuvFellBack;
+    m_sessionYuv = !m_yuvFellBack && m_sessionStreams.contains(QLatin1String("yuv"));
+    m_startedStreams = m_sessionStreams;
     args << QStringLiteral("--log") << log
          << QStringLiteral("--jpgdir") << m_jpgDir << QStringLiteral("--dngdir") << m_dngDir
          << QStringLiteral("stream")
@@ -226,6 +235,14 @@ void IndrawPreview::start()
          << cap << prev << QStringLiteral("raw=max")
          << (m_sessionRaw ? QStringLiteral("type=raw") : QStringLiteral("type=jpeg"));
     if (m_sessionYuv) args << QStringLiteral("yuv=jpeg");   /* the size the user chose for the photo */
+    {   /* only the streams the type and the settings need (yuv dropped after it failed) */
+        QStringList want;
+        for (const QString &s : m_sessionStreams.split(QLatin1Char(','), QString::SkipEmptyParts))
+            if (s != QLatin1String("yuv") || m_sessionYuv) want << s;
+        if (m_yuvFellBack && m_sessionStreams.contains(QLatin1String("yuv")) && !want.contains(QStringLiteral("jpeg")))
+            want << QStringLiteral("jpeg");       /* JPG then takes the camera's JPEG */
+        args << QStringLiteral("streams=") + want.join(QLatin1Char(','));
+    }
 
     m_buffer.clear();
     /* Inside the Sailjail sandbox /usr/bin only holds the app binary
@@ -676,6 +693,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
             if (!fc.isEmpty()) facing.append(QString::fromLatin1(fc));
         m_caps.insert(QStringLiteral("facing"), facing);
         m_caps.insert(QStringLiteral("focusCal"), f.value("focus_cal", "0").toInt());   /* calibration points in force */
+        {   /* the camera's RAW capability, independent of this session's streams */
+            const QList<QByteArray> rc = f.value("raw_cap", "0x0").split('x');
+            m_caps.insert(QStringLiteral("rawCapW"), rc.size() == 2 ? rc.at(0).toInt() : 0);
+        }
         QVariantList sizes;
         for (const QByteArray &sz : f.value("jpeg_sizes").split(','))
             if (!sz.isEmpty()) sizes.append(QString::fromLatin1(sz));

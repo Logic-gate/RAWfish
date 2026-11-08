@@ -196,7 +196,10 @@ ApplicationWindow {
             // A phone whose profile says "streams": "exclusive" has RAW in its
             // own session: available, even while the JPEG session runs.
             readonly property bool exclusiveStreams: String(viewfinder.caps.limits || "").indexOf("exclusive") >= 0
-            readonly property bool rawAvailable: exclusiveStreams || viewfinder.caps.rawW === undefined || viewfinder.caps.rawW > 0
+            // RAW is offered from the camera's capability (caps raw_cap), not from
+            // this session's streams, which follow the type (sessionStreams).
+            readonly property bool rawAvailable: exclusiveStreams || viewfinder.caps.rawCapW === undefined || viewfinder.caps.rawCapW > 0
+                                                 || (viewfinder.caps.rawW !== undefined && viewfinder.caps.rawW > 0)
             property string imageTypeSetAside: ""         // "raw" set aside by a camera without RAW
             onRawAvailableChanged: {
                 if (!rawAvailable && imageType === "raw") { imageTypeSetAside = "raw"; imageType = "jpg" }
@@ -210,6 +213,20 @@ ApplicationWindow {
             // stream; elsewhere (exclusive streams, or a session that refused it)
             // it is the camera's JPEG, without a word: the photo is still a JPEG.
             readonly property bool ownJpeg: !page.exclusiveStreams && !viewfinder.yuvFellBack
+            // The session holds only the streams the type and the settings need
+            // (every stream costs the HAL): RAW for raw; our YUV for jpg, with
+            // RAW too when a DNG is asked with it, and the JPEG one when a
+            // bracket needs it; the JPEG one for haljpg (or jpg without YUV).
+            readonly property string sessionStreams: {
+                if (page.imageType === "raw") return "raw"
+                if (page.imageType === "haljpg" || !page.ownJpeg) return "jpeg"
+                var s = "yuv"
+                if (outputConf.jpgWithDng && page.rawAvailable) s += ",raw"
+                if (settingsMenu.bracket !== "off") s += ",jpeg"
+                return s
+            }
+            onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
+            Component.onCompleted: viewfinder.sessionStreams = sessionStreams
             // Starts in continuous focus (the "auto" label): the camera follows
             // the scene by itself until the user asks for more. ("auto" here is
             // Camera2's AUTO, one scan then hold: the "once" label.)

@@ -1057,7 +1057,8 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg]   (default preview 1280x960; yuv=jpeg: at the JPEG size)\n"
+            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
+            "         (default preview 1280x960; yuv=jpeg: at the JPEG size; streams=: only these beside the viewfinder)\n"
             "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
@@ -2283,8 +2284,19 @@ int main(int argc, char **argv)
 
         if (!op || !jpeg || !cl) return EXIT_BRIDGE;
         if (argc < 4 || !parse_size(argv[3], &jw, &jh)) { usage(); return EXIT_USAGE; }
-        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg] */
-            if (!strncmp(argv[i], "raw=", 4)) {
+        int want_jpeg = 1, want_raw = 1, want_yuv = 1, have_streams = 0;
+        for (i = 4; i < argc; ++i) {            /* [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg] [streams=LIST] */
+            if (!strncmp(argv[i], "streams=", 8)) {
+                /* The streams this session needs, besides the viewfinder: a
+                 * comma list of jpeg, raw, yuv. Fewer streams is a lighter
+                 * session (on the JP2 a 12-megapixel YUV stream beside the
+                 * JPEG one slows the viewfinder down by a second). */
+                const char *l = argv[i] + 8;
+                have_streams = 1;
+                want_jpeg = strstr(l, "jpeg") != NULL;
+                want_raw = strstr(l, "raw") != NULL;
+                want_yuv = strstr(l, "yuv") != NULL;
+            } else if (!strncmp(argv[i], "raw=", 4)) {
                 if (!parse_size(argv[i] + 4, &rw, &rh)) { usage(); return EXIT_USAGE; }
             } else if (!strncmp(argv[i], "yuv=", 4)) {
                 int yw, yh;
@@ -2311,6 +2323,18 @@ int main(int argc, char **argv)
         g_ov_user_ok = check_override(argv[2]);
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
         apply_stream_limits(bridge, argv[2], type_raw);   /* raw_stream / jpeg_max / streams, before open */
+        if (have_streams) {                        /* streams=: only what this session needs */
+            typedef int (*flag_fn)(int);
+            typedef int (*yuvsize_fn)(int, int);
+            flag_fn jsf = (flag_fn)a_dlsym(bridge, "indraw_set_jpeg_stream");
+            yuvsize_fn ys = (yuvsize_fn)a_dlsym(bridge, "indraw_set_yuv_size");
+            char msg[160];
+            if (!want_jpeg && jsf) jsf(0);
+            if (!want_raw) rw = rh = 0;
+            if (!want_yuv && ys) ys(0, 0);
+            snprintf(msg, sizeof msg, "streams asked: viewfinder%s%s%s", want_jpeg ? " + JPEG" : "", want_raw ? " + RAW" : "", want_yuv ? " + YUV" : "");
+            log_line("# ", msg);
+        }
         {   /* device-profile switch, read BEFORE open: the photo/RAW template */
             typedef int (*set_tpl_fn)(int);
             set_tpl_fn stp = (set_tpl_fn)a_dlsym(bridge, "indraw_set_still_template");

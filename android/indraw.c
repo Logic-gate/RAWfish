@@ -5283,6 +5283,10 @@ IR_API int indraw_focus(int mode, float diopters, char *out, size_t out_size)
  *        black=N white=N raw=W,H */
 static void emit_caps(void)
 {
+    /* The camera's RAW16 capability, whatever this session opened (raw= gives
+     * the session's RAW size, 0x0 when none): the app offers RAW from it. */
+    int raw_cap_w = 0, raw_cap_h = 0;
+    if (!g.lim_raw_off && !largest_output_size(g.chars, AIMAGE_FORMAT_RAW16, 0, &raw_cap_w, &raw_cap_h)) raw_cap_w = raw_cap_h = 0;
     ACameraMetadata_const_entry e;
     char line[1200];
     long long iso_min = -1, iso_max = -1, iso_analog = -1, exp_min = -1, exp_max = -1, shutter_max;
@@ -5377,10 +5381,10 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s facing=%s focus_cal=%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s facing=%s focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
-             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, facing, g.focus_cal_n, sizes, awb, scenes);
+             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, facing, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
         if (n && line[n - 1] == '\n') line[--n] = '\0';

@@ -59,6 +59,12 @@ class IndrawPreview : public QQuickItem
      * (yuv=jpeg), in every session. A session that dies with it before its
      * caps is retried without (yuvFellBack): JPG then takes the camera's JPEG. */
     Q_PROPERTY(bool yuvFellBack READ yuvFellBack NOTIFY yuvFellBackChanged)
+    /* The streams the session needs beside the viewfinder, a comma list of
+     * jpeg, raw, yuv (streams= to the engine): what the type and the settings
+     * ask for, no more, because every stream costs the HAL (a 12-megapixel
+     * YUV stream beside the JPEG one slowed the JP2's viewfinder by a second).
+     * A change restarts the engine. */
+    Q_PROPERTY(QString sessionStreams READ sessionStreams WRITE setSessionStreams NOTIFY sessionStreamsChanged)
     /* The size of the frames the engine streams (sensor orientation): their
      * proportions are the photo's; the page shapes the viewfinder on them. */
     Q_PROPERTY(QSize frameSize READ frameSize NOTIFY frameSizeChanged)
@@ -170,6 +176,8 @@ public:
     bool rawSession() const { return m_rawSession; }
     void setRawSession(bool raw);
     bool yuvFellBack() const { return m_yuvFellBack; }
+    QString sessionStreams() const { return m_sessionStreams; }
+    void setSessionStreams(const QString &s);
 
     bool fill() const;
     void setFill(bool fill);
@@ -273,6 +281,7 @@ public:
 signals:
     void rawSessionChanged();
     void yuvFellBackChanged();
+    void sessionStreamsChanged();
     void rawSessionFailed();       /* exclusive streams: the RAW session died, back to JPEG */
 
     void activeChanged();
@@ -358,6 +367,8 @@ private:
     bool m_gotCaps = false;        /* this engine reached its caps line          */
     bool m_rawSession = false;     /* what the page wants                          */
     bool m_yuvFellBack = false;    /* a session with the YUV stream died: without it */
+    QString m_sessionStreams = QStringLiteral("jpeg,raw,yuv");   /* asked by the page */
+    QString m_startedStreams;      /* what the running engine was started with */
     int m_yuvFails = 0;            /* such deaths in a row, before any caps         */
     bool m_sessionYuv = false;     /* what the running engine was started with     */
     bool m_sessionRaw = false;     /* what the running engine was started with     */
