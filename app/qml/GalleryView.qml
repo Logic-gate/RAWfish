@@ -160,8 +160,19 @@ Item {
                 source: shown
                 active: slides.currentIndex === index && gallery.visible
                 viewMoving: slides.moving
-                onZoomedChanged: overlay.active = !zoomed
+                // The viewer can report itself zoomed on its own as a picture
+                // arrives (fitting a large or rotated image), with nobody
+                // pinching: the strip then stayed locked (no swipe back to the
+                // camera) and the overlay hidden, until a tap zoomed out. A
+                // zoom in the first moment of a picture being shown is not
+                // the user's: it is undone at once.
+                onActiveChanged: if (active) arrival.restart()
+                onZoomedChanged: {
+                    if (zoomed && arrival.running) { zoomOut(); return }
+                    overlay.active = !zoomed
+                }
                 onClicked: { if (zoomed) zoomOut(); else overlay.active = !overlay.active }
+                Timer { id: arrival; interval: 1200 }
             }
             // A DNG without a preview yet (older files): a tap here still
             // toggles the overlay, so the X is always reachable -- with no
