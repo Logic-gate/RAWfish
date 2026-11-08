@@ -325,7 +325,13 @@ ApplicationWindow {
             // A tap on the viewfinder: the reference point, in display-window
             // coordinates; the controller maps it and runs the focus / light
             // sequence, then reports the circle to draw.
+            // Whether the circle is meant to be on screen. Its opacity fades over
+            // 300 ms, and a focus state arriving during the fade-out used to set
+            // it back (onSettledChanged): the circle stayed, and needed a second
+            // tap. The state's styling now only touches a circle meant to show.
+            property bool circleShown: false
             function tapAt(px, py) {
+                page.circleShown = true
                 meterCircle.opacity = 1.0
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
                 viewfinder.sendCommand("vw tap " + q.u.toFixed(4) + " " + q.v.toFixed(4))
@@ -442,6 +448,7 @@ ApplicationWindow {
             // Remove the reference point (the controller frees the exposure and
             // restates the focus mode; the circle goes).
             function clearTap() {
+                page.circleShown = false
                 meterCircle.opacity = 0
                 viewfinder.sendCommand("fc clear")
             }
@@ -452,7 +459,7 @@ ApplicationWindow {
                 if (!viewfinder.running) return
                 viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
             }
-            onFocusModeChanged: { applyFocus(); meterCircle.opacity = 0 }
+            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0 }
             // Kept across an engine restart: the manual focus distance and the
             // reference point (the circle). Both live in the engine's process;
             // a restarted engine gets them back once its capabilities are in.
@@ -481,6 +488,7 @@ ApplicationWindow {
                         page.keptRefV = 0.5 + (page.keptRefV - 0.5) * r
                         if (page.keptRefU < 0.02 || page.keptRefU > 0.98 || page.keptRefV < 0.02 || page.keptRefV > 0.98) page.keptRef = false
                     }
+                    page.circleShown = page.keptRef
                     if (page.keptRef) { meterCircle.opacity = 1.0; restoreTimer.restart() } else meterCircle.opacity = 0
                 }
             }
@@ -502,6 +510,7 @@ ApplicationWindow {
                 // manual distance and no loupe. The loupe stays closed; the
                 // distance and the circle are given back once the caps are in.
                 onRunningChanged: if (viewfinder.running) {
+                    page.circleShown = false
                     meterCircle.opacity = 0
                     page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
@@ -1587,13 +1596,8 @@ ApplicationWindow {
                     opacity: 0
                     Behavior on opacity { NumberAnimation { duration: 300 } }
                     readonly property bool settled: afState === 2 || afState === 4 || afState === 5 || afState === 6
-                    onSettledChanged: if (opacity > 0) opacity = settled ? 0.6 : 1.0
-                    MouseArea {
-                        anchors.fill: parent
-                        onPressed: viewfinder.sendCommand("# circle: pressed")     // traced: a first tap sometimes did nothing visible
-                        onClicked: { viewfinder.sendCommand("# circle: tap, clearing"); page.clearTap() }
-                        onCanceled: viewfinder.sendCommand("# circle: press cancelled (stolen by another area)")
-                    }
+                    onSettledChanged: if (page.circleShown) opacity = settled ? 0.6 : 1.0
+                    MouseArea { anchors.fill: parent; onClicked: page.clearTap() }
                     // Manual or semi-automatic exposure (a wheel touched): the light
                     // at the circle as an absolute EV (at ISO 100), above it -- a spot
                     // light meter, the way the distance shows below it in manual focus.
