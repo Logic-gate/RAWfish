@@ -1,7 +1,7 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-ir camera (the interface)
 Version:    0.1.14
-Release:    1
+Release:    0.tweak_denoise_sharpen
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2

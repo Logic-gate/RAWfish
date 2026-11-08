@@ -2,7 +2,7 @@ Name:       rawfish-ir-cli
 Summary:    RAWfish-ir camera engine (Camera2 bridge library, controller, CLI)
 # Keep in step with indraw_version.h (scripts/build-engine-rpm.sh checks).
 Version:    0.1.14
-Release:    1
+Release:    0.tweak_denoise_sharpen
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2
