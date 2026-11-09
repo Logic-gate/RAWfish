@@ -687,6 +687,9 @@ static struct {
     float spot_x, spot_y;                   /* its centre, sensor-normalised 0..1 */
     int awb_mode;                           /* CONTROL_AWB_MODE set by indraw_wb (0 = auto default) */
     float awb_gains[4];                     /* last gains the HAL's AWB applied (R, Geven, Godd, B) */
+    float wb_base_gains[4];                 /* the manual white's base, frozen when a shift begins */
+    ACameraMetadata_rational wb_base_transform[9];
+    int wb_base_frozen;                     /* 1 while a shift or tint is in force */
     double ct_m1[9], ct_m2[9];              /* the sensor's two XYZ->camera calibration matrices */
     double ct_t1, ct_t2;                    /* their illuminants' temperatures (K); t2 0 = one only */
     int have_ct;                            /* (colortemp.h: the white balance in kelvin) */
@@ -2742,7 +2745,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     setup_colour_temperature();              /* the camera->XYZ matrix, for the WB temperature */
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
-    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0;
+    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0;
     g.vw_n = 0;
     g.af_tapped = 0; g.af_zoom_on = 0; g.scene_mode = 0;   /* a new session starts with no scene */
     if (!g.shade_balance && !g.shade_strength) { g.shade_balance = 50; g.shade_strength = 100; g.shade_max_gain = 5; }
@@ -5793,10 +5796,13 @@ IR_API int indraw_wb(int mode, char *out, size_t out_size)
         return fail(out, out_size, IR_ESTATE, "wb", "camera not open", 0);
     if (mode <= 0 || !u8_list_has(g.chars, ACAMERA_CONTROL_AWB_AVAILABLE_MODES, mode))
         return fail(out, out_size, IR_EARG, "wb", "white balance mode not listed", mode);
-    if (g.wb_fixed) {                              /* a measured white rules: the mode waits */
+    if (g.wb_fixed || g.wb_shift || g.wb_tint) {   /* a measured white, or a shift in force, rules: the mode waits */
+        /* Re-enabling the AWB here, even for a few frames before the shift is
+         * set again, let it write new gains into the base of the next step:
+         * a visible jump each time. The mode is recorded for the return. */
         g.awb_mode = mode;
         jw_init(&w, out, out_size);
-        jw_add(&w, "{\"ok\":true,\"awb_mode\":%d,\"kept\":\"fixed white\"}", mode);
+        jw_add(&w, "{\"ok\":true,\"awb_mode\":%d,\"kept\":\"%s\"}", mode, g.wb_fixed ? "fixed white" : "manual shift");
         return IR_OK;
     }
     u8 = (uint8_t)mode;
@@ -5865,6 +5871,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
     if (g.meter_request) all[n++] = g.meter_request;
     g.wb_shift = shift; g.wb_tint = tint;
     if (shift == 0 && tint == 0 && !g.wb_fixed) {  /* back to the HAL's AWB     */
+        pthread_mutex_lock(&g.lock); g.wb_base_frozen = 0; pthread_mutex_unlock(&g.lock);   /* the next shift starts from the AWB again */
         u8 = g.awb_mode > 0 ? (uint8_t)g.awb_mode : ACAMERA_CONTROL_AWB_MODE_AUTO;
         cc = ACAMERA_COLOR_CORRECTION_MODE_FAST;
         for (i = 0; i < n; ++i) {
@@ -5882,8 +5889,18 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
             return fail(out, out_size, IR_EARG, "wb", "shift -20..20, tint -100..100", shift);
         pthread_mutex_lock(&g.lock);                  /* written by the result thread */
         seen = g.awb_seen;
-        memcpy(base, g.wb_fixed ? g.wb_fixed_gains : g.awb_gains, sizeof base);
-        memcpy(tr, g.awb_transform, sizeof tr);
+        /* The base is FROZEN at the first step away from zero and kept for
+         * every step until the return to zero: each step is then an exact
+         * multiple of the same neutral, and the AWB's later estimates (it
+         * keeps running on frames in flight, and on the mode command) cannot
+         * move the result between two steps. A fixed white is its own base. */
+        if (!g.wb_base_frozen) {
+            memcpy(g.wb_base_gains, g.awb_gains, sizeof g.wb_base_gains);
+            memcpy(g.wb_base_transform, g.awb_transform, sizeof g.wb_base_transform);
+            g.wb_base_frozen = 1;
+        }
+        memcpy(base, g.wb_fixed ? g.wb_fixed_gains : g.wb_base_gains, sizeof base);
+        memcpy(tr, g.wb_base_transform, sizeof tr);
         pthread_mutex_unlock(&g.lock);
         if (!seen) return fail(out, out_size, IR_ESTATE, "wb", "no AWB result yet", 0);
         (void)k; (void)t;

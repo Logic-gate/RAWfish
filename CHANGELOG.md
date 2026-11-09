@@ -42,6 +42,10 @@ repository). Newest first.
 - Checked with logChecks on the JP2: the histograms shown (viewfinder
   in JPG, RAW meter in RAW) match the photos within one to three bins
   (JPG 4-12 levels of 255, RAW 0.0-0.3 stop), highlights included.
+- Manual white balance made steady: the base (the camera's neutral) is
+  frozen at the first step away from zero and kept until the return to
+  zero, and the mode command no longer re-enables the AWB while a shift
+  is in force; each step is an exact multiple of the same neutral.
 - JPG and RAW share one session (YUV + RAW): switching between them no
   longer restarts the engine. HAL JPG still does.
 - White balance: the pick (a 2 s press on a readout) works again in JPG
