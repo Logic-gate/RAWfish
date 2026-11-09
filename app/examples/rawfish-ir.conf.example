@@ -4,7 +4,8 @@
 ; setting, even at its default: when there is none (a new install, or after
 ; "Reset the camera settings") it is created from this one; a key it lacks
 ; (an older file, a key a new version adds) is added at its default, the
-; values already there untouched.
+; values already there untouched; a key of an older version that nothing
+; reads any more is dropped.
 ;
 ; Back to the defaults: Settings > Apps > RAWfish-ir > "Reset the camera settings"
 ; (the file is kept as rawfish-ir.conf.bak), or delete the file with the app closed.

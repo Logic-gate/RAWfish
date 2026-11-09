@@ -395,6 +395,11 @@ void IndrawPreview::writeDefaultSettings()
     }
     QSettings s(path, QSettings::IniFormat);
     int added = 0;
+    /* Keys of earlier versions that nothing reads any more (the processing
+     * moved to the named keys in 0.2.0): dropped, so that the file only
+     * holds what the example documents. */
+    static const char *const retired[] = { "noiseIndex", "edgeIndex", "previewNoiseIndex", "previewEdgeIndex", "yuvFrames", "yuvColour", "yuvMedian", "yuvSharpen", "jpgColour", "jpgMoire", "halJpeg", nullptr };
+    for (int i = 0; retired[i]; ++i) if (s.contains(QLatin1String(retired[i]))) { s.remove(QLatin1String(retired[i])); ++added; }
     for (const QByteArray &line : lines) {
         const int eq = line.indexOf('=');
         if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || keptLastValue(line)) continue;
