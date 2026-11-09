@@ -18,6 +18,16 @@ Each item says why, so it can be picked up later without re-deriving it.
   stop forwarding once 'quit' is sent.
 
 ### Features
+
+- **"snap": the camera's own JPEG as a third type, for utility shots.**
+  TYPE would offer DNG (RAW), jpg and snap, always (the useHalJpeg key
+  would go). snap = the HAL JPEG at a fixed, small size (the largest
+  4:3 size at or under 5 megapixels, 2592x1944 on the JP2; a snapSize
+  key in rawfish-ir.conf to choose another), noise reduction and
+  sharpening HQ, no DNG, no bracket; the menu greys the size, format and
+  processing columns in that type; Exif Software "(HAL JPEG, snap)". The
+  size is to be settled by use: 5 megapixels reads a receipt or a sign
+  and weighs about 1.5 MB; 8 (3264x2448) is the alternative.
 - **A "stock" JPEG type**: the HAL's own processing at 8 MP, quality 85,
   for small everyday files. To decide: reopen the session at that size
   (about 1 s to switch, ~1.5 MB files) or keep the current size (instant,
