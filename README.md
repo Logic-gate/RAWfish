@@ -1,3 +1,5 @@
+# Please see the currently worked branch: https://github.com/Logic-gate/RAWfish/tree/indraw
+
 # RAWfish Camera App for JP2
 
 This is a fork of Jolla Camera, intended to serve as a working experiment until we finally get Camera2 support in droidmedia. Please note that this app should only be tested on the Jolla Phone 2.
