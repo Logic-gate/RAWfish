@@ -1,194 +1,193 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS>
+<?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="fr">
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="+67"/>
+        <location filename="../settings/SettingsPage.qml" line="+68" />
         <source>Captures</source>
         <translation>Photos</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+12" />
         <source>File name prefix</source>
         <translation>Préfixe des noms de fichiers</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+5" />
         <source>Letters, digits, - and _ (up to 32). Files are named PREFIX_YYYYMMDD_HHMMSS_mmm.EXT.</source>
         <translation>Lettres, chiffres, - et _ (32 au plus). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS_mmm.EXT.</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+9" />
         <source>JPEG folder</source>
         <translation>Dossier des JPEG</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+5" />
         <source>Under ~/Pictures (the only place the app may write).</source>
-        <translation>Dans ~/Pictures (le seul endroit où l&apos;app peut écrire).</translation>
+        <translation>Dans ~/Pictures (le seul endroit où l'app peut écrire).</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+9" />
         <source>DNG folder</source>
         <translation>Dossier des DNG</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+5" />
         <source>May be another folder than the JPEGs. DNG previews go to its hidden .previews/ subfolder.</source>
         <translation>Peut être différent de celui des JPEG. Les aperçus des DNG vont dans son sous-dossier caché .previews/.</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+8" />
         <source>Reset to defaults</source>
         <translation>Valeurs par défaut</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+7" />
         <source>Camera menu</source>
-        <translation>Menu de l&apos;appareil photo</translation>
+        <translation>Menu de l'appareil photo</translation>
     </message>
     <message>
-        <location line="+3"/>
-        <source>Scenes in the camera menu (not yet implemented)</source>
-        <translation>Scènes dans le menu de l&apos;appareil (pas encore au point)</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>The camera&apos;s scene modes (night, sport…) as a menu column, in simple and advanced mode. With a scene on, the camera drives exposure, focus and white balance itself.</source>
-        <translation>Les modes scène de la caméra (nuit, sport…) en colonne du menu, en mode simple et avancé. Avec une scène active, la caméra règle elle-même l&apos;exposition, la mise au point et la balance des blancs.</translation>
-    </message>
-    <message>
-        <location line="+6"/>
+        <location line="+10" />
         <source>Start in manual focus and exposure</source>
         <translation>Démarrer en mise au point et exposition manuelles</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+1" />
         <source>At start, the focus is manual at the last distance and both wheels are pinned at the last ISO and speed (advanced mode).</source>
         <translation>Au démarrage, la mise au point est manuelle à la dernière distance, et les deux molettes sont fixées sur les derniers ISO et vitesse (mode avancé).</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+6" />
         <source>Mode at start</source>
         <translation>Mode au démarrage</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>Simple: JPEG only, a brightness slider, a short menu. Advanced: everything. &quot;As left&quot; keeps the last mode used.</source>
+        <location line="+1" />
+        <source>Simple: JPEG only, a brightness slider, a short menu. Advanced: everything. "As left" keeps the last mode used.</source>
         <translation>Simple : JPEG seulement, un curseur de luminosité, un menu court. Avancé : tout. « Comme à la sortie » reprend le dernier mode utilisé.</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+3" />
         <source>As left</source>
         <translation>Comme à la sortie</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+1" />
         <source>Simple</source>
         <translation>Simple</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+1" />
         <source>Advanced</source>
         <translation>Avancé</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+5" />
         <source>Device tuning</source>
-        <translation>Réglages de l&apos;appareil</translation>
+        <translation>Réglages de l'appareil</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+3" />
         <source>Focus calibration in the camera menu</source>
         <translation>Étalonnage de la mise au point dans le menu</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>Shows the &quot;Focus cal.&quot; column: focus on a target at a known distance, tap that distance, the lens position is recorded. Off once the lens is calibrated.</source>
-        <translation>Affiche la colonne « Étal. MàP » : faites la mise au point sur une cible à distance connue, touchez cette distance, la position de l&apos;objectif est enregistrée. À désactiver une fois l&apos;objectif étalonné.</translation>
+        <location line="+1" />
+        <source>Shows the "Focus cal." column: focus on a target at a known distance, tap that distance, the lens position is recorded. Off once the lens is calibrated.</source>
+        <translation>Affiche la colonne « Étal. MàP » : faites la mise au point sur une cible à distance connue, touchez cette distance, la position de l'objectif est enregistrée. À désactiver une fois l'objectif étalonné.</translation>
     </message>
     <message>
-        <location line="+16"/>
-        <location line="+16"/>
-        <location line="+24"/>
+        <location line="+16" />
+        <location line="+16" />
+        <location line="+24" />
         <source>Requested — open RAWfish-ir</source>
         <translation>Demandé — ouvrez RAWfish-ir</translation>
     </message>
     <message>
-        <location line="-36"/>
+        <location line="-36" />
         <source>Device profile files</source>
-        <translation>Fichiers de profil de l&apos;appareil</translation>
+        <translation>Fichiers de profil de l'appareil</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+12" />
         <source>Create the device profile files</source>
-        <translation>Créer les fichiers de profil de l&apos;appareil</translation>
+        <translation>Créer les fichiers de profil de l'appareil</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+5" />
         <source>Log</source>
         <translation>Journal</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+2" />
         <source>Detailed log</source>
         <translation>Journal détaillé</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>For a bug report: each photo&apos;s report also carries the histogram the app showed and the photo&apos;s own, so that the zebra and the histogram can be checked. About 2 KB more per photo. Takes effect at the next start of RAWfish-ir.</source>
-        <translation>Pour un rapport de bogue : le compte rendu de chaque photo porte aussi l&apos;histogramme que l&apos;app affichait et celui de la photo, pour vérifier le zébra et l&apos;histogramme. Environ 2 Ko de plus par photo. Pris en compte au prochain démarrage de RAWfish-ir.</translation>
+        <location line="+1" />
+        <source>For a bug report: each photo's report also carries the histogram the app showed and the photo's own, so that the zebra and the histogram can be checked. About 2 KB more per photo. Takes effect at the next start of RAWfish-ir.</source>
+        <translation>Pour un rapport de bogue : le compte rendu de chaque photo porte aussi l'histogramme que l'app affichait et celui de la photo, pour vérifier le zébra et l'histogramme. Environ 2 Ko de plus par photo. Pris en compte au prochain démarrage de RAWfish-ir.</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+5" />
         <source>Camera settings</source>
-        <translation>Réglages de l&apos;appareil photo</translation>
+        <translation>Réglages de l'appareil photo</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+7" />
         <source>Puts every setting of the camera and of rawfish-ir.conf back to its default when RAWfish-ir next opens (close it first if it is open). The current file is kept as rawfish-ir.conf.bak in ~/.config/com.rawfish/rawfish-ir/. The settings of this page are not changed.</source>
-        <translation>Remet chaque réglage de l&apos;appareil photo et de rawfish-ir.conf à sa valeur par défaut à la prochaine ouverture de RAWfish-ir (fermez-le d&apos;abord s&apos;il est ouvert). Le fichier actuel est gardé sous le nom rawfish-ir.conf.bak dans ~/.config/com.rawfish/rawfish-ir/. Les réglages de cette page ne changent pas.</translation>
+        <translation>Remet chaque réglage de l'appareil photo et de rawfish-ir.conf à sa valeur par défaut à la prochaine ouverture de RAWfish-ir (fermez-le d'abord s'il est ouvert). Le fichier actuel est gardé sous le nom rawfish-ir.conf.bak dans ~/.config/com.rawfish/rawfish-ir/. Les réglages de cette page ne changent pas.</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+4" />
         <source>Reset the camera settings</source>
         <translation>Remettre les réglages à zéro</translation>
     </message>
     <message>
-        <location line="-51"/>
+        <location line="-51" />
         <source>Lens shading (vignetting)</source>
-        <translation>Ombrage de l&apos;objectif (vignetage)</translation>
+        <translation>Ombrage de l'objectif (vignetage)</translation>
     </message>
     <message>
-        <location line="-94"/>
+        <location line="-94" />
         <source>Also save a DNG with each JPG</source>
         <translation>Enregistrer aussi un DNG avec chaque JPG</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>Same exposure, same file name. Saved in the DNG folder. Not working with the camera&apos;s own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can&apos;t do both at the same time.</source>
-        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Ne fonctionne pas avec le JPEG de l&apos;appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
+        <location line="+1" />
+        <source>Same exposure, same file name. Saved in the DNG folder. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.</source>
+        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Ne fonctionne pas avec le JPEG de l'appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
     </message>
     <message>
-        <location line="+100"/>
+        <location line="+59" />
+        <source>JPG processing in the camera menu</source>
+        <translation>Traitement du JPG dans le menu</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Shows four columns in the advanced menu: Frames (1, 2 or 4 merged), Colour NR, Moiré and Sharpen, RAWfish-ir's processing of the JPG. Otherwise they are set in rawfish-ir.conf.</source>
+        <translation>Affiche quatre colonnes dans le menu avancé : Images (1, 2 ou 4 fusionnées), Bruit coul., Moiré et Netteté, le traitement du JPG par RAWfish-ir. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
+    </message>
+    <message>
+        <location line="+40" />
         <source>Measures how the lens darkens the corners, for every DNG to be corrected. Needs a white translucent diffuser on the lens and an even light; about a minute. The assistant opens at the next start of RAWfish-ir.</source>
-        <translation>Mesure comment l&apos;objectif assombrit les coins, pour corriger chaque DNG. Il faut un diffuseur blanc translucide sur l&apos;objectif et une lumière uniforme ; environ une minute. L&apos;assistant s&apos;ouvre au prochain lancement de RAWfish-ir.</translation>
+        <translation>Mesure comment l'objectif assombrit les coins, pour corriger chaque DNG. Il faut un diffuseur blanc translucide sur l'objectif et une lumière uniforme ; environ une minute. L'assistant s'ouvre au prochain lancement de RAWfish-ir.</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+4" />
         <source>Calibrate the lens shading</source>
-        <translation>Étalonner l&apos;ombrage de l&apos;objectif</translation>
+        <translation>Étalonner l'ombrage de l'objectif</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+11" />
         <source>Last written: %1. </source>
         <translation>Dernière écriture : %1. </translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+1" />
         <source>RAWfish-ir writes them when it next opens: generated-hal.json (what the camera driver claims) and, if absent, a starter override-hal.json to edit (shutter ceiling, peaking and zebra thresholds), in ~/.local/share/com.rawfish/rawfish-ir/device-profiles/. Changes above apply the next time the camera starts.</source>
-        <translation>RAWfish-ir les écrit à sa prochaine ouverture : generated-hal.json (ce que déclare le pilote de la caméra) et, s&apos;il n&apos;existe pas, un override-hal.json de départ à modifier (vitesse maximale, seuils du peaking et du zébra), dans ~/.local/share/com.rawfish/rawfish-ir/device-profiles/. Les changements ci-dessus s&apos;appliquent au prochain démarrage de l&apos;appareil photo.</translation>
+        <translation>RAWfish-ir les écrit à sa prochaine ouverture : generated-hal.json (ce que déclare le pilote de la caméra) et, s'il n'existe pas, un override-hal.json de départ à modifier (vitesse maximale, seuils du peaking et du zébra), dans ~/.local/share/com.rawfish/rawfish-ir/device-profiles/. Les changements ci-dessus s'appliquent au prochain démarrage de l'appareil photo.</translation>
     </message>
 </context>
 </TS>

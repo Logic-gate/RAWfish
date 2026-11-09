@@ -66,7 +66,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+89"/>
+        <location filename="../qml/SettingsMenu.qml" line="+91"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
@@ -161,13 +161,16 @@
         <location line="+19"/>
         <location line="+2"/>
         <location line="+297"/>
-        <location line="+49"/>
+        <location line="+42"/>
+        <location line="+6"/>
+        <location line="+6"/>
+        <location line="+21"/>
         <location line="+13"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-380"/>
+        <location line="-406"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -373,7 +376,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+110"/>
+        <location line="+115"/>
         <source>Flash</source>
         <translation type="unfinished"></translation>
     </message>
@@ -403,7 +406,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="-9"/>
         <source>Mode</source>
         <translation type="unfinished"></translation>
     </message>
@@ -428,7 +431,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+12"/>
         <source>Timer</source>
         <translation type="unfinished"></translation>
     </message>
@@ -480,7 +483,75 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+10"/>
+        <location line="+5"/>
+        <location line="+6"/>
+        <location line="+6"/>
+        <source>JPG only: RAWfish-ir&apos;s processing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-16"/>
+        <source>Frames</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>One frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>%1 frames merged (less grain)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Colour NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Colour noise filter off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Colour noise filter: %1 x the noise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Moiré</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>False colour: nothing removed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>False colour: a %1 median on the colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Sharpen</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>RAWfish sharpening off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>RAWfish sharpening: %1 x the fine detail</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>RAW: no JPEG quality</source>
         <translation type="unfinished"></translation>
     </message>
@@ -752,7 +823,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+271"/>
+        <location filename="../qml/indraw.qml" line="+272"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
@@ -771,13 +842,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+13"/>
         <location line="+149"/>
-        <location line="+1842"/>
+        <location line="+1844"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-2017"/>
+        <location line="-2019"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -887,30 +958,30 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+249"/>
-        <location line="+783"/>
+        <location line="+785"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-783"/>
-        <location line="+783"/>
+        <location line="-785"/>
+        <location line="+785"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-755"/>
-        <location line="+755"/>
+        <location line="-757"/>
+        <location line="+757"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-755"/>
-        <location line="+755"/>
+        <location line="-757"/>
+        <location line="+757"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-682"/>
+        <location line="-684"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1010,7 +1081,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+217"/>
+        <location line="+219"/>
         <source>CAM</source>
         <translation type="unfinished"></translation>
     </message>

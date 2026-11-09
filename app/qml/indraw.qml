@@ -59,6 +59,7 @@ ApplicationWindow {
         path: "/apps/rawfish-ir/menu"
         property string startMode: "last"            // last | simple | advanced
         property bool showScenes: false              // scenes in the camera menu
+        property bool processingColumns: false       // the JPG processing columns in the camera menu
         property bool startManual: false             // start in manual focus + exposure
     }
     ConfigurationGroup {
@@ -269,7 +270,7 @@ ApplicationWindow {
             function imageTypeLabel(t) {
                 switch (t) {
                 case "raw":     return qsTr("DNG\n(RAW)")
-                case "snap":    return qsTr("snap")
+                case "snap":    return page.snapSize.width > 0 ? qsTr("snap") + "\n" + (page.snapSize.width * page.snapSize.height / 1e6).toFixed(0) + " Mpx" : qsTr("snap")
                 default:        return page.jpgPlusRaw ? qsTr("JPG\n+RAW") : qsTr("jpg")
                 }
             }
@@ -1751,6 +1752,8 @@ ApplicationWindow {
                 focusCalibrationMenu: deviceConf.focusCalibrationMenu
                 startMode: menuConf.startMode
                 showScenes: menuConf.showScenes
+                processingColumns: menuConf.processingColumns
+                snapActualSize: page.snapSize.width > 0 ? page.snapSize.width + "x" + page.snapSize.height : ""
                 imageType: page.imageType
                 onPeakTweakChanged: page.applyAidThresholds()
                 onZebraTweakChanged: page.applyAidThresholds()

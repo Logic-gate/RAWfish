@@ -43,10 +43,12 @@ Item {
             var dr = r - level.fRoll
             if (dr > 180) dr -= 360
             if (dr < -180) dr += 360
-            level.fRoll = level.valid ? level.fRoll + 0.12 * dr : r
-            level.fPitch = level.valid ? level.fPitch + 0.12 * (p - level.fPitch) : p
-            if (!level.valid || Math.abs(level.fRoll - level.roll) > 0.05) level.roll = level.fRoll
-            if (!level.valid || Math.abs(level.fPitch - level.pitch) > 0.05) level.pitch = level.fPitch
+            // 0.08 and a 0.15 degree dead band (ui 197): the busier sessions of
+            // 0.2 deliver the readings less evenly, and 0.12 / 0.05 trembled again.
+            level.fRoll = level.valid ? level.fRoll + 0.08 * dr : r
+            level.fPitch = level.valid ? level.fPitch + 0.08 * (p - level.fPitch) : p
+            if (!level.valid || Math.abs(level.fRoll - level.roll) > 0.15) level.roll = level.fRoll
+            if (!level.valid || Math.abs(level.fPitch - level.pitch) > 0.15) level.pitch = level.fPitch
             level.valid = true
             level.readings += 1
         }

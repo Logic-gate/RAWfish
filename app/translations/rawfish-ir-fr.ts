@@ -65,7 +65,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+89" />
+        <location filename="../qml/SettingsMenu.qml" line="+91" />
         <source>Off</source>
         <translation>Off</translation>
     </message>
@@ -160,13 +160,16 @@
         <location line="+19" />
         <location line="+2" />
         <location line="+297" />
-        <location line="+49" />
+        <location line="+42" />
+        <location line="+6" />
+        <location line="+6" />
+        <location line="+21" />
         <location line="+13" />
         <source>off</source>
         <translation>off</translation>
     </message>
     <message>
-        <location line="-380" />
+        <location line="-406" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -372,7 +375,7 @@
         <translation>%1 Mpx</translation>
     </message>
     <message>
-        <location line="+110" />
+        <location line="+115" />
         <source>Flash</source>
         <translation>Flash</translation>
     </message>
@@ -402,7 +405,7 @@
         <translation>torche</translation>
     </message>
     <message>
-        <location line="+5" />
+        <location line="-9" />
         <source>Mode</source>
         <translation>Mode</translation>
     </message>
@@ -427,7 +430,7 @@
         <translation>simple</translation>
     </message>
     <message>
-        <location line="+3" />
+        <location line="+12" />
         <source>Timer</source>
         <translation>Retardateur</translation>
     </message>
@@ -479,7 +482,75 @@
         <translation>Résolution</translation>
     </message>
     <message>
-        <location line="+7" />
+        <location line="+10" />
+        <location line="+5" />
+        <location line="+6" />
+        <location line="+6" />
+        <source>JPG only: RAWfish-ir's processing</source>
+        <translation>JPG seulement : le traitement de RAWfish-ir</translation>
+    </message>
+    <message>
+        <location line="-16" />
+        <source>Frames</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>One frame</source>
+        <translation>Une image</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>%1 frames merged (less grain)</source>
+        <translation>%1 images fusionnées (moins de grain)</translation>
+    </message>
+    <message>
+        <location line="+4" />
+        <source>Colour NR</source>
+        <translation>Bruit coul.</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Colour noise filter off</source>
+        <translation>Filtre du bruit de couleur désactivé</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>Colour noise filter: %1 x the noise</source>
+        <translation>Filtre du bruit de couleur : %1 × le bruit</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>Moiré</source>
+        <translation>Moiré</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>False colour: nothing removed</source>
+        <translation>Fausses couleurs : rien d'enlevé</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>False colour: a %1 median on the colour</source>
+        <translation>Fausses couleurs : médian %1 sur la couleur</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>Sharpen</source>
+        <translation>Netteté</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>RAWfish sharpening off</source>
+        <translation>Accentuation RAWfish désactivée</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>RAWfish sharpening: %1 x the fine detail</source>
+        <translation>Accentuation RAWfish : %1 × le détail fin</translation>
+    </message>
+    <message>
+        <location line="+4" />
         <source>RAW: no JPEG quality</source>
         <translation>RAW : pas de qualité JPEG</translation>
     </message>
@@ -757,7 +828,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+271" />
+        <location filename="../qml/indraw.qml" line="+272" />
         <source>DNG
 (RAW)</source>
         <translation>DNG
@@ -778,13 +849,13 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     <message>
         <location line="+13" />
         <location line="+149" />
-        <location line="+1842" />
+        <location line="+1844" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-2017" />
+        <location line="-2019" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -894,30 +965,30 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+249" />
-        <location line="+783" />
+        <location line="+785" />
         <source>zebra</source>
         <translation>zébra</translation>
     </message>
     <message>
-        <location line="-783" />
-        <location line="+783" />
+        <location line="-785" />
+        <location line="+785" />
         <source>peak</source>
         <translation>peaking</translation>
     </message>
     <message>
-        <location line="-755" />
-        <location line="+755" />
+        <location line="-757" />
+        <location line="+757" />
         <source>level</source>
         <translation>bulle</translation>
     </message>
     <message>
-        <location line="-755" />
-        <location line="+755" />
+        <location line="-757" />
+        <location line="+757" />
         <source>AE</source>
         <translation>AE</translation>
     </message>
     <message>
-        <location line="-682" />
+        <location line="-684" />
         <source>failed, see the log</source>
         <translation>échec, voir le journal</translation>
     </message>
@@ -1017,7 +1088,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>arrêter — garder ce qui est fait</translation>
     </message>
     <message>
-        <location line="+217" />
+        <location line="+219" />
         <source>CAM</source>
         <translation>CAM</translation>
     </message>

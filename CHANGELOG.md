@@ -39,6 +39,14 @@ repository). Newest first.
   still sets the exposure. "once" is the mode where a touch picks the
   point and holds it.
 - The sun follows the zoom and the loupe's pans, like the focus circle.
+- Settings > Camera menu > "JPG processing in the camera menu": shows
+  Frames, Colour NR, Moiré and Sharpen in the advanced menu (the same
+  rawfish-ir.conf keys). The "Scenes" switch is gone (not implemented).
+- Menu: each column's default value has a light green ring.
+- TYPE in snap reads "snap" over its size ("5 Mpx").
+- The level is steadier (a stronger filter and a 0.15° dead band).
+- The menu's Mode column (simple / advanced) comes first. In snap the
+  greyed Resolution column shows snap's own size.
 - The bracket column is greyed in snap; the white-balance menu no longer
   offers "0" (the AWB off).
 - After each touch or hold, a line in the viewfinder for two seconds:

@@ -25,6 +25,9 @@ Column {
     property var armed: undefined
     // Greyed out: shown, but a tap only says why (dimmedHint) and changes
     // nothing -- a choice that means nothing for the current image type.
+    // The default value: its disc is drawn with a light green ring, so the
+    // way back to the defaults stays visible. undefined: none marked.
+    property var defaultValue: undefined
     property bool dimmed: false
     property string dimmedHint: ""
     signal picked(var value)
@@ -71,6 +74,15 @@ Column {
                     NumberAnimation { from: 0.15; to: 0.6; duration: 350 }
                     NumberAnimation { from: 0.6; to: 0.15; duration: 350 }
                 }
+            }
+            Rectangle {                                   // the default: a light green ring
+                anchors.centerIn: parent
+                width: Theme.iconSizeMedium + Theme.paddingSmall; height: width; radius: width / 2
+                z: -1
+                color: "transparent"
+                border.color: "#8fd89a"; border.width: Math.max(1, Math.round(Theme.pixelRatio * 1.5))
+                opacity: 0.8
+                visible: col.defaultValue !== undefined && col.defaultValue === modelData
             }
             Rectangle {                                   // highlight disc
                 anchors.centerIn: parent

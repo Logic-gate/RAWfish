@@ -32,6 +32,7 @@ Page {
         path: "/apps/rawfish-ir/menu"
         property string startMode: "last"
         property bool showScenes: false
+        property bool processingColumns: false
         property bool startManual: false
     }
     ConfigurationGroup {
@@ -127,10 +128,10 @@ Page {
             SectionHeader { text: qsTr("Camera menu") }
 
             TextSwitch {
-                text: qsTr("Scenes in the camera menu (not yet implemented)")
-                description: qsTr("The camera's scene modes (night, sport…) as a menu column, in simple and advanced mode. With a scene on, the camera drives exposure, focus and white balance itself.")
-                checked: menuGroup.showScenes
-                onCheckedChanged: menuGroup.showScenes = checked
+                text: qsTr("JPG processing in the camera menu")
+                description: qsTr("Shows four columns in the advanced menu: Frames (1, 2 or 4 merged), Colour NR, Moiré and Sharpen, RAWfish-ir's processing of the JPG. Otherwise they are set in rawfish-ir.conf.")
+                checked: menuGroup.processingColumns
+                onCheckedChanged: menuGroup.processingColumns = checked
             }
 
             TextSwitch {
