@@ -270,7 +270,7 @@ ApplicationWindow {
             function imageTypeLabel(t) {
                 switch (t) {
                 case "raw":     return qsTr("DNG\n(RAW)")
-                case "snap":    return page.snapSize.width > 0 ? qsTr("snap") + "\n" + (page.snapSize.width * page.snapSize.height / 1e6).toFixed(0) + " Mpx" : qsTr("snap")
+                case "snap":    return qsTr("snap")
                 default:        return page.jpgPlusRaw ? qsTr("JPG\n+RAW") : qsTr("jpg")
                 }
             }
@@ -1243,6 +1243,15 @@ ApplicationWindow {
                     color: Theme.highlightColor
                     text: viewfinder.errorString.length > 0
                           ? viewfinder.errorString : qsTr("Starting camera…")
+                }
+                // snap: a light, translucent "SNAP" over the top of the viewfinder
+                // (a third of its width), so the type is never mistaken.
+                Text {
+                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge }
+                    visible: page.imageType === "snap" && viewfinder.running
+                    text: "SNAP"
+                    color: "white"; opacity: 0.28
+                    font { pixelSize: parent.width / 3 / 3.2; bold: true; letterSpacing: parent.width / 3 / 3.2 * 0.08 }
                 }
                 // The touch rule, two seconds after each tap or hold.
                 Label {

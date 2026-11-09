@@ -396,13 +396,11 @@ Item {
             // meters with a pre-flash first, ~0.5-1 s more) / torch (continuous).
             // First column, in simple mode too.
             MenuColumn { width: band.colW; header: header
-                defaultValue: false
                 caption: qsTr("Mode"); values: [false, true]; current: menu.advanced
                 labelFor: function(v) { return v ? qsTr("Advanced: wheels, raw, every control") : qsTr("Simple: JPEG, automatic") }
                 shortFor: function(v) { return v ? qsTr("adv") : qsTr("simp") }
                 onPicked: { menu.advanced = value; menu.save("advanced", value ? 1 : 0) } }
             MenuColumn { visible: !!(menu.viewfinder && menu.viewfinder.caps.flash)
-                defaultValue: "off"
                 width: band.colW; header: header
                 caption: qsTr("Flash"); values: ["off", "auto", "on", "torch"]; current: menu.flash
                 labelFor: function(v) { return v === "off" ? qsTr("Flash off") : v === "auto" ? qsTr("Flash when dark")
@@ -412,7 +410,6 @@ Item {
                                               : v === "on" ? "icon-camera-flash-on" : "" }
                 onPicked: { menu.flash = value; menu.save("flash", value); if (viewfinder.running && viewfinder.caps.flash) viewfinder.sendCommand("flash " + value) } }
             MenuColumn { visible: menu.simpleMenuHas("timer"); width: band.colW; header: header
-                defaultValue: 0
                 caption: qsTr("Timer"); values: [0, 3, 10]; current: menu.timerSec
                 labelFor: function(v) { return v === 0 ? qsTr("No timer") : qsTr("%1 second timer").arg(v) }
                 shortFor: function(v) { return v === 0 ? qsTr("off") : v + "s" }
@@ -421,7 +418,6 @@ Item {
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).
             MenuColumn { visible: menu.simpleMenuHas("format"); width: band.colW; header: header
-                defaultValue: menu.sensorFormat
                 dimmed: menu.imageType === "raw" || menu.imageType === "snap"; dimmedHint: menu.imageType === "snap" ? qsTr("snap: one small size, the camera's own JPEG") : qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Format"); values: ["4:3", "16:9"]; current: menu.format
                 // "as the RAW" is whichever format has the RAW stream's shape
@@ -477,13 +473,11 @@ Item {
                 shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
                 onPicked: { menu.yuvSharpen = value; menu.save("jpgSharpen", value) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                defaultValue: 95
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: no JPEG quality")
                 caption: qsTr("Quality"); values: [20, 40, 60, 80, 90, 95, 100]; current: menu.jpegQuality
                 labelFor: function(v) { return qsTr("JPEG quality %1").arg(v) }
                 onPicked: { menu.jpegQuality = value; menu.save("jpegQuality", value) } }
             MenuColumn { visible: menu.simpleMenuHas("wb"); width: band.colW; header: header
-                defaultValue: 1
                 caption: qsTr("White bal."); values: menu.awbAvailable.slice(0, 8); current: menu.awbMode
                 labelFor: function(v) { return menu.awbNames[v] || String(v) }
                 shortFor: function(v) { return menu.awbShort[v] || String(v) }
@@ -492,7 +486,6 @@ Item {
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                defaultValue: "off"
                 dimmed: menu.imageType === "snap"; dimmedHint: qsTr("snap: one shot, no bracketing")
                 caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.bracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
@@ -503,14 +496,12 @@ Item {
             // The level's zero: "zeroed" once recorded (a long press on "level"
             // with the phone upright), "factory" clears it.
             MenuColumn { width: band.colW; header: header
-                defaultValue: "factory"
                 caption: qsTr("Level"); values: ["factory", "zeroed"]; current: menu.levelZeroed ? "zeroed" : "factory"
                 labelFor: function(v) { return v === "zeroed" ? qsTr("Level zero: as recorded (hold \"level\" with the phone upright)") : qsTr("Level zero: the sensor's own") }
                 shortFor: function(v) { return v === "zeroed" ? qsTr("zeroed") : qsTr("factory") }
                 onPicked: { if (value === "factory") menu.clearLevelZero(); else if (!menu.levelZeroed) header.show(qsTr("Hold \"level\" with the phone upright to record the zero")) } }
             // Rule-of-thirds grid (its notch button became the level).
             MenuColumn { width: band.colW; header: header
-                defaultValue: false
                 caption: qsTr("Grid"); values: [false, true]; current: menu.gridOn
                 labelFor: function(v) { return v ? qsTr("Grid on") : qsTr("Grid off") }
                 shortFor: function(v) { return v ? qsTr("on") : qsTr("off") }

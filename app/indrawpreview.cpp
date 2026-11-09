@@ -342,10 +342,14 @@ void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, cons
     const QString jp = folder(jpgDir), dn = folder(dngDir);
     const QString pf = safe.match(prefix).hasMatch() ? prefix : QStringLiteral("photo");
     if (jp == m_jpgDir && dn == m_dngDir && pf == m_prefix) return;
+    const bool dirsChanged = jp != m_jpgDir || dn != m_dngDir;
     m_jpgDir = jp; m_dngDir = dn; m_prefix = pf;
     QDir().mkpath(m_jpgDir);
     QDir().mkpath(m_dngDir);
     emit outputChanged();
+    /* The folders are arguments of the engine: a running one would go on
+     * writing to the old ones. The prefix goes with each shot: no restart. */
+    if (dirsChanged && m_active && m_gotCaps) restart();
 }
 QString IndrawPreview::jpgDir() const { return m_jpgDir; }
 QString IndrawPreview::dngDir() const { return m_dngDir; }

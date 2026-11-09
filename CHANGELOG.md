@@ -42,8 +42,12 @@ repository). Newest first.
 - Settings > Camera menu > "JPG processing in the camera menu": shows
   Frames, Colour NR, Moiré and Sharpen in the advanced menu (the same
   rawfish-ir.conf keys). The "Scenes" switch is gone (not implemented).
-- Menu: each column's default value has a light green ring.
-- TYPE in snap reads "snap" over its size ("5 Mpx").
+- Menu: the four JPG processing columns show their default value with a
+  light green ring.
+- snap: a large translucent "SNAP" over the top of the viewfinder.
+- The output folders set in Settings apply at once (the engine restarts
+  with them); the fields are saved when their edit is finished, no
+  longer at every keystroke (which created half-typed folders).
 - The level is steadier (a stronger filter and a 0.15° dead band).
 - The menu's Mode column (simple / advanced) comes first. In snap the
   greyed Resolution column shows snap's own size.

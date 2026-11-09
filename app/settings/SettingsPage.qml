@@ -83,7 +83,7 @@ Page {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                 errorHighlight: !page.prefixOk(text)
                 description: qsTr("Letters, digits, - and _ (up to 32). Files are named PREFIX_YYYYMMDD_HHMMSS_mmm.EXT.")
-                onTextChanged: if (page.prefixOk(text)) output.prefix = text
+                onEditingFinished: if (page.prefixOk(text)) output.prefix = text
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
                 EnterKey.onClicked: focus = false
             }
@@ -97,7 +97,7 @@ Page {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
                 description: qsTr("Under ~/Pictures (the only place the app may write).")
-                onTextChanged: if (page.folderOk(text)) output.jpgDir = text.trim()
+                onEditingFinished: if (page.folderOk(text)) output.jpgDir = text.trim()
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
                 EnterKey.onClicked: focus = false
             }
@@ -111,7 +111,7 @@ Page {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
                 description: qsTr("May be another folder than the JPEGs. DNG previews go to its hidden .previews/ subfolder.")
-                onTextChanged: if (page.folderOk(text)) output.dngDir = text.trim()
+                onEditingFinished: if (page.folderOk(text)) output.dngDir = text.trim()
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
                 EnterKey.onClicked: focus = false
             }
