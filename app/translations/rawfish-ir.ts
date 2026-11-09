@@ -766,13 +766,13 @@ JPG</source>
     <message>
         <location line="+13"/>
         <location line="+136"/>
-        <location line="+1788"/>
+        <location line="+1789"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1950"/>
+        <location line="-1951"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -787,7 +787,13 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+114"/>
+        <location line="+103"/>
+        <location line="+56"/>
+        <source>Tmp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-45"/>
         <source>reset</source>
         <translation type="unfinished"></translation>
     </message>
@@ -818,25 +824,13 @@ JPG</source>
     </message>
     <message>
         <location line="-44"/>
-        <location line="+55"/>
+        <location line="+56"/>
         <location line="+9"/>
         <source>tint</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-65"/>
-        <location line="+54"/>
-        <source>temp</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-1"/>
-        <location line="+2"/>
-        <source>fixed</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+211"/>
+        <location line="+201"/>
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation type="unfinished"></translation>

@@ -382,7 +382,7 @@ ApplicationWindow {
             property string fineShown: ""
             property string fineText: ""
             function fineWb(what, d) {
-                if (what === "warmth") { settingsMenu.stepWarmth(d); page.fineText = (d > 0 ? "+" : "−") + (5 * settingsMenu.fineWarmthStep) + "% " + qsTr("temp") }
+                if (what === "warmth") { settingsMenu.stepWarmth(d); page.fineText = (d > 0 ? "+" : "−") + (5 * settingsMenu.fineWarmthStep) + "% " + qsTr("Tmp") }
                 else { settingsMenu.stepTint(d); page.fineText = (d > 0 ? "+" : "−") + settingsMenu.fineTintStep + "% " + qsTr("tint") }
                 page.fineShown = what
                 fineTimer.interval = 2000; fineTimer.restart()
@@ -435,10 +435,11 @@ ApplicationWindow {
             Timer { id: fineTimer; interval: 2000; onTriggered: { page.fineShown = ""; interval = 2000 } }
             // The two readouts' permanent texts: the offset asked ("+10% temp",
             // "−5% tint"; just "temp" / "tint" at zero) over the value in force.
-            readonly property string warmthOffset: settingsMenu.wbFixed !== "" ? qsTr("fixed")
-                : settingsMenu.wbShift === 0 ? qsTr("temp") : (settingsMenu.wbShift > 0 ? "+" : "−") + Math.abs(5 * settingsMenu.wbShift) + "% " + qsTr("temp")
-            readonly property string tintOffset: settingsMenu.wbFixed !== "" ? qsTr("fixed")
-                : settingsMenu.tint === 0 ? qsTr("tint") : (settingsMenu.tint > 0 ? "+" : "−") + Math.abs(settingsMenu.tint) + "% " + qsTr("tint")
+            // Always "+n% Tmp" / "−n% tint" ("0%" at zero, and for a measured
+            // white, which is the new zero); "Tmp" is short so as not to overlap
+            // the wheel beside it.
+            readonly property string warmthOffset: (settingsMenu.wbFixed !== "" || settingsMenu.wbShift === 0 ? "0" : (settingsMenu.wbShift > 0 ? "+" : "−") + Math.abs(5 * settingsMenu.wbShift)) + "% " + qsTr("Tmp")
+            readonly property string tintOffset: (settingsMenu.wbFixed !== "" || settingsMenu.tint === 0 ? "0" : (settingsMenu.tint > 0 ? "+" : "−") + Math.abs(settingsMenu.tint)) + "% " + qsTr("tint")
             // Orange when warmer than the camera's white, blue when cooler;
             // magenta when tinted that way, green the other; a measured white
             // in cyan; the deck's colour at zero.
