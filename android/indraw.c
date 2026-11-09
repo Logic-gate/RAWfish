@@ -587,6 +587,8 @@ static struct {
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
+    long vf_last_hist[3][64];                    /* and its histogram (bins of 4 levels, r;g;b) */
+    long meter_last_hist[3][64];                 /* the RAW meter's last histogram (k_hist_edge bins) */
     int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, 0 none) */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
@@ -1042,6 +1044,7 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
      * live values. Tagging the measure with its own pair lets the exposure
      * loop know at once whether a frame already shows the pair it sent. */
     g.vf_last_mean = sum / wsum; g.vf_last_clip_hi = 100.0 * hi / n;   /* for a capture's report: viewfinder vs photo */
+    memcpy(g.vf_last_hist, hist, sizeof g.vf_last_hist);
     p += snprintf(p, (size_t)(end - p), "vfmeter mean=%.5f clip_lo=%.3f clip_hi=%.3f iso=%d exp_ns=%lld hist=",
                   sum / wsum, 100.0 * lo / n, 100.0 * hi / n, iso, (long long)exp_ns);
     for (c = 0; c < 3 && p < end; ++c) {
@@ -1446,6 +1449,7 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     if (wsum <= 0 || n == 0) return;
     for (c = 0; c < 3; ++c) for (x = 0; x < 64; ++x) if (hist[c][x] > peak) peak = hist[c][x];
     for (c = 0; c < 3; ++c) for (x = 0; x < 64; ++x) if (shist[c][x] > speak) speak = shist[c][x];
+    memcpy(g.meter_last_hist, hist, sizeof g.meter_last_hist);   /* for a DNG's report: meter vs photo */
 
     p += snprintf(p, (size_t)(end - p),
                   "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f hist=",
@@ -4068,6 +4072,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     int a_iso = -1, a_fps0 = -1, a_fps1 = -1, a_control = -1; /* rmeta (not globals) */
     float a_focus = -1.0f;
     uint16_t *dng_px = NULL;                      /* contiguous copy for the DNG  */
+    long chk_hist[3][64] = {{0}}; int chk_ok = 0;  /* the image's histogram, meter's bins (report) */
     float *sh_gains = NULL;
     int sh_cols = 0, sh_rows = 0;
     a3_report_t a3 = { "skipped", -1, -1 };
@@ -4196,6 +4201,34 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
             n_px += 3 * w_px / 4 - w_px / 4;
         }
     }
+    {   /* Meter vs photo: the same histogram as the RAW meter's (64 bins,
+         * k_hist_edge, of (value - black) / (white - black)) on this image,
+         * every 16th quad, by colour from the CFA; reported beside the
+         * meter's last one so the app's RAW histogram can be checked. */
+        ACameraMetadata_const_entry ce;
+        int cfa = 3, c, x, y;
+        double range = white - black;
+        if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_COLOR_FILTER_ARRANGEMENT, &ce) == ACAMERA_OK && ce.count) cfa = ce.data.u8[0];
+        if (range > 0 && w_px >= 2 && h_px >= 2) {
+            for (y = 0; y + 1 < h_px; y += 16) {
+                const uint16_t *r0 = (const uint16_t *)(data + (size_t)y * stride), *r1 = (const uint16_t *)(data + (size_t)(y + 1) * stride);
+                for (x = 0; x + 1 < w_px; x += 16) {
+                    int q[4] = { r0[x], r0[x + 1], r1[x], r1[x + 1] }, v[3];
+                    switch (cfa) {
+                    case 0:  v[0] = q[0]; v[1] = (q[1] + q[2]) / 2; v[2] = q[3]; break;
+                    case 1:  v[0] = q[1]; v[1] = (q[0] + q[3]) / 2; v[2] = q[2]; break;
+                    case 2:  v[0] = q[2]; v[1] = (q[0] + q[3]) / 2; v[2] = q[1]; break;
+                    default: v[0] = q[3]; v[1] = (q[1] + q[2]) / 2; v[2] = q[0]; break;
+                    }
+                    for (c = 0; c < 3; ++c) {
+                        double nv = (v[c] - black) / range;
+                        chk_hist[c][nv <= 0 ? 0 : nv >= 1 ? 63 : hist_bin(nv)]++;
+                    }
+                }
+            }
+            chk_ok = 1;
+        }
+    }
     if (want_dng) {
         /* Copy pixels (dropping row padding) and the shading map while the
          * image and result are still valid, then write the DNG. */
@@ -4277,6 +4310,14 @@ report:
            a_control, a_focus,
            res_ts == img_ts ? "true" : "false", (long long)exposure_ns, iso,
            n_px ? sum / n_px - black : -1.0, n_px ? 100.0 * n_clip / n_px : -1.0, frames_during);
+    if (chk_ok) {   /* meter vs photo (computed above, while the image was ours) */
+        int c, i;
+        jw_add(&w, ",\"check\":{\"meter_hist\":\"");
+        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", g.meter_last_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
+        jw_add(&w, "\",\"photo_hist\":\"");
+        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", chk_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
+        jw_add(&w, "\",\"black\":%.1f,\"white\":%d}", black, white);
+    }
     add_variant(&w, variant);
     jw_add(&w, "}");
     return IR_OK;
@@ -6911,8 +6952,23 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
                 if (m >= 250) hi250++;
                 sum += pow(gch / 255.0, 2.2); cnt++;
             }
-        if (cnt) jw_add(&w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f}",
-                        g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
+        if (cnt) {
+            /* and the two histograms, 64 bins of 4 levels per channel, r;g;b */
+            long ph[3][64] = {{0}}; int c, i;
+            for (y = 0; y + 1 < f0->h; y += 8)
+                for (x = 0; x + 1 < f0->w; x += 8) {
+                    int Y = f0->y[(size_t)y * f0->w + x];
+                    int U = f0->u[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128, V = f0->v[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128;
+                    int rgb3[3] = { Y + ((91881 * V) >> 16), Y - ((22554 * U + 46802 * V) >> 16), Y + ((116130 * U) >> 16) };
+                    for (c = 0; c < 3; ++c) { int v = rgb3[c] < 0 ? 0 : rgb3[c] > 255 ? 255 : rgb3[c]; ph[c][v >> 2]++; }
+                }
+            jw_add(&w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
+                   g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
+            for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", g.vf_last_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
+            jw_add(&w, "\",\"photo_hist\":\"");
+            for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", ph[c][i]); if (c < 2) jw_add(&w, ";"); }
+            jw_add(&w, "\"}");
+        }
     }
     if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\",\"preview_err\":%d}", dng_state, dng_preview_err); }
     jw_add(&w, "}");
