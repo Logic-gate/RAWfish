@@ -870,6 +870,9 @@ ApplicationWindow {
                 var level = page.imageType === "raw" ? (c.zebraRaw > 0 ? c.zebraRaw : 992) / 1000 * 255
                                                      : (c.zebraJpeg > 0 ? c.zebraJpeg : 250)
                 viewfinder.zebraLevel = Math.round(255 - (255 - level) * zb)
+                // JPEG: a pixel is striped when it comes out white (luminance),
+                // unless rawfish-ir.conf asks for the channel test; RAW: any channel.
+                viewfinder.zebraLuma = page.imageType !== "raw" && settingsMenu.zebraJpegMode !== "channel"
             }
             onImageTypeChanged: {
                 viewfinder.sendCommand("# type: " + imageType)   // logged: a type that changes by itself is a bug to see

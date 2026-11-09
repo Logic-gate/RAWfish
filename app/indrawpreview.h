@@ -28,7 +28,7 @@
  * lives in its own QThread, takes the latest frame and the aids' settings,
  * and hands the ARGB overlay back (ui 167). While it works, newer frames
  * only replace the one waiting: it never falls behind, it skips. */
-struct OverlayParams { bool zebra = false, peaking = false; int level = 250, edge = 40, width = 2; };
+struct OverlayParams { bool zebra = false, peaking = false, zebraLuma = false; int level = 250, edge = 40, width = 2; };
 class OverlayWorker : public QObject
 {
     Q_OBJECT
@@ -153,6 +153,12 @@ class IndrawPreview : public QQuickItem
     Q_PROPERTY(bool zebra READ zebra WRITE setZebra NOTIFY aidsChanged)
     Q_PROPERTY(bool peaking READ peaking WRITE setPeaking NOTIFY aidsChanged)
     Q_PROPERTY(int zebraLevel READ zebraLevel WRITE setZebraLevel NOTIFY aidsChanged)
+    /* zebraLuma: a pixel is striped when its LUMINANCE reaches the level (a
+     * pixel that comes out white), not when any one channel does. For a JPEG
+     * that is what the eye calls burnt: a blue sky or a red folder saturates
+     * one channel long before it looks overexposed. For RAW the channel test
+     * stays: one channel lost is data lost. */
+    Q_PROPERTY(bool zebraLuma READ zebraLuma WRITE setZebraLuma NOTIFY aidsChanged)
     Q_PROPERTY(int peakEdge READ peakEdge WRITE setPeakEdge NOTIFY aidsChanged)
     Q_PROPERTY(int peakWidth READ peakWidth WRITE setPeakWidth NOTIFY aidsChanged)
 
@@ -226,6 +232,8 @@ public:
     bool peaking() const;
     void setPeaking(bool on);
     int zebraLevel() const;
+    bool zebraLuma() const { return m_zebraLuma; }
+    void setZebraLuma(bool on);
     void setZebraLevel(int level);
     int peakEdge() const;
     void setPeakEdge(int edge);
@@ -405,6 +413,7 @@ private:
     qreal m_histClipLow = 0, m_histClipHigh = 0;
     bool m_zebra = false, m_peaking = false;
     int m_zebraLevel = 250;
+    bool m_zebraLuma = false;
     int m_peakEdge = 40;
     int m_peakWidth = 2;
     QImage m_overlay;              /* half-resolution ARGB aids, or null         */

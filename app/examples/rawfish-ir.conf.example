@@ -72,6 +72,12 @@ jpgMoireFilter=0
 ;                                               range 0..5              default 3
 jpgSharpen=3
 
+; The zebra in JPG: luma = a pixel is striped when it comes out white (its
+; luminance reaches the level); channel = when any one colour channel does
+; (a blue sky or a red folder then stripe long before they look burnt). RAW
+; always uses the channel test: one channel lost is data lost.
+;                                               values: luma, channel   default luma
+zebraJpegMode=luma
 ; Checks in the log: each photo's report then carries the histogram the app
 ; showed (viewfinder, or RAW meter) and the photo's own, for histo-check.py.
 ; About 2 KB of log per photo; off for everyday use.

@@ -878,8 +878,12 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
                 const int a = l[x];
                 if (a > edge && a >= l[x - 1] && a >= l[x + 1] && a >= lu[x] && a >= ld[x]) v = peak;
             }
-            if (prm.zebra && (px[3 * x] >= level || px[3 * x + 1] >= level || px[3 * x + 2] >= level))
-                v = (((x + y) >> 3) & 1) ? zebraA : zebraB;
+            if (prm.zebra) {
+                const bool hit = prm.zebraLuma
+                    ? (77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >= level * 256   /* Rec.601 luma */
+                    : (px[3 * x] >= level || px[3 * x + 1] >= level || px[3 * x + 2] >= level);
+                if (hit) v = (((x + y) >> 3) & 1) ? zebraA : zebraB;
+            }
             out[x] = v;
         }
     }
@@ -912,7 +916,7 @@ void IndrawPreview::buildOverlay()
 {
     if ((!m_zebra && !m_peaking) || m_frame.isNull()) { m_overlay = QImage(); m_overlayPending = false; return; }
     if (m_overlayBusy) { m_overlayPending = true; return; }
-    OverlayParams p; p.zebra = m_zebra; p.peaking = m_peaking; p.level = m_zebraLevel; p.edge = m_peakEdge; p.width = m_peakWidth;
+    OverlayParams p; p.zebra = m_zebra; p.peaking = m_peaking; p.zebraLuma = m_zebraLuma; p.level = m_zebraLevel; p.edge = m_peakEdge; p.width = m_peakWidth;
     m_overlayBusy = true;
     QMetaObject::invokeMethod(m_overlayWorker, "compute", Qt::QueuedConnection, Q_ARG(QImage, m_frame), Q_ARG(OverlayParams, p));
 }
@@ -930,6 +934,7 @@ void IndrawPreview::setZebra(bool on) { if (m_zebra == on) return; m_zebra = on;
 bool IndrawPreview::peaking() const { return m_peaking; }
 void IndrawPreview::setPeaking(bool on) { if (m_peaking == on) return; m_peaking = on; emit aidsChanged(); buildOverlay(); update(); }
 int IndrawPreview::zebraLevel() const { return m_zebraLevel; }
+void IndrawPreview::setZebraLuma(bool on) { if (m_zebraLuma == on) return; m_zebraLuma = on; emit aidsChanged(); buildOverlay(); update(); }
 void IndrawPreview::setZebraLevel(int level) { level = qBound(1, level, 255); if (m_zebraLevel == level) return; m_zebraLevel = level; emit aidsChanged(); buildOverlay(); update(); }
 int IndrawPreview::peakEdge() const { return m_peakEdge; }
 void IndrawPreview::setPeakEdge(int edge) { edge = qBound(1, edge, 255); if (m_peakEdge == edge) return; m_peakEdge = edge; emit aidsChanged(); buildOverlay(); update(); }
