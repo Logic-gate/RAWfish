@@ -4313,11 +4313,11 @@ report:
            n_px ? sum / n_px - black : -1.0, n_px ? 100.0 * n_clip / n_px : -1.0, frames_during);
     if (chk_ok) {   /* meter vs photo (computed above, while the image was ours) */
         int c, i;
-        jw_add(&w, ",\"check\":{\"meter_hist\":\"");
+        jw_add(&w, "\"check\":{\"meter_hist\":\"");
         for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", g.meter_last_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
         jw_add(&w, "\",\"photo_hist\":\"");
         for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", chk_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
-        jw_add(&w, "\",\"black\":%.1f,\"white\":%d}", black, white);
+        jw_add(&w, "\",\"black\":%.1f,\"white\":%d},", black, white);
     }
     add_variant(&w, variant);
     jw_add(&w, "}");
@@ -6677,6 +6677,35 @@ IR_API int indraw_set_yuv_size(int w, int h)
 /* A YUV frame for a JPEG of our own: the camera's processing up to the
  * colour (demosaicing, white balance, matrix, tone curve) but with its
  * noise reduction and sharpening off, so that ours can replace them. */
+/* Viewfinder vs photo, when asked (g.checks): the same measures on the frame
+ * (linear mean of the green, % of pixels with a channel at 255, and at 250+)
+ * beside the viewfinder's last, with both histograms (64 bins of 4 levels,
+ * r;g;b), so that the zebra and the histogram, computed on the viewfinder,
+ * can be checked against what the photo holds. Every 8th pixel, the frame's
+ * own YUV to RGB conversion. Appends ,"check":{...} to an open object. */
+static void yuv_check_json(jw_t *w, const ir_yuv_t *f0)
+{
+    long cnt = 0, hi255 = 0, hi250 = 0, ph[3][64] = {{0}}; double sum = 0; int x, y, c, i;
+    if (!g.checks) return;
+    for (y = 0; y + 1 < f0->h; y += 8)
+        for (x = 0; x + 1 < f0->w; x += 8) {
+            int Y = f0->y[(size_t)y * f0->w + x];
+            int U = f0->u[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128, V = f0->v[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128;
+            int rgb3[3] = { Y + ((91881 * V) >> 16), Y - ((22554 * U + 46802 * V) >> 16), Y + ((116130 * U) >> 16) }, m = 0;
+            for (c = 0; c < 3; ++c) { int v = rgb3[c] < 0 ? 0 : rgb3[c] > 255 ? 255 : rgb3[c]; rgb3[c] = v; ph[c][v >> 2]++; if (v > m) m = v; }
+            if (m >= 255) hi255++;
+            if (m >= 250) hi250++;
+            sum += pow(rgb3[1] / 255.0, 2.2); cnt++;
+        }
+    if (!cnt) return;
+    jw_add(w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
+           g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
+    for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", g.vf_last_hist[c][i]); if (c < 2) jw_add(w, ";"); }
+    jw_add(w, "\",\"photo_hist\":\"");
+    for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", ph[c][i]); if (c < 2) jw_add(w, ";"); }
+    jw_add(w, "\"}");
+}
+
 IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
                       ir_yuv_t *f, char *out, size_t out_size)
 {
@@ -6750,8 +6779,10 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     snprintf(f->make, sizeof f->make, "%s", g.make);
     snprintf(f->model, sizeof f->model, "%s", g.model);
     jw_init(&jw, out, out_size);
-    jw_add(&jw, "{\"ok\":true,\"size\":[%d,%d],\"exposure_ns\":%lld,\"iso\":%d,\"ms\":{\"image\":%.1f,\"copied\":%.1f}}",
+    jw_add(&jw, "{\"ok\":true,\"size\":[%d,%d],\"exposure_ns\":%lld,\"iso\":%d,\"ms\":{\"image\":%.1f,\"copied\":%.1f}",
            w, h, (long long)f->exposure_ns, f->iso, t_image - t0, t_copied - t0);
+    yuv_check_json(&jw, f);                         /* viewfinder vs photo, when asked */
+    jw_add(&jw, "}");
     return IR_OK;
 }
 
@@ -6940,42 +6971,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
     jw_add(&w, "],\"ms\":{\"capture\":%.1f}", t_cap - t0);
-    if (g.checks) {   /* Viewfinder vs photo: the same measures on the first frame (linear
-         * mean of the green, % of pixels with a channel at 255, and at 250+),
-         * beside the viewfinder's last, so that the zebra and the histogram,
-         * computed on the viewfinder, can be checked against what the photo
-         * holds. Every 8th pixel, the frame's own YUV to RGB conversion. */
-        const ir_yuv_t *f0 = &frames[0];
-        long cnt = 0, hi255 = 0, hi250 = 0; double sum = 0; int x, y;
-        for (y = 0; y + 1 < f0->h; y += 8)
-            for (x = 0; x + 1 < f0->w; x += 8) {
-                int Y = f0->y[(size_t)y * f0->w + x];
-                int U = f0->u[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128, V = f0->v[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128;
-                int r = Y + ((91881 * V) >> 16), gch = Y - ((22554 * U + 46802 * V) >> 16), b = Y + ((116130 * U) >> 16), m;
-                r = r < 0 ? 0 : r > 255 ? 255 : r; gch = gch < 0 ? 0 : gch > 255 ? 255 : gch; b = b < 0 ? 0 : b > 255 ? 255 : b;
-                m = r > gch ? (r > b ? r : b) : (gch > b ? gch : b);
-                if (m >= 255) hi255++;
-                if (m >= 250) hi250++;
-                sum += pow(gch / 255.0, 2.2); cnt++;
-            }
-        if (cnt) {
-            /* and the two histograms, 64 bins of 4 levels per channel, r;g;b */
-            long ph[3][64] = {{0}}; int c, i;
-            for (y = 0; y + 1 < f0->h; y += 8)
-                for (x = 0; x + 1 < f0->w; x += 8) {
-                    int Y = f0->y[(size_t)y * f0->w + x];
-                    int U = f0->u[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128, V = f0->v[(size_t)(y / 2) * (f0->w / 2) + x / 2] - 128;
-                    int rgb3[3] = { Y + ((91881 * V) >> 16), Y - ((22554 * U + 46802 * V) >> 16), Y + ((116130 * U) >> 16) };
-                    for (c = 0; c < 3; ++c) { int v = rgb3[c] < 0 ? 0 : rgb3[c] > 255 ? 255 : rgb3[c]; ph[c][v >> 2]++; }
-                }
-            jw_add(&w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
-                   g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
-            for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", g.vf_last_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
-            jw_add(&w, "\",\"photo_hist\":\"");
-            for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", ph[c][i]); if (c < 2) jw_add(&w, ";"); }
-            jw_add(&w, "\"}");
-        }
-    }
+    yuv_check_json(&w, &frames[0]);
     if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\",\"preview_err\":%d}", dng_state, dng_preview_err); }
     jw_add(&w, "}");
     g.yuv_dng_path[0] = '\0';
