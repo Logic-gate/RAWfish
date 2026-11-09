@@ -72,6 +72,11 @@ jpgMoireFilter=0
 ;                                               range 0..5              default 3
 jpgSharpen=3
 
+; Checks in the log: each photo's report then carries the histogram the app
+; showed (viewfinder, or RAW meter) and the photo's own, for histo-check.py.
+; About 2 KB of log per photo; off for everyday use.
+;                                               values: false, true     default false
+logChecks=false
 ; The YUV stream's size for JPG: jpeg = the photo's size, taken through the
 ; largest listed YUV size that is a whole multiple of it, averaged down (the
 ; normal case: a mid-size YUV stream makes the JP2's viewfinder lag, the full

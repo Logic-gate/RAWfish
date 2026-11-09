@@ -586,6 +586,7 @@ static struct {
     AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
+    int checks;                                  /* reports carry the viewfinder-vs-photo "check" (off by default: ~2 KB per shot) */
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
     long vf_last_hist[3][64];                    /* and its histogram (bins of 4 levels, r;g;b) */
     long meter_last_hist[3][64];                 /* the RAW meter's last histogram (k_hist_edge bins) */
@@ -4209,7 +4210,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
         int cfa = 3, c, x, y;
         double range = white - black;
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_COLOR_FILTER_ARRANGEMENT, &ce) == ACAMERA_OK && ce.count) cfa = ce.data.u8[0];
-        if (range > 0 && w_px >= 2 && h_px >= 2) {
+        if (g.checks && range > 0 && w_px >= 2 && h_px >= 2) {
             for (y = 0; y + 1 < h_px; y += 16) {
                 const uint16_t *r0 = (const uint16_t *)(data + (size_t)y * stride), *r1 = (const uint16_t *)(data + (size_t)(y + 1) * stride);
                 for (x = 0; x + 1 < w_px; x += 16) {
@@ -6763,6 +6764,11 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * last frame of the burst carries the RAW target too, so one exposure gives
  * both. Used once, then cleared. 0 on success, IR_ESTATE without a RAW
  * stream in this session. */
+/* The reports' "check" (histograms of what was shown and of the photo):
+ * off unless asked, it costs a few milliseconds and about 2 KB of log per
+ * shot. The CLI's "checks on|off". */
+IR_API void indraw_set_checks(int on) { g.checks = on ? 1 : 0; }
+
 IR_API int indraw_yuv_dng_next(const char *path, const char *datetime)
 {
     if (!path || !path[0]) { g.yuv_dng_path[0] = '\0'; return IR_OK; }
@@ -6934,7 +6940,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
     jw_add(&w, "],\"ms\":{\"capture\":%.1f}", t_cap - t0);
-    {   /* Viewfinder vs photo: the same measures on the first frame (linear
+    if (g.checks) {   /* Viewfinder vs photo: the same measures on the first frame (linear
          * mean of the green, % of pixels with a channel at 255, and at 250+),
          * beside the viewfinder's last, so that the zebra and the histogram,
          * computed on the viewfinder, can be checked against what the photo

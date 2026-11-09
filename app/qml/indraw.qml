@@ -515,6 +515,7 @@ ApplicationWindow {
                     page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
                     page.applyZoom(); page.applyFocus()
+                    if (settingsMenu.logChecks) viewfinder.sendCommand("checks on")   // rawfish-ir.conf: histograms in the reports
                     viewfinder.sendCommand("fc scene " + (page.sceneOn ? "on" : "off"))
                     if (viewfinder.caps.focalEq !== undefined) page.restoreAtCaps()   // the caps come before the first frame
                     if (orientLoader.item && orientLoader.item.valid) viewfinder.sendCommand("orient " + orientLoader.item.degrees)

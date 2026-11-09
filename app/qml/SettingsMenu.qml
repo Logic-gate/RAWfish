@@ -60,6 +60,7 @@ Item {
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     // JPG: RAWfish-ir's own processing of the ISP's image (rawfish-ir.conf only).
     property bool halJpeg: false                   // offer "HAL JPG" (the camera driver's JPEG) in TYPE
+    property bool logChecks: false                 // the reports carry the viewfinder-vs-photo histograms (a check)
     property int yuvFrames: 1                      // 1, 2 or 4 frames merged
     property int yuvColour: 2                      // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
     property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
@@ -159,6 +160,7 @@ Item {
         awbMode = num("awbMode", 1, 1, 8)
         // Set in rawfish-ir.conf only (not in the menu): the processing.
         halJpeg = pick("useHalJpeg", "false", ["false", "true"]) === "true"
+        logChecks = pick("logChecks", "false", ["false", "true"]) === "true"
         noiseIndex = Math.max(0, noiseModes.indexOf(pick("halJpegNoise", "off", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "fast", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))

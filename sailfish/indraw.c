@@ -1213,6 +1213,19 @@ static int cmd_ev(indraw_ev_fn evfn, char **save, char *out)
 }
 
 /* Handles one "meter on|off [rate=HZ]" line: the RAW16 exposure meter. */
+/* "checks on|off": the reports carry the viewfinder-vs-photo histograms. */
+static int cmd_checks(void *bridge, char **save, char *out)
+{
+    typedef void (*checks_fn)(int);
+    checks_fn cf = (checks_fn)a_dlsym(bridge, "indraw_set_checks");
+    char *tok = strtok_r(NULL, " \t\r\n", save);
+    if (!tok || (strcmp(tok, "on") && strcmp(tok, "off")) || !cf) { emit("{\"ok\":false,\"error\":\"checks on|off\"}"); return 1; }
+    cf(!strcmp(tok, "on"));
+    snprintf(out, OUT_SIZE, "{\"ok\":true,\"checks\":%s}", !strcmp(tok, "on") ? "true" : "false");
+    emit(out);
+    return 0;
+}
+
 static int cmd_meter(indraw_meter_fn mt, char **save, char *out)
 {
     char *tok;
@@ -2537,6 +2550,7 @@ int main(int argc, char **argv)
             else if (!strcmp(cmd, "exposure")) failures += cmd_exposure(pe, &save, out);
             else if (!strcmp(cmd, "ev")) failures += cmd_ev(evfn, &save, out);
             else if (!strcmp(cmd, "meter")) failures += cmd_meter(mt, &save, out);
+            else if (!strcmp(cmd, "checks")) failures += cmd_checks(bridge, &save, out);
             else if (!strcmp(cmd, "zoom")) failures += cmd_zoom(zf, &save, out);
             else if (!strcmp(cmd, "tap")) failures += cmd_tap(tf, &save, out);
             else if (!strcmp(cmd, "wb")) failures += cmd_wb(wf, wm, &save, out);
