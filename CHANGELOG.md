@@ -42,6 +42,10 @@ repository). Newest first.
 - Checked with logChecks on the JP2: the histograms shown (viewfinder
   in JPG, RAW meter in RAW) match the photos within one to three bins
   (JPG 4-12 levels of 255, RAW 0.0-0.3 stop), highlights included.
+- The log is lighter: a temperature or tint step sends one command (six
+  before), and the separator line written before every command is gone
+  (a third of the lines). Settings > Log > "Detailed log" turns the
+  checks on without editing rawfish-ir.conf.
 - Manual white balance made steady: the base (the camera's neutral) is
   frozen at the first step away from zero and kept until the return to
   zero, and the mode command no longer re-enables the AWB while a shift

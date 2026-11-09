@@ -160,14 +160,14 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+281"/>
+        <location line="+284"/>
         <location line="+48"/>
         <location line="+13"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-363"/>
+        <location line="-366"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -363,7 +363,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+147"/>
+        <location line="+150"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -741,7 +741,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+245"/>
+        <location filename="../qml/indraw.qml" line="+246"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
@@ -766,13 +766,13 @@ JPG</source>
     <message>
         <location line="+13"/>
         <location line="+141"/>
-        <location line="+1793"/>
+        <location line="+1794"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1960"/>
+        <location line="-1961"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>

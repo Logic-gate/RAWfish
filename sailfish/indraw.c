@@ -2484,8 +2484,7 @@ int main(int argc, char **argv)
         while (getline(&line, &cap, stdin) > 0) {
             char *save = NULL, *cmd;
             line[strcspn(line, "\r\n")] = '\0'; /* drop the newline for the log  */
-            log_line("", "### ----------------------------------------"); /* separate captures */
-            log_line("> ", line);
+            log_line("> ", line);                /* (a separator line per command used to double the log) */
             if (!strncmp(line, "xp ", 3) || !strncmp(line, "fc ", 3) || !strncmp(line, "vw ", 3) ||
                 !strncmp(line, "sh ", 3)) {       /* the controller's own commands */
                 char cap[256];

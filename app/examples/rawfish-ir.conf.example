@@ -85,7 +85,8 @@ jpgSharpen=3
 zebraJpegMode=luma
 ; Checks in the log: each photo's report then carries the histogram the app
 ; showed (viewfinder, or RAW meter) and the photo's own, for histo-check.py.
-; About 2 KB of log per photo; off for everyday use.
+; About 2 KB of log per photo; off for everyday use. The same switch is in
+; Settings > Apps > RAWfish-ir > Log > "Detailed log".
 ;                                               values: false, true     default false
 logChecks=false
 ; The YUV stream's size for JPG: jpeg = the photo's size, taken through the

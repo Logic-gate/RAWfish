@@ -69,6 +69,7 @@ ApplicationWindow {
         property string probeDone: ""
         property bool shadingCalRequested: false   // Settings asked for the lens-shading assistant
         property bool resetSettingsRequested: false // Settings asked for rawfish-ir.conf back to the defaults
+        property bool extraLog: false               // Settings: a detailed log (checks in the reports)
     }
 
     // Cover (the app's tile on the home screen): the newest capture, or the
@@ -538,7 +539,7 @@ ApplicationWindow {
                     page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
                     page.applyZoom(); page.applyFocus()
-                    if (settingsMenu.logChecks) viewfinder.sendCommand("checks on")   // rawfish-ir.conf: histograms in the reports
+                    if (deviceConf.extraLog || settingsMenu.logChecks) viewfinder.sendCommand("checks on")   // Settings "Detailed log" (or rawfish-ir.conf logChecks)
                     viewfinder.sendCommand("fc scene " + (page.sceneOn ? "on" : "off"))
                     if (viewfinder.caps.focalEq !== undefined) page.restoreAtCaps()   // the caps come before the first frame
                     if (orientLoader.item && orientLoader.item.valid) viewfinder.sendCommand("orient " + orientLoader.item.degrees)

@@ -42,6 +42,7 @@ Page {
         property string probeDone: ""        // the app writes the date when done
         property bool shadingCalRequested: false   // the lens-shading assistant, at the next start
         property bool resetSettingsRequested: false // rawfish-ir.conf back to the defaults, at the next start
+        property bool extraLog: false               // a detailed log (checks in the reports), for bug reports
     }
 
     readonly property string picturesHome: StandardPaths.pictures     // "/home/<user>/Pictures"
@@ -190,6 +191,14 @@ Page {
                 text: device.probeRequested ? qsTr("Requested — open RAWfish-ir") : qsTr("Create the device profile files")
                 enabled: !device.probeRequested
                 onClicked: device.probeRequested = true
+            }
+
+            SectionHeader { text: qsTr("Log") }
+            TextSwitch {
+                text: qsTr("Detailed log")
+                description: qsTr("For a bug report: each photo's report also carries the histogram the app showed and the photo's own, so that the zebra and the histogram can be checked. About 2 KB more per photo. Takes effect at the next start of RAWfish-ir.")
+                checked: device.extraLog
+                onCheckedChanged: device.extraLog = checked
             }
 
             SectionHeader { text: qsTr("Camera settings") }

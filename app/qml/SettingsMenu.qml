@@ -234,10 +234,13 @@ Item {
     property real shadingMaxGain: 5
     property int fineWarmthStep: 1
     property int fineTintStep: 5
-    function resetWarmth() { wbShift = 0; save("wbShift", 0); applyLive() }
-    function resetTint() { tint = 0; save("tint", 0); applyLive() }
-    function stepWarmth(d) { wbShift = Math.max(-20, Math.min(20, wbShift + d * fineWarmthStep)); save("wbShift", wbShift); applyLive() }
-    function stepTint(d) { tint = Math.max(-100, Math.min(100, tint + d * fineTintStep)); save("tint", tint); applyLive() }
+    // A shift or tint step sends only the shift: the rest of the live settings
+    // did not change (six commands and their replies per step filled the log).
+    function applyShift() { if (viewfinder && viewfinder.running && advanced) viewfinder.sendCommand("wb shift=" + wbShift + " tint=" + tint) }
+    function resetWarmth() { wbShift = 0; save("wbShift", 0); applyShift() }
+    function resetTint() { tint = 0; save("tint", 0); applyShift() }
+    function stepWarmth(d) { wbShift = Math.max(-20, Math.min(20, wbShift + d * fineWarmthStep)); save("wbShift", wbShift); applyShift() }
+    function stepTint(d) { tint = Math.max(-100, Math.min(100, tint + d * fineTintStep)); save("tint", tint); applyShift() }
     // The noise and edge options a HAL JPEG / burst command carries.
     function photoProcessing() {
         return " " + noiseModes[noiseIndex] + " " + edgeModes[edgeIndex]
@@ -385,7 +388,7 @@ Item {
                 shortFor: function(v) { return v === "torch" ? qsTr("torch") : v }
                 iconFor: function(v) { return v === "off" ? "icon-camera-flash-off" : v === "auto" ? "icon-camera-flash-automatic"
                                               : v === "on" ? "icon-camera-flash-on" : "" }
-                onPicked: { menu.flash = value; menu.save("flash", value); menu.applyLive() } }
+                onPicked: { menu.flash = value; menu.save("flash", value); if (viewfinder.running && viewfinder.caps.flash) viewfinder.sendCommand("flash " + value) } }
             MenuColumn { width: band.colW; header: header
                 caption: qsTr("Mode"); values: [false, true]; current: menu.advanced
                 labelFor: function(v) { return v ? qsTr("Advanced: wheels, raw, every control") : qsTr("Simple: JPEG, automatic") }
