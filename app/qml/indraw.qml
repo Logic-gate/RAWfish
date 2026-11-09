@@ -1016,8 +1016,10 @@ ApplicationWindow {
                             MouseArea {
                                 id: aidTap
                                 anchors.fill: parent
-                                onClicked: if (index === 0) viewfinder.zebra = !viewfinder.zebra
-                                           else viewfinder.peaking = !viewfinder.peaking
+                                onClicked: {
+                                    if (index === 0) { viewfinder.zebra = !viewfinder.zebra; viewfinder.setSetting("zebraOn", viewfinder.zebra ? 1 : 0) }
+                                    else { viewfinder.peaking = !viewfinder.peaking; viewfinder.setSetting("peakingOn", viewfinder.peaking ? 1 : 0) }
+                                }
                             }
                         }
                     }
@@ -1641,14 +1643,8 @@ ApplicationWindow {
                     if (page.imageType !== "jpg") page.imageType = "jpg"
                     exposure.resetAuto()
                 }
-                // Resolution / format: the JPEG size is an argument of the
-                // engine; the viewfinder restarts it with the chosen one.
-                function applyCaptureSize(wxh, restart) {
-                    if (wxh === "") viewfinder.captureSize = Qt.size(0, 0)
-                    else { var p = wxh.split("x"); viewfinder.captureSize = Qt.size(Number(p[0]), Number(p[1])) }
-                    if (restart) viewfinder.restart()
-                }
-                onCaptureSizeChosen: applyCaptureSize(wxh, true)
+                // The zebra and the peaking are kept across starts, in advanced
+                // mode (simple mode starts without aids). Each toggle saves.
                 Component.onCompleted: {
                     // Settings asked for the defaults: the file is set aside
                     // (rawfish-ir.conf.bak) before anything is read from it.
@@ -1658,8 +1654,21 @@ ApplicationWindow {
                         viewfinder.sendCommand("# settings back to the defaults" + (bak !== "" ? ", the previous file kept as " + bak : " (there was no file)"))
                     }
                     load()
+                    if (advanced) {
+                        viewfinder.zebra = viewfinder.setting("zebraOn", "0") == 1
+                        viewfinder.peaking = viewfinder.setting("peakingOn", "0") == 1
+                    }
                     applyCaptureSize(captureSize, false)  // the saved size, before the first start
                 }
+                // Resolution / format: the JPEG size is an argument of the
+                // engine; the viewfinder restarts it with the chosen one.
+                function applyCaptureSize(wxh, restart) {
+                    if (wxh === "") viewfinder.captureSize = Qt.size(0, 0)
+                    else { var p = wxh.split("x"); viewfinder.captureSize = Qt.size(Number(p[0]), Number(p[1])) }
+                    if (restart) viewfinder.restart()
+                }
+                onCaptureSizeChosen: applyCaptureSize(wxh, true)
+
                 // Over the viewfinder (same geometry), pulled down from inside
                 // the image; tap outside the columns closes it (closeRequested).
                 width: viewfinderZone.width
@@ -1746,8 +1755,8 @@ ApplicationWindow {
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: {
-                                    if (index === 0) viewfinder.zebra = !viewfinder.zebra
-                                    else if (index === 1) viewfinder.peaking = !viewfinder.peaking
+                                    if (index === 0) { viewfinder.zebra = !viewfinder.zebra; viewfinder.setSetting("zebraOn", viewfinder.zebra ? 1 : 0) }
+                                    else if (index === 1) { viewfinder.peaking = !viewfinder.peaking; viewfinder.setSetting("peakingOn", viewfinder.peaking ? 1 : 0) }
                                     else if (index === 2) { if (page.levelAvailable) page.levelOn = !page.levelOn }
                                     else page.backToAuto()          // same as in portrait
                                 }

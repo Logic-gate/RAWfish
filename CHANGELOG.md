@@ -42,6 +42,9 @@ repository). Newest first.
 - Checked with logChecks on the JP2: the histograms shown (viewfinder
   in JPG, RAW meter in RAW) match the photos within one to three bins
   (JPG 4-12 levels of 255, RAW 0.0-0.3 stop), highlights included.
+- Zebra and focus peaking are kept across starts in advanced mode
+  (rawfish-ir.conf: zebraOn, peakingOn); simple mode starts without
+  them.
 - A new install opens in simple mode (the mode last used is kept as
   before; "Mode at start" in Settings still forces one).
 - The yuv command's report says whether the DNG's gallery preview was

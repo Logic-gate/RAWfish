@@ -43,6 +43,10 @@ awbMode=1
 bracket=off
 ; Rule-of-thirds grid.                          values: 0, 1            default 0
 gridOn=0
+; Zebra and focus peaking as last left, restored at the start in advanced
+; mode (simple mode starts without them).      values: 0, 1            default 0
+zebraOn=0
+peakingOn=0
 ; Mode last used (simple 0, advanced 1); read when "Mode at start" is "last".
 ; A new install opens in simple mode.
 ;                                               values: 0, 1            default 0
