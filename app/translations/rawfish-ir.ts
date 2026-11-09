@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1076"/>
+        <location filename="../indrawpreview.cpp" line="+1080"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,14 +160,14 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+294"/>
-        <location line="+48"/>
+        <location line="+297"/>
+        <location line="+49"/>
         <location line="+13"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-376"/>
+        <location line="-380"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -363,7 +363,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+160"/>
+        <location line="+163"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -501,6 +501,11 @@
     </message>
     <message>
         <location line="+8"/>
+        <source>snap: one shot, no bracketing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Bracket</source>
         <translation type="unfinished"></translation>
     </message>
@@ -747,7 +752,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+262"/>
+        <location filename="../qml/indraw.qml" line="+271"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
@@ -765,14 +770,14 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+13"/>
-        <location line="+146"/>
-        <location line="+1839"/>
+        <location line="+149"/>
+        <location line="+1842"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-2011"/>
+        <location line="-2017"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -787,7 +792,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+170"/>
+        <location line="+173"/>
         <source>Tmp</source>
         <translation type="unfinished"></translation>
     </message>
@@ -797,12 +802,32 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-163"/>
+        <location line="-174"/>
+        <source>selfie</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>wide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>tele</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>standard</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
         <source>snap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+187"/>
+        <location line="+190"/>
         <source>measuring…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -833,7 +858,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+217"/>
+        <location line="+212"/>
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation type="unfinished"></translation>
@@ -862,30 +887,30 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+249"/>
-        <location line="+778"/>
+        <location line="+783"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-778"/>
-        <location line="+778"/>
+        <location line="-783"/>
+        <location line="+783"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-750"/>
-        <location line="+750"/>
+        <location line="-755"/>
+        <location line="+755"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-750"/>
-        <location line="+750"/>
+        <location line="-755"/>
+        <location line="+755"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-677"/>
+        <location line="-682"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -896,6 +921,11 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+6"/>
+        <source>auto focus · hold: exposure here</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>touch: focus · hold: exposure here</source>
         <translation type="unfinished"></translation>
     </message>
@@ -980,7 +1010,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+213"/>
+        <location line="+217"/>
         <source>CAM</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1005,7 +1035,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+9"/>
         <source>%1mm</source>
         <translation type="unfinished"></translation>
     </message>

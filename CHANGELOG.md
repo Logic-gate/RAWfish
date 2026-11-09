@@ -31,8 +31,16 @@ repository). Newest first.
   noise reduction and sharpening HQ, no DNG, no bracket; the menu greys
   its size and format; Exif Software says "(HAL JPEG, snap)". It replaces
   the HAL JPG type and its useHalJpeg key.
-- Simple mode shows TYPE too: jpg or snap (RAW stays an advanced-mode
-  type).
+- Simple mode shows TYPE (jpg or snap) and no FOCUS: auto focus at all
+  times; FOCAL names the camera (standard, wide, tele, selfie). RAW stays
+  an advanced-mode type.
+- In auto (continuous) focus, a touch no longer draws a circle: the
+  camera chooses where to focus (the HAL ignores a region there); a hold
+  still sets the exposure. "once" is the mode where a touch picks the
+  point and holds it.
+- The sun follows the zoom and the loupe's pans, like the focus circle.
+- The bracket column is greyed in snap; the white-balance menu no longer
+  offers "0" (the AWB off).
 - After each touch or hold, a line in the viewfinder for two seconds:
   "touch: focus · hold: exposure here".
 

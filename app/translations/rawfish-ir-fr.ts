@@ -34,7 +34,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1076" />
+        <location filename="../indrawpreview.cpp" line="+1080" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
@@ -159,14 +159,14 @@
         <location line="-4" />
         <location line="+19" />
         <location line="+2" />
-        <location line="+294" />
-        <location line="+48" />
+        <location line="+297" />
+        <location line="+49" />
         <location line="+13" />
         <source>off</source>
         <translation>off</translation>
     </message>
     <message>
-        <location line="-376" />
+        <location line="-380" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -362,7 +362,7 @@
         <translation>omb</translation>
     </message>
     <message>
-        <location line="+160" />
+        <location line="+163" />
         <source>max</source>
         <translation>max</translation>
     </message>
@@ -500,6 +500,11 @@
     </message>
     <message>
         <location line="+8" />
+        <source>snap: one shot, no bracketing</source>
+        <translation>snap : une prise, sans bracketing</translation>
+    </message>
+    <message>
+        <location line="+1" />
         <source>Bracket</source>
         <translation>Bracketing</translation>
     </message>
@@ -752,7 +757,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+262" />
+        <location filename="../qml/indraw.qml" line="+271" />
         <source>DNG
 (RAW)</source>
         <translation>DNG
@@ -772,14 +777,14 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+13" />
-        <location line="+146" />
-        <location line="+1839" />
+        <location line="+149" />
+        <location line="+1842" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-2011" />
+        <location line="-2017" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -794,7 +799,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation> m</translation>
     </message>
     <message>
-        <location line="+170" />
+        <location line="+173" />
         <source>Tmp</source>
         <translation>Tmp</translation>
     </message>
@@ -804,12 +809,32 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>réinit.</translation>
     </message>
     <message>
-        <location line="-163" />
+        <location line="-174" />
+        <source>selfie</source>
+        <translation>selfie</translation>
+    </message>
+    <message>
+        <location line="+2" />
+        <source>wide</source>
+        <translation>grand-angle</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>tele</source>
+        <translation>télé</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>standard</source>
+        <translation>standard</translation>
+    </message>
+    <message>
+        <location line="+6" />
         <source>snap</source>
         <translation>snap</translation>
     </message>
     <message>
-        <location line="+187" />
+        <location line="+190" />
         <source>measuring…</source>
         <translation>mesure…</translation>
     </message>
@@ -840,7 +865,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>teinte</translation>
     </message>
     <message>
-        <location line="+217" />
+        <location line="+212" />
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation>%1s</translation>
@@ -869,30 +894,30 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+249" />
-        <location line="+778" />
+        <location line="+783" />
         <source>zebra</source>
         <translation>zébra</translation>
     </message>
     <message>
-        <location line="-778" />
-        <location line="+778" />
+        <location line="-783" />
+        <location line="+783" />
         <source>peak</source>
         <translation>peaking</translation>
     </message>
     <message>
-        <location line="-750" />
-        <location line="+750" />
+        <location line="-755" />
+        <location line="+755" />
         <source>level</source>
         <translation>bulle</translation>
     </message>
     <message>
-        <location line="-750" />
-        <location line="+750" />
+        <location line="-755" />
+        <location line="+755" />
         <source>AE</source>
         <translation>AE</translation>
     </message>
     <message>
-        <location line="-677" />
+        <location line="-682" />
         <source>failed, see the log</source>
         <translation>échec, voir le journal</translation>
     </message>
@@ -903,6 +928,11 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+6" />
+        <source>auto focus · hold: exposure here</source>
+        <translation>mise au point auto · appui long : exposition ici</translation>
+    </message>
+    <message>
+        <location line="+1" />
         <source>touch: focus · hold: exposure here</source>
         <translation>toucher : mise au point · appui long : exposition ici</translation>
     </message>
@@ -987,7 +1017,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>arrêter — garder ce qui est fait</translation>
     </message>
     <message>
-        <location line="+213" />
+        <location line="+217" />
         <source>CAM</source>
         <translation>CAM</translation>
     </message>
@@ -1012,7 +1042,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>FOCALE</translation>
     </message>
     <message>
-        <location line="+7" />
+        <location line="+9" />
         <source>%1mm</source>
         <translation>%1mm</translation>
     </message>

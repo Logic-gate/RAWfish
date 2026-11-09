@@ -24,6 +24,8 @@ struct ctl_view {
     int gesture;
     int has_ref;
     double ref_ax, ref_ay;      /* the reference point, array coordinates */
+    int has_light;
+    double light_ax, light_ay;  /* the light point (a long press), array coordinates */
     char last_loupe_cmd[64];
     char pending_cmd[64];
     double last_loupe_ms;
@@ -132,7 +134,7 @@ void ctl_view_restart(ctl_view_t *v)
 {
     char c[32];
     v->loupe = 1; v->cx = 0.5; v->cy = 0.5; v->gesture = 0;
-    v->has_ref = 0;
+    v->has_ref = 0; v->has_light = 0;
     v->last_loupe_cmd[0] = '\0'; v->pending_cmd[0] = '\0'; v->last_loupe_ms = -1000;
     snprintf(c, sizeof c, "zoom %.2f", v->zoom);
     send(v, c);
@@ -187,14 +189,19 @@ void ctl_view_tap(ctl_view_t *v, double u, double vv)
 }
 void ctl_view_clear_ref(ctl_view_t *v) { v->has_ref = 0; publish(v); }
 
-/* A display-window point -> viewfinder-frame point (the long press's light
- * point, which keeps no array reference of its own). */
-void ctl_view_map(ctl_view_t *v, double u, double vv, double *fx, double *fy)
+/* The light point (a long press): kept in array coordinates like the
+ * focus reference, so the sun follows the zoom and the loupe's pans;
+ * returns the viewfinder-frame point for the exposure. */
+void ctl_view_light(ctl_view_t *v, double u, double vv, double *fx, double *fy)
 {
     ctl_rect_t d = display_window(v), f = ctl_view_frame(v);
-    *fx = (d.x + u * d.w - f.x) / f.w;
-    *fy = (d.y + vv * d.h - f.y) / f.h;
+    double ax = d.x + u * d.w, ay = d.y + vv * d.h;
+    v->light_ax = ax; v->light_ay = ay; v->has_light = 1;
+    *fx = (ax - f.x) / f.w;
+    *fy = (ay - f.y) / f.h;
+    publish(v);
 }
+void ctl_view_clear_light(ctl_view_t *v) { v->has_light = 0; publish(v); }
 
 void ctl_view_state(const ctl_view_t *v, ctl_view_state_t *out)
 {
@@ -205,4 +212,6 @@ void ctl_view_state(const ctl_view_t *v, ctl_view_state_t *out)
     out->view = d;
     out->has_ref = v->has_ref;
     if (v->has_ref) { out->ref_u = (v->ref_ax - d.x) / d.w; out->ref_v = (v->ref_ay - d.y) / d.h; }
+    out->has_light = v->has_light;
+    if (v->has_light) { out->light_u = (v->light_ax - d.x) / d.w; out->light_v = (v->light_ay - d.y) / d.h; }
 }

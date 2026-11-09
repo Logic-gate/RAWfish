@@ -28,6 +28,8 @@ typedef struct {
     ctl_rect_t view;            /* what the interface shows, array-normalised */
     int has_ref;
     double ref_u, ref_v;        /* the reference point in display-window coordinates */
+    int has_light;
+    double light_u, light_v;    /* the light point (a long press), same coordinates */
 } ctl_view_state_t;
 
 typedef void (*ctl_view_cmd_fn)(void *ctx, const char *engine_command);
@@ -50,7 +52,8 @@ void ctl_view_pan(ctl_view_t *v, double du, double dv, double now_ms); /* in dis
 void ctl_view_gesture(ctl_view_t *v, int on, double now_ms);
 void ctl_view_tap(ctl_view_t *v, double u, double vv);               /* display-window point */
 void ctl_view_clear_ref(ctl_view_t *v);
-void ctl_view_map(ctl_view_t *v, double u, double vv, double *fx, double *fy);
+void ctl_view_light(ctl_view_t *v, double u, double vv, double *fx, double *fy);
+void ctl_view_clear_light(ctl_view_t *v);
 void ctl_view_tick(ctl_view_t *v, double now_ms);                    /* flushes a throttled loupe command */
 
 void ctl_view_state(const ctl_view_t *v, ctl_view_state_t *out);

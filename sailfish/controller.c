@@ -147,8 +147,9 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
     /* the engine's meters cover what is shown: tell it the display window */
     snprintf(line, sizeof line, "viewwin %.5f %.5f %.5f %.5f", s->view.x, s->view.y, s->view.w, s->view.h);
     exp_cmd(NULL, line);
-    snprintf(line, sizeof line, "vwstate zoom=%.3f loupe=%.3f view=%.5f,%.5f,%.5f,%.5f ref=%d,%.5f,%.5f\n",
-             s->zoom, s->loupe, s->view.x, s->view.y, s->view.w, s->view.h, s->has_ref, s->ref_u, s->ref_v);
+    snprintf(line, sizeof line, "vwstate zoom=%.3f loupe=%.3f view=%.5f,%.5f,%.5f,%.5f ref=%d,%.5f,%.5f light=%d,%.5f,%.5f\n",
+             s->zoom, s->loupe, s->view.x, s->view.y, s->view.w, s->view.h, s->has_ref, s->ref_u, s->ref_v,
+             s->has_light, s->light_u, s->light_v);
     if (c.emit) c.emit(line);
 }
 
@@ -237,10 +238,10 @@ static int view_command(const char *line)
     else if (!strcmp(a, "clear")) ctl_view_clear_ref(c.view);
     else if (!strcmp(a, "light") && n >= 3) {          /* a long press: the exposure's point */
         double fx, fy;
-        ctl_view_map(c.view, atof(b), atof(d), &fx, &fy);
+        ctl_view_light(c.view, atof(b), atof(d), &fx, &fy);
         if (c.foc) ctl_focus_light(c.foc, fx, fy);
     }
-    else if (!strcmp(a, "lightclear")) { if (c.foc) ctl_focus_light_clear(c.foc); }
+    else if (!strcmp(a, "lightclear")) { ctl_view_clear_light(c.view); if (c.foc) ctl_focus_light_clear(c.foc); }
     else if (!strcmp(a, "state")) { ctl_view_state_t s; ctl_view_state(c.view, &s); view_state(NULL, &s); }
     return 1;
 }

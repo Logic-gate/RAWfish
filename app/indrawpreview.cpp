@@ -808,6 +808,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         st.insert(QStringLiteral("hasRef"), rf.size() == 3 && rf.at(0).toInt() != 0);
         st.insert(QStringLiteral("refU"), rf.size() == 3 ? rf.at(1).toDouble() : 0.5);
         st.insert(QStringLiteral("refV"), rf.size() == 3 ? rf.at(2).toDouble() : 0.5);
+        const QList<QByteArray> lf = f.value("light").split(',');      /* the light point (sun) */
+        st.insert(QStringLiteral("hasLight"), lf.size() == 3 && lf.at(0).toInt() != 0);
+        st.insert(QStringLiteral("lightU"), lf.size() == 3 ? lf.at(1).toDouble() : 0.5);
+        st.insert(QStringLiteral("lightV"), lf.size() == 3 ? lf.at(2).toDouble() : 0.5);
         m_viewState = st;
         emit viewStateChanged();
     } else if (name == "fcstate") {

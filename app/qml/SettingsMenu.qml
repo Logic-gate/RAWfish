@@ -75,7 +75,7 @@ Item {
     property int tint: 0                           // percent of green, - green .. + magenta
     // Simple mode layout, from ~/.config/com.rawfish/rawfish-ir/simple.json
     // (defaults below): what it hides, what it fixes, which menu columns stay.
-    property var simple: ({ "hide": ["wheels", "histogram", "headers"],
+    property var simple: ({ "hide": ["wheels", "histogram", "headers", "focus"],
                             "quality": 95, "noise": "minimal_noise", "edge": "hq_edge",
                             "menu": ["timer", "format", "wb"] })
     function simpleHides(what) { return !advanced && simple.hide && simple.hide.indexOf(what) >= 0 }
@@ -128,7 +128,10 @@ Item {
                                       7: "icon-camera-wb-sunset", 8: "icon-camera-wb-shade" }
     readonly property var awbCommands: { 1: "auto", 2: "incandescent", 3: "fluorescent", 4: "warm_fluorescent",
                                          5: "daylight", 6: "cloudy", 7: "twilight", 8: "shade" }
-    readonly property var awbAvailable: viewfinder && viewfinder.caps.awbModes ? viewfinder.caps.awbModes : [1]
+    // The camera's AWB modes without OFF (0): a manual white is set by the
+    // shift, the tint or the pick, never by switching the AWB off here.
+    readonly property var awbAvailable: viewfinder && viewfinder.caps.awbModes
+                                        ? viewfinder.caps.awbModes.filter(function(m) { return Number(m) !== 0 }) : [1]
     readonly property var jpegSizes: viewfinder && viewfinder.caps.jpegSizes ? viewfinder.caps.jpegSizes : []
     // The shape of the RAW stream the HAL gives: "4:3" (the JP2, the whole
     // sensor) or "16:9" (the Xperia XA2: a 16:9 readout of a 4:3 IMX300 --
@@ -451,6 +454,7 @@ Item {
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
+                dimmed: menu.imageType === "snap"; dimmedHint: qsTr("snap: one shot, no bracketing")
                 caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.bracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
                                               : v === "0" ? qsTr("3 frames in a row, same exposure")

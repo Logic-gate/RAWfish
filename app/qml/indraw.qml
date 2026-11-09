@@ -256,6 +256,15 @@ ApplicationWindow {
             // The TYPE button's value: small two-line labels ("DNG" over
             // "(RAW)", "HAL" over "JPG"); "JPG+RAW" when Settings saves a DNG
             // with each JPG, the type then being fixed.
+            // The left column's buttons (FOCAL, TYPE, FOCUS) share its height.
+            readonly property int leftButtons: 1 + (settingsMenu.simpleHides("type") ? 0 : 1) + (settingsMenu.simpleHides("focus") ? 0 : 1)
+            // FOCAL in simple mode: a name for the camera instead of a focal length.
+            function cameraRoleName() {
+                var c = viewfinder.caps, i = page.cameraIds.indexOf(viewfinder.cameraId)
+                if (i >= 0 && page.cameraFacing.length > i && page.cameraFacing[i] === "front") return qsTr("selfie")
+                if (!(c.focalEq > 0)) return ""
+                return c.focalEq < 22 ? qsTr("wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("standard")
+            }
             readonly property bool jpgPlusRaw: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg && imageType !== "snap"
             function imageTypeLabel(t) {
                 switch (t) {
@@ -358,6 +367,9 @@ ApplicationWindow {
             function showTouchHint() { page.touchHintShown = true; touchHintTimer.restart() }
             function tapAt(px, py) {
                 page.showTouchHint()
+                // Continuous ("auto"): the camera chooses where to focus, a touch
+                // does not move it (the HAL ignores a region in that mode).
+                if (page.focusMode === "cont") return
                 page.circleShown = true
                 meterCircle.opacity = 1.0
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
@@ -494,17 +506,13 @@ ApplicationWindow {
             // Remove the reference point (the controller frees the exposure and
             // restates the focus mode; the circle goes).
             // The exposure's point (a long press), its own marker and command.
-            property bool lightShown: false
-            property real lightX: 0
-            property real lightY: 0
+            readonly property bool lightShown: !!page.vws.hasLight && !!page.fcs.light
             function lightAt(px, py) {
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
-                page.lightX = px; page.lightY = py; page.lightShown = true
                 page.showTouchHint()
                 viewfinder.sendCommand("vw light " + q.u.toFixed(4) + " " + q.v.toFixed(4))
             }
             function clearLight() {
-                page.lightShown = false
                 viewfinder.sendCommand("vw lightclear")
             }
             function clearTap() {
@@ -519,7 +527,7 @@ ApplicationWindow {
                 if (!viewfinder.running) return
                 viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
             }
-            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0; page.lightShown = false }   // the controller clears both
+            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0; if (page.lightShown) viewfinder.sendCommand("vw lightclear") }   // the controller clears both
             // Kept across an engine restart: the manual focus distance and the
             // reference point (the circle). Both live in the engine's process;
             // a restarted engine gets them back once its capabilities are in.
@@ -572,7 +580,6 @@ ApplicationWindow {
                 onRunningChanged: if (viewfinder.running) {
                     page.circleShown = false
                     meterCircle.opacity = 0
-                    page.lightShown = false                          // the engine starts without a light point
                     page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
                     page.applyZoom(); page.applyFocus()
@@ -1240,7 +1247,8 @@ ApplicationWindow {
                 Label {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge * 2 }
                     visible: page.touchHintShown && viewfinder.running
-                    text: qsTr("touch: focus · hold: exposure here")
+                    text: page.focusMode === "cont" ? qsTr("auto focus · hold: exposure here")
+                                                    : qsTr("touch: focus · hold: exposure here")
                     color: "white"; font.pixelSize: Theme.fontSizeExtraSmall
                     style: Text.Outline; styleColor: "black"
                 }
@@ -1720,8 +1728,11 @@ ApplicationWindow {
                 FocusCircle {
                     id: lightMarker
                     sun: true
-                    visible: page.lightShown
-                    x: page.lightX - width / 2; y: page.lightY - height / 2
+                    // placed from the view controller's light point (array
+                    // coordinates), so it follows the zoom and the loupe's pans
+                    readonly property var lp: page.rotate(page.vws.lightU !== undefined ? page.vws.lightU : 0.5, page.vws.lightV !== undefined ? page.vws.lightV : 0.5)
+                    visible: !!page.vws.hasLight && !!page.fcs.light
+                    x: lp.u * viewfinderZone.width - width / 2; y: lp.v * viewfinderZone.height - height / 2
                     MouseArea { anchors.fill: parent; onClicked: page.clearLight() }
                     Label {
                         anchors { bottom: parent.top; horizontalCenter: parent.horizontalCenter }
@@ -1748,6 +1759,7 @@ ApplicationWindow {
                 // manual exposure left over would be invisible, so back to auto.
                 onAdvancedChanged: if (!advanced) {
                     if (page.imageType === "raw") page.imageType = "jpg"   // simple mode: jpg or snap
+                    if (page.focusMode !== "cont") page.focusMode = "cont"   // simple mode: auto focus
                     exposure.resetAuto()
                 }
                 // The zebra and the peaking are kept across starts, in advanced
@@ -1915,7 +1927,7 @@ ApplicationWindow {
                         // free at the top) and share the rest down to the bottom.
                         topPadding: Math.round(parent.height * 0.08)
                         CycleButton {
-                            width: parent.width; height: (parent.height - parent.topPadding) / (settingsMenu.simpleHides("type") ? 2 : 3)
+                            width: parent.width; height: (parent.height - parent.topPadding) / page.leftButtons
                             compact: page.compactDeck
                             caption: qsTr("FOCAL")
                             // The 35 mm-equivalent focal length of the current camera
@@ -1923,10 +1935,12 @@ ApplicationWindow {
                             // 35 mm-equivalent focal length, marked "(=35)"
                             // so it is clear it is the equivalent, not the real
                             // focal (which is ~5 mm on a phone).
-                            value: viewfinder.caps.focalEq > 0
+                            // Simple mode: the camera's role (standard, wide, tele, selfie).
+                            value: !settingsMenu.advanced && page.cameraRoleName() !== "" ? page.cameraRoleName()
+                                   : viewfinder.caps.focalEq > 0
                                    ? qsTr("%1mm").arg(Math.round(viewfinder.caps.focalEq))
                                    : qsTr("cam %1").arg(viewfinder.cameraId)
-                            subCaption: viewfinder.caps.focalEq > 0 ? qsTr("(=35)") : ""
+                            subCaption: settingsMenu.advanced && viewfinder.caps.focalEq > 0 ? qsTr("(=35)") : ""
                             // A tap cycles the back cameras; a long press goes to
                             // the front one; from the front, a tap returns to the
                             // last back camera. With one back and one front camera
@@ -1936,7 +1950,7 @@ ApplicationWindow {
                             onHeld: page.switchCamera(true)
                         }
                         CycleButton {
-                            width: parent.width; height: (parent.height - parent.topPadding) / 3
+                            width: parent.width; height: (parent.height - parent.topPadding) / page.leftButtons
                             compact: page.compactDeck
                             caption: qsTr("TYPE"); value: page.imageTypeLabel(page.imageType)
                             visible: !settingsMenu.simpleHides("type")   // simple mode: jpg and snap
@@ -1951,9 +1965,10 @@ ApplicationWindow {
                             }
                         }
                         CycleButton {
-                            width: parent.width; height: (parent.height - parent.topPadding) / (settingsMenu.simpleHides("type") ? 2 : 3)
+                            width: parent.width; height: (parent.height - parent.topPadding) / page.leftButtons
                             compact: page.compactDeck
                             caption: qsTr("FOCUS")
+                            visible: !settingsMenu.simpleHides("focus")   // simple mode: auto focus, no button
                             enabled: !page.sceneOn; opacity: page.sceneOn ? Theme.opacityLow : 1.0
                             // Manual focus shows the distance; the others a short label.
                             // The distance is red while this camera has no focus
