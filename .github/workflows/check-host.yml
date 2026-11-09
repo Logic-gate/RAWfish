@@ -21,6 +21,6 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q clang valgrind python3
+          sudo apt-get install -y -q clang valgrind python3 libjpeg-dev   # libjpeg: the YUV-to-JPEG host test (0.2.0)
       - name: scripts/check-host.sh
         run: sh scripts/check-host.sh
