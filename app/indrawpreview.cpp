@@ -213,6 +213,7 @@ void IndrawPreview::start()
      * folder models watch existing directories from the start. */
     QDir().mkpath(m_jpgDir);
     QDir().mkpath(m_dngDir);
+    QDir().mkpath(m_dngDir + QStringLiteral("/.previews"));   /* see setOutput */
     QStringList args;
     /* An empty size means "max": the engine picks the largest listed JPEG /
      * RAW16 size and the widest preview <= 1280, so every camera (front
@@ -346,6 +347,10 @@ void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, cons
     m_jpgDir = jp; m_dngDir = dn; m_prefix = pf;
     QDir().mkpath(m_jpgDir);
     QDir().mkpath(m_dngDir);
+    /* The DNG previews' hidden folder exists from the start: a folder model
+     * set on a folder that does not exist yet never notices its creation
+     * (the gallery showed no previews in a new DNG folder). */
+    QDir().mkpath(m_dngDir + QStringLiteral("/.previews"));
     emit outputChanged();
     /* The folders are arguments of the engine: a running one would go on
      * writing to the old ones. The prefix goes with each shot: no restart. */
