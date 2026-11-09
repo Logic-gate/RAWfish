@@ -83,9 +83,12 @@ Page {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                 errorHighlight: !page.prefixOk(text)
                 description: qsTr("Letters, digits, - and _ (up to 32). Files are named PREFIX_YYYYMMDD_HHMMSS_mmm.EXT.")
-                onEditingFinished: if (page.prefixOk(text)) output.prefix = text
+                // Saved when the edit ends (Enter, or the field left), not at
+                // every keystroke. (Silica's TextField has no editingFinished:
+                // using it made the whole page fail to load.)
+                onActiveFocusChanged: if (!activeFocus) { if (page.prefixOk(text)) output.prefix = text }
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
-                EnterKey.onClicked: focus = false
+                EnterKey.onClicked: { if (page.prefixOk(text)) output.prefix = text; focus = false }
             }
 
             TextField {
@@ -97,9 +100,12 @@ Page {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
                 description: qsTr("Under ~/Pictures (the only place the app may write).")
-                onEditingFinished: if (page.folderOk(text)) output.jpgDir = text.trim()
+                // Saved when the edit ends (Enter, or the field left), not at
+                // every keystroke. (Silica's TextField has no editingFinished:
+                // using it made the whole page fail to load.)
+                onActiveFocusChanged: if (!activeFocus) { if (page.folderOk(text)) output.jpgDir = text.trim() }
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
-                EnterKey.onClicked: focus = false
+                EnterKey.onClicked: { if (page.folderOk(text)) output.jpgDir = text.trim(); focus = false }
             }
 
             TextField {
@@ -111,9 +117,12 @@ Page {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
                 description: qsTr("May be another folder than the JPEGs. DNG previews go to its hidden .previews/ subfolder.")
-                onEditingFinished: if (page.folderOk(text)) output.dngDir = text.trim()
+                // Saved when the edit ends (Enter, or the field left), not at
+                // every keystroke. (Silica's TextField has no editingFinished:
+                // using it made the whole page fail to load.)
+                onActiveFocusChanged: if (!activeFocus) { if (page.folderOk(text)) output.dngDir = text.trim() }
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
-                EnterKey.onClicked: focus = false
+                EnterKey.onClicked: { if (page.folderOk(text)) output.dngDir = text.trim(); focus = false }
             }
 
             Button {
