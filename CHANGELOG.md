@@ -14,6 +14,20 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.2.3 — a touch focuses, a hold meters (patches 0333)
+- A touch on the viewfinder sets the FOCUS only, in every focus mode
+  (continuous: kept on the point; once: one scan, held; manual: one scan,
+  the distance found becomes the manual one, to adjust by hand). The
+  exposure is no longer touched by it: a tap to focus used to move it,
+  often wrongly.
+- A press held one second sets the EXPOSURE's point: a sun, a 5 % spot
+  there (was 6 %, and 12 % for the RAW meter); in a manual or priority
+  exposure, the light there shows above it as an EV. A tap on the sun,
+  or the AE button, brings the exposure back to the whole image. The
+  focus circle and the sun can stand together.
+- After each touch or hold, a line in the viewfinder for two seconds:
+  "touch: focus · hold: exposure here".
+
 ## 0.2.2 — manual white balance made steady; a lighter log (patches 0320–0331)
 - The log is lighter: a temperature or tint step sends one command (six
   before), and the separator line written before every command is gone

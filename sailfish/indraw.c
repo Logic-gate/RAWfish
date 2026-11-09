@@ -1084,7 +1084,7 @@ static void usage(void)
             "         ev STEPS   (AE compensation in HAL steps, see the caps line)\n"
             "         meter on|off [rate=HZ]   (RAW16 exposure meter -> SF2M meter lines)\n"
             "         zoom FACTOR   (digital zoom, crop region on preview and photos; RAW stays full)\n"
-            "         tap NX NY [ae] [af] [clear]   (metering/focus region at a point of the viewfinder frame 0..1)\n"
+            "         tap NX NY [ae] [af] [clear|aeclear|afclear]   (exposure / focus region at a point of the viewfinder frame 0..1; what is not named is kept)\n"
             "         wb auto|incandescent|fluorescent|warm_fluorescent|daylight|cloudy|twilight|shade\n"
             "         wb shift=S [tint=T]   (manual, from the AWB: S x5%% red/blue -20..20, T green..magenta -100..100)\n"
             "         scene off|N   (Camera2 scene mode number from caps; the HAL then drives 3A)\n"
@@ -1253,15 +1253,17 @@ static int cmd_tap(indraw_tap_fn tf, char **save, char *out)
 {
     char *xs = strtok_r(NULL, " \t\r\n", save), *ys = strtok_r(NULL, " \t\r\n", save), *tok, ex;
     float nx, ny;
-    int do_ae = -1, do_af = -1;
+    int do_ae = -1, do_af = -1;     /* 0 keep, 1 set at this point, 2 clear */
     if (!xs || !ys || sscanf(xs, "%f%c", &nx, &ex) != 1 || sscanf(ys, "%f%c", &ny, &ex) != 1) {
         emit("{\"ok\":false,\"error\":\"tap: need NX NY (0..1)\"}"); return 1;
     }
     while ((tok = strtok_r(NULL, " \t\r\n", save))) {
-        if (!strcmp(tok, "ae")) { if (do_ae < 0) do_ae = 0; do_ae = 1; }
-        else if (!strcmp(tok, "af")) { if (do_af < 0) do_af = 0; do_af = 1; }
-        else if (!strcmp(tok, "clear")) { do_ae = 0; do_af = 0; }
-        else { emit("{\"ok\":false,\"error\":\"tap: unknown option (ae|af|clear)\"}"); return 1; }
+        if (!strcmp(tok, "ae")) do_ae = 1;
+        else if (!strcmp(tok, "af")) do_af = 1;
+        else if (!strcmp(tok, "clear")) { do_ae = 2; do_af = 2; }
+        else if (!strcmp(tok, "aeclear")) do_ae = 2;
+        else if (!strcmp(tok, "afclear")) do_af = 2;
+        else { emit("{\"ok\":false,\"error\":\"tap: unknown option (ae|af|clear|aeclear|afclear)\"}"); return 1; }
     }
     if (do_ae < 0 && do_af < 0) { do_ae = 1; do_af = 1; }   /* default: both       */
     if (do_ae < 0) do_ae = 0;

@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "195"                             // shown in the deck
+    readonly property string uiVersion: "196"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -336,7 +336,12 @@ ApplicationWindow {
             // it back (onSettledChanged): the circle stayed, and needed a second
             // tap. The state's styling now only touches a circle meant to show.
             property bool circleShown: false
+            // The touch rule, said each time: a two-second line in the viewfinder.
+            property bool touchHintShown: false
+            Timer { id: touchHintTimer; interval: 2000; onTriggered: page.touchHintShown = false }
+            function showTouchHint() { page.touchHintShown = true; touchHintTimer.restart() }
             function tapAt(px, py) {
+                page.showTouchHint()
                 page.circleShown = true
                 meterCircle.opacity = 1.0
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
@@ -461,16 +466,31 @@ ApplicationWindow {
                 return (t > 0 ? "+" : "") + t + " " + qsTr("tint")
             }
 
-            // The AE button (both orientations): automatic exposure, no circle;
-            // a loupe being moved keeps the exposure still, as always.
+            // The AE button (both orientations): automatic exposure on the whole
+            // image (the light point goes; the focus circle stays: it is the
+            // focus's); a loupe being moved keeps the exposure still, as always.
             function backToAuto() {
                 exposure.resetAuto()
-                page.clearTap()
+                if (page.lightShown) page.clearLight()
                 if (page.loupeGesture) viewfinder.sendCommand("aelock on")
             }
 
             // Remove the reference point (the controller frees the exposure and
             // restates the focus mode; the circle goes).
+            // The exposure's point (a long press), its own marker and command.
+            property bool lightShown: false
+            property real lightX: 0
+            property real lightY: 0
+            function lightAt(px, py) {
+                var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
+                page.lightX = px; page.lightY = py; page.lightShown = true
+                page.showTouchHint()
+                viewfinder.sendCommand("vw light " + q.u.toFixed(4) + " " + q.v.toFixed(4))
+            }
+            function clearLight() {
+                page.lightShown = false
+                viewfinder.sendCommand("vw lightclear")
+            }
             function clearTap() {
                 page.circleShown = false
                 meterCircle.opacity = 0
@@ -483,7 +503,7 @@ ApplicationWindow {
                 if (!viewfinder.running) return
                 viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
             }
-            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0 }
+            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0; page.lightShown = false }   // the controller clears both
             // Kept across an engine restart: the manual focus distance and the
             // reference point (the circle). Both live in the engine's process;
             // a restarted engine gets them back once its capabilities are in.
@@ -536,6 +556,7 @@ ApplicationWindow {
                 onRunningChanged: if (viewfinder.running) {
                     page.circleShown = false
                     meterCircle.opacity = 0
+                    page.lightShown = false                          // the engine starts without a light point
                     page.pendingRestore = true
                     if (page.loupeOpen) page.loupe = 1
                     page.applyZoom(); page.applyFocus()
@@ -1193,6 +1214,14 @@ ApplicationWindow {
                     text: viewfinder.errorString.length > 0
                           ? viewfinder.errorString : qsTr("Starting camera…")
                 }
+                // The touch rule, two seconds after each tap or hold.
+                Label {
+                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge * 2 }
+                    visible: page.touchHintShown && viewfinder.running
+                    text: qsTr("touch: focus · hold: exposure here")
+                    color: "white"; font.pixelSize: Theme.fontSizeExtraSmall
+                    style: Text.Outline; styleColor: "black"
+                }
                 // A white-balance change: what was added or removed and the
                 // value now in force, shown in the viewfinder for two seconds.
                 Label {
@@ -1410,10 +1439,16 @@ ApplicationWindow {
                             if (dragging === "menu") settingsMenu.settle(settingsMenu.open)
                             dragging = "pinch"
                         }
-                        onPressed: { startX = mouse.x; startY = mouse.y; dragging = "" }
+                        // A press held 1 s without moving: the exposure's point (the light).
+                        Timer {
+                            id: holdTimer; interval: 1000
+                            onTriggered: { parent.dragging = "held"; page.lightAt(parent.startX, parent.startY) }
+                        }
+                        onPressed: { startX = mouse.x; startY = mouse.y; dragging = ""; holdTimer.restart() }
                         onPositionChanged: {
                             var dx = mouse.x - startX, dy = mouse.y - startY
-                            if (pinchArea.active) { cancelSwipe(); return }        // two fingers: never a swipe
+                            if (Math.abs(dx) + Math.abs(dy) > Theme.paddingLarge) holdTimer.stop()   // a drag is not a hold
+                            if (pinchArea.active) { holdTimer.stop(); cancelSwipe(); return }        // two fingers: never a swipe
                             if (page.loupe > 1.01) {
                                 // Loupe on: one finger pans the window (the gallery
                                 // and menu swipes are off, so the finger is free);
@@ -1426,16 +1461,18 @@ ApplicationWindow {
                             if (dragging === "menu") settingsMenu.y = viewfinderZone.y + Math.max(-settingsMenu.height, Math.min(0, -settingsMenu.height + dy))
                         }
                         onReleased: {
+                            holdTimer.stop()
+                            if (dragging === "held") { dragging = ""; return }  // the hold did its work
                             if (dragging === "pan") page.loupeGesture = false
                             if (dragging === "pinch" || dragging === "pan") { dragging = ""; return }
                             if (dragging === "menu")
                                 settingsMenu.settle(settingsMenu.y - viewfinderZone.y > -settingsMenu.height * 0.8)   // 20 % pulled: open
                             else if (Math.abs(mouse.x - startX) + Math.abs(mouse.y - startY) <= Theme.paddingLarge)
-                                page.tapAt(mouse.x, mouse.y)       // a tap = meter/focus here
+                                page.tapAt(mouse.x, mouse.y)       // a tap = the focus here
                             // (a drag that never said menu or gallery is nothing, not a tap)
                             dragging = ""
                         }
-                        onCanceled: { if (dragging === "menu") settingsMenu.settle(settingsMenu.open); if (dragging === "pan") page.loupeGesture = false; dragging = "" }
+                        onCanceled: { holdTimer.stop(); if (dragging === "menu") settingsMenu.settle(settingsMenu.open); if (dragging === "pan") page.loupeGesture = false; dragging = "" }
                     }
                 }
 
@@ -1645,21 +1682,29 @@ ApplicationWindow {
                     readonly property bool settled: afState === 2 || afState === 4 || afState === 5 || afState === 6
                     onSettledChanged: if (page.circleShown) opacity = settled ? 0.6 : 1.0
                     MouseArea { anchors.fill: parent; onClicked: page.clearTap() }
-                    // Manual or semi-automatic exposure (a wheel touched): the light
-                    // at the circle as an absolute EV (at ISO 100), above it -- a spot
-                    // light meter, the way the distance shows below it in manual focus.
-                    Label {
-                        anchors { bottom: parent.top; horizontalCenter: parent.horizontalCenter }
-                        visible: !exposure.fullAuto && !isNaN(exposure.meteredEv100)
-                        text: "EV " + exposure.meteredEv100.toFixed(1)
-                        color: "white"; font.pixelSize: Theme.fontSizeSmall
-                        style: Text.Outline; styleColor: "black"
-                    }
                     // Manual focus: the distance, under the circle.
                     Label {
                         anchors { top: parent.bottom; horizontalCenter: parent.horizontalCenter }
                         visible: page.focusMode === "manual"
                         text: page.focusSearching ? "…" : page.focusDistanceLabel()
+                        color: "white"; font.pixelSize: Theme.fontSizeSmall
+                        style: Text.Outline; styleColor: "black"
+                    }
+                }
+                // The exposure's point (a long press): a sun. The exposure meters
+                // a 5 % spot there; in a manual or priority exposure the light
+                // there shows above it (an absolute EV at ISO 100: a spot meter).
+                // A tap on it: the exposure back to the whole image.
+                FocusCircle {
+                    id: lightMarker
+                    sun: true
+                    visible: page.lightShown
+                    x: page.lightX - width / 2; y: page.lightY - height / 2
+                    MouseArea { anchors.fill: parent; onClicked: page.clearLight() }
+                    Label {
+                        anchors { bottom: parent.top; horizontalCenter: parent.horizontalCenter }
+                        visible: !exposure.fullAuto && !isNaN(exposure.meteredEv100)
+                        text: "EV " + exposure.meteredEv100.toFixed(1)
                         color: "white"; font.pixelSize: Theme.fontSizeSmall
                         style: Text.Outline; styleColor: "black"
                     }

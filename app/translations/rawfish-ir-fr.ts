@@ -159,14 +159,14 @@
         <location line="-4" />
         <location line="+19" />
         <location line="+2" />
-        <location line="+284" />
+        <location line="+293" />
         <location line="+48" />
         <location line="+13" />
         <source>off</source>
         <translation>off</translation>
     </message>
     <message>
-        <location line="-366" />
+        <location line="-375" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -362,7 +362,7 @@
         <translation>omb</translation>
     </message>
     <message>
-        <location line="+150" />
+        <location line="+159" />
         <source>max</source>
         <translation>max</translation>
     </message>
@@ -773,14 +773,14 @@ JPG</translation>
     </message>
     <message>
         <location line="+13" />
-        <location line="+141" />
-        <location line="+1794" />
+        <location line="+146" />
+        <location line="+1834" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-1961" />
+        <location line="-2006" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -795,7 +795,7 @@ JPG</translation>
         <translation> m</translation>
     </message>
     <message>
-        <location line="+165" />
+        <location line="+170" />
         <source>Tmp</source>
         <translation>Tmp</translation>
     </message>
@@ -836,7 +836,7 @@ JPG</translation>
         <translation>teinte</translation>
     </message>
     <message>
-        <location line="+201" />
+        <location line="+217" />
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation>%1s</translation>
@@ -865,30 +865,30 @@ JPG</translation>
     </message>
     <message>
         <location line="+243" />
-        <location line="+754" />
+        <location line="+778" />
         <source>zebra</source>
         <translation>zébra</translation>
     </message>
     <message>
-        <location line="-754" />
-        <location line="+754" />
+        <location line="-778" />
+        <location line="+778" />
         <source>peak</source>
         <translation>peaking</translation>
     </message>
     <message>
-        <location line="-726" />
-        <location line="+726" />
+        <location line="-750" />
+        <location line="+750" />
         <source>level</source>
         <translation>bulle</translation>
     </message>
     <message>
-        <location line="-726" />
-        <location line="+726" />
+        <location line="-750" />
+        <location line="+750" />
         <source>AE</source>
         <translation>AE</translation>
     </message>
     <message>
-        <location line="-653" />
+        <location line="-677" />
         <source>failed, see the log</source>
         <translation>échec, voir le journal</translation>
     </message>
@@ -898,7 +898,12 @@ JPG</translation>
         <translation>Démarrage de l'appareil photo…</translation>
     </message>
     <message>
-        <location line="+37" />
+        <location line="+6" />
+        <source>touch: focus · hold: exposure here</source>
+        <translation>toucher : mise au point · appui long : exposition ici</translation>
+    </message>
+    <message>
+        <location line="+39" />
         <source>focus help ×%1</source>
         <translation>aide MàP ×%1</translation>
     </message>
@@ -913,7 +918,7 @@ JPG</translation>
         <translation>V %1°</translation>
     </message>
     <message>
-        <location line="+167" />
+        <location line="+175" />
         <source>Device profile: no RAW, JPEG size limited</source>
         <translation>Profil de l'appareil : pas de RAW, taille JPEG limitée</translation>
     </message>
@@ -978,7 +983,7 @@ JPG</translation>
         <translation>arrêter — garder ce qui est fait</translation>
     </message>
     <message>
-        <location line="+205" />
+        <location line="+213" />
         <source>CAM</source>
         <translation>CAM</translation>
     </message>

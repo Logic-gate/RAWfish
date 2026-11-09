@@ -58,6 +58,10 @@ void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double no
 void ctl_focus_set_mode(ctl_focus_t *f, int mode);
 void ctl_focus_step(ctl_focus_t *f, int dir);             /* manual: +1 farther, -1 nearer */
 void ctl_focus_set_distance(ctl_focus_t *f, double diopters);
+/* A long press: the exposure meters a 5 % spot at that point (the focus is
+ * untouched); _light_clear: back to the whole image. */
+void ctl_focus_light(ctl_focus_t *f, double fx, double fy);
+void ctl_focus_light_clear(ctl_focus_t *f);
 void ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms); /* a tap, frame coords */
 void ctl_focus_clear(ctl_focus_t *f);                     /* the reference removed */
 void ctl_focus_set_scene(ctl_focus_t *f, int scene_on);   /* a scene drives the exposure: no spot */

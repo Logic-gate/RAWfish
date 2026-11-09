@@ -187,6 +187,15 @@ void ctl_view_tap(ctl_view_t *v, double u, double vv)
 }
 void ctl_view_clear_ref(ctl_view_t *v) { v->has_ref = 0; publish(v); }
 
+/* A display-window point -> viewfinder-frame point (the long press's light
+ * point, which keeps no array reference of its own). */
+void ctl_view_map(ctl_view_t *v, double u, double vv, double *fx, double *fy)
+{
+    ctl_rect_t d = display_window(v), f = ctl_view_frame(v);
+    *fx = (d.x + u * d.w - f.x) / f.w;
+    *fy = (d.y + vv * d.h - f.y) / f.h;
+}
+
 void ctl_view_state(const ctl_view_t *v, ctl_view_state_t *out)
 {
     ctl_rect_t d = display_window(v);

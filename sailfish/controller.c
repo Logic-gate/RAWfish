@@ -235,6 +235,12 @@ static int view_command(const char *line)
     else if (!strcmp(a, "gesture")) ctl_view_gesture(c.view, !strcmp(b, "on"), now_ms());
     else if (!strcmp(a, "tap") && n >= 3) ctl_view_tap(c.view, atof(b), atof(d));
     else if (!strcmp(a, "clear")) ctl_view_clear_ref(c.view);
+    else if (!strcmp(a, "light") && n >= 3) {          /* a long press: the exposure's point */
+        double fx, fy;
+        ctl_view_map(c.view, atof(b), atof(d), &fx, &fy);
+        if (c.foc) ctl_focus_light(c.foc, fx, fy);
+    }
+    else if (!strcmp(a, "lightclear")) { if (c.foc) ctl_focus_light_clear(c.foc); }
     else if (!strcmp(a, "state")) { ctl_view_state_t s; ctl_view_state(c.view, &s); view_state(NULL, &s); }
     return 1;
 }

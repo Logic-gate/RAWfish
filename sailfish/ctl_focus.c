@@ -27,6 +27,7 @@ struct ctl_focus {
     double diopters;
     int circle;
     int light_ref;
+    double light_fx, light_fy;              /* the light point (long press), frame coordinates */
     int scene_on;
 
     int searching, seen_active, search_late;
@@ -115,7 +116,7 @@ static void outcome(ctl_focus_t *f, int st, double focus_real_d)
         if (st == 4 && focus_real_d >= 0) f->diopters = snap(focus_real_d);  /* the distance found */
         send_manual(f);                                          /* manual again, there */
     }
-    if (!was_late) light_phase(f);                               /* a late lock: it already ran */
+    (void)was_late;                                              /* the light is the hold's, not the search's */
     publish(f);
 }
 
@@ -136,10 +137,12 @@ void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double no
         f->circle = CTL_CIRCLE_UNSURE;
         set_paused(f, 0);
         if (f->manual_pick) { f->manual_pick = 0; send_manual(f); }
-        light_phase(f);
         publish(f);
         return;
     }
+    /* Continuous focus has no lock: settled on the point (PASSIVE_FOCUSED)
+     * is its outcome. */
+    if (f->mode == CTL_FOCUS_CONT && af_state == 2 && f->seen_active) { outcome(f, 4, focus_real_d); return; }
     if (!done) { f->seen_active = 1; f->circle = CTL_CIRCLE_SEARCHING; publish(f); return; }
     if (f->seen_active || now_ms - f->search_start_ms > STALE_MS) outcome(f, af_state, focus_real_d);
 }
@@ -149,6 +152,7 @@ void ctl_focus_set_mode(ctl_focus_t *f, int mode)
     if (mode < CTL_FOCUS_CONT || mode > CTL_FOCUS_MANUAL) return;
     f->mode = mode;
     ctl_focus_clear(f);                                          /* a mode change drops the reference */
+    ctl_focus_light_clear(f);
     apply_mode(f);
     publish(f);
 }
@@ -166,44 +170,59 @@ void ctl_focus_set_distance(ctl_focus_t *f, double diopters)
     publish(f);
 }
 
+/* A tap: the FOCUS only, in every mode (continuous: focus kept on the
+ * point; once: one scan, then held; manual: one scan, the distance found
+ * becomes the manual one, to adjust by hand). The exposure is not touched:
+ * it stays the whole image's, or the held light point's (ctl_focus_light). */
 void ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
 {
     char c[64];
-    int light_only = f->mode == CTL_FOCUS_CONT;
     f->tap_fx = fx; f->tap_fy = fy;
     f->search_late = 0; f->seen_active = 0;
-    f->hold_pending = 0; f->manual_pick = 0;
-    f->light_ref = 1;
-    if (f->spot) f->spot(f->ctx, 0);                             /* a held pair: the HAL's AE back for the search */
-    if (light_only) {
-        snprintf(c, sizeof c, "tap %.4f %.4f ae", fx, fy);
-        send(f, c);
-        f->circle = CTL_CIRCLE_SUN;
-        f->searching = 0;
-        light_phase(f);
-        publish(f);
-        return;
-    }
     f->manual_pick = f->mode == CTL_FOCUS_MANUAL;
     f->hold_pending = f->mode == CTL_FOCUS_ONCE;
     f->searching = 1;
     f->search_start_ms = now_ms;
     f->circle = CTL_CIRCLE_SEARCHING;
-    set_paused(f, 1);                                            /* no exposure change during the search */
-    snprintf(c, sizeof c, "tap %.4f %.4f ae af", fx, fy);
+    snprintf(c, sizeof c, "tap %.4f %.4f af", fx, fy);
     send(f, c);
     publish(f);
 }
 
+/* A long press: the LIGHT at that point (a 5 % spot): the HAL's exposure
+ * meters there, and in a manual or priority exposure the spot meter reads
+ * there (the light reference). The focus is not touched. */
+void ctl_focus_light(ctl_focus_t *f, double fx, double fy)
+{
+    char c[64];
+    f->light_fx = fx; f->light_fy = fy;
+    f->light_ref = 1;
+    if (f->spot) f->spot(f->ctx, 0);                             /* a new point: measured afresh */
+    snprintf(c, sizeof c, "tap %.4f %.4f ae", fx, fy);
+    send(f, c);
+    light_phase(f);
+    publish(f);
+}
+void ctl_focus_light_clear(ctl_focus_t *f)
+{
+    if (!f->light_ref) return;
+    f->light_ref = 0;
+    if (f->spot) f->spot(f->ctx, 0);                             /* the exposure back to the whole image */
+    send(f, "tap 0.5 0.5 aeclear");
+    publish(f);
+}
+
+/* The focus circle cleared: the focus back to the mode's (the light point,
+ * if any, stays; ctl_focus_light_clear removes it). A mode change clears
+ * both. */
 void ctl_focus_clear(ctl_focus_t *f)
 {
-    int had = f->light_ref || f->searching || f->search_late || f->circle != CTL_CIRCLE_NONE;
-    f->light_ref = 0; f->searching = 0; f->search_late = 0;
+    int had = f->searching || f->search_late || f->circle != CTL_CIRCLE_NONE;
+    f->searching = 0; f->search_late = 0;
     f->hold_pending = 0; f->manual_pick = 0;
     f->circle = CTL_CIRCLE_NONE;
     set_paused(f, 0);
-    if (f->spot) f->spot(f->ctx, 0);                             /* the held exposure goes back to the HAL */
-    if (had) { send(f, "tap 0.5 0.5 clear"); apply_mode(f); }   /* and the held lens: the mode again */
+    if (had) { send(f, "tap 0.5 0.5 afclear"); apply_mode(f); } /* the held lens: the mode again */
     publish(f);
 }
 void ctl_focus_set_scene(ctl_focus_t *f, int scene_on) { f->scene_on = !!scene_on; }

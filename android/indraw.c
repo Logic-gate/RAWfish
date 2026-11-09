@@ -586,6 +586,7 @@ static struct {
     AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
+    int32_t ae_region[5]; int ae_region_on;      /* the exposure point in force (a long press), kept across focus taps */
     int checks;                                  /* reports carry the viewfinder-vs-photo "check" (off by default: ~2 KB per shot) */
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
     long vf_last_hist[3][64];                    /* and its histogram (bins of 4 levels, r;g;b) */
@@ -2745,7 +2746,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     setup_colour_temperature();              /* the camera->XYZ matrix, for the WB temperature */
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
-    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0;
+    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0;
     g.vw_n = 0;
     g.af_tapped = 0; g.af_zoom_on = 0; g.scene_mode = 0;   /* a new session starts with no scene */
     if (!g.shade_balance && !g.shade_strength) { g.shade_balance = 50; g.shade_strength = 100; g.shade_max_gain = 5; }
@@ -5207,6 +5208,10 @@ static void zoom_af_region(void)
     g.af_zoom_on = on;
 }
 
+/* A point of the viewfinder for the exposure and / or the focus.
+ * do_ae, do_af: 0 keep what is there, 1 set at (nx, ny), 2 clear (the
+ * exposure meters the whole image; the focus goes back to the mode's).
+ * The exposure point is a 5 % spot; the focus region is as before. */
 IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_t out_size)
 {
     ACaptureRequest *reqs[1];
@@ -5222,13 +5227,13 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
     /* The RAW meter follows the light reference: a tap with ae measures there
      * from now on, "clear" goes back to centre-weighted. */
     pthread_mutex_lock(&g.lock);                    /* the meters read it on their threads */
-    g.spot_on = do_ae ? 1 : (do_af ? g.spot_on : 0);
+    if (do_ae == 1) g.spot_on = 1; else if (do_ae == 2) g.spot_on = 0;
     pthread_mutex_unlock(&g.lock);
     /* A new light reference (or none): the held exposure is freed, the HAL
      * meters again; the UI holds it once more when the AE has converged. */
-    if (do_ae || (!do_ae && !do_af)) g.ae_lock = 0;
-    if (do_af) { g.af_tapped = 1; g.af_zoom_on = 0; }  /* the tap's region replaces ours */
-    else if (!do_ae) g.af_tapped = 0;                  /* cleared: ours again if zoomed */
+    if (do_ae) g.ae_lock = 0;
+    if (do_af == 1) { g.af_tapped = 1; g.af_zoom_on = 0; }  /* the tap's region replaces ours */
+    else if (do_af == 2) g.af_tapped = 0;                  /* cleared: ours again if zoomed */
     if (active_array(&ax, &ay, &aw, &ah, NULL))
         return fail(out, out_size, IR_ESTATE, "tap", "no active array size", 0);
     if (nx < 0) nx = 0;
@@ -5245,14 +5250,14 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         preview_crop(ax, ay, aw, ah, pc);
         cx = pc[0] + (int32_t)(nx * pc[2]);
         cy = pc[1] + (int32_t)(ny * pc[3]);
-        side = (pc[2] < pc[3] ? pc[2] : pc[3]) * 6 / 100;
+        side = (pc[2] < pc[3] ? pc[2] : pc[3]) * 5 / 100;   /* the exposure spot: 5 % of the frame */
         if (side < 16) side = 16;
-        if (do_ae) {                                /* the RAW meter's spot, array-normalised */
+        if (do_ae == 1) {                           /* the RAW meter's spot, array-normalised */
             pthread_mutex_lock(&g.lock);
             g.spot_x = (float)(cx - ax) / aw;
             g.spot_y = (float)(cy - ay) / ah;
-            g.spot_hw = 0.06f * pc[2] / aw;         /* 12 % of the FRAME: smaller in the loupe */
-            g.spot_hh = 0.06f * pc[3] / ah;
+            g.spot_hw = 0.025f * pc[2] / aw;        /* 5 % of the FRAME: smaller in the loupe */
+            g.spot_hh = 0.025f * pc[3] / ah;
             pthread_mutex_unlock(&g.lock);
         }
         region[0] = cx - side / 2; if (region[0] < ax) region[0] = ax;
@@ -5303,14 +5308,26 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
             uint8_t lk = g.ae_lock ? ACAMERA_CONTROL_AE_LOCK_ON : ACAMERA_CONTROL_AE_LOCK_OFF;
             if (!all[i]) continue;
             ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AE_LOCK, 1, &lk);
-            ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, do_ae ? region : none);
-            if (do_af) {
+            /* the exposure region: set here, cleared, or the one in force kept */
+            ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5,
+                                         do_ae == 1 ? region : (do_ae == 0 && g.ae_region_on) ? g.ae_region : none);
+            if (do_af == 1) {
                 ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AF_MODE, 1, &af_mode);
                 ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, af_region);
             }
         }
     }
-    if (!do_ae && !do_af) zoom_af_region();            /* cleared while zoomed: the middle third */
+    if (do_ae == 1) { memcpy(g.ae_region, region, sizeof g.ae_region); g.ae_region_on = 1; }
+    else if (do_ae == 2) g.ae_region_on = 0;
+    if (do_af == 2) {                                   /* the focus back to the whole image (or our zoom region) */
+        int32_t none5[5] = { ax, ay, ax + aw, ay + ah, 0 };
+        ACaptureRequest *af_all[6]; int na = 0, k;
+        af_all[na++] = g.preview_request; af_all[na++] = g.trigger_request; af_all[na++] = g.still_request;
+        if (g.raw_request) af_all[na++] = g.raw_request;
+        if (g.meter_request) af_all[na++] = g.meter_request;
+        for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 5, none5);
+        zoom_af_region();                               /* cleared while zoomed: the middle third */
+    }
     reqs[0] = g.preview_request;
     st = ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
     if (st != ACAMERA_OK)
@@ -5318,13 +5335,13 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
     /* A new scan: CANCEL first releases a lock from a previous tap (some HALs
      * ignore a START while FOCUSED_LOCKED), then START. No AE precapture: with
      * AE on, the HAL re-meters its region by itself. */
-    if (do_af && !continuous) {
+    if (do_af == 1 && !continuous) {
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
     jw_init(&w, out, out_size);
     jw_add(&w, "{\"ok\":true,\"ae\":%s,\"af\":%s,\"continuous\":%s,\"region\":[%d,%d,%d,%d]}",
-           do_ae ? "true" : "false", do_af ? "true" : "false", continuous ? "true" : "false",
+           do_ae == 1 ? "true" : "false", do_af == 1 ? "true" : "false", continuous ? "true" : "false",
            region[0], region[1], region[2], region[3]);
     return IR_OK;
 }
