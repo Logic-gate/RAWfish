@@ -96,12 +96,15 @@ logChecks=false
 ; WIDTHxHEIGHT the camera lists. A test key.
 ;                                               values: jpeg, max, WxH  default jpeg
 jpgYuvStream=jpeg
-; HAL JPG: the camera driver's own JPEG, offered in TYPE when this is true.
-; Stacks, brackets and bursts use the HAL JPEG and its settings below even
-; when it is not offered. On a phone whose session cannot hold the YUV stream
-; (exclusive streams), JPG is the HAL JPEG.
-;                                               values: false, true     default false
-useHalJpeg=false
+; snap (in TYPE): the camera driver's own JPEG at a small size, for utility
+; shots (a receipt, a sign), noise reduction and sharpening HQ. Its size, as
+; WIDTHxHEIGHT among the camera's JPEG sizes ("" = the largest 4:3 size of
+; at most 5 megapixels: 2592x1944 on the JP2).
+;                                               e.g. 3264x2448          default ""
+snapSize=
+; Stacks, brackets and bursts use the HAL JPEG and its settings below. On a
+; phone whose session cannot hold the YUV stream (exclusive streams), JPG is
+; the HAL JPEG.
 ; The HAL JPEG's noise reduction.               values: default, off, fast, hq, minimal   default off
 halJpegNoise=off
 ; The HAL JPEG's sharpening.                    values: default, off, fast, hq            default hq

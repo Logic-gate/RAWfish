@@ -34,7 +34,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1066" />
+        <location filename="../indrawpreview.cpp" line="+1076" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
@@ -159,14 +159,14 @@
         <location line="-4" />
         <location line="+19" />
         <location line="+2" />
-        <location line="+293" />
+        <location line="+294" />
         <location line="+48" />
         <location line="+13" />
         <source>off</source>
         <translation>off</translation>
     </message>
     <message>
-        <location line="-375" />
+        <location line="-376" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -362,7 +362,7 @@
         <translation>omb</translation>
     </message>
     <message>
-        <location line="+159" />
+        <location line="+160" />
         <source>max</source>
         <translation>max</translation>
     </message>
@@ -446,6 +446,12 @@
         <location line="+17" />
         <source>RAW has one size and one format: the sensor's</source>
         <translation>Le RAW n'a qu'une taille et un format : ceux du capteur</translation>
+    </message>
+    <message>
+        <location line="-17" />
+        <location line="+17" />
+        <source>snap: one small size, the camera's own JPEG</source>
+        <translation>snap : une petite taille, le JPEG de l'appareil</translation>
     </message>
     <message>
         <location line="-16" />
@@ -746,21 +752,14 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+246" />
+        <location filename="../qml/indraw.qml" line="+262" />
         <source>DNG
 (RAW)</source>
         <translation>DNG
 (RAW)</translation>
     </message>
     <message>
-        <location line="+1" />
-        <source>HAL
-JPG</source>
-        <translation>HAL
-JPG</translation>
-    </message>
-    <message>
-        <location line="+1" />
+        <location line="+2" />
         <source>jpg</source>
         <translation>jpg</translation>
     </message>
@@ -774,13 +773,13 @@ JPG</translation>
     <message>
         <location line="+13" />
         <location line="+146" />
-        <location line="+1834" />
+        <location line="+1839" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-2006" />
+        <location line="-2011" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -805,7 +804,12 @@ JPG</translation>
         <translation>réinit.</translation>
     </message>
     <message>
-        <location line="+24" />
+        <location line="-163" />
+        <source>snap</source>
+        <translation>snap</translation>
+    </message>
+    <message>
+        <location line="+187" />
         <source>measuring…</source>
         <translation>mesure…</translation>
     </message>
@@ -864,7 +868,7 @@ JPG</translation>
         <translation>bulle : pas de mesure</translation>
     </message>
     <message>
-        <location line="+243" />
+        <location line="+249" />
         <location line="+778" />
         <source>zebra</source>
         <translation>zébra</translation>
@@ -1028,7 +1032,7 @@ JPG</translation>
         <translation>TYPE</translation>
     </message>
     <message>
-        <location line="+16" />
+        <location line="+15" />
         <source>FOCUS</source>
         <translation>MàP</translation>
     </message>

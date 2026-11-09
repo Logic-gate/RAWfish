@@ -207,8 +207,8 @@ ApplicationWindow {
                 else if (rawAvailable && imageTypeSetAside !== "") { imageType = imageTypeSetAside; imageTypeSetAside = "" }
             }
             // UI state. Internal values are plain keys; qsTr() only on display.
-            // raw | jpg (RAWfish-ir's JPEG, from the ISP's image) | haljpg (the
-            // camera driver's own JPEG, offered when rawfish-ir.conf says useHalJpeg=true)
+            // raw | jpg (RAWfish-ir's JPEG, from the ISP's image) | snap (the
+            // camera driver's own JPEG at a small fixed size, for utility shots)
             property string imageType: "jpg"
             // JPG is RAWfish-ir's own processing where the session holds the YUV
             // stream; elsewhere (exclusive streams, or a session that refused it)
@@ -225,7 +225,8 @@ ApplicationWindow {
                 // slow the viewfinder), so switching between them is instant; only
                 // HAL JPG, or a bracket, adds the JPEG stream and restarts.
                 var raw = page.rawAvailable ? ",raw" : ""
-                if (page.imageType === "haljpg" || !page.ownJpeg) return "jpeg" + raw
+                if (page.imageType === "snap") return "jpeg"                 // the camera's JPEG at the snap size, nothing else
+                if (!page.ownJpeg) return "jpeg" + raw
                 if (page.imageType === "raw") return page.ownJpeg ? "yuv,raw" : "raw"
                 var s = "yuv" + raw
                 if (settingsMenu.bracket !== "off") s += ",jpeg"
@@ -233,6 +234,21 @@ ApplicationWindow {
             }
             onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
             Component.onCompleted: viewfinder.sessionStreams = sessionStreams
+            // snap: the camera's JPEG at a small size: rawfish-ir.conf's snapSize
+            // if the camera lists it, else the largest 4:3 size of at most 5
+            // megapixels. The session is opened at that size while in snap.
+            readonly property size snapSize: {
+                var list = viewfinder.caps.jpegSizes ? viewfinder.caps.jpegSizes : []
+                var want = settingsMenu.snapSize, best = Qt.size(0, 0), i
+                for (i = 0; i < list.length; ++i) {
+                    var p = String(list[i]).split("x"), w = Number(p[0]), h = Number(p[1])
+                    if (want !== "" && want === w + "x" + h) return Qt.size(w, h)
+                    if (Math.abs(w * 3 - h * 4) <= 4 && w * h <= 5100000 && w * h > best.width * best.height) best = Qt.size(w, h)
+                }
+                return best
+            }
+            readonly property size jpegOverride: imageType === "snap" ? snapSize : Qt.size(0, 0)
+            onJpegOverrideChanged: viewfinder.jpegSizeOverride = jpegOverride
             // Starts in continuous focus (the "auto" label): the camera follows
             // the scene by itself until the user asks for more. ("auto" here is
             // Camera2's AUTO, one scan then hold: the "once" label.)
@@ -240,17 +256,17 @@ ApplicationWindow {
             // The TYPE button's value: small two-line labels ("DNG" over
             // "(RAW)", "HAL" over "JPG"); "JPG+RAW" when Settings saves a DNG
             // with each JPG, the type then being fixed.
-            readonly property bool jpgPlusRaw: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
+            readonly property bool jpgPlusRaw: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg && imageType !== "snap"
             function imageTypeLabel(t) {
                 switch (t) {
                 case "raw":     return qsTr("DNG\n(RAW)")
-                case "haljpg":  return qsTr("HAL\nJPG")
+                case "snap":    return qsTr("snap")
                 default:        return page.jpgPlusRaw ? qsTr("JPG\n+RAW") : qsTr("jpg")
                 }
             }
             // Settings asks for a DNG with each JPG: JPG is the type, whatever
             // was chosen before (the button says JPG+RAW and is greyed).
-            onJpgPlusRawChanged: if (jpgPlusRaw && imageType !== "jpg") imageType = "jpg"
+            onJpgPlusRawChanged: if (jpgPlusRaw && imageType === "raw") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
             //   "once"   = one scan where you tap, then hold (Camera2 AUTO)
             //   "auto"   = continuous focus by the HAL; a tap then only meters
@@ -962,6 +978,12 @@ ApplicationWindow {
             // the manual distance, a stack for a Σ speed, a burst or three
             // shots for a bracket -- from the settings sent here.
             function shoot() {
+                if (page.imageType === "snap") {
+                    // the camera's JPEG, noise reduction and sharpening HQ, one shot
+                    viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=jpg q=" + settingsMenu.effQuality
+                                           + " noise=hq_noise edge=hq_edge bracket=off denoise_sigma=1 snap=1")
+                    return
+                }
                 var isRaw = (page.imageType === "raw"), isYuv = (page.imageType === "jpg" && page.ownJpeg)
                 viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix
                                        + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
@@ -1918,14 +1940,13 @@ ApplicationWindow {
                             compact: page.compactDeck
                             caption: qsTr("TYPE"); value: page.imageTypeLabel(page.imageType)
                             visible: !settingsMenu.simpleHides("type")   // simple mode: JPEG only
-                            // Greyed on a Σ speed (stacking writes a DNG only) and on a
-                            // camera without RAW (nothing to cycle to).
-                            enabled: !page.stackSelected && !page.jpgPlusRaw && (page.rawAvailable || settingsMenu.halJpeg)
-                            opacity: page.stackSelected || page.jpgPlusRaw || !(page.rawAvailable || settingsMenu.halJpeg) ? Theme.opacityLow : 1.0
+                            // Greyed on a Σ speed (stacking writes a DNG only) and with
+                            // a DNG saved with each JPG (the type is fixed then).
+                            enabled: !page.stackSelected && !page.jpgPlusRaw
+                            opacity: page.stackSelected || page.jpgPlusRaw ? Theme.opacityLow : 1.0
                             onCycle: {
-                                // RAW and JPG; HAL JPG too when rawfish-ir.conf offers it.
-                                var t = page.rawAvailable ? ["raw", "jpg"] : ["jpg"]
-                                if (settingsMenu.halJpeg) t.push("haljpg")
+                                // RAW (where the camera has it), JPG, snap.
+                                var t = page.rawAvailable ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
                             }
                         }

@@ -265,6 +265,7 @@ static int shoot_command(const char *line)
     if ((v = field(line, "median"))) r.median = atoi(v);
     if ((v = field(line, "sharpen"))) r.sharpen = atoi(v);
     r.dng = (v = field(line, "dng")) && atoi(v) == 1;
+    r.snap = (v = field(line, "snap")) && atoi(v) == 1;
     if ((v = field(line, "q"))) r.quality = atoi(v);
     if ((v = field(line, "noise"))) sscanf(v, "%23s", r.noise);
     if ((v = field(line, "edge"))) sscanf(v, "%23s", r.edge);

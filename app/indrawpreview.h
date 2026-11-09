@@ -65,6 +65,9 @@ class IndrawPreview : public QQuickItem
      * YUV stream beside the JPEG one slowed the JP2's viewfinder by a second).
      * A change restarts the engine. */
     Q_PROPERTY(QString sessionStreams READ sessionStreams WRITE setSessionStreams NOTIFY sessionStreamsChanged)
+    /* A JPEG size that overrides captureSize for this session (the snap
+     * type's small size); empty = none. A change restarts the engine. */
+    Q_PROPERTY(QSize jpegSizeOverride READ jpegSizeOverride WRITE setJpegSizeOverride NOTIFY jpegSizeOverrideChanged)
     /* The size of the frames the engine streams (sensor orientation): their
      * proportions are the photo's; the page shapes the viewfinder on them. */
     Q_PROPERTY(QSize frameSize READ frameSize NOTIFY frameSizeChanged)
@@ -183,6 +186,8 @@ public:
     void setRawSession(bool raw);
     bool yuvFellBack() const { return m_yuvFellBack; }
     QString sessionStreams() const { return m_sessionStreams; }
+    QSize jpegSizeOverride() const { return m_jpegOverride; }
+    void setJpegSizeOverride(const QSize &s);
     void setSessionStreams(const QString &s);
 
     bool fill() const;
@@ -290,6 +295,7 @@ signals:
     void rawSessionChanged();
     void yuvFellBackChanged();
     void sessionStreamsChanged();
+    void jpegSizeOverrideChanged();
     void rawSessionFailed();       /* exclusive streams: the RAW session died, back to JPEG */
 
     void activeChanged();
@@ -377,6 +383,8 @@ private:
     bool m_yuvFellBack = false;    /* a session with the YUV stream died: without it */
     QString m_sessionStreams = QStringLiteral("jpeg,raw,yuv");   /* asked by the page */
     QString m_startedStreams;      /* what the running engine was started with */
+    QSize m_jpegOverride;          /* snap: the JPEG size of this session          */
+    QSize m_startedOverride;
     int m_yuvFails = 0;            /* such deaths in a row, before any caps         */
     bool m_sessionYuv = false;     /* what the running engine was started with     */
     bool m_sessionRaw = false;     /* what the running engine was started with     */

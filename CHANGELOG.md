@@ -14,7 +14,7 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.2.3 — a touch focuses, a hold meters (patches 0333)
+## 0.2.3 — a touch focuses, a hold meters (patches 0333–0334)
 - A touch on the viewfinder sets the FOCUS only, in every focus mode
   (continuous: kept on the point; once: one scan, held; manual: one scan,
   the distance found becomes the manual one, to adjust by hand). The
@@ -25,6 +25,12 @@ repository). Newest first.
   exposure, the light there shows above it as an EV. A tap on the sun,
   or the AE button, brings the exposure back to the whole image. The
   focus circle and the sun can stand together.
+- TYPE: DNG (RAW), jpg, snap. snap is the camera's own JPEG at a small
+  size for utility shots (the largest 4:3 size of at most 5 megapixels,
+  2592x1944 on the JP2; rawfish-ir.conf snapSize to choose another),
+  noise reduction and sharpening HQ, no DNG, no bracket; the menu greys
+  its size and format; Exif Software says "(HAL JPEG, snap)". It replaces
+  the HAL JPG type and its useHalJpeg key.
 - After each touch or hold, a line in the viewfinder for two seconds:
   "touch: focus · hold: exposure here".
 

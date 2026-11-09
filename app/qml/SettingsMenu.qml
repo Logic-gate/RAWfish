@@ -59,7 +59,7 @@ Item {
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     // JPG: RAWfish-ir's own processing of the ISP's image (rawfish-ir.conf only).
-    property bool halJpeg: false                   // offer "HAL JPG" (the camera driver's JPEG) in TYPE
+    property string snapSize: ""                   // snap's JPEG size (WxH listed by the camera); "" = the largest 4:3 <= 5 Mpx
     property bool logChecks: false                 // the reports carry the viewfinder-vs-photo histograms (a check)
     property string zebraJpegMode: "luma"          // JPEG zebra: luma (a pixel that comes out white) or channel (any one)
     property int yuvFrames: 1                      // 1, 2 or 4 frames merged
@@ -160,7 +160,8 @@ Item {
         jpegQuality = pick("jpegQuality", "95", ["20", "40", "60", "80", "90", "95", "100"]) * 1
         awbMode = num("awbMode", 1, 1, 8)
         // Set in rawfish-ir.conf only (not in the menu): the processing.
-        halJpeg = pick("useHalJpeg", "false", ["false", "true"]) === "true"
+        var ss = String(viewfinder.setting("snapSize", "")).trim()
+        snapSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(ss) ? ss : ""
         logChecks = pick("logChecks", "false", ["false", "true"]) === "true"
         zebraJpegMode = pick("zebraJpegMode", "luma", ["luma", "channel"])
         noiseIndex = Math.max(0, noiseModes.indexOf(pick("halJpegNoise", "off", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
@@ -412,7 +413,7 @@ Item {
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).
             MenuColumn { visible: menu.simpleMenuHas("format"); width: band.colW; header: header
-                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW has one size and one format: the sensor's")
+                dimmed: menu.imageType === "raw" || menu.imageType === "snap"; dimmedHint: menu.imageType === "snap" ? qsTr("snap: one small size, the camera's own JPEG") : qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Format"); values: ["4:3", "16:9"]; current: menu.format
                 // "as the RAW" is whichever format has the RAW stream's shape
                 // (4:3 on the JP2, 16:9 on the XA2); the other one crops. Up to
@@ -429,7 +430,7 @@ Item {
                     if (sz === "") { header.show(qsTr("No %1 size listed").arg(value)); return }
                     menu.formatSaved = value; menu.save("format", value); menu.setSize(sz) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW has one size and one format: the sensor's")
+                dimmed: menu.imageType === "raw" || menu.imageType === "snap"; dimmedHint: menu.imageType === "snap" ? qsTr("snap: one small size, the camera's own JPEG") : qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Resolution")
                 values: menu.sizesFor(menu.format)
                 current: menu.effectiveSize()

@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1066"/>
+        <location filename="../indrawpreview.cpp" line="+1076"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,14 +160,14 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+293"/>
+        <location line="+294"/>
         <location line="+48"/>
         <location line="+13"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-375"/>
+        <location line="-376"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -363,7 +363,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+159"/>
+        <location line="+160"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -446,6 +446,12 @@
         <location line="+7"/>
         <location line="+17"/>
         <source>RAW has one size and one format: the sensor&apos;s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-17"/>
+        <location line="+17"/>
+        <source>snap: one small size, the camera&apos;s own JPEG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -741,19 +747,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+246"/>
+        <location filename="../qml/indraw.qml" line="+262"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>HAL
-JPG</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
+        <location line="+2"/>
         <source>jpg</source>
         <translation type="unfinished"></translation>
     </message>
@@ -766,13 +766,13 @@ JPG</source>
     <message>
         <location line="+13"/>
         <location line="+146"/>
-        <location line="+1834"/>
+        <location line="+1839"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-2006"/>
+        <location line="-2011"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -797,7 +797,12 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="-163"/>
+        <source>snap</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+187"/>
         <source>measuring…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -856,7 +861,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+243"/>
+        <location line="+249"/>
         <location line="+778"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
@@ -1020,7 +1025,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+15"/>
         <source>FOCUS</source>
         <translation type="unfinished"></translation>
     </message>

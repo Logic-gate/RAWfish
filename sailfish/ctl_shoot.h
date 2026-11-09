@@ -31,6 +31,7 @@ typedef struct {
     int yuv;                    /* 1: our JPEG from the YUV stream (frames, colour, median, sharpen) */
     int frames, colour, median, sharpen;
     int dng;                    /* yuv: a DNG of the same exposure too */
+    int snap;                   /* jpeg: the snap type (label=snap in the Exif) */
     int quality;                /* JPEG quality */
     char noise[24], edge[24];   /* the photo's processing modes (jpeg), "" = none */
     int bracket;                /* -1 off, 0 = x3 same exposure, 1..3 stops */

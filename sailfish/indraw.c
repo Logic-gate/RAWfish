@@ -1550,6 +1550,11 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
             }
         }
         else if (!strcmp(tok, "easy")) easy = 1;   /* combined AF + AE (one call) */
+        else if (!strncmp(tok, "label=", 6)) {     /* the kind, in Exif Software ("snap") */
+            typedef void (*label_fn)(const char *);
+            label_fn lf = g_bridge_for_vendor ? (label_fn)a_dlsym(g_bridge_for_vendor, "indraw_set_jpeg_label") : NULL;
+            if (lf) lf(tok + 6);
+        }
         else { emit("{\"ok\":false,\"error\":\"jpeg: unknown option\"}"); return 1; }
     }
     if (quality < 1 || quality > 100) {

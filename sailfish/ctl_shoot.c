@@ -46,7 +46,8 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
                  req->name, ns / 1e9, iso, req->denoise > 1 ? req->denoise : 1);
         return 1;
     }
-    snprintf(head, sizeof head, "%s %s%s%s", req->raw ? "raw" : "jpeg", req->name, farg, req->raw ? "" : q);
+    snprintf(head, sizeof head, "%s %s%s%s%s", req->raw ? "raw" : "jpeg", req->name, farg, req->raw ? "" : q,
+             !req->raw && req->snap ? " label=snap" : "");
     /* x3 in JPEG: one burst; the pair goes along when held. */
     if (req->bracket == 0 && !req->raw) {
         n = snprintf(lines[0], CTL_SHOOT_LINE, "burst %s n=3%s", req->name, q);

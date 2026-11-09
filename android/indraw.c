@@ -587,6 +587,7 @@ static struct {
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
     int32_t ae_region[5]; int ae_region_on;      /* the exposure point in force (a long press), kept across focus taps */
+    char jpeg_label[24];                         /* the next HAL JPEG's kind in Exif Software ("snap"), used once */
     int checks;                                  /* reports carry the viewfinder-vs-photo "check" (off by default: ~2 KB per shot) */
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
     long vf_last_hist[3][64];                    /* and its histogram (bins of 4 levels, r;g;b) */
@@ -3685,7 +3686,10 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
         exif_datetime(dt, sizeof dt);
         ex.make = make[0] ? make : NULL;
         ex.model = model[0] ? model : NULL;
-        ex.software = "RAWfish-ir " IR_VERSION " (HAL JPEG)";   /* the camera driver's JPEG, as against ours (JPG from YUV) */
+        char swl[64];
+        snprintf(swl, sizeof swl, "RAWfish-ir " IR_VERSION " (HAL JPEG%s%s)", g.jpeg_label[0] ? ", " : "", g.jpeg_label);
+        g.jpeg_label[0] = '\0';
+        ex.software = swl;                         /* the camera driver's JPEG, as against ours (JPG from YUV) */
         ex.flash = exif_flash_value(g.result_ready && g.r_flash_fired);
         ex.digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
         ex.datetime = dt;
@@ -6824,6 +6828,12 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* The next HAL JPEG's kind, written in its Exif Software ("snap"). */
+IR_API void indraw_set_jpeg_label(const char *label)
+{
+    snprintf(g.jpeg_label, sizeof g.jpeg_label, "%s", label ? label : "");
+}
+
 /* JPG + DNG: the next indraw_yuv_burst also writes a DNG of the same
  * instant (path ".dng"), from the RAW16 stream of the same session: the
  * last frame of the burst carries the RAW target too, so one exposure gives

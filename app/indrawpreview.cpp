@@ -91,6 +91,14 @@ void IndrawPreview::setPreviewSize(const QSize &size)
 }
 
 QSize IndrawPreview::captureSize() const { return m_captureSize; }
+void IndrawPreview::setJpegSizeOverride(const QSize &s)
+{
+    if (m_jpegOverride == s) return;
+    m_jpegOverride = s;
+    emit jpegSizeOverrideChanged();
+    if (m_active && m_gotCaps && m_startedOverride != s) restart();
+}
+
 void IndrawPreview::setSessionStreams(const QString &s)
 {
     if (m_sessionStreams == s) return;
@@ -215,8 +223,10 @@ void IndrawPreview::start()
      * camera, October 2026); the caps of the "max" engine let the page
      * settle a size this camera has. */
     m_gotCaps = false;
-    const QString cap = (m_captureSize.isEmpty() || m_sizeFallback) ? QStringLiteral("max")
-            : QStringLiteral("%1x%2").arg(m_captureSize.width()).arg(m_captureSize.height());
+    m_startedOverride = m_jpegOverride;
+    const QSize capSize = !m_jpegOverride.isEmpty() ? m_jpegOverride : m_captureSize;
+    const QString cap = (capSize.isEmpty() || m_sizeFallback) ? QStringLiteral("max")
+            : QStringLiteral("%1x%2").arg(capSize.width()).arg(capSize.height());
     const QString prev = m_previewSize.isEmpty() ? QStringLiteral("max")
             : QStringLiteral("%1x%2").arg(m_previewSize.width()).arg(m_previewSize.height());
     /* The RAW stream is always "max": the engine picks the camera's RAW16
@@ -398,7 +408,7 @@ void IndrawPreview::writeDefaultSettings()
     /* Keys of earlier versions that nothing reads any more (the processing
      * moved to the named keys in 0.2.0): dropped, so that the file only
      * holds what the example documents. */
-    static const char *const retired[] = { "noiseIndex", "edgeIndex", "previewNoiseIndex", "previewEdgeIndex", "yuvFrames", "yuvColour", "yuvMedian", "yuvSharpen", "jpgColour", "jpgMoire", "halJpeg", nullptr };
+    static const char *const retired[] = { "noiseIndex", "edgeIndex", "previewNoiseIndex", "previewEdgeIndex", "yuvFrames", "yuvColour", "yuvMedian", "yuvSharpen", "jpgColour", "jpgMoire", "halJpeg", "useHalJpeg", nullptr };
     for (int i = 0; retired[i]; ++i) if (s.contains(QLatin1String(retired[i]))) { s.remove(QLatin1String(retired[i])); ++added; }
     for (const QByteArray &line : lines) {
         const int eq = line.indexOf('=');

@@ -19,26 +19,9 @@ Each item says why, so it can be picked up later without re-deriving it.
 
 ### Features
 
-- **"snap": the camera's own JPEG as a third type, for utility shots.**
-  TYPE would offer DNG (RAW), jpg and snap, always (the useHalJpeg key
-  would go). snap = the HAL JPEG at a fixed, small size (the largest
-  4:3 size at or under 5 megapixels, 2592x1944 on the JP2; a snapSize
-  key in rawfish-ir.conf to choose another), noise reduction and
-  sharpening HQ, no DNG, no bracket; the menu greys the size, format and
-  processing columns in that type; Exif Software "(HAL JPEG, snap)". The
-  size is to be settled by use: 5 megapixels reads a receipt or a sign
-  and weighs about 1.5 MB; 8 (3264x2448) is the alternative.
-- **A "stock" JPEG type**: the HAL's own processing at 8 MP, quality 85,
-  for small everyday files. To decide: reopen the session at that size
-  (about 1 s to switch, ~1.5 MB files) or keep the current size (instant,
-  3-4 MB).
-- **An HDR of RAWfish-ir's own**: the JP2 HAL's own is not reachable from
-  Camera2 (VENDOR-TESTS). Bracketed RAWs merged in linear space on the
-  stacking code (tripod or steady hand: no alignment), written as one DNG;
-  the bracketing setting already takes the exposures.
-- **XA2, 16:9 photos**: the deck would have to lie over the image for the
-  viewfinder to take the full width (a 16:9 image on a 16:9 screen leaves
-  no room under it).
+- **snap: settle its size by use** (done in 0.2.3 at the largest 4:3 size
+  of at most 5 megapixels, 2592x1944 on the JP2; snapSize in
+  rawfish-ir.conf to try 3264x2448).
 
 - **A shorter shutter delay with ZSL** (zero shutter lag): the camera keeps
   the last full-resolution frames, unprocessed, in a ring buffer; at the

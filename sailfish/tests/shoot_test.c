@@ -41,6 +41,11 @@ int main(void)
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && strstr(lines[0], "q=95 dng=1 focus=") != NULL, "yuv with a DNG: dng=1");
     r.yuv = 0; r.dng = 0;
+    /* 3c. snap: the HAL JPEG with its label for the Exif. */
+    r.snap = 1;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && !strncmp(lines[0], "jpeg ", 5) && strstr(lines[0], " label=snap") != NULL, "snap: a jpeg line with label=snap");
+    r.snap = 0;
     /* 4. a stacked shutter with a pair: a stack with the denoise factor. */
     xs.shutter_ns = 2e9; r.denoise = 2;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
