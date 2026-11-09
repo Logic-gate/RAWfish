@@ -219,6 +219,15 @@ Item {
         wbShift = 0; tint = 0; save("wbShift", 0); save("tint", 0)
         applyLive()
     }
+    // Not on the camera's automatic white: a measured white, a shift or tint,
+    // or a preset mode. The start-up banner offers to keep it or drop it all.
+    readonly property bool wbManualAny: wbFixed !== "" || wbShift !== 0 || tint !== 0 || awbMode !== 1
+    function resetWbAll() {
+        if (wbFixed !== "") { clearWbFixed(); }
+        wbShift = 0; tint = 0; save("wbShift", 0); save("tint", 0)
+        if (awbMode !== 1) { awbMode = 1; save("awbMode", 1) }
+        applyLive()
+    }
     function clearWbFixed() {
         wbFixed = ""; save("wbFixed", "")
         wbShift = 0; tint = 0; save("wbShift", 0); save("tint", 0)

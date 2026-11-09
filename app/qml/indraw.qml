@@ -1544,7 +1544,7 @@ ApplicationWindow {
                     property real remaining: 1.0               // the countdown, 1 -> 0
                     readonly property int countdownMs: 6000
                     anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.paddingLarge }
-                    visible: shown && settingsMenu.wbFixed !== ""
+                    visible: shown && settingsMenu.wbManualAny
                     width: wbKeptLabel.width + 2 * Theme.paddingLarge; height: wbKeptLabel.height + Theme.paddingLarge
                     radius: Theme.paddingSmall; color: Qt.rgba(0, 0, 0, 0.6)
                     border.color: "#80d8ff"; border.width: 1
@@ -1567,11 +1567,11 @@ ApplicationWindow {
                         property double startMs: 0
                         onTriggered: {
                             wbKeptBanner.remaining = Math.max(0, 1 - (Date.now() - startMs) / wbKeptBanner.countdownMs)
-                            if (wbKeptBanner.remaining <= 0) { stop(); wbKeptBanner.shown = false; settingsMenu.clearWbFixed() }
+                            if (wbKeptBanner.remaining <= 0) { stop(); wbKeptBanner.shown = false; settingsMenu.resetWbAll() }
                         }
                     }
                     function offer() {
-                        if (settingsMenu.wbFixed === "" || !settingsMenu.advanced) return
+                        if (!settingsMenu.wbManualAny || !settingsMenu.advanced) return
                         remaining = 1.0; shown = true; wbKeptTimer.startMs = Date.now(); wbKeptTimer.start()
                     }
                 }
