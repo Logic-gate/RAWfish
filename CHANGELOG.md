@@ -14,7 +14,30 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.2.1 — the settings file from the start; the gallery not locked (patches 0299–0305)
+## 0.2.2 — manual white balance made steady; a lighter log (patches 0320–0331)
+- The log is lighter: a temperature or tint step sends one command (six
+  before), and the separator line written before every command is gone
+  (a third of the lines). Settings > Log > "Detailed log" turns the
+  checks on without editing rawfish-ir.conf.
+- Manual white balance made steady: the base (the camera's neutral) is
+  frozen at the first step away from zero and kept until the return to
+  zero, and the mode command no longer re-enables the AWB while a shift
+  is in force; each step is an exact multiple of the same neutral.
+- JPG and RAW share one session (YUV + RAW): switching between them no
+  longer restarts the engine. HAL JPG still does.
+- White balance: the pick (a 2 s press on a readout) works again in JPG
+  (it needs the RAW stream, now in every session). The two readouts
+  show two lines at all times, the offset asked ("+10% Tmp", "−5%
+  tint") over the value in force, orange/blue for a warmer/cooler
+  temperature, magenta/green for the tint; a change is also shown in
+  the viewfinder for two seconds.
+- The start-up banner "Keep previous manual WB" appears for any manual
+  white balance (a measured white, a shift, a preset), not only a
+  measured white; the countdown's end puts everything back to automatic.
+- rawfish-ir.conf: keys of earlier versions that nothing reads any more
+  are dropped at start.
+
+## 0.2.1 — the settings file from the start; the gallery not locked (patches 0299–0319)
 - A new install, or "Reset the camera settings", now writes
   ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf at once, from the
   example: every key at its default, with its comment. Before, the file
@@ -42,22 +65,6 @@ repository). Newest first.
 - Checked with logChecks on the JP2: the histograms shown (viewfinder
   in JPG, RAW meter in RAW) match the photos within one to three bins
   (JPG 4-12 levels of 255, RAW 0.0-0.3 stop), highlights included.
-- The log is lighter: a temperature or tint step sends one command (six
-  before), and the separator line written before every command is gone
-  (a third of the lines). Settings > Log > "Detailed log" turns the
-  checks on without editing rawfish-ir.conf.
-- Manual white balance made steady: the base (the camera's neutral) is
-  frozen at the first step away from zero and kept until the return to
-  zero, and the mode command no longer re-enables the AWB while a shift
-  is in force; each step is an exact multiple of the same neutral.
-- JPG and RAW share one session (YUV + RAW): switching between them no
-  longer restarts the engine. HAL JPG still does.
-- White balance: the pick (a 2 s press on a readout) works again in JPG
-  (it needs the RAW stream, now in every session). The two readouts
-  show two lines at all times, the offset asked ("+10% temp", "−5%
-  tint") over the value in force, orange/blue for a warmer/cooler
-  temperature, magenta/green for the tint; a change is also shown in
-  the viewfinder for two seconds.
 - Zebra and focus peaking are kept across starts in advanced mode
   (rawfish-ir.conf: zebraOn, peakingOn); simple mode starts without
   them.
