@@ -218,10 +218,12 @@ ApplicationWindow {
             // RAW too when a DNG is asked with it, and the JPEG one when a
             // bracket needs it; the JPEG one for haljpg (or jpg without YUV).
             readonly property string sessionStreams: {
+                // RAW is in every session where the camera has it: the white-balance
+                // pick ("wb pick") and the RAW meter measure on the RAW stream.
+                var raw = page.rawAvailable ? ",raw" : ""
                 if (page.imageType === "raw") return "raw"
-                if (page.imageType === "haljpg" || !page.ownJpeg) return "jpeg"
-                var s = "yuv"
-                if (outputConf.jpgWithDng && page.rawAvailable) s += ",raw"
+                if (page.imageType === "haljpg" || !page.ownJpeg) return "jpeg" + raw
+                var s = "yuv" + raw
                 if (settingsMenu.bracket !== "off") s += ",jpeg"
                 return s
             }
@@ -380,10 +382,10 @@ ApplicationWindow {
             property string fineShown: ""
             property string fineText: ""
             function fineWb(what, d) {
-                if (what === "warmth") { settingsMenu.stepWarmth(d); page.fineText = (d > 0 ? "+" : "−") + (5 * settingsMenu.fineWarmthStep) + "% " + qsTr("warm") }
-                else { settingsMenu.stepTint(d); page.fineText = (d > 0 ? "+" : "−") + settingsMenu.fineTintStep + "% " + qsTr("magenta") }
+                if (what === "warmth") { settingsMenu.stepWarmth(d); page.fineText = (d > 0 ? "+" : "−") + (5 * settingsMenu.fineWarmthStep) + "% " + qsTr("temp") }
+                else { settingsMenu.stepTint(d); page.fineText = (d > 0 ? "+" : "−") + settingsMenu.fineTintStep + "% " + qsTr("tint") }
                 page.fineShown = what
-                fineTimer.restart()
+                fineTimer.interval = 2000; fineTimer.restart()
             }
             function fineReset(what) {
                 if (settingsMenu.wbFixed !== "") {             // a measured white: back to the automatic one
@@ -430,7 +432,18 @@ ApplicationWindow {
                     fineTimer.interval = 2500; fineTimer.restart()
                 }
             }
-            Timer { id: fineTimer; interval: 900; onTriggered: { page.fineShown = ""; interval = 900 } }
+            Timer { id: fineTimer; interval: 2000; onTriggered: { page.fineShown = ""; interval = 2000 } }
+            // The two readouts' permanent texts: the offset asked ("+10% temp",
+            // "−5% tint"; just "temp" / "tint" at zero) over the value in force.
+            readonly property string warmthOffset: settingsMenu.wbFixed !== "" ? qsTr("fixed")
+                : settingsMenu.wbShift === 0 ? qsTr("temp") : (settingsMenu.wbShift > 0 ? "+" : "−") + Math.abs(5 * settingsMenu.wbShift) + "% " + qsTr("temp")
+            readonly property string tintOffset: settingsMenu.wbFixed !== "" ? qsTr("fixed")
+                : settingsMenu.tint === 0 ? qsTr("tint") : (settingsMenu.tint > 0 ? "+" : "−") + Math.abs(settingsMenu.tint) + "% " + qsTr("tint")
+            // Orange when warmer than the camera's white, blue when cooler;
+            // magenta when tinted that way, green the other; a measured white
+            // in cyan; the deck's colour at zero.
+            readonly property color warmthColor: settingsMenu.wbFixed !== "" ? "#80d8ff" : settingsMenu.wbShift > 0 ? "#ffb060" : settingsMenu.wbShift < 0 ? "#80b8ff" : app.deckTextColor
+            readonly property color tintColor: settingsMenu.wbFixed !== "" ? "#80d8ff" : settingsMenu.tint > 0 ? "#ff70d0" : settingsMenu.tint < 0 ? "#80e0a0" : app.deckTextColor
             // The tint as a Duv in thousandths: "+4" green side, "−4" magenta side.
             function duvLabel(duv) {
                 var t = Math.round(duv * 1000)
@@ -1168,6 +1181,19 @@ ApplicationWindow {
                     color: Theme.highlightColor
                     text: viewfinder.errorString.length > 0
                           ? viewfinder.errorString : qsTr("Starting camera…")
+                }
+                // A white-balance change: what was added or removed and the
+                // value now in force, shown in the viewfinder for two seconds.
+                Label {
+                    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: Theme.paddingLarge * 3 }
+                    visible: page.fineShown !== "" && viewfinder.running
+                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: Theme.fontSizeMedium; font.bold: true
+                    color: page.fineShown === "warmth" ? page.warmthColor : page.tintColor
+                    style: Text.Outline; styleColor: "black"
+                    text: page.fineText + "   " + (page.fineShown === "warmth"
+                              ? (viewfinder.wbCct > 0 ? viewfinder.wbCct + "K" : "")
+                              : (viewfinder.wbCct > 0 ? page.duvLabel(viewfinder.wbDuv) : ""))
                 }
 
                 // Unpinch = focus loupe (display only, 1x..12x); pinch back to 1
@@ -2035,11 +2061,13 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     visible: settingsMenu.advanced
                                     horizontalAlignment: Text.AlignHCenter
-                                    text: page.fineShown === "warmth" ? page.fineText
-                                        : (viewfinder.wbCct > 0 ? viewfinder.wbCct + "K" : "")
+                                    // Two lines, always: the offset asked, the value in force
+                                    // (a pick's progress message replaces the first line).
+                                    text: (page.fineShown === "warmth" && page.fineText !== "" ? page.fineText : page.warmthOffset)
+                                          + "\n" + (viewfinder.wbCct > 0 ? viewfinder.wbCct + "K" : "")
                                     font.pixelSize: Theme.fontSizeTiny
-                                    color: settingsMenu.wbFixed !== "" ? "#80d8ff"                  // a measured white
-                                         : settingsMenu.wbShift !== 0 ? "#ffb060" : app.deckTextColor   // tinted while shifted
+                                    lineHeight: 0.9
+                                    color: page.warmthColor
                                     MouseArea { anchors.fill: parent; anchors.margins: -Theme.paddingSmall
                                                 onDoubleClicked: page.fineReset("warmth")
                                                 onPressed: page.pickHoldStart(); onReleased: page.pickHoldStop(); onCanceled: page.pickHoldStop() }
@@ -2050,11 +2078,11 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     horizontalAlignment: Text.AlignHCenter
                                     visible: settingsMenu.advanced
-                                    text: page.fineShown === "tint" ? page.fineText
-                                        : (viewfinder.wbCct > 0 ? page.duvLabel(viewfinder.wbDuv) : "")
+                                    text: (page.fineShown === "tint" && page.fineText !== "" ? page.fineText : page.tintOffset)
+                                          + "\n" + (viewfinder.wbCct > 0 ? page.duvLabel(viewfinder.wbDuv) : "")
                                     font.pixelSize: Theme.fontSizeTiny
-                                    color: settingsMenu.wbFixed !== "" ? "#80d8ff"
-                                         : settingsMenu.tint !== 0 ? "#ff70d0" : app.deckTextColor
+                                    lineHeight: 0.9
+                                    color: page.tintColor
                                     MouseArea { anchors.fill: parent; anchors.margins: -Theme.paddingSmall
                                                 onDoubleClicked: page.fineReset("tint")
                                                 onPressed: page.pickHoldStart(); onReleased: page.pickHoldStop(); onCanceled: page.pickHoldStop() }

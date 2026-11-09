@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1049"/>
+        <location filename="../indrawpreview.cpp" line="+1066"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -66,7 +66,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+87"/>
+        <location filename="../qml/SettingsMenu.qml" line="+89"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,14 +160,14 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+279"/>
+        <location line="+281"/>
         <location line="+48"/>
         <location line="+13"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-361"/>
+        <location line="-363"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -363,7 +363,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+145"/>
+        <location line="+147"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -741,7 +741,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+240"/>
+        <location filename="../qml/indraw.qml" line="+242"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
@@ -765,14 +765,14 @@ JPG</source>
     </message>
     <message>
         <location line="+13"/>
-        <location line="+130"/>
-        <location line="+1745"/>
+        <location line="+136"/>
+        <location line="+1788"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1901"/>
+        <location line="-1950"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -787,17 +787,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+97"/>
-        <source>warm</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>magenta</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+10"/>
+        <location line="+114"/>
         <source>reset</source>
         <translation type="unfinished"></translation>
     </message>
@@ -827,12 +817,26 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="-44"/>
+        <location line="+55"/>
         <location line="+9"/>
         <source>tint</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+197"/>
+        <location line="-65"/>
+        <location line="+54"/>
+        <source>temp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-1"/>
+        <location line="+2"/>
+        <source>fixed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+211"/>
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation type="unfinished"></translation>
@@ -860,31 +864,31 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+239"/>
-        <location line="+729"/>
+        <location line="+243"/>
+        <location line="+751"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-729"/>
-        <location line="+729"/>
+        <location line="-751"/>
+        <location line="+751"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-703"/>
-        <location line="+703"/>
+        <location line="-723"/>
+        <location line="+723"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-703"/>
-        <location line="+703"/>
+        <location line="-723"/>
+        <location line="+723"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-630"/>
+        <location line="-650"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -894,7 +898,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+34"/>
         <source>focus help ×%1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -974,7 +978,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+198"/>
+        <location line="+205"/>
         <source>CAM</source>
         <translation type="unfinished"></translation>
     </message>

@@ -42,6 +42,12 @@ repository). Newest first.
 - Checked with logChecks on the JP2: the histograms shown (viewfinder
   in JPG, RAW meter in RAW) match the photos within one to three bins
   (JPG 4-12 levels of 255, RAW 0.0-0.3 stop), highlights included.
+- White balance: the pick (a 2 s press on a readout) works again in JPG
+  (it needs the RAW stream, now in every session). The two readouts
+  show two lines at all times, the offset asked ("+10% temp", "−5%
+  tint") over the value in force, orange/blue for a warmer/cooler
+  temperature, magenta/green for the tint; a change is also shown in
+  the viewfinder for two seconds.
 - Zebra and focus peaking are kept across starts in advanced mode
   (rawfish-ir.conf: zebraOn, peakingOn); simple mode starts without
   them.
