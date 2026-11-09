@@ -220,9 +220,12 @@ ApplicationWindow {
             readonly property string sessionStreams: {
                 // RAW is in every session where the camera has it: the white-balance
                 // pick ("wb pick") and the RAW meter measure on the RAW stream.
+                // JPG and RAW share one session (our full-size YUV stream does not
+                // slow the viewfinder), so switching between them is instant; only
+                // HAL JPG, or a bracket, adds the JPEG stream and restarts.
                 var raw = page.rawAvailable ? ",raw" : ""
-                if (page.imageType === "raw") return "raw"
                 if (page.imageType === "haljpg" || !page.ownJpeg) return "jpeg" + raw
+                if (page.imageType === "raw") return page.ownJpeg ? "yuv,raw" : "raw"
                 var s = "yuv" + raw
                 if (settingsMenu.bracket !== "off") s += ",jpeg"
                 return s

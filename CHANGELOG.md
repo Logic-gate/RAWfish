@@ -42,6 +42,8 @@ repository). Newest first.
 - Checked with logChecks on the JP2: the histograms shown (viewfinder
   in JPG, RAW meter in RAW) match the photos within one to three bins
   (JPG 4-12 levels of 255, RAW 0.0-0.3 stop), highlights included.
+- JPG and RAW share one session (YUV + RAW): switching between them no
+  longer restarts the engine. HAL JPG still does.
 - White balance: the pick (a 2 s press on a readout) works again in JPG
   (it needs the RAW stream, now in every session). The two readouts
   show two lines at all times, the offset asked ("+10% temp", "−5%
