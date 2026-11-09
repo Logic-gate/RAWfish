@@ -871,6 +871,7 @@ ApplicationWindow {
                 viewfinder.zebraLevel = Math.round(255 - (255 - level) * zb)
             }
             onImageTypeChanged: {
+                viewfinder.sendCommand("# type: " + imageType)   // logged: a type that changes by itself is a bug to see
                 applyAidThresholds()
                 viewfinder.rawSession = (imageType === "raw")   // exclusive streams: the session follows the type
             }

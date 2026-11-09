@@ -42,9 +42,14 @@ MouseArea {
             horizontalAlignment: Text.AlignHCenter
             truncationMode: TruncationMode.Fade
             color: root.pressed ? Theme.highlightColor : root.textColor
-            // A value on two lines ("HAL" over "JPG") is set small, to fit.
+            // A value on two lines ("HAL" over "JPG", "DNG" over "(RAW)") is set
+            // small, and shrinks further where the button is low (landscape),
+            // rather than vanish: a label clipped to nothing read as "no type".
             readonly property bool twoLines: root.value.indexOf("\n") >= 0
             font { pixelSize: twoLines ? Theme.fontSizeExtraSmall : root.compact ? Theme.fontSizeMedium : Theme.fontSizeLarge; bold: true }
+            fontSizeMode: twoLines ? Text.VerticalFit : Text.FixedSize
+            minimumPixelSize: Theme.fontSizeTiny
+            height: twoLines ? Math.max(Theme.fontSizeTiny * 2, Math.min(implicitHeight, root.height - Theme.fontSizeTiny - 3 * Theme.paddingSmall)) : implicitHeight
             lineHeight: twoLines ? 0.85 : 1.0
             text: root.value
         }

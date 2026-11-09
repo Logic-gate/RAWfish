@@ -737,6 +737,13 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         m_gotCaps = true;
         m_sizeFallback = false;
         m_yuvFails = 0;
+        if (m_startedStreams != m_sessionStreams) {
+            /* The streams asked changed while this engine was starting (the
+             * type changed within its first second): it holds the wrong ones,
+             * and a capture would fail ("session has no raw16 stream").
+             * Start again with the right ones. */
+            QTimer::singleShot(0, this, [this] { if (m_active && m_startedStreams != m_sessionStreams) restart(); });
+        }
         emit capsChanged();
         if (m_caps.value(QStringLiteral("limits")).toString().contains(QLatin1String("exclusive"))) {
             if (m_rawFellBack) {
