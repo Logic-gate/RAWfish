@@ -1201,9 +1201,9 @@ ApplicationWindow {
                     font.pixelSize: Theme.fontSizeMedium; font.bold: true
                     color: page.fineShown === "warmth" ? page.warmthColor : page.tintColor
                     style: Text.Outline; styleColor: "black"
-                    // "−5% → 0% Tmp   3682K": the step, the offset now in force, the value
+                    // "0% Tmp   3682K": the offset now in force and the value
                     // (a pick's messages stand alone).
-                    text: (page.pickMessage ? page.fineText : page.fineText + "  →  " + (page.fineShown === "warmth" ? page.warmthOffset : page.tintOffset))
+                    text: (page.pickMessage ? page.fineText : (page.fineShown === "warmth" ? page.warmthOffset : page.tintOffset))
                           + "   " + (page.fineShown === "warmth"
                               ? (viewfinder.wbCct > 0 ? viewfinder.wbCct + "K" : "")
                               : (viewfinder.wbCct > 0 ? page.duvLabel(viewfinder.wbDuv) : ""))
@@ -2070,7 +2070,8 @@ ApplicationWindow {
                                 // third), no longer against the shutter.
                                 Label {
                                     id: cctReadout
-                                    x: parent.width / 6 - width / 2
+                                    // one character further out than the thirds, clear of the shutter
+                                    x: parent.width / 6 - width / 2 - Theme.fontSizeTiny * 0.6
                                     anchors.verticalCenter: parent.verticalCenter
                                     visible: settingsMenu.advanced
                                     horizontalAlignment: Text.AlignHCenter
@@ -2087,7 +2088,7 @@ ApplicationWindow {
                                 }
                                 Label {
                                     id: tintReadout
-                                    x: parent.width * 5 / 6 - width / 2
+                                    x: parent.width * 5 / 6 - width / 2 + Theme.fontSizeTiny * 0.6
                                     anchors.verticalCenter: parent.verticalCenter
                                     horizontalAlignment: Text.AlignHCenter
                                     visible: settingsMenu.advanced
