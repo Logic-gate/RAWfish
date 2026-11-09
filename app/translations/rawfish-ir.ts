@@ -741,7 +741,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>indraw</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+242"/>
+        <location filename="../qml/indraw.qml" line="+245"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
@@ -765,14 +765,14 @@ JPG</source>
     </message>
     <message>
         <location line="+13"/>
-        <location line="+136"/>
-        <location line="+1789"/>
+        <location line="+141"/>
+        <location line="+1793"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-1951"/>
+        <location line="-1960"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -787,18 +787,17 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+103"/>
-        <location line="+56"/>
+        <location line="+165"/>
         <source>Tmp</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-45"/>
+        <location line="-46"/>
         <source>reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+24"/>
         <source>measuring…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -823,8 +822,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-44"/>
-        <location line="+56"/>
+        <location line="+12"/>
         <location line="+9"/>
         <source>tint</source>
         <translation type="unfinished"></translation>
@@ -859,30 +857,30 @@ JPG</source>
     </message>
     <message>
         <location line="+243"/>
-        <location line="+751"/>
+        <location line="+754"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-751"/>
-        <location line="+751"/>
+        <location line="-754"/>
+        <location line="+754"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-723"/>
-        <location line="+723"/>
+        <location line="-726"/>
+        <location line="+726"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-723"/>
-        <location line="+723"/>
+        <location line="-726"/>
+        <location line="+726"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-650"/>
+        <location line="-653"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -892,7 +890,7 @@ JPG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+37"/>
         <source>focus help ×%1</source>
         <translation type="unfinished"></translation>
     </message>

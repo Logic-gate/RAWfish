@@ -385,12 +385,17 @@ ApplicationWindow {
             property string fineShown: ""
             property string fineText: ""
             function fineWb(what, d) {
-                if (what === "warmth") { settingsMenu.stepWarmth(d); page.fineText = (d > 0 ? "+" : "−") + (5 * settingsMenu.fineWarmthStep) + "% " + qsTr("Tmp") }
-                else { settingsMenu.stepTint(d); page.fineText = (d > 0 ? "+" : "−") + settingsMenu.fineTintStep + "% " + qsTr("tint") }
+                if (what === "warmth") { settingsMenu.stepWarmth(d); page.fineText = (d > 0 ? "+" : "−") + (5 * settingsMenu.fineWarmthStep) + "%" }
+                else { settingsMenu.stepTint(d); page.fineText = (d > 0 ? "+" : "−") + settingsMenu.fineTintStep + "%" }
+                page.pickMessage = false
                 page.fineShown = what
                 fineTimer.interval = 2000; fineTimer.restart()
             }
+            // fineText is a step ("+5%") or, with pickMessage, a message of its own
+            // ("measuring…", "WB set", "auto", "reset") shown in place of the offset.
+            property bool pickMessage: false
             function fineReset(what) {
+                page.pickMessage = true
                 if (settingsMenu.wbFixed !== "") {             // a measured white: back to the automatic one
                     settingsMenu.clearWbFixed()
                     page.fineText = qsTr("auto"); page.fineShown = what
@@ -419,6 +424,7 @@ ApplicationWindow {
                         stop(); page.pickProgress = 0
                         page.pickMeasuring = true
                         viewfinder.sendCommand("wb pick")
+                        page.pickMessage = true
                         page.fineText = qsTr("measuring…"); page.fineShown = "warmth"; fineTimer.restart()
                     }
                 }
@@ -1195,7 +1201,10 @@ ApplicationWindow {
                     font.pixelSize: Theme.fontSizeMedium; font.bold: true
                     color: page.fineShown === "warmth" ? page.warmthColor : page.tintColor
                     style: Text.Outline; styleColor: "black"
-                    text: page.fineText + "   " + (page.fineShown === "warmth"
+                    // "−5% → 0% Tmp   3682K": the step, the offset now in force, the value
+                    // (a pick's messages stand alone).
+                    text: (page.pickMessage ? page.fineText : page.fineText + "  →  " + (page.fineShown === "warmth" ? page.warmthOffset : page.tintOffset))
+                          + "   " + (page.fineShown === "warmth"
                               ? (viewfinder.wbCct > 0 ? viewfinder.wbCct + "K" : "")
                               : (viewfinder.wbCct > 0 ? page.duvLabel(viewfinder.wbDuv) : ""))
                 }
@@ -2067,7 +2076,7 @@ ApplicationWindow {
                                     horizontalAlignment: Text.AlignHCenter
                                     // Two lines, always: the offset asked, the value in force
                                     // (a pick's progress message replaces the first line).
-                                    text: (page.fineShown === "warmth" && page.fineText !== "" ? page.fineText : page.warmthOffset)
+                                    text: (page.fineShown === "warmth" && page.pickMessage ? page.fineText : page.warmthOffset)
                                           + "\n" + (viewfinder.wbCct > 0 ? viewfinder.wbCct + "K" : "")
                                     font.pixelSize: Theme.fontSizeTiny
                                     lineHeight: 0.9
@@ -2082,7 +2091,7 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     horizontalAlignment: Text.AlignHCenter
                                     visible: settingsMenu.advanced
-                                    text: (page.fineShown === "tint" && page.fineText !== "" ? page.fineText : page.tintOffset)
+                                    text: (page.fineShown === "tint" && page.pickMessage ? page.fineText : page.tintOffset)
                                           + "\n" + (viewfinder.wbCct > 0 ? page.duvLabel(viewfinder.wbDuv) : "")
                                     font.pixelSize: Theme.fontSizeTiny
                                     lineHeight: 0.9
