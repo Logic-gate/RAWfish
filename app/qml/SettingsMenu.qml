@@ -75,7 +75,7 @@ Item {
     property int tint: 0                           // percent of green, - green .. + magenta
     // Simple mode layout, from ~/.config/com.rawfish/rawfish-ir/simple.json
     // (defaults below): what it hides, what it fixes, which menu columns stay.
-    property var simple: ({ "hide": ["wheels", "type", "histogram", "headers"],
+    property var simple: ({ "hide": ["wheels", "histogram", "headers"],
                             "quality": 95, "noise": "minimal_noise", "edge": "hq_edge",
                             "menu": ["timer", "format", "wb"] })
     function simpleHides(what) { return !advanced && simple.hide && simple.hide.indexOf(what) >= 0 }

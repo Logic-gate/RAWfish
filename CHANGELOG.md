@@ -31,6 +31,8 @@ repository). Newest first.
   noise reduction and sharpening HQ, no DNG, no bracket; the menu greys
   its size and format; Exif Software says "(HAL JPEG, snap)". It replaces
   the HAL JPG type and its useHalJpeg key.
+- Simple mode shows TYPE too: jpg or snap (RAW stays an advanced-mode
+  type).
 - After each touch or hold, a line in the viewfinder for two seconds:
   "touch: focus · hold: exposure here".
 

@@ -1747,7 +1747,7 @@ ApplicationWindow {
                 // Simple mode is JPEG only, and has no wheels: a priority or
                 // manual exposure left over would be invisible, so back to auto.
                 onAdvancedChanged: if (!advanced) {
-                    if (page.imageType !== "jpg") page.imageType = "jpg"
+                    if (page.imageType === "raw") page.imageType = "jpg"   // simple mode: jpg or snap
                     exposure.resetAuto()
                 }
                 // The zebra and the peaking are kept across starts, in advanced
@@ -1939,14 +1939,14 @@ ApplicationWindow {
                             width: parent.width; height: (parent.height - parent.topPadding) / 3
                             compact: page.compactDeck
                             caption: qsTr("TYPE"); value: page.imageTypeLabel(page.imageType)
-                            visible: !settingsMenu.simpleHides("type")   // simple mode: JPEG only
+                            visible: !settingsMenu.simpleHides("type")   // simple mode: jpg and snap
                             // Greyed on a Σ speed (stacking writes a DNG only) and with
                             // a DNG saved with each JPG (the type is fixed then).
                             enabled: !page.stackSelected && !page.jpgPlusRaw
                             opacity: page.stackSelected || page.jpgPlusRaw ? Theme.opacityLow : 1.0
                             onCycle: {
-                                // RAW (where the camera has it), JPG, snap.
-                                var t = page.rawAvailable ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
+                                // RAW (where the camera has it, advanced mode only), JPG, snap.
+                                var t = page.rawAvailable && settingsMenu.advanced ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
                             }
                         }

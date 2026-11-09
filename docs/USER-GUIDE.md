@@ -176,7 +176,7 @@ columns or swipe up to close.
 
 | Column | What it sets |
 |---|---|
-| Mode | **simple** (JPEG only, no wheels, a brightness slider instead) or **advanced** |
+| Mode | **simple** (jpg or snap, no wheels, a brightness slider instead) or **advanced** |
 | Timer | off, 3 s, 10 s |
 | Format | 4:3 or 16:9. By default, the shape of the RAW the camera gives ("as the RAW": 4:3 on the JP2, 16:9 on the Xperia XA2); the other one crops. The viewfinder takes the photo's shape (grey bands only if the camera has no preview of that shape) |
 | Resolution | the JPEG sizes this camera offers |
