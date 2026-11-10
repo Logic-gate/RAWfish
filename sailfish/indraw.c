@@ -1513,6 +1513,7 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
 /* Handles one "jpeg ..." line (tokens after "jpeg" come from strtok_r). */
 static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
 {
+    const char *label = "";                  /* label=: the HAL JPEG's kind for its Exif */
     char *prefix = strtok_r(NULL, " \t\r\n", save); /* filename prefix (1st)   */
     char file[1200];                                  /* built timestamped path  */
     char *tok;
@@ -1550,16 +1551,18 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
             }
         }
         else if (!strcmp(tok, "easy")) easy = 1;   /* combined AF + AE (one call) */
-        else if (!strncmp(tok, "label=", 6)) {     /* the kind, in Exif Software ("snap") */
-            typedef void (*label_fn)(const char *);
-            label_fn lf = g_bridge_for_vendor ? (label_fn)a_dlsym(g_bridge_for_vendor, "indraw_set_jpeg_label") : NULL;
-            if (lf) lf(tok + 6);
-        }
+        else if (!strncmp(tok, "label=", 6)) label = tok + 6;   /* the kind, in Exif Software ("snap") */
         else { emit("{\"ok\":false,\"error\":\"jpeg: unknown option\"}"); return 1; }
     }
     if (quality < 1 || quality > 100) {
         emit("{\"ok\":false,\"error\":\"jpeg: bad value\"}");
         return 1;
+    }
+    {   /* The label is set for EVERY jpeg, empty when none was given: a label
+         * left by a capture that failed never marks the next one. */
+        typedef void (*label_fn)(const char *);
+        label_fn lf = g_bridge_for_vendor ? (label_fn)a_dlsym(g_bridge_for_vendor, "indraw_set_jpeg_label") : NULL;
+        if (lf) lf(label);
     }
     /* "easy" = the combined convenience path: one-shot AF + AE precapture. It is
      * the only command allowed to combine; everything else stays atomic. Without

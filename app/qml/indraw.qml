@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "197"                             // shown in the deck
+    readonly property string uiVersion: "198"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -220,17 +220,20 @@ ApplicationWindow {
             // RAW too when a DNG is asked with it, and the JPEG one when a
             // bracket needs it; the JPEG one for haljpg (or jpg without YUV).
             readonly property string sessionStreams: {
-                // RAW is in every session where the camera has it: the white-balance
-                // pick ("wb pick") and the RAW meter measure on the RAW stream.
-                // JPG and RAW share one session (our full-size YUV stream does not
-                // slow the viewfinder), so switching between them is instant; only
-                // HAL JPG, or a bracket, adds the JPEG stream and restarts.
+                // What the engine opens beside the viewfinder (streams=):
+                //  - RAW in every session where the camera has it: the white-
+                //    balance pick and the RAW meter measure on it;
+                //  - jpg and raw share ONE session (our YUV stream + RAW), so
+                //    switching between them is instant; a bracket adds the
+                //    camera's JPEG stream (brackets are HAL JPEGs);
+                //  - snap, and jpg where our YUV is not possible (exclusive
+                //    streams, or a session that refused it): the camera's JPEG
+                //    stream (at the snap size for snap, see jpegOverride).
+                // A change of this list restarts the engine (about a second).
                 var raw = page.rawAvailable ? ",raw" : ""
-                if (page.imageType === "snap") return "jpeg"                 // the camera's JPEG at the snap size, nothing else
-                if (!page.ownJpeg) return "jpeg" + raw
-                if (page.imageType === "raw") return page.ownJpeg ? "yuv,raw" : "raw"
-                var s = "yuv" + raw
-                if (settingsMenu.bracket !== "off") s += ",jpeg"
+                if (page.imageType === "snap" || !page.ownJpeg) return "jpeg" + raw
+                var s = "yuv" + raw                                   // jpg and raw alike
+                if (page.imageType === "jpg" && settingsMenu.bracket !== "off") s += ",jpeg"
                 return s
             }
             onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
@@ -266,17 +269,18 @@ ApplicationWindow {
                 if (!(c.focalEq > 0)) return ""
                 return c.focalEq < 22 ? qsTr("wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("standard")
             }
-            readonly property bool jpgPlusRaw: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg && imageType !== "snap"
             function imageTypeLabel(t) {
                 switch (t) {
                 case "raw":     return qsTr("DNG\n(RAW)")
                 case "snap":    return qsTr("snap")
-                default:        return page.jpgPlusRaw ? qsTr("JPG\n+RAW") : qsTr("jpg")
+                default:        return page.dngWithJpg ? qsTr("JPG\n+RAW") : qsTr("jpg")
                 }
             }
-            // Settings asks for a DNG with each JPG: JPG is the type, whatever
-            // was chosen before (the button says JPG+RAW and is greyed).
-            onJpgPlusRawChanged: if (jpgPlusRaw && imageType === "raw") imageType = "jpg"
+            // Settings asks for a DNG with each JPG: RAW alone would be the same
+            // DNG without its JPG, so TYPE offers "JPG +RAW" and snap only, and a
+            // type left on RAW becomes JPG.
+            readonly property bool dngWithJpg: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
+            onDngWithJpgChanged: if (dngWithJpg && imageType === "raw") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
             //   "once"   = one scan where you tap, then hold (Camera2 AUTO)
             //   "auto"   = continuous focus by the HAL; a tap then only meters
@@ -479,16 +483,17 @@ ApplicationWindow {
             Timer { id: fineTimer; interval: 2000; onTriggered: { page.fineShown = ""; interval = 2000 } }
             // The two readouts' permanent texts: the offset asked ("+10% temp",
             // "−5% tint"; just "temp" / "tint" at zero) over the value in force.
-            // Always "+n% Tmp" / "−n% tint" ("0%" at zero, and for a measured
-            // white, which is the new zero); "Tmp" is short so as not to overlap
-            // the wheel beside it.
-            readonly property string warmthOffset: (settingsMenu.wbFixed !== "" || settingsMenu.wbShift === 0 ? "0" : (settingsMenu.wbShift > 0 ? "+" : "−") + Math.abs(5 * settingsMenu.wbShift)) + "% " + qsTr("Tmp")
-            readonly property string tintOffset: (settingsMenu.wbFixed !== "" || settingsMenu.tint === 0 ? "0" : (settingsMenu.tint > 0 ? "+" : "−") + Math.abs(settingsMenu.tint)) + "% " + qsTr("tint")
+            // Always "+n% Tmp" / "−n% tint" ("0%" at zero). After a measured
+            // white the count starts again from it (the pick resets the shift
+            // and the tint), and steps from there show as usual. "Tmp" is
+            // short so as not to overlap the wheel beside it.
+            readonly property string warmthOffset: (settingsMenu.wbShift === 0 ? "0" : (settingsMenu.wbShift > 0 ? "+" : "−") + Math.abs(5 * settingsMenu.wbShift)) + "% " + qsTr("Tmp")
+            readonly property string tintOffset: (settingsMenu.tint === 0 ? "0" : (settingsMenu.tint > 0 ? "+" : "−") + Math.abs(settingsMenu.tint)) + "% " + qsTr("tint")
             // Orange when warmer than the camera's white, blue when cooler;
             // magenta when tinted that way, green the other; a measured white
             // in cyan; the deck's colour at zero.
-            readonly property color warmthColor: settingsMenu.wbFixed !== "" ? "#80d8ff" : settingsMenu.wbShift > 0 ? "#ffb060" : settingsMenu.wbShift < 0 ? "#80b8ff" : app.deckTextColor
-            readonly property color tintColor: settingsMenu.wbFixed !== "" ? "#80d8ff" : settingsMenu.tint > 0 ? "#ff70d0" : settingsMenu.tint < 0 ? "#80e0a0" : app.deckTextColor
+            readonly property color warmthColor: settingsMenu.wbShift > 0 ? "#ffb060" : settingsMenu.wbShift < 0 ? "#80b8ff" : settingsMenu.wbFixed !== "" ? "#80d8ff" : app.deckTextColor
+            readonly property color tintColor: settingsMenu.tint > 0 ? "#ff70d0" : settingsMenu.tint < 0 ? "#80e0a0" : settingsMenu.wbFixed !== "" ? "#80d8ff" : app.deckTextColor
             // The tint as a Duv in thousandths: "+4" green side, "−4" magenta side.
             function duvLabel(duv) {
                 var t = Math.round(duv * 1000)
@@ -528,7 +533,9 @@ ApplicationWindow {
                 if (!viewfinder.running) return
                 viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
             }
-            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0; if (page.lightShown) viewfinder.sendCommand("vw lightclear") }   // the controller clears both
+            // A mode change: the controller drops the focus point and the light
+            // point with their markers ("fc mode"); the circle fades here.
+            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0 }
             // Kept across an engine restart: the manual focus distance and the
             // reference point (the circle). Both live in the engine's process;
             // a restarted engine gets them back once its capabilities are in.
@@ -1452,7 +1459,8 @@ ApplicationWindow {
                         }
                         lastCx = pinch.center.x; lastCy = pinch.center.y
                     }
-                    // One finger: a tap = meter/focus; a downward drag pulls the
+                    // One finger: a tap = the focus; a press held 1 s = the exposure's
+                    // point; a downward drag pulls the
                     // settings menu down (anywhere in the image, so it never
                     // competes with the system's top-edge gesture); a sideways
                     // drag is not handled here -- the switcher takes it and
@@ -1472,7 +1480,7 @@ ApplicationWindow {
                         property real startY: 0
                         property real lastX: 0
                         property real lastY: 0
-                        property string dragging: ""          // "" | "menu" | "pinch" | "pan"
+                        property string dragging: ""          // "" | "menu" | "pinch" | "pan" | "held" (a long press, done)
                         // A swipe interrupted (second finger, system): the menu goes
                         // back where it was, nothing is left half-way.
                         function cancelSwipe() {
@@ -1480,9 +1488,10 @@ ApplicationWindow {
                             dragging = "pinch"
                         }
                         // A press held 1 s without moving: the exposure's point (the light).
+                        // (swipeArea by its id: a Timer is not an Item and has no "parent".)
                         Timer {
                             id: holdTimer; interval: 1000
-                            onTriggered: { parent.dragging = "held"; page.lightAt(parent.startX, parent.startY) }
+                            onTriggered: { swipeArea.dragging = "held"; page.lightAt(swipeArea.startX, swipeArea.startY) }
                         }
                         onPressed: { startX = mouse.x; startY = mouse.y; dragging = ""; holdTimer.restart() }
                         onPositionChanged: {
@@ -1966,13 +1975,13 @@ ApplicationWindow {
                             compact: page.compactDeck
                             caption: qsTr("TYPE"); value: page.imageTypeLabel(page.imageType)
                             visible: !settingsMenu.simpleHides("type")   // simple mode: jpg and snap
-                            // Greyed on a Σ speed (stacking writes a DNG only) and with
-                            // a DNG saved with each JPG (the type is fixed then).
-                            enabled: !page.stackSelected && !page.jpgPlusRaw
-                            opacity: page.stackSelected || page.jpgPlusRaw ? Theme.opacityLow : 1.0
+                            // Greyed on a Σ speed (stacking writes a DNG only).
+                            enabled: !page.stackSelected
+                            opacity: page.stackSelected ? Theme.opacityLow : 1.0
                             onCycle: {
-                                // RAW (where the camera has it, advanced mode only), JPG, snap.
-                                var t = page.rawAvailable && settingsMenu.advanced ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
+                                // RAW (where the camera has it, advanced mode only, and not
+                                // when a DNG already comes with each JPG), JPG, snap.
+                                var t = page.rawAvailable && settingsMenu.advanced && !page.dngWithJpg ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
                             }
                         }

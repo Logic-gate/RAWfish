@@ -91,12 +91,33 @@ void IndrawPreview::setPreviewSize(const QSize &size)
 }
 
 QSize IndrawPreview::captureSize() const { return m_captureSize; }
+/* The session is made of its streams and its JPEG size: when what is asked
+ * differs from what the running engine was started with, it is restarted.
+ * A change of type moves several of these at once (snap: the streams AND
+ * the JPEG size): the restart is asked once, at the end of the event-loop
+ * turn, and only if the engine is past its start (its caps received);
+ * otherwise the caps' arrival does the same check. Two restarts in a row, or
+ * an engine left with the first value only, were the bugs this avoids. */
+bool IndrawPreview::sessionOutdated() const
+{
+    return m_startedStreams != m_sessionStreams || m_startedOverride != m_jpegOverride;
+}
+void IndrawPreview::restartIfOutdated()
+{
+    if (m_restartQueued) return;
+    m_restartQueued = true;
+    QTimer::singleShot(0, this, [this] {
+        m_restartQueued = false;
+        if (m_active && m_gotCaps && sessionOutdated()) restart();
+    });
+}
+
 void IndrawPreview::setJpegSizeOverride(const QSize &s)
 {
     if (m_jpegOverride == s) return;
     m_jpegOverride = s;
     emit jpegSizeOverrideChanged();
-    if (m_active && m_gotCaps && m_startedOverride != s) restart();
+    restartIfOutdated();
 }
 
 void IndrawPreview::setSessionStreams(const QString &s)
@@ -104,7 +125,7 @@ void IndrawPreview::setSessionStreams(const QString &s)
     if (m_sessionStreams == s) return;
     m_sessionStreams = s;
     emit sessionStreamsChanged();
-    if (m_active && m_gotCaps && m_startedStreams != s) restart();   /* the session is made of its streams */
+    restartIfOutdated();
 }
 
 void IndrawPreview::setRawSession(bool raw)
@@ -761,13 +782,11 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         m_gotCaps = true;
         m_sizeFallback = false;
         m_yuvFails = 0;
-        if (m_startedStreams != m_sessionStreams) {
-            /* The streams asked changed while this engine was starting (the
-             * type changed within its first second): it holds the wrong ones,
-             * and a capture would fail ("session has no raw16 stream").
-             * Start again with the right ones. */
-            QTimer::singleShot(0, this, [this] { if (m_active && m_startedStreams != m_sessionStreams) restart(); });
-        }
+        /* The streams or the JPEG size asked changed while this engine was
+         * starting (the type changed within its first second): it holds the
+         * wrong ones, and a capture would fail ("session has no raw16
+         * stream") or come at the wrong size. Start again with the right ones. */
+        if (sessionOutdated()) restartIfOutdated();
         emit capsChanged();
         if (m_caps.value(QStringLiteral("limits")).toString().contains(QLatin1String("exclusive"))) {
             if (m_rawFellBack) {

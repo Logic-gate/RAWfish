@@ -692,6 +692,7 @@ static struct {
     float wb_base_gains[4];                 /* the manual white's base, frozen when a shift begins */
     ACameraMetadata_rational wb_base_transform[9];
     int wb_base_frozen;                     /* 1 while a shift or tint is in force */
+    int awb_auto_results;                   /* results since the AWB was (re)enabled: it must settle before its gains count */
     double ct_m1[9], ct_m2[9];              /* the sensor's two XYZ->camera calibration matrices */
     double ct_t1, ct_t2;                    /* their illuminants' temperatures (K); t2 0 = one only */
     int have_ct;                            /* (colortemp.h: the white balance in kelvin) */
@@ -1711,14 +1712,35 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
      * setting is a controlled shift from the HAL's neutral, not a guess. */
     {
         ACameraMetadata_const_entry ge, te, me;
-        if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AWB_MODE, &me) == ACAMERA_OK && me.count &&
-            me.data.u8[0] != ACAMERA_CONTROL_AWB_MODE_OFF &&
-            ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_GAINS, &ge) == ACAMERA_OK && ge.count == 4 &&
-            ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_TRANSFORM, &te) == ACAMERA_OK && te.count == 9) {
-            int k;
-            for (k = 0; k < 4; ++k) g.awb_gains[k] = ge.data.f[k];
-            for (k = 0; k < 9; ++k) g.awb_transform[k] = te.data.r[k];
-            g.awb_seen = 1;
+        /* The AWB's neutral (gains and transform), the base of a manual
+         * white. It is taken only:
+         *  - while the AWB really runs: with a manual white in force the
+         *    gains in the results are OURS (and a HAL may still say AUTO on
+         *    frames in flight); read then, they fed the next step (gains of
+         *    17 and 42 were seen at the end of the range);
+         *  - once the AWB has SETTLED: just re-enabled, it walks away from
+         *    our last gains for a few frames, and at a start it has not
+         *    found the white yet. Settled = it says CONVERGED or LOCKED, or,
+         *    for a HAL that never says so, 12 results after it was enabled.
+         * Until then the previous neutral stays: going back to zero and off
+         * again at once uses the same base as before. */
+        if (g.wb_shift || g.wb_tint || g.wb_fixed) {
+            g.awb_auto_results = 0;                     /* manual: the AWB will have to settle again */
+        } else if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AWB_MODE, &me) == ACAMERA_OK && me.count &&
+                   me.data.u8[0] != ACAMERA_CONTROL_AWB_MODE_OFF &&
+                   ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_GAINS, &ge) == ACAMERA_OK && ge.count == 4 &&
+                   ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_TRANSFORM, &te) == ACAMERA_OK && te.count == 9) {
+            ACameraMetadata_const_entry se;
+            int settled, k;
+            if (g.awb_auto_results < 1000) g.awb_auto_results++;
+            settled = g.awb_auto_results >= 12 ||
+                      (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AWB_STATE, &se) == ACAMERA_OK && se.count &&
+                       (se.data.u8[0] == ACAMERA_CONTROL_AWB_STATE_CONVERGED || se.data.u8[0] == ACAMERA_CONTROL_AWB_STATE_LOCKED));
+            if (settled) {
+                for (k = 0; k < 4; ++k) g.awb_gains[k] = ge.data.f[k];
+                for (k = 0; k < 9; ++k) g.awb_transform[k] = te.data.r[k];
+                g.awb_seen = 1;
+            }
         }
         {   /* the watched vendor keys, as this result reports them (g.lock held) */
             int vi;
@@ -2748,6 +2770,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
     g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0;
+    g.awb_auto_results = 0;
     g.vw_n = 0;
     g.af_tapped = 0; g.af_zoom_on = 0; g.scene_mode = 0;   /* a new session starts with no scene */
     if (!g.shade_balance && !g.shade_strength) { g.shade_balance = 50; g.shade_strength = 100; g.shade_max_gain = 5; }
@@ -5805,6 +5828,8 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
  * multipliers are only written as metadata): CONTROL_AWB_MODE on every
  * request. mode is the Camera2 value (1 AUTO .. 8 SHADE); OFF is refused
  * because without manual gains it would leave the HAL's last state. */
+static int wb_apply(int shift, int tint, char *out, size_t out_size);
+static int wb_wait_awb(void);
 IR_API int indraw_wb(int mode, char *out, size_t out_size)
 {
     ACaptureRequest *reqs[1], *all[5];
@@ -5817,14 +5842,30 @@ IR_API int indraw_wb(int mode, char *out, size_t out_size)
         return fail(out, out_size, IR_ESTATE, "wb", "camera not open", 0);
     if (mode <= 0 || !u8_list_has(g.chars, ACAMERA_CONTROL_AWB_AVAILABLE_MODES, mode))
         return fail(out, out_size, IR_EARG, "wb", "white balance mode not listed", mode);
-    if (g.wb_fixed || g.wb_shift || g.wb_tint) {   /* a measured white, or a shift in force, rules: the mode waits */
-        /* Re-enabling the AWB here, even for a few frames before the shift is
-         * set again, let it write new gains into the base of the next step:
-         * a visible jump each time. The mode is recorded for the return. */
+    if (g.wb_fixed || ((g.wb_shift || g.wb_tint) && mode == g.awb_mode)) {
+        /* A measured white rules whatever the mode; and the SAME mode sent
+         * again while a shift is in force (the menu restates it with every
+         * setting) must not touch anything: re-enabling the AWB, even for a
+         * few frames, let it write new gains into the base of the next step
+         * (a visible jump each time). The mode is recorded for the return. */
         g.awb_mode = mode;
         jw_init(&w, out, out_size);
         jw_add(&w, "{\"ok\":true,\"awb_mode\":%d,\"kept\":\"%s\"}", mode, g.wb_fixed ? "fixed white" : "manual shift");
         return IR_OK;
+    }
+    if (g.wb_shift || g.wb_tint) {
+        /* ANOTHER mode chosen while a shift is in force (daylight to cloudy,
+         * say): the shift moves onto the new mode's neutral. The AWB runs in
+         * the new mode until it has settled (wb_apply waits for it, up to
+         * 2 s), then the same shift and tint are applied again on that base. */
+        int shift = g.wb_shift, tint = g.wb_tint, err;
+        g.awb_mode = mode;
+        err = wb_apply(0, 0, out, out_size);          /* the AWB, in the new mode */
+        if (err) return err;
+        pthread_mutex_lock(&g.lock);
+        g.awb_seen = 0; g.awb_auto_results = 0;       /* its neutral must be a new, settled one */
+        pthread_mutex_unlock(&g.lock);
+        return wb_apply(shift, tint, out, out_size);
     }
     u8 = (uint8_t)mode;
     all[n++] = g.preview_request;
@@ -5852,7 +5893,6 @@ IR_API int indraw_wb(int mode, char *out, size_t out_size)
  * magenta). shift 0 and tint 0 = back to AWB, colour correction back to the
  * HAL's own (FAST) so its gains apply again. Applied in the ISP, after the
  * sensor, so preview and JPEG agree and the RAW is untouched. */
-static int wb_apply(int shift, int tint, char *out, size_t out_size);
 /* The gains of a manual white: `base` (a fixed white, or the AWB's last)
  * shifted by `shift` steps of 5 % on red/blue and `tint` % of
  * green. */
@@ -5890,9 +5930,13 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
     if (g.meter_request) all[n++] = g.meter_request;
-    g.wb_shift = shift; g.wb_tint = tint;
+    if (shift < -20 || shift > 20 || tint < -100 || tint > 100)
+        return fail(out, out_size, IR_EARG, "wb", "shift -20..20, tint -100..100", shift);
     if (shift == 0 && tint == 0 && !g.wb_fixed) {  /* back to the HAL's AWB     */
-        pthread_mutex_lock(&g.lock); g.wb_base_frozen = 0; pthread_mutex_unlock(&g.lock);   /* the next shift starts from the AWB again */
+        pthread_mutex_lock(&g.lock);
+        g.wb_shift = 0; g.wb_tint = 0;
+        g.wb_base_frozen = 0;                     /* the next shift starts from the AWB's neutral again */
+        pthread_mutex_unlock(&g.lock);
         u8 = g.awb_mode > 0 ? (uint8_t)g.awb_mode : ACAMERA_CONTROL_AWB_MODE_AUTO;
         cc = ACAMERA_COLOR_CORRECTION_MODE_FAST;
         for (i = 0; i < n; ++i) {
@@ -5901,20 +5945,20 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
             ACaptureRequest_setEntry_u8(all[i], ACAMERA_COLOR_CORRECTION_MODE, 1, &cc);
         }
     } else {
-        /* 1.05^shift by repeated multiplication (|shift| <= 20): exact for a table of steps. */
-        double k = 1.0, t = 1.0 - tint / 100.0;
         float base[4];
         ACameraMetadata_rational tr[9];
-        int seen;
-        if (shift < -20 || shift > 20 || tint < -100 || tint > 100)
-            return fail(out, out_size, IR_EARG, "wb", "shift -20..20, tint -100..100", shift);
-        pthread_mutex_lock(&g.lock);                  /* written by the result thread */
-        seen = g.awb_seen;
+        /* A manual white needs the AWB's neutral: its first settled result
+         * is waited for (a shift kept from the last run arrives right after
+         * the start). Nothing is changed if it does not come: the state stays
+         * what it was, and the caller may ask again. */
+        if (!g.wb_base_frozen && !wb_wait_awb())
+            return fail(out, out_size, IR_ESTATE, "wb", "no AWB result yet", 0);
+        pthread_mutex_lock(&g.lock);                  /* the result thread writes the AWB's gains */
         /* The base is FROZEN at the first step away from zero and kept for
          * every step until the return to zero: each step is then an exact
-         * multiple of the same neutral, and the AWB's later estimates (it
-         * keeps running on frames in flight, and on the mode command) cannot
-         * move the result between two steps. A fixed white is its own base. */
+         * multiple of the same neutral, and the AWB's later estimates cannot
+         * move the result between two steps. A fixed white is its own base
+         * for the gains; the transform is the frozen one in both cases. */
         if (!g.wb_base_frozen) {
             memcpy(g.wb_base_gains, g.awb_gains, sizeof g.wb_base_gains);
             memcpy(g.wb_base_transform, g.awb_transform, sizeof g.wb_base_transform);
@@ -5922,9 +5966,8 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
         }
         memcpy(base, g.wb_fixed ? g.wb_fixed_gains : g.wb_base_gains, sizeof base);
         memcpy(tr, g.wb_base_transform, sizeof tr);
+        g.wb_shift = shift; g.wb_tint = tint;         /* from here the results' gains are ours: not read as the AWB's */
         pthread_mutex_unlock(&g.lock);
-        if (!seen) return fail(out, out_size, IR_ESTATE, "wb", "no AWB result yet", 0);
-        (void)k; (void)t;
         wb_shifted(base, shift, tint, gains);         /* R, G even, G odd, B */
         u8 = ACAMERA_CONTROL_AWB_MODE_OFF;
         cc = ACAMERA_COLOR_CORRECTION_MODE_TRANSFORM_MATRIX;
@@ -5946,8 +5989,9 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
     return IR_OK;
 }
 
-/* Waits (up to 2 s) for the AWB's first result: its colour transform is the
- * one a manual white balance keeps. */
+/* Waits (up to 2 s) for the AWB's first SETTLED result (see the result
+ * handler): its gains and colour transform are the base a manual white
+ * balance keeps. */
 static int wb_wait_awb(void)
 {
     int i, seen = 0;

@@ -13,10 +13,10 @@ buttons, the viewfinder, and the control deck.
 
 | Button | What it does |
 |---|---|
-| **zebra** | stripes over what is about to clip (bold = on) |
+| **zebra** | stripes over what is about to clip (bold = on). In **jpg** and snap: the pixels that come out white (their luminance at the limit); in **RAW**: any one colour channel at the limit, since a lost channel is lost data. Zebra and peak are remembered from one start to the next in advanced mode |
 | **peak** | thin red lines on the edges that are in focus |
 | **level** | a cross on the true horizon, with the degrees (see "The level") |
-| **AE** | back to full automatic exposure; also removes the reference circle |
+| **AE** | back to full automatic exposure on the whole image; also removes the exposure point (the sun) |
 
 ### The viewfinder
 
@@ -25,23 +25,27 @@ is the exposure you get.
 
 | Gesture | Effect |
 |---|---|
-| tap | sets the reference point: focus and exposure there (see "Focus") |
-| tap on the circle | removes it (back to the camera's own choice, the centre) |
+| touch | **the focus** at that point (see "Focus"); the exposure is not touched. In **auto** focus the camera chooses the point itself and a touch does nothing |
+| touch held 1 s | **the exposure** at that point: a small sun marks a spot of 5 % of the frame, measured from then on (see "Exposure") |
+| touch on the circle / on the sun | removes it: the focus back to the mode's own, or the exposure back to the whole image |
 | two fingers apart / together | focus loupe, up to 12x, for the viewfinder only (the photo is not zoomed): up to the camera's limit (about 4x on the JP2) the sensor's real detail, beyond that an enlargement; a red frame and diagonal say it is on |
 | one finger, loupe on | moves around in the magnified image; while a finger moves, the exposure does not change and the view is an enlargement (smooth); when it stops, the sensor's real detail comes back and the exposure, the wheels and AE work as usual. On cameras that can only magnify the centre, the real detail is largest in the middle and the view is enlarged more the further you move from it |
-| tap, loupe on | focus and light measured at that point on a spot as small as the loupe shows -- a precise spot measurement -- then held |
+| touch or hold, loupe on | the same, on a spot as small as the loupe shows: a precise focus point, a precise spot measurement. The circle and the sun follow the loupe and the zoom |
 | swipe down | opens the settings menu |
 | swipe left to right | opens the gallery (a clearly sideways swipe: a slanting downward one opens the menu instead) |
 
-While the loupe is on, the menu and gallery swipes are off.
+While the loupe is on, the menu and gallery swipes are off. After each
+touch or hold, a line recalls the rule for two seconds: "touch: focus · hold:
+exposure here".
 
 ### The deck
 
 | Part | What it is |
 |---|---|
 | **FOCAL** | the camera, shown by its 35 mm-equivalent focal length; tap to switch camera |
-| **TYPE** | raw (DNG) or jpg (RAWfish-ir's JPEG, from the camera's image before its noise reduction and sharpening); "HAL JPG", the camera's own JPEG, when rawfish-ir.conf has useHalJpeg=true |
-| **FOCUS** | circle, auto, or a distance (see "Focus") |
+| **TYPE** | **DNG (RAW)**; **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +RAW" when Settings saves a DNG with each JPG); **snap**, the camera's own JPEG at a small size (5 megapixels) for utility shots such as a receipt or a sign, marked SNAP on the viewfinder |
+
+| **FOCUS** | once, auto, or a distance (see "Focus") |
 | histogram | the tones of **what the viewfinder shows** (zoomed or in the loupe: that area), per colour, with clipping bars at each end. In **jpg** it is measured on the processed image; in **raw** on the sensor data itself, so it sits further left and narrower (no tone curve lifting the shadows), and its left bar is bigger: it counts photosites at or below black, where noise puts about half of the truly dark ones -- shadows with no information, as the DNG will hold them. With a reference circle, the circle's own tones are drawn as bright outlines over it |
 | **EV** wheel | brightness correction, in the camera's steps |
 | shutter | takes the picture |
@@ -54,47 +58,49 @@ While the loupe is on, the menu and gallery swipes are off.
 
 The SPEED and ISO wheels decide the mode:
 
-| Mode | How to get there | What is automatic | With a circle |
+| Mode | How to get there | What is automatic | With an exposure point (the sun) |
 |---|---|---|---|
-| **automatic** | no wheel touched, or the AE button | speed and ISO, by the camera; the EV wheel corrects | the app measures the point and sets the exposure from it (a few quick corrections), then **holds** it until you remove the circle |
-| **ISO priority** | touch the ISO wheel | the speed, by the app; EV corrects | the app measures the point instead of the centre; the point's light level shows above the circle |
+| **automatic** | no wheel touched, or the AE button | speed and ISO, by the camera; the EV wheel corrects | the app measures the point and sets the exposure from it (a few quick corrections), then **holds** it until you remove the sun |
+| **ISO priority** | touch the ISO wheel | the speed, by the app; EV corrects | the app measures the point instead of the whole image; the point's light level shows above the sun |
 | **speed priority** | touch the SPEED wheel | the ISO, by the app; EV corrects; past 1/2 s: Σ (stacked, raw) | same |
-| **manual** | touch both | nothing; the EV wheel becomes a "+/−" number: stops brighter or darker than automatic would be | the number tells how **the point** is exposed; the point's light level shows above the circle |
+| **manual** | touch both | nothing; the EV wheel becomes a "+/−" number: stops brighter or darker than automatic would be | the number tells how **the point** is exposed; the point's light level shows above the sun |
 
-The light level above the circle is an absolute EV at ISO 100 ("EV 8.3"),
-what a spot light meter would read -- as the distance shows below the circle
-in manual focus.
+The exposure point is set by a touch **held one second**: a small sun, a spot
+of 5 % of the frame. Without one, the exposure is measured on the whole image.
+The light level above the sun is an absolute EV at ISO 100 ("EV 8.3"), what a
+spot light meter would read. The histogram draws the spot's own tones as
+brighter outlines over the whole picture's. A touch on the sun, or the AE
+button, removes it.
 
-The AE button goes back to automatic from any mode, and removes the circle.
+The AE button goes back to automatic from any mode, and removes the sun.
 A photo is always exposed as the viewfinder shows: when a pair is held (a
-wheel, or a circle in automatic) the photo takes that pair. Switching to
-simple mode returns to automatic exposure; another camera, another
-resolution or coming back to the app starts without circle or loupe.
-Under a scene, the camera drives the exposure: a circle only focuses and
-measures for the histogram.
+wheel, or a sun in automatic) the photo takes that pair. Switching to
+simple mode returns to automatic exposure and automatic focus; another
+camera, another resolution or coming back to the app keeps the exposure
+mode and its values, and the focus point where it still makes sense.
+Under a scene, the camera drives the exposure.
 "auto" under a wheel means the camera (or the app) is turning it.
 
 ## Focus
 
 The FOCUS button cycles through three modes; the camera starts in **auto**:
 
-| Mode | Without a tap | With a tap |
+| Mode | Without a touch | With a touch |
 |---|---|---|
-| **once** | one search when the mode is chosen, then the lens stays where it is | one search on the point; once sharp (solid circle) the lens is **held** there however you reframe, until you remove the circle, tap elsewhere (new search) or change mode |
-| **auto** | the camera keeps focusing by itself, following the scene | the tap does not touch the focus: it only measures **the light** (a small sun instead of the circle) |
+| **once** | one search when the mode is chosen, then the lens stays where it is | one search on the point; once sharp (solid circle) the lens is **held** there however you reframe, until you remove the circle, touch elsewhere (new search) or change mode |
+| **auto** | the camera keeps focusing by itself, following the scene, where it chooses | nothing: the camera does not take a point in this mode. Choose **once** to focus where you touch |
 | **a distance** (e.g. "1.50 m") | manual focus at that distance; volume up / down moves it by small steps (up = farther), hold a key to move faster | one search on the point; the distance found becomes the manual distance, shown under the circle, and the volume keys continue from there |
 
-A photo never starts a new search: it is taken where the focus is.
+A photo never starts a new search: it is taken where the focus is. A touch
+never changes the exposure: that is the held touch's work (see "Exposure").
 
-With a circle, the focus is searched first (the camera's own exposure stays
-on during the search), then the light is measured on the point. The point
-measured is the one the circle shows, at any zoom or loupe (in the loupe, a
-small spot).
-
-**The circle** marks the reference point. It stays on screen -- it never
+**The circle** marks the focus point. It stays on screen -- it never
 disappears by itself: dotted while searching, solid when sharp, dashed when
-it could not focus. Remove it with a tap on it, the AE button, or a change of
-focus mode. In the loupe, a tap measures a spot as small as the loupe shows.
+it could not focus. Remove it with a touch on it or a change of focus mode.
+In the loupe, the point is as small as the loupe shows. The circle (focus)
+and the sun (exposure) are independent and can stand together.
+
+Simple mode has no FOCUS button: it stays in auto.
 
 Manual distances are only as exact as the focus calibration of your phone
 (see "Settings" and `DEVICE-PROFILES.md`).
@@ -176,20 +182,18 @@ columns or swipe up to close.
 
 | Column | What it sets |
 |---|---|
-| Mode | **simple** (jpg or snap, no wheels, a brightness slider instead) or **advanced** |
+| Mode | the first column: **simple** (jpg or snap, automatic focus and exposure, a brightness slider instead of the wheels, the cameras named standard / wide / tele / selfie) or **advanced** |
 | Timer | off, 3 s, 10 s |
 | Format | 4:3 or 16:9. By default, the shape of the RAW the camera gives ("as the RAW": 4:3 on the JP2, 16:9 on the Xperia XA2); the other one crops. The viewfinder takes the photo's shape (grey bands only if the camera has no preview of that shape) |
-| Resolution | the JPEG sizes this camera offers |
-| Quality | JPEG quality |
+| Resolution | the JPEG sizes this camera offers; greyed in RAW (the sensor's size) and in snap (its own small size, shown) |
+| Quality | JPEG quality: 20, 40, 60, 80, 90, 95 (default) or 100 |
 | White bal. | automatic or a preset (daylight, cloudy, tungsten...) |
-| Noise, Sharpen | the camera's noise reduction and sharpening **for the photos** |
-| Vf noise, Vf sharpen | the same for the **viewfinder** only (shown when enabled in Settings); by default light noise reduction and no sharpening, which keeps a high-ISO preview clean |
-| Bracket | off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
+| Frames, Colour NR, Moiré, Sharpen | RAWfish-ir's processing of the **jpg**, shown when Settings > Camera menu > "JPG processing in the camera menu" is on (else set in `rawfish-ir.conf`): frames merged (1, 2, 4), the colour noise filter, the false-colour filter and the sharpening; the default of each has a green ring |
+| Bracket | (not in snap) off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
 | Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. In automatic exposure the camera measures with a pre-flash first, so the shot takes half a second to a second longer. When the exposure is held (a wheel touched, or a circle in automatic) "auto" cannot judge and does not fire; "on" always fires. No flash in a burst. |
 | Grid | rule-of-thirds lines |
 | Σ denoise | for Σ (stacked) shots only: 2x or 4x the frames for less noise, 2x or 4x the time |
 | Focus cal. | the focus calibration assistant (when enabled in Settings) |
-| Scene | only if Settings > RAWfish-ir > "Scenes in the camera menu" is on (off by default, not finished): the camera's scene modes, in simple and advanced mode; while one is on, the controls it takes over are greyed |
 
 In **simple** mode the menu only keeps the flash, timer, format and white balance (this
 can be changed in `~/.config/com.rawfish/rawfish-ir/simple.json`, see the README).
@@ -269,7 +273,7 @@ Changes take effect the next time the camera starts.
 |---|---|
 | photos | `~/Pictures/RAWfish-ir/` (or the folders set above) |
 | DNG quick previews | `.previews/` inside the DNG folder (hidden, not in the system gallery) |
-| commented references | `rawfish-ir.conf.example` next to `rawfish-ir.conf`, and `override-hal.example.jsonc` next to `override-hal.json` in `device-profiles/`: every key, what it does, its values and limits, as real comments. References only (never read; the .jsonc is not loadable JSON: copy the lines you need without the comments). Rewritten at each start of the app; your own files are never touched and stay without comments (edit `rawfish-ir.conf` with the app closed: it rewrites that file and drops comments) |
+| commented references | `rawfish-ir.conf.example` next to `rawfish-ir.conf`, and `override-hal.example.jsonc` next to `override-hal.json` in `device-profiles/`: every key, what it does, its values and limits, as real comments. Rewritten at each start of the app. `rawfish-ir.conf` itself is written at the first start with every key at its default (and its comments); keys a new version adds are added, keys nothing reads any more are dropped, your values stay. Edit it with the app closed: the app rewrites it when a setting changes, and its comments are then lost (the example keeps them). Settings > "Reset the camera settings" puts every key back to its default (the previous file is kept as `rawfish-ir.conf.bak`) |
 | app settings | `~/.config/com.rawfish/rawfish-ir/` -- `rawfish-ir.conf` also holds hand-edited keys, among them `fineWarmthStep` (the warmth button's step, in 5 % units, 1..4), `fineTintStep` (the tint button's step in % of green, 1..25), `sigmaPreviewFps` (the Σ viewfinder's target frame rate, 1..30, 10 by default), `peakTweak` and `zebraTweak`; every key is described in `rawfish-ir.conf.example` next to it |
 | device profile | `~/.local/share/com.rawfish/rawfish-ir/device-profiles/` |
-| the engine's log | `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log` -- the first thing to send when something goes wrong |
+| the engine's log | `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log` -- the first thing to send when something goes wrong. Settings > Log > "Detailed log" adds, for each photo, the histogram the app showed and the photo's own (about 2 KB per photo), to check the zebra and the histogram |

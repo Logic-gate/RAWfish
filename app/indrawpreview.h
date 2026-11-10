@@ -384,7 +384,10 @@ private:
     QString m_sessionStreams = QStringLiteral("jpeg,raw,yuv");   /* asked by the page */
     QString m_startedStreams;      /* what the running engine was started with */
     QSize m_jpegOverride;          /* snap: the JPEG size of this session          */
-    QSize m_startedOverride;
+    QSize m_startedOverride;       /* the override the running engine was started with */
+    bool m_restartQueued = false;  /* a restart check waits for the end of this event-loop turn */
+    bool sessionOutdated() const;  /* what is asked differs from what the engine was started with */
+    void restartIfOutdated();
     int m_yuvFails = 0;            /* such deaths in a row, before any caps         */
     bool m_sessionYuv = false;     /* what the running engine was started with     */
     bool m_sessionRaw = false;     /* what the running engine was started with     */

@@ -14,7 +14,36 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.2.3 — a touch focuses, a hold meters (patches 0333–0334)
+## 0.2.4 — a review of 0.2: sturdier white balance, sessions and snap (patch 0342)
+A reading of everything changed since 0.2.0, on the request to make it
+solid. What it found and mended:
+- Manual white balance: the camera's neutral is now taken only from an AWB
+  that has SETTLED (it says converged, or 12 results after being enabled).
+  Just re-enabled, or at a start, its gains were still on their way and
+  could be frozen as the base of a shift. A shift kept from the last run
+  waits for that neutral instead of failing; a failed request no longer
+  leaves the engine believing a shift is in force (which stopped it from
+  ever reading the AWB again). Choosing another white-balance mode while
+  a shift is in force moves the shift onto the new mode's neutral (it did
+  nothing until the shift was back to zero).
+- The readouts after a measured white show the steps made from it (they
+  stayed at "0%").
+- Sessions: one restart when a type changes several things at once (snap:
+  the streams and the JPEG size); before, two restarts in a row, or an
+  engine left at the previous JPEG size, so that snap could come out at
+  the JPG's size.
+- snap keeps the RAW stream (the white-balance pick works there); its
+  Exif label can no longer stick to a later photo.
+- With "Also save a DNG with each JPG", TYPE still reaches snap ("JPG
+  +RAW" and snap; RAW alone would be the same DNG without its JPG).
+- The held touch read the press position through a Timer's "parent",
+  which a Timer does not have: it now names the touch area.
+- A focus mode change clears the circle's and the sun's points in the
+  controller itself.
+- The user guide follows the new rules (touch / hold, snap, the settings
+  file, the detailed log); the roadmap drops what is done.
+
+## 0.2.3 — a touch focuses, a hold meters; snap (patches 0332–0340)
 - A touch on the viewfinder sets the FOCUS only, in every focus mode
   (continuous: kept on the point; once: one scan, held; manual: one scan,
   the distance found becomes the manual one, to adjust by hand). The

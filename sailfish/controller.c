@@ -209,7 +209,12 @@ static int focus_command(const char *line)
     a[0] = b[0] = d[0] = '\0';
     n = sscanf(line + 3, "%31s %31s %31s", a, b, d);
     if (!c.foc || n < 1) return 1;
-    if (!strcmp(a, "mode")) ctl_focus_set_mode(c.foc, !strcmp(b, "once") ? CTL_FOCUS_ONCE : !strcmp(b, "manual") ? CTL_FOCUS_MANUAL : CTL_FOCUS_CONT);
+    if (!strcmp(a, "mode")) {
+        /* A mode change drops the focus point and the light point: the view's
+         * markers go with them (the interface need not ask for it). */
+        ctl_focus_set_mode(c.foc, !strcmp(b, "once") ? CTL_FOCUS_ONCE : !strcmp(b, "manual") ? CTL_FOCUS_MANUAL : CTL_FOCUS_CONT);
+        if (c.view) { ctl_view_clear_ref(c.view); ctl_view_clear_light(c.view); }
+    }
     else if (!strcmp(a, "step")) ctl_focus_step(c.foc, atoi(b));
     else if (!strcmp(a, "distance")) ctl_focus_set_distance(c.foc, atof(b));
     else if (!strcmp(a, "ref") && n >= 3) ctl_focus_ref(c.foc, atof(b), atof(d), now_ms());
