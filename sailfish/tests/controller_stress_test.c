@@ -2,7 +2,7 @@
  * (and Helgrind): a fake engine thread floods the event pipe with the state
  * lines the real engine sends at 10-30 Hz ("ae", "vfmeter", "meter", "caps"),
  * while the main thread plays the CLI: commands from the interface under
- * ctl_lock(), as sailfish/indraw.c does, which drive the exposure, focus and
+ * ctl_lock(), as sailfish/rawfish-ir.c does, which drive the exposure, focus and
  * view controllers that the reader thread updates at the same time. The
  * engine commands the controller sends come back on engine_line (counted).
  * Passes when it runs to the end without a sanitizer report; check-host runs

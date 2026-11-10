@@ -14,6 +14,28 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.0 (beta) — the sources renamed, an outside review's remarks (patch 0343)
+The first version called a beta: the functions are there and used daily
+on the Jolla Phone 2 and the Xperia XA2; it now needs testers, above all
+on other phones. Nothing changes in what the app does.
+- The source files take the project's name: `android/indraw.c` and
+  `sailfish/indraw.c` become `rawfish-ir.c`, `indrawpreview.cpp/.h`
+  `rawfish-ir-preview.cpp/.h`, `indraw.qml` `rawfish-ir.qml`,
+  `indraw_version.h` `rawfish-ir-version.h`. The functions and the C++
+  class keep their names (`indraw_*`, `IndrawPreview`): they are the
+  library's interface. The translations follow (the QML context is the
+  file's name).
+- From an outside review: the two developer environment variables
+  (another library, another profile folder) exist only in a build made
+  with -DIR_DEV_ENV; the app deletes files only inside its two output
+  folders and reads JSON only from its configuration folder; the JPEG
+  writer's buffer is volatile across setjmp; the existing shading file is
+  read under the same 4 MB cap as elsewhere; the CI action is pinned by
+  commit. The README's title and the tool's help say RAWfish-ir and
+  rawfish-ir-cli.
+- Still open from that review (ROADMAP): the two very long files, the
+  private Silica import of the gallery's dismiss button.
+
 ## 0.2.4 — a review of 0.2: sturdier white balance, sessions and snap (patch 0342)
 A reading of everything changed since 0.2.0, on the request to make it
 solid. What it found and mended:

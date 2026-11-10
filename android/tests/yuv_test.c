@@ -13,7 +13,7 @@ static int fails;
                               else { ++fails; printf("  FAIL: "); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
 static inline uint8_t clip8(int v) { return v < 0 ? 0 : (v > 255 ? 255 : (uint8_t)v); }
-/* The reference: the per-pixel conversion of indraw.c up to 0.47.60. */
+/* The reference: the per-pixel conversion of rawfish-ir.c up to 0.47.60. */
 static void reference(const uint8_t *py, int ly, int ry, int xy, const uint8_t *pu, int lu, int ru, int xu,
                       const uint8_t *pv, int lv, int rv, int xv, int w, int h, uint8_t *rgb)
 {

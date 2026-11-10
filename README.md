@@ -1,12 +1,13 @@
-## indRAW
+## RAWfish-ir
 
 ### Human description
 
-indRAW is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
+RAWfish-ir is RAWfish, deconstructed, reorganized, cleaned, reconstructed.\
 Transitional version meant to be reviewed and merged with some RAWfish parts, once all functions and UI are brought in.\
 Coded by AI under the supervision of and at the request of the creators.\
 Supervision and all the tests made by humans.\
-No human code review yet. Audits by other sessions and other AI models.
+No human code review yet. Audits by other sessions and other AI models.\
+Beta since 0.3.0: used daily on the Jolla Phone 2 and the Xperia XA2; other phones need testers.
 
 ### Architecture
 
@@ -69,7 +70,7 @@ https://forum.sailfishos.org/t/next-gen-native-camera-app-rawfish/34150
 Names: **RAWfish-ir** is the project (this branch of RAWfish); **RAWfish-ir**
 is what you see on the phone (the app grid, Settings); `rawfish-ir` is the
 technical name (packages `rawfish-ir-cli` and `rawfish-ir-gui`, binaries,
-paths, settings); `indraw` stays the engine's development name in the sources.
+paths, settings, source files); `indraw` remains only inside the code (the library's functions, `indraw_*`, and the C++ class).
 
 
 RAWfish-ir
@@ -88,7 +89,7 @@ frame protocol it reuses; what it deliberately does differently is listed in `do
 being reviewed and tested on the device by a person; contributions are welcome on the same terms.
 License: BSD-3-Clause (`LICENSE`); lineage and credits in `CREDITS.md`; what changed when in `CHANGELOG.md`.
 The project was called **rawbar**, then **indRAW**, before joining RAWfish as this branch in
-October 2026 (RAWfish-ir); the sources keep `indraw` as the engine's name.
+October 2026 (RAWfish-ir); the functions of the library keep the `indraw_` prefix.
 
 ## Engine
 
@@ -128,7 +129,7 @@ cd app && sfdk build                                           # app/RPMS/rawfis
 
 `rawfish-ir-cli` carries `librawfish-ir.so` (prebuilt with the NDK, installed to
 `/usr/libexec/droid-hybris/system/lib64/`) and the `rawfish-ir-cli` program (`/usr/libexec/rawfish-ir/rawfish-ir-cli`,
-plus `/usr/bin/rawfish-ir-cli`); `rawfish-ir-gui` requires it. The version is `indraw_version.h`, shared by
+plus `/usr/bin/rawfish-ir-cli`); `rawfish-ir-gui` requires it. The version is `rawfish-ir-version.h`, shared by
 the library, the CLI and the spec; the CLI refuses to run with a library of another version.
 
 Install by hand (development): copy `build/android/librawfish-ir.so` to
@@ -417,7 +418,7 @@ corrections to it (`override-hal.json`, atomic sensor fixes only -- today
 `observed_shutter_max_ns`, the tested long-exposure ceiling, replacing the hard-coded 1/2 s), and UI
 preferences (device-independent, kept by the app in its own settings). Files live under
 `~/.local/share/com.rawfish/rawfish-ir/device-profiles/` (Sailjail path;
-`INDRAW_PROFILE_DIR` overrides for tests).
+a developer's build, `-DIR_DEV_ENV`, also reads `INDRAW_PROFILE_DIR` and `INDRAW_LIB`; the distributed binaries do not).
 
 ```sh
 ./rawfish-ir-cli cameras          # list camera ids

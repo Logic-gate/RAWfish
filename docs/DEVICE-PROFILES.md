@@ -304,6 +304,7 @@ Following the Sailjail sandbox (which whitelists
     $XDG_DATA_HOME/com.rawfish/rawfish-ir/device-profiles/      (inside the sandbox)
     $HOME/.local/share/com.rawfish/rawfish-ir/device-profiles/  (fallback)
 
-`INDRAW_PROFILE_DIR` overrides both, for tests. The CLI tool reads
+In a developer's build (`-DIR_DEV_ENV`) `INDRAW_PROFILE_DIR` overrides both;
+the distributed binaries do not read it. The CLI tool reads
 `XDG_DATA_HOME` first, which is what Qt's `QStandardPaths::AppLocalDataLocation`
 resolves to, so the CLI and the app agree on the path.

@@ -1,5 +1,5 @@
 /*
- * indraw.c -- Android side of indraw (built with the NDK, loaded through libhybris).
+ * rawfish-ir.c -- Android side of indraw (built with the NDK, loaded through libhybris).
  *
  * This library owns ONE camera session that stays open between photos:
  *   - a small YUV preview stream runs continuously (repeating request), so
@@ -75,7 +75,7 @@
 #else
 #define IR_API __attribute__((visibility("default"))) /* exported symbol */
 #endif
-#include "../indraw_version.h"   /* IR_VERSION, shared with the CLI */
+#include "../rawfish-ir-version.h"   /* IR_VERSION, shared with the CLI */
 #include "yuvframe.h"            /* the full-resolution YUV frame for the CLI's JPEG */
 IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "colortemp.h"           /* the white balance as a colour temperature */
@@ -6469,7 +6469,7 @@ IR_API int indraw_shading_calibrate(const char *dir, int full, double cct,
         if (ef) {
             long len; char *text;
             fseek(ef, 0, SEEK_END); len = ftell(ef); fseek(ef, 0, SEEK_SET);
-            if (len > 0 && (text = malloc((size_t)len + 1))) {
+            if (len > 0 && len <= 4000000 && (text = malloc((size_t)len + 1))) {   /* the cap of the other reader of this file */
                 if (fread(text, 1, (size_t)len, ef) == (size_t)len) { text[len] = '\0'; if (shading_parse(text, &existing, err, sizeof err) == 0) have_existing = 1; }
                 free(text);
             }

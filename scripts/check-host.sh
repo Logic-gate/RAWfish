@@ -52,8 +52,8 @@ typedef struct ARect { int32_t left, top, right, bottom; } ARect;' > "$hdr/andro
 #define __ANDROID_API__ 34' > "$hdr/stub_prefix.h"
 fi
 gcc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -fsyntax-only \
-    -include "$hdr/stub_prefix.h" -I "$hdr" -I "$root/android" "$root/android/indraw.c"
-echo "android/indraw.c: OK (syntax/types)"
+    -include "$hdr/stub_prefix.h" -I "$hdr" -I "$root/android" "$root/android/rawfish-ir.c"
+echo "android/rawfish-ir.c: OK (syntax/types)"
 gcc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -fsyntax-only "$root/android/dngwrite.c" -I "$root/android"
 echo "android/dngwrite.c: OK"
 gcc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -fsyntax-only "$root/android/exifwrite.c" -I "$root/android"
@@ -62,23 +62,23 @@ echo "android/exifwrite.c: OK"
 # misses (e.g. use of an uninitialised variable). Compile to an object we throw
 # away; this only checks, it does not build the shipped binary (the NDK does).
 gcc -std=c11 -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -c \
-    -include "$hdr/stub_prefix.h" -I "$hdr" -I "$root/android" "$root/android/indraw.c" -o /dev/null
-echo "android/indraw.c: OK (-O2 flow analysis)"
+    -include "$hdr/stub_prefix.h" -I "$hdr" -I "$root/android" "$root/android/rawfish-ir.c" -o /dev/null
+echo "android/rawfish-ir.c: OK (-O2 flow analysis)"
 gcc -std=c11 -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -c "$root/android/dngwrite.c" -I "$root/android" -o /dev/null
 echo "android/dngwrite.c: OK (-O2)"
 # The NDK compiles with clang, which has warnings gcc lacks: check with it too if present.
 if command -v clang >/dev/null 2>&1; then
     clang -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -fsyntax-only \
-        -include "$hdr/stub_prefix.h" -I "$hdr" -I "$root/android" "$root/android/indraw.c"
-    echo "android/indraw.c: OK with clang"
+        -include "$hdr/stub_prefix.h" -I "$hdr" -I "$root/android" "$root/android/rawfish-ir.c"
+    echo "android/rawfish-ir.c: OK with clang"
 else
-    echo "android/indraw.c: clang not installed, NDK-only warnings not checked"
+    echo "android/rawfish-ir.c: clang not installed, NDK-only warnings not checked"
 fi
 # Same flags as sailfish/Makefile (no -D_GNU_SOURCE: the file must declare
 # what it needs itself, as on the build engine), warnings as errors.
-gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/indraw.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
-echo "sailfish/indraw.c + controller: OK"
-gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/indraw.c" -o /dev/null
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/rawfish-ir.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
+echo "sailfish/rawfish-ir.c + controller: OK"
+gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/rawfish-ir.c" -o /dev/null
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/null
 # The controller runs without Android or Qt: its host test (sailfish/tests).
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ctl-test "$root/sailfish/tests/controller_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
@@ -114,7 +114,7 @@ run_test /tmp/indraw-view-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_shoot.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shoot-test "$root/sailfish/tests/shoot_test.c" "$root/sailfish/ctl_shoot.c" -lm
 run_test /tmp/indraw-shoot-test
-echo "sailfish/indraw.c: OK (-O2)"
+echo "sailfish/rawfish-ir.c: OK (-O2)"
 
 # RPM specs: in %install every line is a shell command, so a line that is
 # The app is built from app/ alone (sfdk), so it carries its own copy of the
@@ -133,7 +133,7 @@ lupd=$(command -v lupdate || ls /usr/lib/qt5/bin/lupdate 2>/dev/null || true)
 if [ -n "$lupd" ]; then
     tdir=$(mktemp -d)
     cp "$root"/app/translations/*.ts "$tdir"/
-    ( cd "$root/app" && "$lupd" -no-obsolete -locations none qml/*.qml indrawpreview.cpp main.cpp -ts "$tdir"/rawfish-ir.ts "$tdir"/rawfish-ir-*.ts >/dev/null 2>&1
+    ( cd "$root/app" && "$lupd" -no-obsolete -locations none qml/*.qml rawfish-ir-preview.cpp main.cpp -ts "$tdir"/rawfish-ir.ts "$tdir"/rawfish-ir-*.ts >/dev/null 2>&1
       "$lupd" -no-obsolete -locations none settings/SettingsPage.qml -ts "$tdir"/settings-rawfish-ir-*.ts >/dev/null 2>&1 )
     python3 - "$root/app/translations" "$tdir" <<'PYEOF'
 import sys, glob, os, xml.etree.ElementTree as ET
@@ -164,11 +164,11 @@ else
     echo "translations: lupdate not installed, not checked"
 fi
 # One version number for the two packages and the library (RAWfish-ir 0.1.0+).
-v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/indraw_version.h")
+v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/rawfish-ir-version.h")
 v_cli=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir-cli.spec")
 v_gui=$(sed -n 's/^Version: *//p' "$root/app/rpm/rawfish-ir-gui.spec")
-if [ "$v_h" = "$v_cli" ] && [ "$v_h" = "$v_gui" ]; then echo "version: $v_h in indraw_version.h and both specs (OK)"
-else echo "version MISMATCH: indraw_version.h $v_h, rawfish-ir-cli.spec $v_cli, rawfish-ir-gui.spec $v_gui" >&2; exit 1; fi
+if [ "$v_h" = "$v_cli" ] && [ "$v_h" = "$v_gui" ]; then echo "version: $v_h in rawfish-ir-version.h and both specs (OK)"
+else echo "version MISMATCH: rawfish-ir-version.h $v_h, rawfish-ir-cli.spec $v_cli, rawfish-ir-gui.spec $v_gui" >&2; exit 1; fi
 
 # only a path ("%{_datadir}/...") is a %files entry put in the wrong section
 # (it then runs as a command and the build fails in %install). Twice so far.
@@ -223,16 +223,16 @@ run_test /tmp/indraw-exif-test
 # The engine's longest event line (vfmeter: line[2600]) must fit the
 # controller's reader line (line[4096]) with room: a line longer than the
 # reader's buffer is cut in silence.
-eng=$(grep -o 'char line\[[0-9]*\], \*p, \*end;' "$root/android/indraw.c" | grep -o '[0-9]*' | sort -n | tail -1)
+eng=$(grep -o 'char line\[[0-9]*\], \*p, \*end;' "$root/android/rawfish-ir.c" | grep -o '[0-9]*' | sort -n | tail -1)
 ctl=$(grep -o 'char buf\[4096\], line\[[0-9]*\]' "$root/sailfish/controller.c" | grep -o 'line\[[0-9]*' | grep -o '[0-9]*')
 if [ -n "$eng" ] && [ -n "$ctl" ] && [ "$eng" -lt "$ctl" ]; then echo "event line: engine $eng < controller $ctl (OK)"; else echo "event line: engine '$eng' vs controller '$ctl': NOT OK"; exit 1; fi
 
 # The shipped device profiles: valid JSON, a match block, every key known to
-# the CLI's override checker (sailfish/indraw.c k_ov_fields / k_ov_struct).
+# the CLI's override checker (sailfish/rawfish-ir.c k_ov_fields / k_ov_struct).
 python3 - "$root" <<'PYEOF'
 import json, glob, re, sys
 root = sys.argv[1]
-src = open(root + "/sailfish/indraw.c").read()
+src = open(root + "/sailfish/rawfish-ir.c").read()
 known = set(re.findall(r'\{ "([a-z_]+)",\s+\d', src))
 blk = src[src.index("k_ov_struct[]"):src.index("NULL };", src.index("k_ov_struct[]"))]
 known |= set(re.findall(r'"([a-z_]+)"', blk))
@@ -256,12 +256,12 @@ PYEOF
 # g.lock is not reentrant: taking it twice in one function deadlocks the
 # camera at the first frame (0.47.15). A straight-line scan, fast and crude:
 # a lock re-taken in the other arm of an if carries "lockcheck: branch".
-awk -f "$root/scripts/lockcheck.awk" "$root/android/indraw.c" || { echo "android/indraw.c: the lock contract is broken (see above)"; exit 1; }
+awk -f "$root/scripts/lockcheck.awk" "$root/android/rawfish-ir.c" || { echo "android/rawfish-ir.c: the lock contract is broken (see above)"; exit 1; }
 # ... and the checker still catches each of its three rules on a bad sample.
 printf 'static void a(void)\n{\n    pthread_mutex_lock(&g.out_lock);\n    pthread_mutex_lock(&g.lock);\n}\nstatic void b(void)\n{\n    int fd = g.stream_fd;\n}\nstatic void c(void)\n{\n    pthread_mutex_lock(&g.lock);\n    pthread_mutex_lock(&g.lock);\n}\n' > /tmp/indraw-lockcheck-bad.c
 n_bad=$(awk -f "$root/scripts/lockcheck.awk" /tmp/indraw-lockcheck-bad.c | wc -l)
 [ "$n_bad" -eq 3 ] || { echo "lockcheck.awk: its self-test found $n_bad of 3 faults" >&2; exit 1; }
-echo "android/indraw.c: lock contract OK (g.lock not re-taken, order g.lock -> out_lock, descriptors under out_lock; checker self-test 3/3)"
+echo "android/rawfish-ir.c: lock contract OK (g.lock not re-taken, order g.lock -> out_lock, descriptors under out_lock; checker self-test 3/3)"
 
 # A "(64bit)" provide named outside an "%ifarch aarch64" block breaks the
 # 32-bit package (armv7hl: "nothing provides ...(64bit)", 0.47.24).

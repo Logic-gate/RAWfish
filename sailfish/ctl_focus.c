@@ -1,6 +1,6 @@
 /*
  * ctl_focus.c -- the focus behaviour (see ctl_focus.h). Ported from the
- * page's tap / search / hold / manual-pick sequences (app/qml/indraw.qml up
+ * page's tap / search / hold / manual-pick sequences (app/qml/rawfish-ir.qml up
  * to ui 126), rule for rule.
  */
 #define _POSIX_C_SOURCE 200809L

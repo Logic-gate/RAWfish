@@ -21,7 +21,7 @@ part of the measurements live in the interface. That made iteration easy, but:
 
 Terms used below: **engine** = `librawfish-ir.so`; **controller** = the new C
 layer; **interface** = the app, made of its **QML** (screens and, today,
-the camera logic) and a **C++ item** (`indrawpreview.cpp`: receives the
+the camera logic) and a **C++ item** (`rawfish-ir-preview.cpp`: receives the
 frames, draws them, and today measures the viewfinder and computes zebra
 and peaking).
 

@@ -18,6 +18,6 @@ mkdir -p "$root/build/android"
 # -Wl,--no-undefined: a missing symbol fails here, not on the phone.
 "$cc" -std=c11 -O2 -g -fPIC -fvisibility=hidden -Wall -Wextra \
     -shared -Wl,--no-undefined \
-    "$root/android/indraw.c" "$root/android/dngwrite.c" "$root/android/exifwrite.c" -lcamera2ndk -lmediandk -lm \
+    "$root/android/rawfish-ir.c" "$root/android/dngwrite.c" "$root/android/exifwrite.c" -lcamera2ndk -lmediandk -lm \
     -o "$root/build/android/librawfish-ir.so"
 echo "built $root/build/android/librawfish-ir.so ($abi)"

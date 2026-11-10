@@ -1,6 +1,6 @@
 /*
  * ctl_view.c -- the viewfinder's geometry (see ctl_view.h). Ported from the
- * page's "Coordinates" model (app/qml/indraw.qml up to ui 127).
+ * page's "Coordinates" model (app/qml/rawfish-ir.qml up to ui 127).
  */
 #define _POSIX_C_SOURCE 200809L
 #include "ctl_view.h"

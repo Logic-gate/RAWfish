@@ -1,5 +1,5 @@
 /*
- * indraw.qml -- the camera page: display and gestures (docs/ARCHITECTURE.md).
+ * rawfish-ir.qml -- the camera page: display and gestures (docs/ARCHITECTURE.md).
  *
  * One page, as Jolla Camera: a horizontal strip (the switcher) holds the
  * gallery (GalleryView.qml) and, to its right, the camera. The camera,
@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "198"                             // shown in the deck
+    readonly property string uiVersion: "199"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine

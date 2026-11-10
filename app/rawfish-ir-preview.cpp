@@ -1,7 +1,7 @@
 /*
- * indrawpreview.cpp -- see indrawpreview.h.
+ * rawfish-ir-preview.cpp -- see rawfish-ir-preview.h.
  */
-#include "indrawpreview.h"
+#include "rawfish-ir-preview.h"
 
 #include <QSGSimpleTextureNode>
 #include <QQuickWindow>
@@ -514,16 +514,32 @@ void IndrawPreview::restart()
     start();
 }
 
+/* True when `path`, made canonical (no "..", no link leading out), lies in
+ * `dir` or below it. The two calls below are reachable from QML: each is
+ * kept to the folders it is meant for, whatever path it is given. */
+static bool pathWithin(const QString &path, const QString &dir)
+{
+    if (dir.isEmpty()) return false;
+    const QString d = QDir(dir).canonicalPath();
+    const QFileInfo fi(path);
+    const QString p = fi.exists() ? fi.canonicalFilePath() : QDir(fi.absolutePath()).canonicalPath() + QLatin1Char('/') + fi.fileName();
+    return !d.isEmpty() && (p == d || p.startsWith(d + QLatin1Char('/')));
+}
+
+/* A JSON object from the app's own configuration folder (simple.json). */
 QVariantMap IndrawPreview::readJsonFile(const QString &path)
 {
+    if (!pathWithin(path, configDir())) return QVariantMap();
     QFile f(path);
-    if (!f.open(QIODevice::ReadOnly)) return QVariantMap();
+    if (!f.open(QIODevice::ReadOnly) || f.size() > 1000000) return QVariantMap();
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
     return doc.isObject() ? doc.object().toVariantMap() : QVariantMap();
 }
 
+/* Deletes a capture or its preview: only inside the two output folders. */
 bool IndrawPreview::deleteFile(const QString &path)
 {
+    if (!pathWithin(path, m_jpgDir) && !pathWithin(path, m_dngDir)) return false;
     return QFile::remove(path);
 }
 

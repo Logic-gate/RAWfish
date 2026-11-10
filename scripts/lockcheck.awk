@@ -1,6 +1,6 @@
-# scripts/lockcheck.awk -- run by check-host.sh on android/indraw.c. A
+# scripts/lockcheck.awk -- run by check-host.sh on android/rawfish-ir.c. A
 # straight-line reading of each function (no control flow analysis), for the
-# engine's lock contract (the header of android/indraw.c, docs/ARCHITECTURE.md):
+# engine's lock contract (the header of android/rawfish-ir.c, docs/ARCHITECTURE.md):
 #  1. g.lock is not recursive: taken while already held in the same function
 #     is a self-deadlock (0.47.15's bug). A lock legitimately re-taken in
 #     another branch carries "lockcheck: branch".

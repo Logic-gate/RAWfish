@@ -1,7 +1,7 @@
 Name:       rawfish-ir-cli
 Summary:    RAWfish-ir camera engine (Camera2 bridge library, controller, CLI)
-# Keep in step with indraw_version.h (scripts/build-engine-rpm.sh checks).
-Version:    0.2.4
+# Keep in step with rawfish-ir-version.h (scripts/build-engine-rpm.sh checks).
+Version:    0.3.0
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
@@ -37,7 +37,7 @@ Requires:       droidmedia
 %global __provides_exclude_from ^%{_libexecdir}/droid-hybris/.*$
 
 %description
-The RAWfish-ir engine: librawfish-ir.so (Android side, built beforehand
+Beta. The RAWfish-ir engine: librawfish-ir.so (Android side, built beforehand
 with the NDK by scripts/build-android.sh and shipped prebuilt in
 build/android/) and the rawfish-ir-cli program (glibc side, compiled here:
 the bridge to the library, the photographic controller and the command
@@ -51,7 +51,7 @@ another version. Internally the engine keeps its development name, indraw.
 %prep
 %setup -q -n %{name}-%{version}
 test -f build/android/librawfish-ir.so || { echo "build/android/librawfish-ir.so missing: run scripts/build-android.sh first" >&2; exit 1; }
-grep -q "\"%{version}\"" indraw_version.h || { echo "indraw_version.h is not %{version}: fix the spec Version" >&2; exit 1; }
+grep -q "\"%{version}\"" rawfish-ir-version.h || { echo "rawfish-ir-version.h is not %{version}: fix the spec Version" >&2; exit 1; }
 
 %build
 make -C sailfish clean all

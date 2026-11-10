@@ -10,15 +10,15 @@ CONFIG += sailfishapp
 
 SOURCES += \
     main.cpp \
-    indrawpreview.cpp
+    rawfish-ir-preview.cpp
 
 HEADERS += \
-    indrawpreview.h
+    rawfish-ir-preview.h
 
 # The .desktop is installed by the .spec (%install), not here: the sailfishapp
 # qmake integration can shadow a .pro desktop INSTALLS rule.
 OTHER_FILES += \
-    qml/indraw.qml \
+    qml/rawfish-ir.qml \
     qml/ShadingAssistant.qml \
     rpm/rawfish-ir-gui.spec \
     rawfish-ir.desktop \

@@ -7,7 +7,7 @@
 #include <QtQuick>
 #include <sailfishapp.h>
 
-#include "indrawpreview.h"
+#include "rawfish-ir-preview.h"
 
 int main(int argc, char *argv[])
 {
@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
      * /usr/share/<ApplicationName>, and the binary has that name too). The
      * QML files keep the engine's development name, indraw. */
     view->setSource(QUrl::fromLocalFile(
-        QStringLiteral("/usr/share/rawfish-ir/qml/indraw.qml")));
+        QStringLiteral("/usr/share/rawfish-ir/qml/rawfish-ir.qml")));
     view->show();
 
     return app->exec();

@@ -20,7 +20,7 @@ work and how RAWfish-ir stands on each point, and the steps.
   package's dependencies follow too (a 64-bit library is named with a
   `()(64bit)` suffix by rpm, a 32-bit one without). On 32-bit ARM the
   exported entry points use the hard-float calling convention (`IR_API`
-  in android/indraw.c): Android armeabi-v7a passes floats in the core
+  in android/rawfish-ir.c): Android armeabi-v7a passes floats in the core
   registers, Sailfish armv7hl in the VFP ones, and a mismatch crashes any
   call with a float argument (found on the Xperia XA2, October 2026: the
   first 32-bit phone the engine ran on -- it opens, streams, probes).

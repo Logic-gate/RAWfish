@@ -8,10 +8,10 @@
 set -eu
 cd "$(dirname -- "$0")/.."
 sfdk=${SFDK:-sfdk}
-ver=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' indraw_version.h)
+ver=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' rawfish-ir-version.h)
 spec_ver=$(sed -n 's/^Version: *//p' rpm/rawfish-ir-cli.spec)
 if [ "$ver" != "$spec_ver" ]; then
-    echo "indraw_version.h says $ver but rpm/rawfish-ir-cli.spec says $spec_ver" >&2
+    echo "rawfish-ir-version.h says $ver but rpm/rawfish-ir-cli.spec says $spec_ver" >&2
     exit 1
 fi
 # The library's ABI follows the sfdk target: a 64-bit target (aarch64) gets

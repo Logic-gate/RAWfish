@@ -6,7 +6,7 @@
  * DNGs into the luminance-per-lens-position and colour-per-light grids
  * shading.h composes a photo's map from.
  *
- * Pure C, no Android: included by indraw.c (the CLI drives the captures and
+ * Pure C, no Android: included by rawfish-ir.c (the CLI drives the captures and
  * calls this) and tested on a PC (android/tests/shading_build_test.c), which
  * writes synthetic flat-field DNGs with dng_write() and checks the grids come
  * back -- so it also exercises the DNG writer's pixels and GainMap.

@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-ir camera (the interface)
-Version:    0.2.4
+Version:    0.3.0
 Release:    1
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
@@ -36,7 +36,7 @@ Requires:       libkeepalive
 Requires:       rawfish-ir-cli >= 0.1.0
 
 %description
-RAWfish-ir camera application: the live viewfinder, the deck of controls
+Beta. RAWfish-ir camera application: the live viewfinder, the deck of controls
 and the gallery, backed by the rawfish-ir-cli engine. Shown as RAWfish-ir in
 the app grid and in Settings. Installs next to RAWfish (its own names and
 settings): both can be used on one phone. Internally the code keeps its

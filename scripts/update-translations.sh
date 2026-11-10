@@ -11,7 +11,7 @@
 set -eu
 cd "$(dirname -- "$0")/../app"
 lupdate=${LUPDATE:-$(command -v lupdate || echo /usr/lib/qt5/bin/lupdate)}
-app_sources="qml/*.qml indrawpreview.cpp main.cpp"
+app_sources="qml/*.qml rawfish-ir-preview.cpp main.cpp"
 # shellcheck disable=SC2086
 "$lupdate" -no-obsolete -locations relative $app_sources -ts translations/rawfish-ir.ts translations/rawfish-ir-*.ts
 "$lupdate" -no-obsolete -locations relative settings/SettingsPage.qml -ts translations/settings-rawfish-ir-*.ts

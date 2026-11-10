@@ -13,7 +13,7 @@ runs two worlds at once:
 | `rawfish-ir-gui` | the Qt/QML user interface | the **Sailfish SDK** | a normal Sailfish application |
 
 Both are plain RPM files you copy to the phone and install. The engine's
-version is written in one file, `indraw_version.h`, and the tool refuses to run
+version is written in one file, `rawfish-ir-version.h`, and the tool refuses to run
 with a library of another version, so always install both packages together.
 
 ## 1. What you need
@@ -185,16 +185,16 @@ rm -rf ~/.config/com.rawfish ~/.cache/com.rawfish ~/.local/share/com.rawfish
 ## 9. How the repository is organised
 
 ```
-android/      the Android library (Camera2 through the NDK): indraw.c, dngwrite.c, exifwrite.c
+android/      the Android library (Camera2 through the NDK): rawfish-ir.c, dngwrite.c, exifwrite.c
 sailfish/     the command-line tool that loads it through libhybris, and controller.c (the
               controller layer, docs/ARCHITECTURE.md) with its host test in tests/
-app/          the Qt/QML application (qml/, indrawpreview.cpp, the spec in rpm/)
+app/          the Qt/QML application (qml/, rawfish-ir-preview.cpp, the spec in rpm/)
 rpm/          the engine's RPM spec (rawfish-ir-cli)
 scripts/      build and diagnostic scripts (build-all.sh is the one to remember)
 docs/         USER-GUIDE.md, ENGINE.md (command reference), UI-NOTES.md (what the app does and why), DEVICE-PROFILES.md,
               GENERATED-HAL.md, STACKING.md, PORTING.md, ROBUSTNESS.md, ROADMAP.md, ARCHITECTURE.md,
               this file
-indraw_version.h   the version, shared by the library, the tool and both specs
+rawfish-ir-version.h   the version, shared by the library, the tool and both specs
 ```
 
 ## Versions and git tags

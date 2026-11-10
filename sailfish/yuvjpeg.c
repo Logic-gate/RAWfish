@@ -17,7 +17,9 @@ int yuv_encode_jpeg(const ir_yuv_t *f, int quality, uint8_t **jpg, unsigned long
     err_t err;
     JSAMPROW rows_y[16], rows_u[8], rows_v[8];
     JSAMPARRAY planes[3] = { rows_y, rows_u, rows_v };
-    unsigned char *mem = NULL;
+    /* mem is written by libjpeg (through its address) between setjmp and a
+     * possible longjmp, and read after it: C requires volatile for that. */
+    unsigned char *volatile mem = NULL;
     unsigned long memlen = 0;
     int i;
     if (!f || !f->y || !f->u || !f->v || f->w < 16 || f->h < 16 || (f->w & 1) || (f->h & 1) || !jpg || !len) return -1;
@@ -26,7 +28,12 @@ int yuv_encode_jpeg(const ir_yuv_t *f, int quality, uint8_t **jpg, unsigned long
     err.pub.error_exit = on_error;
     if (setjmp(err.jb)) { jpeg_destroy_compress(&c); free(mem); return -2; }
     jpeg_create_compress(&c);
-    jpeg_mem_dest(&c, &mem, &memlen);
+    {   /* jpeg_mem_dest wants a plain pointer-to-pointer; go through a local
+         * rather than cast away volatile, which would draw a compiler warning. */
+        unsigned char *p = NULL;
+        jpeg_mem_dest(&c, &p, &memlen);
+        mem = p;
+    }
     c.image_width = (JDIMENSION)f->w;
     c.image_height = (JDIMENSION)f->h;
     c.input_components = 3;

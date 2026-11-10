@@ -1,5 +1,5 @@
 /*
- * indrawpreview.h -- the viewfinder, a QQuickItem shown in QML.
+ * rawfish-ir-preview.h -- the viewfinder, a QQuickItem shown in QML.
  *
  * It launches the indraw engine in 'stream' mode as a child process, reads the
  * continuous SF2P frame stream from its stdout, turns each frame into a QImage,

@@ -1,6 +1,6 @@
 /*
  * LevelSensor.qml -- reads the accelerometer for the level (roll and tilt).
- * Loaded through a Loader by indraw.qml so that a device without the QtSensors
+ * Loaded through a Loader by rawfish-ir.qml so that a device without the QtSensors
  * QML module still runs the app (the level is then simply unavailable).
  *
  * Gravity in the device frame (Qt: x right, y up, z out of the screen; at rest

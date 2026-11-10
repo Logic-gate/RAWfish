@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../indrawpreview.cpp" line="+1108"/>
+        <location filename="../rawfish-ir-preview.cpp" line="+1124"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -821,22 +821,47 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
 </context>
 <context>
-    <name>indraw</name>
+    <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/indraw.qml" line="+274"/>
+        <location filename="../qml/rawfish-ir.qml" line="+268"/>
+        <source>selfie</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>wide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>tele</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>standard</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>DNG
 (RAW)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
-        <source>jpg</source>
+        <location line="+1"/>
+        <source>snap</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>JPG
++RAW</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+0"/>
-        <source>JPG
-+RAW</source>
+        <source>jpg</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -863,42 +888,12 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+174"/>
-        <source>Tmp</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-47"/>
+        <location line="+127"/>
         <source>reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-175"/>
-        <source>selfie</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>wide</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>tele</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>standard</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+5"/>
-        <source>snap</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+192"/>
+        <location line="+24"/>
         <source>measuring…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -923,7 +918,12 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+12"/>
+        <source>Tmp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <location line="+9"/>
         <source>tint</source>
         <translation type="unfinished"></translation>

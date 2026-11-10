@@ -1,5 +1,5 @@
 /*
- * indraw.c -- Sailfish side of indraw (glibc program, built with the Sailfish SDK).
+ * rawfish-ir.c -- Sailfish side of indraw (glibc program, built with the Sailfish SDK).
  *
  * Loads the Android-side library librawfish-ir.so through libhybris and drives it:
  * camera listing and capabilities, the device profile files, and a session
@@ -31,7 +31,7 @@
 #include <poll.h>     /* poll: notice the app's stdin closing    */
 #include <math.h>     /* fabsf: comparing calibration distances  */
 #include <pthread.h>  /* the stdin hang-up watcher thread         */
-#include "../indraw_version.h"
+#include "../rawfish-ir-version.h"
 #include "controller.h"
 #include "yuvjpeg.h"
 #include "yuvproc.h"
@@ -147,7 +147,8 @@ static void emit(const char *json)
 }
 
 /* Resolves the device-profiles directory, honouring the Sailjail sandbox.
- * Order: INDRAW_PROFILE_DIR (for tests), else $XDG_DATA_HOME/com.rawfish/rawfish-ir,
+ * Order: INDRAW_PROFILE_DIR (a developer's build only, -DIR_DEV_ENV: a
+ * distributed binary does not read it), else $XDG_DATA_HOME/com.rawfish/rawfish-ir,
  * else $HOME/.local/share/com.rawfish/rawfish-ir. Sailjail whitelists exactly
  * $HOME/.local/share/<OrganizationName>/<ApplicationName>, i.e.
  * com.rawfish/rawfish-ir, and sets XDG_DATA_HOME inside the sandbox, so reading it
@@ -155,7 +156,11 @@ static void emit(const char *json)
  * Writes the path into `buf`; returns 0 on success, -1 if it does not fit. */
 static int profile_dir(char *buf, size_t n)
 {
-    const char *over = getenv("INDRAW_PROFILE_DIR");  /* test/override          */
+#ifdef IR_DEV_ENV
+    const char *over = getenv("INDRAW_PROFILE_DIR");  /* developer's override   */
+#else
+    const char *over = NULL;                          /* not in a distributed binary */
+#endif
     const char *xdg = getenv("XDG_DATA_HOME");        /* set by Sailjail        */
     const char *home = getenv("HOME");
     int len;
@@ -1057,9 +1062,9 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       indraw [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
+            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; streams=: only these beside the viewfinder)\n"
-            "       indraw [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
+            "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
             "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS_mmm.EXT\n"
@@ -2009,7 +2014,13 @@ int main(int argc, char **argv)
      * -1, emit_event stops) and the engine closes the camera on its way out. */
     signal(SIGPIPE, SIG_IGN);
     static char out[OUT_SIZE];                 /* JSON from the bridge          */
-    const char *lib = getenv("INDRAW_LIB");     /* override for tests            */
+    /* Another library to load: a developer's build only (-DIR_DEV_ENV). A
+     * distributed binary loads its own library and nothing else. */
+#ifdef IR_DEV_ENV
+    const char *lib = getenv("INDRAW_LIB");
+#else
+    const char *lib = NULL;
+#endif
     char cmdline[512] = "";
     void *bridge;
     int jw, jh, pw = 1280, ph = 960, rw = 0, rh = 0, rc, i, type_raw = 0;  /* viewfinder-grade default */

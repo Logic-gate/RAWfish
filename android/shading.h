@@ -1,7 +1,7 @@
 /*
  * shading.h -- a MEASURED lens-shading (vignetting) calibration, and the
  * gain map composed from it for one photo. Pure C, no Android: included by
- * indraw.c and tested on a PC (android/tests/shading_test.c).
+ * rawfish-ir.c and tested on a PC (android/tests/shading_test.c).
  *
  * Why (measured on the JP2, October 2026, docs/VENDOR-TESTS.md): the HAL's
  * own shading map corrects only about half the falloff, does not follow the

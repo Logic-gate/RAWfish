@@ -3,7 +3,7 @@
  * temperature (kelvin) and a Duv (tint), from the camera's neutral (the
  * camera RGB of a white surface, i.e. 1 / the white-balance gains) and the
  * sensor's two calibration matrices (XYZ -> camera, each for a reference
- * illuminant). Pure C, no Android: included by indraw.c and tested on a PC
+ * illuminant). Pure C, no Android: included by rawfish-ir.c and tested on a PC
  * (android/tests/colortemp_test.c).
  *
  * The method is the DNG SDK's, which darktable uses too: the XYZ -> camera

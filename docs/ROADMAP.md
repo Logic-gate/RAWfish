@@ -9,7 +9,7 @@ Each item says why, so it can be picked up later without re-deriving it.
 - **Publication**: a fresh snapshot as the public repository's first commit
   (the history keeps old names and notes that are not for publication; the
   README says the history starts there), then the files split:
-  `android/indraw.c` (~6000 lines) and `app/qml/indraw.qml` (~2000) by
+  `android/rawfish-ir.c` (~6000 lines) and `app/qml/rawfish-ir.qml` (~2000) by
   responsibility (session, capture, stacking, shading, DNG / page, deck,
   overlays), with the host tests kept green at each step.
 - **The engine is sent commands while it stops**: after 'quit' the
@@ -48,6 +48,18 @@ Each item says why, so it can be picked up later without re-deriving it.
   (cJSON, one file, MIT): suggested by two October 2026 audits. The hand
   readers are bounded and tested (no memory fault found); a library would
   remove a class of misreadings of odd but valid JSON. Not urgent.
+
+### From the November 2026 review (open)
+
+- **Two very long files**: `android/rawfish-ir.c` (about 7300 lines) and
+  `app/qml/rawfish-ir.qml` (about 2300) are the main obstacle to a human
+  review. To split by subject without changing behaviour: the engine into
+  session / capture / metering / white balance / calibration units, the
+  page into components (deck, viewfinder overlays, white-balance controls).
+- **A private Silica import**: the gallery uses `Sailfish.Silica.private`
+  for its dismiss button (the same one as Jolla's gallery). It may change
+  with a Sailfish update: to replace by a button of our own.
+
 
 ### To find out
 - **The viewfinder's "maze" at high ISO** (JP2; RAWfish shows the same):
