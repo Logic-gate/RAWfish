@@ -516,6 +516,7 @@ static struct {
     char make[64], model[64];               /* ro.product.manufacturer / .model  */
     int64_t override_shutter_max_ns;        /* 0 = none; else the tested ceiling */
     int override_iso_max;                   /* 0 = none; else the highest ISO found to work in manual (above the declared range) */
+    int64_t override_exp_max_ns;            /* 0 = none; else the longest exposure found to work (above the declared range) */
     int lim_raw_off;                        /* device profile: no RAW stream      */
     int lim_jw, lim_jh;                     /* device profile: largest JPEG asked (0 = none) */
     int lim_no_jpeg;                        /* this session: no JPEG stream (RAW + preview) */
@@ -3294,6 +3295,9 @@ static int set_exposure(ACaptureRequest *req, int64_t exposure_ns, int iso,
             ACAMERA_OK && e.count) max_frame = e.data.i64[0];
     if (!max_exp || !max_iso)
         return fail(out, out_size, IR_EARG, "check", "manual exposure not supported", 0);
+    /* observed_exposure_max_ns in the device profile: a camera found to take
+     * a longer exposure than it declares (the JP2's 18 mm declares 0.1 s). */
+    if (g.override_exp_max_ns > max_exp) max_exp = g.override_exp_max_ns;
     if (exposure_ns < min_exp || exposure_ns > max_exp)
         return fail(out, out_size, IR_EARG, "check", "exposure outside sensor range", 0);
     if (iso <= 0) iso = min_iso;                         /* default: cleanest ISO   */
@@ -3310,7 +3314,9 @@ static int set_exposure(ACaptureRequest *req, int64_t exposure_ns, int iso,
         int64_t floor = g.override_min_frame_ns > 0 ? g.override_min_frame_ns : 33333333;
         frame = exposure_ns > floor ? exposure_ns : floor;
     }
-    if (max_frame && frame > max_frame) frame = max_frame;
+    /* The declared longest frame, unless the profile vouches for a longer
+     * exposure: a frame shorter than its exposure would cut it. */
+    if (max_frame && frame > max_frame && !(g.override_exp_max_ns >= exposure_ns)) frame = max_frame;
     ae = ACAMERA_CONTROL_AE_MODE_OFF;
     iso32 = iso;
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &ae);
@@ -4453,6 +4459,20 @@ static int capture_one_raw(int timeout_ms, AImage **img, int *w, int *h, int *st
  * declared SENSITIVITY_RANGE (0 = the declared range). Whether the HAL
  * really applies it shows in each photo's report: "requested" against
  * "applied". Set before the stream starts (the caps carry it). */
+/* observed_exposure_max_ns (device profile, per camera): the longest single
+ * exposure a manual request may ask for, when testing showed the camera
+ * takes more than its declared EXPOSURE_TIME_RANGE (0 = the declared
+ * range). It raises the declared maximum; observed_shutter_max_ns, the
+ * ceiling before stacking, still applies under it. */
+IR_API int indraw_set_exposure_max(int64_t exp_max_ns, char *out, size_t out_size)
+{
+    jw_t w;
+    g.override_exp_max_ns = exp_max_ns > 0 ? exp_max_ns : 0;
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"observed_exposure_max_ns\":%lld}", (long long)g.override_exp_max_ns);
+    return IR_OK;
+}
+
 IR_API int indraw_set_iso_max(int iso_max, char *out, size_t out_size)
 {
     jw_t w;
@@ -5484,6 +5504,7 @@ static void emit_caps(void)
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_WHITE_LEVEL, &e) == ACAMERA_OK && e.count)
         white = e.data.i32[0];
     shutter_max = g.override_shutter_max_ns > 0 ? g.override_shutter_max_ns : 500000000;
+    if (exp_max > 0 && g.override_exp_max_ns > exp_max) exp_max = g.override_exp_max_ns;   /* the profile's tested maximum */
     if (exp_max > 0 && shutter_max > exp_max) shutter_max = exp_max;
     {   /* JPEG sizes "WxH,WxH,..." as listed, and the AWB modes available. */
         ACameraMetadata_const_entry se;
@@ -6972,6 +6993,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     }
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE, &e) == ACAMERA_OK && e.count >= 2) { exp_min = e.data.i64[0]; exp_max = e.data.i64[1]; }
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE, &e) == ACAMERA_OK && e.count >= 2) { iso_min = e.data.i32[0]; iso_max = e.data.i32[1]; }
+    if (exp_max > 0 && g.override_exp_max_ns > exp_max) exp_max = g.override_exp_max_ns;
     exp_ceiling = g.override_shutter_max_ns > 0 && (exp_max <= 0 || g.override_shutter_max_ns < exp_max) ? g.override_shutter_max_ns : exp_max;
     for (k = 0; k < n; ++k) {
         /* this frame's pair: the exposure time scaled by 2^ev, kept within the

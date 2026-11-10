@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "201"                             // shown in the deck
+    readonly property string uiVersion: "202"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -254,9 +254,12 @@ ApplicationWindow {
             readonly property size jpegOverride: imageType === "snap" ? snapSize : Qt.size(0, 0)
             onJpegOverrideChanged: viewfinder.jpegSizeOverride = jpegOverride
             // Starts in continuous focus (the "auto" label): the camera follows
-            // the scene by itself until the user asks for more. ("auto" here is
-            // Camera2's AUTO, one scan then hold: the "once" label.)
-            property string focusMode: "cont"            // auto | cont | macro | manual
+            // the scene by itself until the user asks for more.
+            // "cont" (shown as "auto": the camera chooses and follows) or "manual"
+            // (a distance: a touch searches there, the volume keys adjust). The
+            // third mode, "once" (a touch searches and holds), went in 0.3.3:
+            // manual does the same and lets the distance be adjusted.
+            property string focusMode: "cont"
             // The TYPE button's value: small two-line labels ("DNG" over
             // "(RAW)", "HAL" over "JPG"); "JPG+RAW" when Settings saves a DNG
             // with each JPG, the type then being fixed.
@@ -282,16 +285,14 @@ ApplicationWindow {
             readonly property bool dngWithJpg: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
             onDngWithJpgChanged: if (dngWithJpg && imageType === "raw") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
-            //   "once"   = one scan where you tap, then hold (Camera2 AUTO)
-            //   "auto"   = continuous focus by the HAL; a tap then only meters
-            //              the light there (sun instead of circle)
-            //   distance = manual, set with the volume keys
+            //   "auto"   = continuous focus by the HAL; a touch does nothing
+            //   distance = manual: a touch searches there, the volume keys adjust
             function focusModeLabel(f) {
                 switch (f) {
                 case "cont":   return qsTr("auto")
                 case "macro":  return qsTr("macro")
                 case "manual": return page.focusDistanceLabel()
-                default:       return qsTr("once")
+                default:       return qsTr("auto")
                 }
             }
 
@@ -366,6 +367,13 @@ ApplicationWindow {
             // it back (onSettledChanged): the circle stayed, and needed a second
             // tap. The state's styling now only touches a circle meant to show.
             property bool circleShown: false
+            // A bracket in jpg is taken by the camera's own JPEG, not by our
+            // processing: said when the bracket is chosen, or when the type comes
+            // to jpg with a bracket already chosen.
+            readonly property bool bracketByHal: imageType === "jpg" && ownJpeg && settingsMenu.bracket !== "off"
+            onBracketByHalChanged: if (bracketByHal) { page.noticeText = qsTr("bracket: taken as the camera's own JPEG"); noticeTimer.restart() }
+            property string noticeText: ""                 // a line in the viewfinder for a few seconds
+            Timer { id: noticeTimer; interval: 3500; onTriggered: page.noticeText = "" }
             // The touch rule, said each time: a two-second line in the viewfinder.
             property bool touchHintShown: false
             Timer { id: touchHintTimer; interval: 2000; onTriggered: page.touchHintShown = false }
@@ -531,7 +539,7 @@ ApplicationWindow {
             // preview and drops the reference).
             function applyFocus() {
                 if (!viewfinder.running) return
-                viewfinder.sendCommand("fc mode " + (page.focusMode === "cont" ? "cont" : page.focusMode === "manual" ? "manual" : "once"))
+                viewfinder.sendCommand("fc mode " + (page.focusMode === "manual" ? "manual" : "cont"))
             }
             // A mode change: the controller drops the focus point and the light
             // point with their markers ("fc mode"); the circle fades here.
@@ -1266,6 +1274,14 @@ ApplicationWindow {
                     color: "white"; opacity: 0.28
                     // (a third of the width at first; 70 % larger since 0.3.1)
                     font { pixelSize: parent.width / 3 / 3.2 * 1.7; bold: true; letterSpacing: parent.width / 3 / 3.2 * 1.7 * 0.08 }
+                }
+                // A notice (a bracket goes to the camera's JPEG), a few seconds.
+                Label {
+                    anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter }
+                    visible: page.noticeText !== "" && viewfinder.running
+                    text: page.noticeText
+                    color: "white"; font.pixelSize: Theme.fontSizeSmall
+                    style: Text.Outline; styleColor: "black"
                 }
                 // The touch rule, two seconds after each tap or hold.
                 Label {
@@ -2007,8 +2023,13 @@ ApplicationWindow {
                             value: page.focusModeLabel(page.focusMode)
                             textColor: page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
                             onCycle: {
-                                var f = ["auto", "cont", "manual"]    // macro: engine only
-                                page.focusMode = f[(f.indexOf(page.focusMode)+1) % f.length]
+                                // auto <-> manual. Entering manual by this button starts
+                                // one search in the middle of the frame: the distance found
+                                // is the manual one to begin with (a start that restores a
+                                // manual distance does not search: it keeps that distance).
+                                if (page.focusMode === "manual") { page.focusMode = "cont"; return }
+                                page.focusMode = "manual"                 // "fc mode manual" goes first (onFocusModeChanged)
+                                viewfinder.sendCommand("fc search")
                             }
                         }
                     }

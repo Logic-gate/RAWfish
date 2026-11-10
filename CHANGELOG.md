@@ -14,6 +14,18 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.3 (beta) — two focus modes; a tested exposure ceiling (patch 0347)
+- FOCUS has two positions, **auto** and **manual**. "once" is gone: since a
+  touch focuses in manual, it did the same, minus the adjustment. Entering
+  manual with the button starts one search in the middle of the frame, and
+  the distance found is the one to begin with.
+- Device profile: `observed_exposure_max_ns`, per camera, lets a manual
+  exposure be longer than the camera declares (the JP2's 18 mm declares
+  0.1 s), as `observed_iso_max` does for the ISO. Nothing changes without
+  the key; a photo's report tells whether the camera followed.
+- Choosing a bracket in jpg says, in the viewfinder, that the three photos
+  are taken as the camera's own JPEG.
+
 ## 0.3.2 (beta) — the bracket in jpg again; a tested ISO ceiling (patch 0346)
 - **The bracket did nothing in jpg since 0.2.0**: one photo came out. Our
   own JPEG is a single photo, and the bracket was sent along with it and

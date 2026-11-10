@@ -160,7 +160,7 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+299"/>
+        <location line="+311"/>
         <location line="+44"/>
         <location line="+7"/>
         <location line="+7"/>
@@ -170,7 +170,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-412"/>
+        <location line="-424"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -376,7 +376,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+115"/>
+        <location line="+127"/>
         <source>Flash</source>
         <translation type="unfinished"></translation>
     </message>
@@ -823,7 +823,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/rawfish-ir.qml" line="+268"/>
+        <location filename="../qml/rawfish-ir.qml" line="+272"/>
         <source>selfie</source>
         <translation type="unfinished"></translation>
     </message>
@@ -866,29 +866,30 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+15"/>
-        <location line="+149"/>
-        <location line="+1858"/>
+        <location line="+3"/>
+        <location line="+153"/>
+        <location line="+1880"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-2033"/>
+        <location line="-2062"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
-        <source>once</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+22"/>
+        <location line="+24"/>
         <source> m</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+127"/>
+        <location line="+57"/>
+        <source>bracket: taken as the camera&apos;s own JPEG</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+77"/>
         <source>reset</source>
         <translation type="unfinished"></translation>
     </message>
@@ -957,31 +958,31 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+249"/>
-        <location line="+796"/>
+        <location line="+255"/>
+        <location line="+807"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-796"/>
-        <location line="+796"/>
+        <location line="-807"/>
+        <location line="+807"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-768"/>
-        <location line="+768"/>
+        <location line="-779"/>
+        <location line="+779"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-768"/>
-        <location line="+768"/>
+        <location line="-779"/>
+        <location line="+779"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-695"/>
+        <location line="-706"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -991,7 +992,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+24"/>
         <source>auto focus · hold: exposure here</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1016,7 +1017,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+177"/>
+        <location line="+179"/>
         <source>Device profile: no RAW, JPEG size limited</source>
         <translation type="unfinished"></translation>
     </message>

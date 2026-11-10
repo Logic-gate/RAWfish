@@ -48,6 +48,11 @@ Corrections wired today (both optional, per camera):
   18 mm declares 2400; its own AE reaches 15537). The ISO wheel goes that
   far. Each photo's report gives the ISO requested and the ISO applied:
   if they differ, the camera did not follow and the key should go.
+- `observed_exposure_max_ns`: the longest single exposure a manual request
+  may ask for, when testing showed the camera takes more than its declared
+  range (the JP2's 18 mm declares 0.1 s). It raises the declared maximum;
+  `observed_shutter_max_ns` still caps the wheel before stacking. Checked
+  the same way: the exposure requested against the one applied.
 - `min_frame_ns`: the minimum frame duration for manual exposure (the floor a
   manual shutter is clamped to). Default is 1/30 s (`33333333`); set this if the
   device accepts shorter or needs longer.

@@ -336,6 +336,7 @@ static const ov_field_t k_ov_fields[] = {
     { "observed_shutter_max_ns", 1000000LL, 60000000000LL },   /* 1 ms .. 60 s  */
     { "min_frame_ns",            1000000LL, 1000000000LL },    /* 1 ms .. 1 s   */
     { "observed_iso_max",        100, 1000000 },                /* a manual ISO ceiling above the declared one */
+    { "observed_exposure_max_ns", 1000000LL, 60000000000LL },   /* a longest exposure above the declared one */
     { "peak_edge",               1, 255 },
     { "peak_width",              1, 6 },
     { "zebra_jpeg",              1, 255 },
@@ -2408,6 +2409,12 @@ int main(int argc, char **argv)
                 set_iso_fn si = (set_iso_fn)a_dlsym(bridge, "indraw_set_iso_max");
                 long long im = ov_ok ? read_override_checked(argv[2], "observed_iso_max") : 0;
                 if (si && im > 0) { si((int)im, out, sizeof out); emit(out); }
+            }
+            {   /* a longest exposure above the declared range (device profile; absent: the declared one) */
+                typedef int (*set_exp_fn)(int64_t, char *, size_t);
+                set_exp_fn se = (set_exp_fn)a_dlsym(bridge, "indraw_set_exposure_max");
+                long long em = ov_ok ? read_override_checked(argv[2], "observed_exposure_max_ns") : 0;
+                if (se && em > 0) { se((int64_t)em, out, sizeof out); emit(out); }
             }
             {   /* a pause before each capture (device profile; absent: none) */
                 typedef int (*set_delay_fn)(int);

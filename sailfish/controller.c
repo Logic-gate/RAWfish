@@ -200,8 +200,9 @@ static void on_event(const char *line)
  *   xp auto | xp touch iso|speed | xp iso N | xp speed NS | xp ev N |
  *   xp spot on|off | xp pause on|off | xp source raw|vf */
 /* The interface's commands for the focus behaviour:
- *   fc mode cont|once|manual | fc step N | fc distance D | fc ref FX FY |
- *   fc clear | fc scene on|off | fc state */
+ *   fc mode cont|once|manual | fc search | fc step N | fc distance D |
+ *   fc ref FX FY | fc clear | fc scene on|off | fc state
+ * (the interface offers cont and manual; "once" stays for the command line) */
 static int focus_command(const char *line)
 {
     char a[32], b[32], d[32];
@@ -209,7 +210,13 @@ static int focus_command(const char *line)
     a[0] = b[0] = d[0] = '\0';
     n = sscanf(line + 3, "%31s %31s %31s", a, b, d);
     if (!c.foc || n < 1) return 1;
-    if (!strcmp(a, "mode")) {
+    if (!strcmp(a, "search")) {
+        /* The focus button entering manual: one search in the middle of the
+         * frame; the distance found becomes the manual one (as a touch does,
+         * without a circle: the view keeps no reference for it). */
+        ctl_focus_ref(c.foc, 0.5, 0.5, now_ms());
+    }
+    else if (!strcmp(a, "mode")) {
         /* A mode change drops the focus point and the light point: the view's
          * markers go with them (the interface need not ask for it). */
         ctl_focus_set_mode(c.foc, !strcmp(b, "once") ? CTL_FOCUS_ONCE : !strcmp(b, "manual") ? CTL_FOCUS_MANUAL : CTL_FOCUS_CONT);

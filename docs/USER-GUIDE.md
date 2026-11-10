@@ -45,7 +45,7 @@ exposure here".
 | **FOCAL** | the camera, shown by its 35 mm-equivalent focal length; tap to switch camera |
 | **TYPE** | **DNG (RAW)**; **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +RAW" when Settings saves a DNG with each JPG); **snap**, the camera's own JPEG at a small size (5 megapixels) for utility shots such as a receipt or a sign, marked SNAP on the viewfinder |
 
-| **FOCUS** | once, auto, or a distance (see "Focus") |
+| **FOCUS** | auto, or a distance: manual (see "Focus") |
 | histogram | the tones of **what the viewfinder shows** (zoomed or in the loupe: that area), per colour, with clipping bars at each end. In **jpg** it is measured on the processed image; in **raw** on the sensor data itself, so it sits further left and narrower (no tone curve lifting the shadows), and its left bar is bigger: it counts photosites at or below black, where noise puts about half of the truly dark ones -- shadows with no information, as the DNG will hold them. With a reference circle, the circle's own tones are drawn as bright outlines over it |
 | **EV** wheel | brightness correction, in the camera's steps |
 | shutter | takes the picture |
@@ -87,9 +87,8 @@ The FOCUS button cycles through three modes; the camera starts in **auto**:
 
 | Mode | Without a touch | With a touch |
 |---|---|---|
-| **once** | one search when the mode is chosen, then the lens stays where it is | one search on the point; once sharp (solid circle) the lens is **held** there however you reframe, until you remove the circle, touch elsewhere (new search) or change mode |
-| **auto** | the camera keeps focusing by itself, following the scene, where it chooses | nothing: the camera does not take a point in this mode. Choose **once** to focus where you touch |
-| **a distance** (e.g. "1.50 m") | manual focus at that distance; volume up / down moves it by small steps (up = farther), hold a key to move faster | one search on the point; the distance found becomes the manual distance, shown under the circle, and the volume keys continue from there |
+| **auto** | the camera keeps focusing by itself, following the scene, where it chooses | nothing: the camera does not take a point in this mode |
+| **a distance** (e.g. "1.50 m"), manual | on entering the mode, one search in the middle of the frame; then the lens stays at the distance shown. Volume up / down moves it by small steps (up = farther), hold a key to move faster | one search on the point; the distance found becomes the manual distance, shown under the circle and held however you reframe; the volume keys continue from there |
 
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
@@ -100,7 +99,9 @@ it could not focus. Remove it with a touch on it or a change of focus mode.
 In the loupe, the point is as small as the loupe shows. The circle (focus)
 and the sun (exposure) are independent and can stand together.
 
-Simple mode has no FOCUS button: it stays in auto.
+Simple mode has no FOCUS button: it stays in auto. (Until 0.3.2 a third
+mode, "once", searched at a touch and held: manual now does that, and lets
+the distance be adjusted.)
 
 Manual distances are only as exact as the focus calibration of your phone
 (see "Settings" and `DEVICE-PROFILES.md`).
@@ -189,7 +190,7 @@ columns or swipe up to close.
 | Quality | JPEG quality: 20, 40, 60, 80, 90, 95 (default) or 100 |
 | White bal. | automatic or a preset (daylight, cloudy, tungsten...) |
 | Frames, Colour NR, Moiré, Sharpen | RAWfish-ir's processing of the **jpg**, shown when Settings > Camera menu > "JPG processing in the camera menu" is on (else set in `rawfish-ir.conf`): frames merged (1, 2, 4), the colour noise filter, the false-colour filter and the sharpening; the default of each has a green ring |
-| Bracket | (not in snap) off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
+| Bracket | (not in snap; in jpg the three photos are the camera's own JPEG, as a line in the viewfinder says when the bracket is chosen) off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
 | Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. In automatic exposure the camera measures with a pre-flash first, so the shot takes half a second to a second longer. When the exposure is held (a wheel touched, or a circle in automatic) "auto" cannot judge and does not fire; "on" always fires. No flash in a burst. |
 | Grid | rule-of-thirds lines |
 | Σ denoise | for Σ (stacked) shots only: 2x or 4x the frames for less noise, 2x or 4x the time |

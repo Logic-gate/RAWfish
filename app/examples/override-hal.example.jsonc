@@ -39,6 +39,15 @@
         // 100 .. 1000000. No default.
         // "observed_iso_max": 16000,
 
+        // Longest single exposure a MANUAL request may ask for, when testing
+        // showed the camera takes more than it declares (the JP2's 18 mm
+        // declares 0.1 s). The speed wheel then goes that far, up to
+        // observed_shutter_max_ns above, beyond which it offers stacks. Test
+        // it as for the ISO: "requested" against "applied" in a photo's
+        // report. Absent: the declared range.
+        // Nanoseconds, 1000000 (1 ms) .. 60000000000 (60 s). No default.
+        // "observed_exposure_max_ns": 500000000,
+
         // Shortest frame time the viewfinder may use (its fastest rate;
         // 33333333 = 30 frames/s).
         // Nanoseconds, 1000000 .. 1000000000. Default 33333333.

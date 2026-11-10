@@ -159,7 +159,7 @@
         <location line="-4" />
         <location line="+19" />
         <location line="+2" />
-        <location line="+299" />
+        <location line="+311" />
         <location line="+44" />
         <location line="+7" />
         <location line="+7" />
@@ -169,7 +169,7 @@
         <translation>off</translation>
     </message>
     <message>
-        <location line="-412" />
+        <location line="-424" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -375,7 +375,7 @@
         <translation>%1 Mpx</translation>
     </message>
     <message>
-        <location line="+115" />
+        <location line="+127" />
         <source>Flash</source>
         <translation>Flash</translation>
     </message>
@@ -828,7 +828,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/rawfish-ir.qml" line="+268" />
+        <location filename="../qml/rawfish-ir.qml" line="+272" />
         <source>selfie</source>
         <translation>selfie</translation>
     </message>
@@ -873,29 +873,30 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+15" />
-        <location line="+149" />
-        <location line="+1858" />
+        <location line="+3" />
+        <location line="+153" />
+        <location line="+1880" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-2033" />
+        <location line="-2062" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
     <message>
-        <location line="+2" />
-        <source>once</source>
-        <translation>unique</translation>
-    </message>
-    <message>
-        <location line="+22" />
+        <location line="+24" />
         <source> m</source>
         <translation> m</translation>
     </message>
     <message>
-        <location line="+127" />
+        <location line="+57" />
+        <source>bracket: taken as the camera's own JPEG</source>
+        <translation>bracket : pris en JPEG de l'appareil</translation>
+    </message>
+    <message>
+        <location line="+77" />
         <source>reset</source>
         <translation>réinit.</translation>
     </message>
@@ -964,31 +965,31 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>bulle : pas de mesure</translation>
     </message>
     <message>
-        <location line="+249" />
-        <location line="+796" />
+        <location line="+255" />
+        <location line="+807" />
         <source>zebra</source>
         <translation>zébra</translation>
     </message>
     <message>
-        <location line="-796" />
-        <location line="+796" />
+        <location line="-807" />
+        <location line="+807" />
         <source>peak</source>
         <translation>peaking</translation>
     </message>
     <message>
-        <location line="-768" />
-        <location line="+768" />
+        <location line="-779" />
+        <location line="+779" />
         <source>level</source>
         <translation>bulle</translation>
     </message>
     <message>
-        <location line="-768" />
-        <location line="+768" />
+        <location line="-779" />
+        <location line="+779" />
         <source>AE</source>
         <translation>AE</translation>
     </message>
     <message>
-        <location line="-695" />
+        <location line="-706" />
         <source>failed, see the log</source>
         <translation>échec, voir le journal</translation>
     </message>
@@ -998,7 +999,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>Démarrage de l'appareil photo…</translation>
     </message>
     <message>
-        <location line="+15" />
+        <location line="+24" />
         <source>auto focus · hold: exposure here</source>
         <translation>mise au point auto · appui long : exposition ici</translation>
     </message>
@@ -1023,7 +1024,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>V %1°</translation>
     </message>
     <message>
-        <location line="+177" />
+        <location line="+179" />
         <source>Device profile: no RAW, JPEG size limited</source>
         <translation>Profil de l'appareil : pas de RAW, taille JPEG limitée</translation>
     </message>
