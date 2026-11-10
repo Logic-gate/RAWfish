@@ -93,8 +93,8 @@ the engine RPM in the Sailfish build engine, then the app RPM, and ends by
 listing the two files:
 
 ```
-RPMS/rawfish-ir-cli-0.41.0-1.aarch64.rpm
-app/RPMS/rawfish-ir-gui-0.13.0-1.aarch64.rpm
+RPMS/rawfish-ir-cli-0.3.0-1.beta.aarch64.rpm
+app/RPMS/rawfish-ir-gui-0.3.0-1.beta.aarch64.rpm
 ```
 
 What the script does, if you prefer the pieces:

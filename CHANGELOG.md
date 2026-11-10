@@ -18,6 +18,9 @@ repository). Newest first.
 The first version called a beta: the functions are there and used daily
 on the Jolla Phone 2 and the Xperia XA2; it now needs testers, above all
 on other phones. Nothing changes in what the app does.
+- The packages' files say it: `rawfish-ir-cli-0.3.0-1.beta.<arch>.rpm`
+  (the release field; the packages' names and the order of versions are
+  unchanged, an update installs over the previous version as before).
 - The source files take the project's name: `android/indraw.c` and
   `sailfish/indraw.c` become `rawfish-ir.c`, `indrawpreview.cpp/.h`
   `rawfish-ir-preview.cpp/.h`, `indraw.qml` `rawfish-ir.qml`,

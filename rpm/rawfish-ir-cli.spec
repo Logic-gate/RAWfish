@@ -2,7 +2,10 @@ Name:       rawfish-ir-cli
 Summary:    RAWfish-ir camera engine (Camera2 bridge library, controller, CLI)
 # Keep in step with rawfish-ir-version.h (scripts/build-engine-rpm.sh checks).
 Version:    0.3.0
-Release:    1
+# "beta" in the release, so the files say it: rawfish-ir-...-0.3.0-1.beta.<arch>.rpm.
+# The package's name and the version's order are untouched: the first
+# version after the beta takes a higher Version and a plain "1" here.
+Release:    1.beta
 License:    BSD-3-Clause
 URL:        https://github.com/Logic-gate/RAWfish
 Source0:    %{name}-%{version}.tar.bz2

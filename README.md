@@ -123,8 +123,8 @@ rebuilding from zero. The short version: `./scripts/build-all.sh` makes both RPM
 Two RPMs, installed on the phone with `rpm -Uvh` (as root):
 
 ```sh
-ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh   # RPMS/rawfish-ir-cli-X.Y.Z-1.aarch64.rpm
-cd app && sfdk build                                           # app/RPMS/rawfish-ir-gui-X.Y.Z-1.aarch64.rpm
+ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh   # RPMS/rawfish-ir-cli-X.Y.Z-1.beta.aarch64.rpm
+cd app && sfdk build                                           # app/RPMS/rawfish-ir-gui-X.Y.Z-1.beta.aarch64.rpm
 ```
 
 `rawfish-ir-cli` carries `librawfish-ir.so` (prebuilt with the NDK, installed to
