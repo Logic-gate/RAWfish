@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "200"                             // shown in the deck
+    readonly property string uiVersion: "201"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -999,7 +999,13 @@ ApplicationWindow {
                                            + " noise=hq_noise edge=hq_edge bracket=off denoise_sigma=1 snap=1")
                     return
                 }
-                var isRaw = (page.imageType === "raw"), isYuv = (page.imageType === "jpg" && page.ownJpeg)
+                // Our own JPEG (type=yuv) is one photo: a bracket in jpg goes to the
+                // camera's JPEG (type=jpg), whose stream the session holds as soon
+                // as a bracket is chosen (see sessionStreams). Since 0.2.0 the
+                // bracket was sent with type=yuv, which ignores it: one photo came
+                // out instead of three.
+                var isRaw = (page.imageType === "raw")
+                var isYuv = (page.imageType === "jpg" && page.ownJpeg && settingsMenu.bracket === "off")
                 viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix
                                        + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
                                        + " q=" + settingsMenu.effQuality

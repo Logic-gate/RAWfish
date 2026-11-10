@@ -32,8 +32,11 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
                  req->noise[0] ? " " : "", req->noise, req->edge[0] ? " " : "", req->edge);
     }
     focus_arg(fs, farg, sizeof farg);
-    /* Our JPEG from the YUV stream: one command, the frames merged there. */
-    if (req->yuv) {
+    /* Our JPEG from the YUV stream: one command, the frames merged there.
+     * It is ONE photo: a request that carries a bracket is not ours to take
+     * (it used to be taken, and its bracket dropped in silence); it goes on
+     * to the camera's JPEG below, burst or three exposures. */
+    if (req->yuv && req->bracket < 0) {
         n = snprintf(lines[0], CTL_SHOOT_LINE, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s%s", req->name,
                      req->frames == 2 || req->frames == 4 ? req->frames : 1, req->colour, req->median, req->sharpen,
                      req->quality > 0 ? req->quality : 95, req->dng ? " dng=1" : "", farg);

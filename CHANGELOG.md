@@ -14,6 +14,19 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.2 (beta) — the bracket in jpg again; a tested ISO ceiling (patch 0346)
+- **The bracket did nothing in jpg since 0.2.0**: one photo came out. Our
+  own JPEG is a single photo, and the bracket was sent along with it and
+  dropped in silence. A bracket in jpg is taken by the camera's JPEG again
+  (x3: a burst; ±1 to ±3 EV: three exposures), as the session already
+  prepared for; the controller no longer drops a bracket either. Those
+  three files are the camera's rendering, not ours (Exif Software says so).
+- Device profile: `observed_iso_max`, per camera, raises the ISO a manual
+  exposure may ask for when the camera takes more than it declares (the
+  JP2's 18 mm declares 2400; its own automatic exposure reaches 15537).
+  Nothing changes without the key. Each photo's report gives the ISO
+  requested and the ISO applied, which tells whether the camera followed.
+
 ## 0.3.1 (beta) — our JPG saved again; first findings of the test protocol (patch 0345)
 - **Our JPG was not saved in 0.3.0, and the engine restarted at each
   attempt.** The JPEG writer, changed in 0.3.0 for a remark of the outside

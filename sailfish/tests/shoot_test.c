@@ -41,6 +41,15 @@ int main(void)
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && strstr(lines[0], "q=95 dng=1 focus=") != NULL, "yuv with a DNG: dng=1");
     r.yuv = 0; r.dng = 0;
+    /* 3b'. a yuv request WITH a bracket is not one photo: it becomes the
+     *      camera's JPEG, a burst (x3) or three exposures (EV). */
+    r.yuv = 1; r.bracket = 0;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && !strncmp(lines[0], "burst ", 6), "yuv with x3: a burst of the camera's JPEG, not one yuv photo");
+    r.bracket = 1;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 3 && !strncmp(lines[0], "jpeg ", 5) && !strncmp(lines[2], "jpeg ", 5), "yuv with an EV bracket: three jpeg exposures");
+    r.yuv = 0; r.bracket = -1;
     /* 3c. snap: the HAL JPEG with its label for the Exif. */
     r.snap = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);

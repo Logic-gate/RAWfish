@@ -515,6 +515,7 @@ static struct {
     char camera_id[16];
     char make[64], model[64];               /* ro.product.manufacturer / .model  */
     int64_t override_shutter_max_ns;        /* 0 = none; else the tested ceiling */
+    int override_iso_max;                   /* 0 = none; else the highest ISO found to work in manual (above the declared range) */
     int lim_raw_off;                        /* device profile: no RAW stream      */
     int lim_jw, lim_jh;                     /* device profile: largest JPEG asked (0 = none) */
     int lim_no_jpeg;                        /* this session: no JPEG stream (RAW + preview) */
@@ -3296,6 +3297,10 @@ static int set_exposure(ACaptureRequest *req, int64_t exposure_ns, int iso,
     if (exposure_ns < min_exp || exposure_ns > max_exp)
         return fail(out, out_size, IR_EARG, "check", "exposure outside sensor range", 0);
     if (iso <= 0) iso = min_iso;                         /* default: cleanest ISO   */
+    /* A HAL may declare less than it does: its own AE was seen at ISO 15537
+     * on a camera that declares 2400 (JP2, 18 mm). observed_iso_max in the
+     * device profile raises the ceiling a manual request may ask for. */
+    if (g.override_iso_max > max_iso) max_iso = g.override_iso_max;
     if (iso < min_iso || iso > max_iso)
         return fail(out, out_size, IR_EARG, "check", "iso outside sensor range", iso);
     /* A frame cannot be shorter than its exposure; the stream minimum is 1/30 s
@@ -4443,6 +4448,20 @@ static int capture_one_raw(int timeout_ms, AImage **img, int *w, int *h, int *st
  *   observed_shutter_max_ns  the real single-exposure ceiling found by testing;
  *                            overrides the built-in 1/2 s stacking sub-frame max
  * Must be called after indraw_open (it stores into the open session's state). */
+/* observed_iso_max (device profile, per camera): the highest ISO a manual
+ * exposure may ask for, when testing showed the camera takes more than its
+ * declared SENSITIVITY_RANGE (0 = the declared range). Whether the HAL
+ * really applies it shows in each photo's report: "requested" against
+ * "applied". Set before the stream starts (the caps carry it). */
+IR_API int indraw_set_iso_max(int iso_max, char *out, size_t out_size)
+{
+    jw_t w;
+    g.override_iso_max = iso_max > 0 ? iso_max : 0;
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"observed_iso_max\":%d}", g.override_iso_max);
+    return IR_OK;
+}
+
 IR_API int indraw_set_override(int64_t observed_shutter_max_ns, int64_t min_frame_ns,
                                char *out, size_t out_size)
 {
@@ -5451,6 +5470,7 @@ static void emit_caps(void)
         zoom_max = e.data.f[0];
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE, &e) == ACAMERA_OK && e.count == 2)
         { iso_min = e.data.i32[0]; iso_max = e.data.i32[1]; }
+    if (iso_max > 0 && g.override_iso_max > iso_max) iso_max = g.override_iso_max;   /* the profile's tested ceiling: the wheel goes that far */
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_MAX_ANALOG_SENSITIVITY, &e) == ACAMERA_OK && e.count)
         iso_analog = e.data.i32[0];
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE, &e) == ACAMERA_OK && e.count == 2)

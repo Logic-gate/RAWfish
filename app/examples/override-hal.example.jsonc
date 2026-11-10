@@ -29,6 +29,16 @@
         // Nanoseconds, 1000000 (1 ms) .. 60000000000 (60 s). Default 500000000.
         "observed_shutter_max_ns": 500000000,
 
+        // Highest ISO a MANUAL exposure may ask for, when testing showed the
+        // camera takes more than it declares (the JP2's 18 mm declares 2400
+        // while its own automatic exposure goes to 15537). The ISO wheel
+        // then goes that far. To test a value: set it, take a manual photo
+        // at a high ISO, and compare "requested" and "applied" in the
+        // photo's report in the log; if the camera did not follow, remove
+        // the key. Absent: the declared range.
+        // 100 .. 1000000. No default.
+        // "observed_iso_max": 16000,
+
         // Shortest frame time the viewfinder may use (its fastest rate;
         // 33333333 = 30 frames/s).
         // Nanoseconds, 1000000 .. 1000000000. Default 33333333.
