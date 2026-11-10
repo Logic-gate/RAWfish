@@ -126,6 +126,12 @@ echo "licence: app/LICENSE = LICENSE (OK)"
 gcc -std=c11 -O2 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -fsanitize=address,undefined \
     -I "$root/sailfish" -o /tmp/indraw-yuvproc-test "$root/sailfish/tests/yuvproc_test.c" "$root/sailfish/yuvproc.c" -lpthread -lm
 run_test /tmp/indraw-yuvproc-test
+# Our JPEG writer: noisy images, so that libjpeg grows its output buffer (a
+# writer that returned the first buffer crashed every photo of 0.3.0 and no
+# test saw it: the file was only compiled). Decoded back; under ASan/UBSan.
+gcc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
+    -I "$root/sailfish" -o /tmp/indraw-yuvjpeg-test "$root/sailfish/tests/yuvjpeg_test.c" "$root/sailfish/yuvjpeg.c" -ljpeg
+run_test /tmp/indraw-yuvjpeg-test
 # Translations: every text shown on screen (qsTr / tr) is in the .ts files,
 # and every language file has a translation for each (lupdate into a
 # scratch copy, compared with the committed files). Skipped without lupdate.

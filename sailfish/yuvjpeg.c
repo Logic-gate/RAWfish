@@ -17,23 +17,26 @@ int yuv_encode_jpeg(const ir_yuv_t *f, int quality, uint8_t **jpg, unsigned long
     err_t err;
     JSAMPROW rows_y[16], rows_u[8], rows_v[8];
     JSAMPARRAY planes[3] = { rows_y, rows_u, rows_v };
-    /* mem is written by libjpeg (through its address) between setjmp and a
-     * possible longjmp, and read after it: C requires volatile for that. */
-    unsigned char *volatile mem = NULL;
-    unsigned long memlen = 0;
+    /* Where libjpeg keeps the output: it holds the ADDRESSES of these two
+     * fields until jpeg_finish_compress, growing the buffer (and freeing the
+     * old one) as it goes, and writes the final pointer and length there at
+     * the end. So they must live as long as the compression, and, read after
+     * a longjmp, must not be locals changed since setjmp (C leaves those
+     * indeterminate): a small heap block, whose pointer `o` never changes,
+     * satisfies both. (0.3.0 gave libjpeg the address of a block-scoped
+     * local and returned the first 4 KB buffer, freed since: every JPG of
+     * our own crashed the engine.) */
+    struct out { unsigned char *mem; unsigned long len; } *o;
     int i;
     if (!f || !f->y || !f->u || !f->v || f->w < 16 || f->h < 16 || (f->w & 1) || (f->h & 1) || !jpg || !len) return -1;
     *jpg = NULL; *len = 0;
+    o = calloc(1, sizeof *o);
+    if (!o) return -3;
     c.err = jpeg_std_error(&err.pub);
     err.pub.error_exit = on_error;
-    if (setjmp(err.jb)) { jpeg_destroy_compress(&c); free(mem); return -2; }
+    if (setjmp(err.jb)) { jpeg_destroy_compress(&c); free(o->mem); free(o); return -2; }
     jpeg_create_compress(&c);
-    {   /* jpeg_mem_dest wants a plain pointer-to-pointer; go through a local
-         * rather than cast away volatile, which would draw a compiler warning. */
-        unsigned char *p = NULL;
-        jpeg_mem_dest(&c, &p, &memlen);
-        mem = p;
-    }
+    jpeg_mem_dest(&c, &o->mem, &o->len);
     c.image_width = (JDIMENSION)f->w;
     c.image_height = (JDIMENSION)f->h;
     c.input_components = 3;
@@ -60,8 +63,9 @@ int yuv_encode_jpeg(const ir_yuv_t *f, int quality, uint8_t **jpg, unsigned long
         }
         jpeg_write_raw_data(&c, planes, 16);
     }
-    jpeg_finish_compress(&c);
+    jpeg_finish_compress(&c);                          /* the final pointer and length are written now */
     jpeg_destroy_compress(&c);
-    *jpg = mem; *len = memlen;
+    *jpg = o->mem; *len = o->len;                      /* the caller frees the JPEG */
+    free(o);
     return 0;
 }

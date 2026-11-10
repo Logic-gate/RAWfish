@@ -14,6 +14,27 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.1 (beta) — our JPG saved again; first findings of the test protocol (patch 0345)
+- **Our JPG was not saved in 0.3.0, and the engine restarted at each
+  attempt.** The JPEG writer, changed in 0.3.0 for a remark of the outside
+  review, gave libjpeg the address of a variable that no longer existed
+  and returned a buffer libjpeg had freed. The output now lives in a heap
+  block for the whole compression. The writer had no test (it was only
+  compiled): it has one, on noisy images whose JPEG outgrows libjpeg's
+  first buffer, decoded back, under AddressSanitizer; run against the
+  0.3.0 writer it fails at once.
+- The sun of a held touch did not always appear: a drawing created hidden
+  is now repainted each time it is shown.
+- The blue ring of the white-balance pick is drawn where the engine
+  measures: on the exposure's point (the sun) if there is one, else in the
+  middle. It followed the focus circle, which the measure never used.
+- A focus calibration the engine refuses (lens values that go down as the
+  distance shortens) no longer leaves the camera without any table: the
+  profile's own table is used, and the log says why the other was left out.
+- The default JPG size is the largest of at most 13 megapixels (12.5 on
+  the JP2) instead of the largest; a size already chosen is kept.
+- "SNAP" on the viewfinder is 70 % larger.
+
 ## 0.3.0 (beta) — the sources renamed, an outside review's remarks (patch 0343)
 The first version called a beta: the functions are there and used daily
 on the Jolla Phone 2 and the Xperia XA2; it now needs testers, above all

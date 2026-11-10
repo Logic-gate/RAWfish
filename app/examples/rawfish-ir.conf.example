@@ -29,7 +29,8 @@ timerSec=0
 ; Image proportion of the JPEG ("" = the sensor's own, 4:3 on most phones).
 ;                                               values: "", 4:3, 16:9   default ""
 format=
-; JPEG size, WIDTHxHEIGHT among the sizes the camera lists ("" = the largest).
+; JPEG size, WIDTHxHEIGHT among the sizes the camera lists ("" = the largest
+; of at most 13 megapixels: 4096x3072 on the JP2).
 ;                                               e.g. 4096x3072          default ""
 captureSize=
 ; JPEG quality (JPG and HAL JPG).

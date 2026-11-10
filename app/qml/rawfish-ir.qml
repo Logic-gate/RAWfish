@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "199"                             // shown in the deck
+    readonly property string uiVersion: "200"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -1252,13 +1252,14 @@ ApplicationWindow {
                           ? viewfinder.errorString : qsTr("Starting camera…")
                 }
                 // snap: a light, translucent "SNAP" over the top of the viewfinder
-                // (a third of its width), so the type is never mistaken.
+                // (a good half of its width), so the type is never mistaken.
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge }
                     visible: page.imageType === "snap" && viewfinder.running
                     text: "SNAP"
                     color: "white"; opacity: 0.28
-                    font { pixelSize: parent.width / 3 / 3.2; bold: true; letterSpacing: parent.width / 3 / 3.2 * 0.08 }
+                    // (a third of the width at first; 70 % larger since 0.3.1)
+                    font { pixelSize: parent.width / 3 / 3.2 * 1.7; bold: true; letterSpacing: parent.width / 3 / 3.2 * 1.7 * 0.08 }
                 }
                 // The touch rule, two seconds after each tap or hold.
                 Label {
@@ -1526,18 +1527,20 @@ ApplicationWindow {
                 }
 
                 // The zone a white-balance pick measures, while the readout is held
-                // and until the measure is over: the reference circle's spot when one
-                // is set, else the middle of what is shown -- both 12 % of the view
-                // (the engine's box; a spot set before a later zoom is approximate).
+                // and until the measure is over. The engine measures on the
+                // EXPOSURE's spot: the light point (the sun, 5 % of the view) when
+                // one is set, else the middle of what is shown (12 %). It never
+                // was the focus circle's point: the ring followed it by mistake.
                 Rectangle {
                     id: wbZone
+                    readonly property bool onLight: page.lightShown
                     visible: page.pickProgress > 0 || page.pickMeasuring
-                    width: Math.min(viewfinderZone.width, viewfinderZone.height) * 0.12 * 1.414
+                    width: Math.min(viewfinderZone.width, viewfinderZone.height) * (onLight ? 0.05 : 0.12) * 1.414
                     height: width; radius: width / 2
                     color: "transparent"
                     border.color: "#80d8ff"; border.width: 2
-                    x: (page.vws.hasRef ? page.rotate(page.vws.refU, page.vws.refV).u : 0.5) * viewfinderZone.width - width / 2
-                    y: (page.vws.hasRef ? page.rotate(page.vws.refU, page.vws.refV).v : 0.5) * viewfinderZone.height - height / 2
+                    x: (onLight ? page.rotate(page.vws.lightU, page.vws.lightV).u : 0.5) * viewfinderZone.width - width / 2
+                    y: (onLight ? page.rotate(page.vws.lightU, page.vws.lightV).v : 0.5) * viewfinderZone.height - height / 2
                 }
 
                 // Metering/focus circle: shown where the user tapped, for a

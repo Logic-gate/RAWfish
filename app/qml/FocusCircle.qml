@@ -26,6 +26,11 @@ Canvas {
     onStyleChanged: requestPaint()
     onColourChanged: requestPaint()
     onSunChanged: requestPaint()
+    // A Canvas created hidden is not always painted when it is first shown
+    // (the sun, hidden until a touch is held, sometimes stayed blank): it is
+    // asked to paint each time it becomes visible or available.
+    onVisibleChanged: if (visible) requestPaint()
+    onAvailableChanged: if (available) requestPaint()
     onPaint: {
         var ctx = getContext("2d")
         ctx.clearRect(0, 0, width, height)

@@ -318,9 +318,21 @@ Item {
         return list
     }
     // The size in force: the chosen one if still allowed, else the largest allowed.
+    // The size in force: the one chosen if this camera and format list it,
+    // else the default: the largest size of at most 13 megapixels (12.5 on
+    // the JP2: its 50 MP binned by four, the size its lens resolves and the
+    // one that keeps the viewfinder and the files light), or the smallest
+    // listed if every size is larger. Until 0.3.0 the default was the largest.
+    function defaultSize(l) {
+        for (var i = 0; i < l.length; ++i) {           // largest first
+            var p = String(l[i]).split("x")
+            if (p[0] * p[1] <= 13000000) return l[i]
+        }
+        return l.length > 0 ? l[l.length - 1] : ""
+    }
     function effectiveSize() {
         var l = sizesFor(format)
-        return l.indexOf(captureSize) >= 0 ? captureSize : (l[0] || "")
+        return l.indexOf(captureSize) >= 0 ? captureSize : defaultSize(l)
     }
     // A type change can narrow the sizes (in raw the JPEG is no wider than the
     // RAW16 stream): settle like a camera change -- restart only if the engine

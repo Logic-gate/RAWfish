@@ -2466,7 +2466,22 @@ int main(int argc, char **argv)
                 float real_d[16], hal_d[16];
                 int ncal = read_focus_calibration(argv[2], real_d, hal_d, 16);
                 if (setcal && ncal > 0) {
-                    setcal(real_d, hal_d, ncal, out, sizeof out);
+                    /* The table is the shipped one with the user's files laid
+                     * over it. If that mix is refused (a calibration whose lens
+                     * values go down as the distance shortens: an autofocus
+                     * that missed at some distances), the user's points are
+                     * left out and the shipped table is used alone, rather
+                     * than no table at all; the log says so, with the reason. */
+                    if (setcal(real_d, hal_d, ncal, out, sizeof out) != 0) {
+                        int nship = g_ov_shipped[0] ? read_focus_calibration_file(g_ov_shipped, argv[2], real_d, hal_d, 16) : 0;
+                        emit(out);                                   /* the refusal, as the engine words it */
+                        log_line("# ", "focus: the calibration in override-hal.json / focus-calibration.json is not usable (see the line above); "
+                                       "it is left out. Run the calibration again, or delete focus-calibration.json");
+                        if (nship > 0 && setcal(real_d, hal_d, nship, out, sizeof out) == 0)
+                            log_line("# ", "focus: the profile's own table is used");
+                        else
+                            log_line("# ", "focus: no calibration table; manual distances are uncalibrated (1:1)");
+                    }
                     emit(out);
                 } else {
                     /* No table: manual focus distances use the uncalibrated 1:1
