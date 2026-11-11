@@ -50,6 +50,22 @@
         }
       ],
       "_focus_calibration_note": "Measured on one JP2 (scripts/focus-calib.sh, October 2026): the HAL's lens value for each real distance, interpolated in diopters. A user's own table (override-hal.json or the calibration assistant) replaces these distances and adds others. Camera 2 (the 18 mm) focuses too and has no table yet."
+    },
+    {
+      "camera_id": "1",
+      "overrides": {
+        "_note": "Tested on a JP2 (November 2026): a manual exposure is taken up to ISO 16000 and 0.5 s, beyond the declared range; the camera's own automatic exposure goes to ISO 15537.",
+        "observed_iso_max": 16000,
+        "observed_exposure_max_ns": 500000000
+      }
+    },
+    {
+      "camera_id": "2",
+      "overrides": {
+        "_note": "The 18 mm. Tested on a JP2 (November 2026): a manual exposure is taken up to ISO 16000 and 0.5 s, beyond the declared 2400 and 0.1 s; the camera's own automatic exposure goes to ISO 15537.",
+        "observed_iso_max": 16000,
+        "observed_exposure_max_ns": 500000000
+      }
     }
   ]
 }

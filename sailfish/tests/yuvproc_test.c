@@ -55,6 +55,35 @@ int main(void)
     float n4 = noise_in(out.y, W, 100, 100, 400, 250);
     CHECK(n4 < n1 * 0.62f, "flat area noise %.2f -> %.2f (4 frames: expected about /2)", n1, n4);
     CHECK(rep.merged_pct[1] > 90 && rep.merged_pct[3] > 85, "merged share %.0f%% %.0f%% %.0f%%", rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
+    {   /* Enlarged grain: frames whose grain spans 2x2 pixels (as the JP2's 50
+         * MP night frames, a 12.5 MP image upscaled). The one-frame estimate
+         * reads low; the merge must still take the frames. (On real JP2 frames
+         * 0.3.3 kept a third to a half; on this milder synthetic grain, 86 %.) */
+        ir_yuv_t big[4], o4; yuv_denoise_report_t rb; int k2, x2, y2;
+        for (k2 = 0; k2 < 4; ++k2) {
+            ir_yuv_t sm = make(W / 2, H / 2, 0, 0, -1, SIG, 77u + (unsigned)k2);
+            big[k2] = sm; big[k2].w = W; big[k2].h = H;
+            big[k2].y = malloc((size_t)W * H); big[k2].u = malloc((size_t)W * H / 4); big[k2].v = malloc((size_t)W * H / 4);
+            for (y2 = 0; y2 < H; ++y2) for (x2 = 0; x2 < W; ++x2) {   /* bilinear 2x, as an ISP enlarges */
+                float sy = (y2 + 0.5f) / 2 - 0.5f, sx = (x2 + 0.5f) / 2 - 0.5f, fy, fx;
+                int y0 = sy < 0 ? 0 : (int)sy, x0 = sx < 0 ? 0 : (int)sx, y1 = y0 + 1 < H / 2 ? y0 + 1 : H / 2 - 1, x1 = x0 + 1 < W / 2 ? x0 + 1 : W / 2 - 1;
+                const uint8_t *q = sm.y; int w2 = W / 2;
+                fy = sy - y0; fx = sx - x0; if (fy < 0) fy = 0; if (fx < 0) fx = 0;
+                big[k2].y[(size_t)y2 * W + x2] = (uint8_t)((q[y0 * w2 + x0] * (1 - fx) + q[y0 * w2 + x1] * fx) * (1 - fy)
+                                                          + (q[y1 * w2 + x0] * (1 - fx) + q[y1 * w2 + x1] * fx) * fy + 0.5f);
+            }
+            for (y2 = 0; y2 < H / 2; ++y2) for (x2 = 0; x2 < W / 2; ++x2) {
+                big[k2].u[(size_t)y2 * (W / 2) + x2] = sm.u[(size_t)(y2 / 2) * (W / 4) + x2 / 2];
+                big[k2].v[(size_t)y2 * (W / 2) + x2] = sm.v[(size_t)(y2 / 2) * (W / 4) + x2 / 2];
+            }
+            free(sm.y); free(sm.u); free(sm.v);
+        }
+        CHECK(yuv_denoise(big, 4, 0, 0, &o4, &rb) == 0 && rb.merged_pct[1] > 95 && rb.merged_pct[3] > 95,
+              "enlarged grain: merged %.0f%% %.0f%% %.0f%% (one-frame noise %.2f, between frames %.2f, used %.2f)",
+              rb.merged_pct[1], rb.merged_pct[2], rb.merged_pct[3], rb.sigma, rb.sigma_pair, rb.sigma_merge);
+        free(o4.y); free(o4.u); free(o4.v);
+        for (k2 = 0; k2 < 4; ++k2) { free(big[k2].y); free(big[k2].u); free(big[k2].v); }
+    }
     {   /* the moving square: the output keeps frame 1's square (at 500..620), not a ghost of the others */
         double inside = 0, ghost = 0; int c1 = 0, c2 = 0;
         for (int y = 320; y < 400; ++y) { for (int x = 520; x < 600; ++x) { inside += out.y[(size_t)y * W + x]; c1++; } for (int x = 700; x < 780; ++x) { ghost += out.y[(size_t)y * W + x]; c2++; } }

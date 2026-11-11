@@ -37,6 +37,13 @@ Item {
     // --- values (persisted) ---
     property int timerSec: 0
     property string captureSize: ""
+    // Once per install: the 12.5 MP default of 0.3.1 applied over a size that
+    // was only ever the old default. Until 0.3.0 the default was the largest
+    // size, and settleSize wrote it into the settings as if chosen; so on an
+    // update the new default never showed. At the first settle with this
+    // version, a stored size equal to the camera's largest is taken for that
+    // old default and cleared (whoever wants 50 MP chooses it again, once).
+    property bool sizeDefaultApplied: false
     // "" (the default, nothing saved): the RAW's shape -- 4:3 on the JP2,
     // 16:9 on the XA2 -- so an untouched install takes all the sensor gives.
     property string formatSaved: ""
@@ -159,6 +166,7 @@ Item {
     }
     function load() {
         timerSec = pick("timerSec", "0", ["0", "3", "10"]) * 1
+        sizeDefaultApplied = String(viewfinder.setting("sizeDefaultApplied", "0")) === "1"
         var sz = String(viewfinder.setting("captureSize", ""))
         captureSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(sz) ? sz : ""
         formatSaved = pick("format", "", ["4:3", "16:9"])   /* "" = the RAW's shape (format) */
@@ -356,6 +364,14 @@ Item {
     // "max" itself; a new camera's largest size of the format usually is).
     function settleSize() {
         if (jpegSizes.length === 0) return
+        if (!sizeDefaultApplied) {
+            var largest = sizesFor(format)[0]
+            sizeDefaultApplied = true; save("sizeDefaultApplied", 1)
+            if (captureSize !== "" && captureSize === largest) {
+                captureSize = ""; save("captureSize", "")
+                save(format === "16:9" ? "captureSize169" : "captureSize43", "")
+            }
+        }
         var e = effectiveSize()
         if (e === captureSize) return
         viewfinder.sendCommand("# settle: format " + format + " wants " + e + ", engine runs " + runningSize

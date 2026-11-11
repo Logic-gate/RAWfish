@@ -33,6 +33,9 @@ format=
 ; of at most 13 megapixels: 4096x3072 on the JP2).
 ;                                               e.g. 4096x3072          default ""
 captureSize=
+; Internal: 1 once the 12.5 MP default (0.3.1) has been applied over a size
+; stored by an earlier version's default. Not to edit.
+sizeDefaultApplied=0
 ; JPEG quality (JPG and HAL JPG).
 ;                                 values: 20, 40, 60, 80, 90, 95, 100   default 95
 jpegQuality=95

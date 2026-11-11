@@ -14,6 +14,26 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.4 (beta) — four frames help again at night; the 12.5 MP default reaches updates; manual ISO and speed of cameras 1 and 2 (patch 0348)
+- **Frames 4 did little at 50 megapixels in low light.** There the JP2 gives
+  its 50 MP as an enlarged 12.5 MP image: neighbouring pixels share their
+  grain, and the noise measured on one frame (a pixel against its
+  neighbours) read a third of the real one (1.4 for 4.7). The merge's
+  threshold, set from it, refused about two thirds of every later frame
+  (38 %, 37 %, 35 % kept in the log). The merge now also measures the noise
+  between the first two frames, and uses it when it reveals enlarged grain
+  (more than twice the one-frame figure), within three times that figure
+  so that movement cannot open the threshold. On the JP2's night frames
+  enlarged to 50 MP, 84 to 100 % is kept instead of 32 to 58 %; at 12.5 MP
+  nothing changes. Each photo's report gives both noise figures.
+- **The 12.5 MP default did not reach those who updated**: earlier versions
+  stored their default (the largest size) as if chosen. Once per install, a
+  stored size equal to the camera's largest is taken for that old default
+  and cleared. To keep 50 MP, choose it again in the menu, once.
+- The JP2's profile takes its front camera (1) and its 18 mm (2) to ISO
+  16000 and 0.5 s in manual, as tested (they declare 2400 and 0.1 s; their
+  own automatic exposure reaches 15537).
+
 ## 0.3.3 (beta) — two focus modes; a tested exposure ceiling (patch 0347)
 - FOCUS has two positions, **auto** and **manual**. "once" is gone: since a
   touch focuses in manual, it did the same, minus the adjustment. Entering

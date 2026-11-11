@@ -1778,9 +1778,11 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f", jlen, quality, t1 - t0);
         if (do_save) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"saved_frames\":%d", saved);
         if (denoise == 1) snprintf(out + strlen(out), OUT_SIZE - strlen(out),
-                              ",\"denoise\":{\"frames\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
+                              ",\"denoise\":{\"frames\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
+                              "\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
                               "\"shifts\":[[%d,%d],[%d,%d],[%d,%d]],\"merged_pct\":[%.0f,%.0f,%.0f]}",
-                              (n == 1 && nev == 0) ? 1 : n, colour, median, rep.sigma, rep.ms_align, rep.ms_merge, rep.ms_colour,
+                              (n == 1 && nev == 0) ? 1 : n, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
+                              rep.ms_align, rep.ms_merge, rep.ms_colour,
                               rep.shift_dy[1], rep.shift_dx[1], rep.shift_dy[2], rep.shift_dx[2], rep.shift_dy[3], rep.shift_dx[3],
                               rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
         if (sharpen) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"sharpen\":{\"level\":%d,\"ms\":%.0f}", sharpen, rep.ms_sharpen);

@@ -293,6 +293,21 @@ static void merge_rows(void *p, int y0, int y1)
     /* merged share: not thread-safe to sum here; each thread writes its slice's sum into d? keep simple: atomic-ish add */
     { static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER; pthread_mutex_lock(&mu); c->merged += m; pthread_mutex_unlock(&mu); }
 }
+/* The median of the per-pixel |difference| (0..255), from a histogram of
+ * one value in 16 (exact enough for a threshold, and quick on 50 MP). */
+static float diff_median(const float *d, size_t np)
+{
+    unsigned long hist[256] = { 0 }, total = 0, acc = 0;
+    size_t i;
+    int k;
+    for (i = 0; i < np; i += 16) {
+        int v = (int)(d[i] + 0.5f);
+        hist[v < 0 ? 0 : v > 255 ? 255 : v]++; total++;
+    }
+    for (k = 0; k < 256; ++k) { acc += hist[k]; if (acc * 2 >= total) break; }
+    /* the integer bin k holds [k-0.5, k+0.5): its middle, at least half a level */
+    return k > 0 ? (float)k : 0.5f;
+}
 typedef struct { const uint8_t *a, *b; int dy, dx, w, h; float *d; } diff_ctx_t;
 static void diff_rows(void *p, int y0, int y1)
 {
@@ -325,6 +340,7 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
      * a level is the 8-bit image's own rounding, the least noise there is. */
     if (!(rep->sigma >= 0.5f)) rep->sigma = 0.5f;
     rep->merged_pct[0] = 100.0f;
+    rep->sigma_merge = rep->sigma;
     if (n == 1) {
         memcpy(out->y, ref->y, np); memcpy(out->u, ref->u, nc); memcpy(out->v, ref->v, nc);
     } else {
@@ -342,10 +358,38 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
             t0 = now_ms();
             dc.a = ref->y; dc.b = frames[k].y; dc.dy = rep->shift_dy[k]; dc.dx = rep->shift_dx[k]; dc.w = w; dc.h = h; dc.d = d;
             parallel_rows(diff_rows, &dc, h);
+            if (k == 1) {
+                /* The merge's noise, measured where it matters: between the
+                 * frames. The estimate on one frame (luma_sigma: a pixel against
+                 * its 8 neighbours) assumes the grain changes from one pixel to
+                 * the next. It does not when the ISP enlarges a binned image: in
+                 * low light the JP2 gives its 50 megapixels as a 12.5 upscaled,
+                 * the neighbours share their grain, and the estimate fell to a
+                 * third (1.4 for a true 4.7): the threshold below then refused
+                 * two thirds of every frame and four frames barely helped. The
+                 * median per-pixel difference of the first pair is |n1 - n2|
+                 * of the real grain wherever the scene is still (most of it):
+                 * its median is 0.6745 x sqrt 2 x sigma.
+                 * That pair estimate also counts what alignment leaves on edges
+                 * and a little movement: on frames whose grain is pixel-sized
+                 * (12.5 MP) it reads 1.5 to 1.75 times the one-frame estimate,
+                 * which is right there, and is not used. It is used when it reads
+                 * more than twice the one-frame estimate, the mark of an
+                 * enlarged grain (3.7 to 4.5 times on the JP2's 50 MP night
+                 * frames), and kept within 3 times, so that a scene mostly in
+                 * motion cannot open the threshold to its own movement.
+                 * Measured on the JP2's night frames (calme / main / bouge, four
+                 * each): at 12.5 MP nothing changes; enlarged to 50 MP, the share
+                 * merged goes from 32-58 % to 84-100 %. */
+                float pair = diff_median(d, np) / (0.6745f * 1.4142f);
+                float cap = 3.0f * rep->sigma;
+                rep->sigma_pair = pair;
+                rep->sigma_merge = pair > 2.0f * rep->sigma ? (pair < cap ? pair : cap) : rep->sigma;
+            }
             box_filter(d, db, w, h, 3);              /* local mean |diff|, 7x7 */
             mc.ref = ref; mc.f = &frames[k]; mc.dy = dc.dy; mc.dx = dc.dx; mc.w = w; mc.h = h;
             mc.ay = ay; mc.au = au; mc.av = av; mc.wy = wy; mc.wc = wc; mc.d = db;
-            mc.T = 2.5f * rep->sigma * 1.4142f * 0.8f; mc.merged = 0;
+            mc.T = 2.5f * rep->sigma_merge * 1.4142f * 0.8f; mc.merged = 0;
             parallel_rows(merge_rows, &mc, h);
             rep->merged_pct[k] = (float)(100.0 * mc.merged / (double)np);
             rep->ms_merge += now_ms() - t0;
