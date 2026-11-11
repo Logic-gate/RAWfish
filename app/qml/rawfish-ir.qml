@@ -25,6 +25,7 @@ import Nemo.Policy 1.0             // volume keys (Resource.ScaleButton)
 import Nemo.Configuration 1.0      // /apps/rawfish-ir/output: the system Settings page's values
 import Nemo.KeepAlive 1.2          // keep the screen on during a stacked exposure
 import Qt.labs.folderlistmodel 2.1 // the gallery: files of ~/Pictures/RAWfish-ir
+import Nemo.Ngf 1.0                // haptic feedback: the shutter, a TYPE change (an idea of IvanV's ProCam)
 import com.indraw 1.0
 
 ApplicationWindow {
@@ -33,7 +34,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "206"                             // shown in the deck
+    readonly property string uiVersion: "207"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -382,6 +383,12 @@ ApplicationWindow {
             // it back (onSettledChanged): the circle stayed, and needed a second
             // tap. The state's styling now only touches a circle meant to show.
             property bool circleShown: false
+            // Haptic feedback, through the system's own events (the phone's
+            // vibration settings apply): the system camera's shutter event at the
+            // release, and the light tick of a pulley menu's step when TYPE
+            // changes. With thanks to IvanV (ProCam) for the idea.
+            NonGraphicalFeedback { id: shutterFeedback; event: "camera_shutter" }
+            NonGraphicalFeedback { id: typeFeedback; event: "pulldown_highlight" }
             // A bracket in jpg is taken by the camera's own JPEG, not by our
             // processing: said when the bracket is chosen, or when the type comes
             // to jpg with a bracket already chosen.
@@ -1016,6 +1023,10 @@ ApplicationWindow {
             // the manual distance, a stack for a Σ speed, a burst or three
             // shots for a bracket -- from the settings sent here.
             function shoot() {
+                // The release: a short vibration as the capture starts (at the
+                // press, or at the end of the timer's countdown); the white flash
+                // comes later, when the photo is taken and the phone may move.
+                shutterFeedback.play()
                 if (page.imageType === "snap") {
                     if (page.ownJpeg)
                         // ours, light: one frame, our processing at its defaults (the
@@ -1248,7 +1259,9 @@ ApplicationWindow {
                     // Running whenever the app is in front: also under the
                     // gallery, so coming back is instant.
                     active: Qt.application.active
-                    // Flash the moment the engine says the exposure is done.
+                    // The white flash the moment the engine says the exposure is
+                    // done: the sensor has the photo, the phone may move. (The
+                    // vibration is at the release, in shoot().)
                     onCaptureFinished: flashAnim.restart()
                     // Stack progress: frame of n, elapsed; the overlay shows the
                     // time left from the measured per-frame time.
@@ -2030,6 +2043,7 @@ ApplicationWindow {
                                 // when a DNG already comes with each JPG), JPG, snap.
                                 var t = page.rawAvailable && settingsMenu.advanced && !page.dngWithJpg ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
+                                typeFeedback.play()                       // a very light tick
                             }
                         }
                         CycleButton {

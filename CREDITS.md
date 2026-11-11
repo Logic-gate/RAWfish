@@ -8,6 +8,8 @@ RAWfish-ir is modelled on RAWfish (itself a fork of Jolla Camera): it takes
 RAWfish's logic and the look of its interface, without copying its code.
 Thanks to mad_dev, who unlocked the RAW on the JP2.
 Thanks to Jolla too, who opensourced the camera.
+Thanks to IvanV (Ivan Vojtko, ProCam), for the idea of a vibration at the
+shutter and at a change of type.
 
 
 ## LLM generated

@@ -14,6 +14,14 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.8 (beta) — a vibration at the shutter and at a change of type (patch 0352)
+- A short vibration at the release (the press, or the end of the timer),
+  and a very light one at each press of TYPE. The white flash keeps its
+  meaning: it comes when the photo is taken and the phone may move.
+  They are the system's own feedback events (the camera's shutter, the
+  tick of a pulley menu), so the phone's vibration settings apply. With
+  thanks to IvanV (ProCam) for the idea.
+
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the
   same full-size image as jpg, averaged down by blocks to about 2048 px
