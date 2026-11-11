@@ -743,6 +743,8 @@ static struct {
     int wbpick_pending, wbpick_done, wbpick_status;   /* status 0 ok, 1 clipped, 2 dark */
     double wbpick_rgb[3];                   /* the measured white, camera RGB (black-subtracted) */
     int af_wait_ms;                         /* how long a capture waits for 3A (0 = 1500) */
+    int af_scan_wait_ms;                    /* continuous AF scanning at the release: wait up to this for it to settle (0 = never) */
+    int last_scan_wait_ms;                  /* how long the last capture waited for that (for its report; -1 = it did not need to) */
 } g = { .lock = PTHREAD_MUTEX_INITIALIZER, .out_lock = PTHREAD_MUTEX_INITIALIZER, .stream_fd = -1, .event_fd = -1, .state_events = 1 };
 
 /* Initialise the condition variable on CLOCK_MONOTONIC, once. */
@@ -2805,6 +2807,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
     g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0; g.yuv_light = 0;
+    g.last_scan_wait_ms = -1; g.af_scan_wait_ms = 1000;   /* the app sends rawfish-ir.conf's value at each start */
     g.awb_auto_results = 0;
     g.vw_n = 0;
     g.af_tapped = 0; g.af_zoom_on = 0; g.scene_mode = 0;   /* a new session starts with no scene */
@@ -3517,6 +3520,27 @@ static void prepare_capture(ACaptureRequest *req, int focus_mode, float focus_di
      * 0.47.50 it touched nothing and the capture kept its setup AF mode). */
     want_af_scan = set_preview_focus(focus_mode, focus_diopters);
     set_focus(req, focus_mode, focus_diopters);
+    /* Continuous autofocus caught in the middle of a search at the release
+     * (after a reframing, say): a photo taken then is soft. Wait for the
+     * search to end, at most af_scan_wait_ms (1 s: the JP2's searches take
+     * 0.4-0.95 s), and only then; a lens already settled costs nothing. (A
+     * manual distance is waited for in set_preview_focus: the lens stationary
+     * and at its target, up to 1.2 s; a touch's search, below, up to 1.5 s.) */
+    g.last_scan_wait_ms = -1;
+    if (g.af_continuous && g.af_scan_wait_ms > 0 && !want_af_scan &&
+        (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS)) {
+        double t0 = now_ms();
+        int scanning;
+        pthread_mutex_lock(&g.lock);
+        scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
+        if (scanning) {
+            struct timespec sdl = deadline_in(g.af_scan_wait_ms);
+            while (g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN && !g.device_error)
+                if (pthread_cond_timedwait(&g.cond, &g.lock, &sdl) == ETIMEDOUT) break;
+        }
+        pthread_mutex_unlock(&g.lock);
+        if (scanning) g.last_scan_wait_ms = (int)(now_ms() - t0 + 0.5);
+    }
     if (g.capture_delay_ms > 0) {                  /* device profile: let the lens settle */
         struct timespec ts;
         ts.tv_sec = g.capture_delay_ms / 1000;
@@ -6941,6 +6965,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     jw_init(&jw, out, out_size);
     jw_add(&jw, "{\"ok\":true,\"size\":[%d,%d],\"exposure_ns\":%lld,\"iso\":%d,\"ms\":{\"image\":%.1f,\"copied\":%.1f}",
            w, h, (long long)f->exposure_ns, f->iso, t_image - t0, t_copied - t0);
+    if (g.last_scan_wait_ms >= 0) jw_add(&jw, ",\"focus_scan_wait_ms\":%d", g.last_scan_wait_ms);   /* the release waited for a search */
     yuv_check_json(&jw, f);                         /* viewfinder vs photo, when asked */
     jw_add(&jw, "}");
     return IR_OK;
@@ -6950,6 +6975,17 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* How long a capture may wait for a continuous-AF search in progress at the
+ * release (ms; 0 = never wait). rawfish-ir.conf focusScanWait. */
+IR_API int indraw_set_focus_scan_wait(int ms, char *out, size_t out_size)
+{
+    jw_t w;
+    g.af_scan_wait_ms = ms < 0 ? 0 : ms > 3000 ? 3000 : ms;
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"focus_scan_wait_ms\":%d}", g.af_scan_wait_ms);
+    return IR_OK;
+}
+
 /* snap from our own YUV: the next captures are binned to about 2048 px wide
  * (on 1), or at the photo's size again (on 0). Set around a capture. */
 IR_API void indraw_set_yuv_light(int on)

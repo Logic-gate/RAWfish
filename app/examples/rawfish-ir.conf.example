@@ -52,6 +52,12 @@ gridOn=0
 ; mode (simple mode starts without them).      values: 0, 1            default 0
 zebraOn=0
 peakingOn=0
+; Continuous autofocus caught searching at the release (after a reframing):
+; the photo waits for the search to end, at most this long, then is taken
+; anyway. A lens already settled costs nothing. In milliseconds; 0 = never
+; wait. The JP2's searches take 0.4 to 0.95 s.
+;                                               values: 0 .. 3000      default 1000
+focusScanWait=1000
 ; Vibration at the release (the press, or the end of the timer), in
 ; milliseconds; 0 = none.                       values: 0 .. 200       default 40
 hapticShutter=40

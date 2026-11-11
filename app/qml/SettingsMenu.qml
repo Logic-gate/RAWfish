@@ -213,6 +213,7 @@ Item {
         fineWarmthStep = num("fineWarmthStep", 1, 1, 4)
         fineTintStep = num("fineTintStep", 5, 1, 25)
         hapticShutterMs = num("hapticShutter", 40, 0, 200)
+        focusScanWaitMs = num("focusScanWait", 1000, 0, 3000)
         hapticTypeMs = num("hapticType", 20, 0, 100)
         tint = num("tint", 0, -100, 100)
         // simple.json: only an object of the expected shape is taken; any
@@ -272,6 +273,9 @@ Item {
     // Vibrations (rawfish-ir.conf): their length in milliseconds, 0 = none.
     // At the release, and at a change of type (a very short tick).
     property int hapticShutterMs: 40
+    // How long a photo may wait for a continuous-AF search in progress at the
+    // release (rawfish-ir.conf focusScanWait, ms; 0 = never): 1 s by default.
+    property int focusScanWaitMs: 1000
     property int hapticTypeMs: 20               // 8 ms did not move the JP2's motor
     // A shift or tint step sends only the shift: the rest of the live settings
     // did not change (six commands and their replies per step filled the log).
@@ -292,6 +296,7 @@ Item {
     }
     function applyLive() {
         if (!viewfinder || !viewfinder.running) return
+        viewfinder.sendCommand("focuswait " + focusScanWaitMs)
         // The preview's own processing (the photos' goes with each shot:
         // photoProcessing()).
         viewfinder.sendCommand("preview " + noiseModes[previewNoiseIndex] + " " + edgeModes[previewEdgeIndex])

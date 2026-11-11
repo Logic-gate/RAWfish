@@ -14,12 +14,18 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.3.8 (beta) — a vibration at the shutter and at a change of type (patch 0352)
+## 0.3.8 (beta) — vibrations; the release waits for a focus search (patches 0352–0355)
 - A short vibration at the release (the press, or the end of the timer),
   and a very short one at each press of TYPE. The white flash keeps its
   meaning: it comes when the photo is taken and the phone may move. Their
   lengths are in rawfish-ir.conf (hapticShutter 40 ms, hapticType 20 ms; 0
   turns one off). With thanks to IvanV (ProCam) for the idea.
+- A photo taken while the continuous autofocus is still searching (just
+  after a reframing) waits for the search to end, at most 1 s
+  (rawfish-ir.conf focusScanWait; 0 = never): it was taken at once, and
+  could be soft. A lens already settled costs nothing; the photo's report
+  says how long it waited. (A manual distance was already waited for, up
+  to 1.2 s; a touch's search, up to 1.5 s.)
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the

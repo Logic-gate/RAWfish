@@ -1236,6 +1236,21 @@ static int cmd_checks(void *bridge, char **save, char *out)
     return 0;
 }
 
+/* focuswait MS: how long a photo may wait for a continuous-AF search in
+ * progress at the release (0 = never). The app sends rawfish-ir.conf's
+ * focusScanWait at each start. */
+static int cmd_focuswait(void *bridge, char **save, char *out)
+{
+    typedef int (*fw_fn)(int, char *, size_t);
+    fw_fn fw = (fw_fn)a_dlsym(bridge, "indraw_set_focus_scan_wait");
+    char *tok = strtok_r(NULL, " \t\r\n", save), *end = NULL;
+    long ms = tok ? strtol(tok, &end, 10) : -1;
+    if (!tok || *end || ms < 0 || ms > 3000 || !fw) { emit("{\"ok\":false,\"error\":\"focuswait 0..3000 (ms)\"}"); return 1; }
+    fw((int)ms, out, OUT_SIZE);
+    emit(out);
+    return 0;
+}
+
 static int cmd_meter(indraw_meter_fn mt, char **save, char *out)
 {
     char *tok;
@@ -2615,6 +2630,7 @@ int main(int argc, char **argv)
             else if (!strcmp(cmd, "ev")) failures += cmd_ev(evfn, &save, out);
             else if (!strcmp(cmd, "meter")) failures += cmd_meter(mt, &save, out);
             else if (!strcmp(cmd, "checks")) failures += cmd_checks(bridge, &save, out);
+            else if (!strcmp(cmd, "focuswait")) failures += cmd_focuswait(bridge, &save, out);
             else if (!strcmp(cmd, "zoom")) failures += cmd_zoom(zf, &save, out);
             else if (!strcmp(cmd, "tap")) failures += cmd_tap(tf, &save, out);
             else if (!strcmp(cmd, "wb")) failures += cmd_wb(wf, wm, &save, out);
