@@ -18,7 +18,7 @@ repository). Newest first.
 - A short vibration at the release (the press, or the end of the timer),
   and a very short one at each press of TYPE. The white flash keeps its
   meaning: it comes when the photo is taken and the phone may move. Their
-  lengths are in rawfish-ir.conf (hapticShutter 40 ms, hapticType 8 ms; 0
+  lengths are in rawfish-ir.conf (hapticShutter 40 ms, hapticType 20 ms; 0
   turns one off). With thanks to IvanV (ProCam) for the idea.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)

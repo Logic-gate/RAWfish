@@ -213,7 +213,7 @@ Item {
         fineWarmthStep = num("fineWarmthStep", 1, 1, 4)
         fineTintStep = num("fineTintStep", 5, 1, 25)
         hapticShutterMs = num("hapticShutter", 40, 0, 200)
-        hapticTypeMs = num("hapticType", 8, 0, 100)
+        hapticTypeMs = num("hapticType", 20, 0, 100)
         tint = num("tint", 0, -100, 100)
         // simple.json: only an object of the expected shape is taken; any
         // other content keeps the defaults (a typo must not break the mode).
@@ -272,7 +272,7 @@ Item {
     // Vibrations (rawfish-ir.conf): their length in milliseconds, 0 = none.
     // At the release, and at a change of type (a very short tick).
     property int hapticShutterMs: 40
-    property int hapticTypeMs: 8
+    property int hapticTypeMs: 20               // 8 ms did not move the JP2's motor
     // A shift or tint step sends only the shift: the rest of the live settings
     // did not change (six commands and their replies per step filled the log).
     function applyShift() { if (viewfinder && viewfinder.running && advanced) viewfinder.sendCommand("wb shift=" + wbShift + " tint=" + tint) }
