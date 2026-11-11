@@ -6975,6 +6975,15 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* The detail scale of a photo `photo_w` wide: 2 when it is at least twice
+ * as wide as the sensor's RAW reading (the JP2: 8192 against 4096, its 50 MP
+ * enlarged from a 12.5 MP binned reading), else 1. The tool's filters use it
+ * (yuv_set_detail_scale). Without a RAW stream to compare with: 1. */
+IR_API int indraw_detail_scale(int photo_w)
+{
+    return g.raw_w > 0 && photo_w * 100 >= g.raw_w * 196 ? 2 : 1;
+}
+
 /* How long a capture may wait for a continuous-AF search in progress at the
  * release (ms; 0 = never wait). rawfish-ir.conf focusScanWait. */
 IR_API int indraw_set_focus_scan_wait(int ms, char *out, size_t out_size)

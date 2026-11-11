@@ -14,7 +14,7 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.3.8 (beta) — vibrations; the release waits for a focus search (patches 0352–0355)
+## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0356)
 - A short vibration at the release (the press, or the end of the timer),
   and a very short one at each press of TYPE. The white flash keeps its
   meaning: it comes when the photo is taken and the phone may move. Their
@@ -26,6 +26,19 @@ repository). Newest first.
   could be soft. A lens already settled costs nothing; the photo's report
   says how long it waited. (A manual distance was already waited for, up
   to 1.2 s; a touch's search, up to 1.5 s.)
+- **Our 50 MP JPG is processed at its own scale.** The JP2's 50 MP is an
+  enlargement of its sensor's 12.5 MP reading: its grain and its finest
+  real detail span two pixels. Our filters (noise estimates, colour filter,
+  false-colour median, sharpening) were made for one-pixel detail and saw
+  almost nothing to sharpen there: our 50 MP came out at half the detail
+  of our own 12.5 MP. They now look two pixels apart when the photo is
+  twice as wide as the sensor's RAW reading. Measured on a real
+  unfiltered 50 MP of the JP2 (daylight, ISO 106), against our 12.5 MP
+  made from it: the noise measured at scale 2 reads 1.40, the 12.5 MP's
+  own figure (0.50 at scale 1: a third); with sharpening 3 the detail is
+  1.22 times the 12.5 MP's at scale 2 against 0.74 at scale 1, the grain
+  4.4 against 4.1, and no halo shows. At 12.5 MP nothing changes. The
+  photo's report gives the scale used.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the

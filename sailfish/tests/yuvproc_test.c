@@ -82,6 +82,26 @@ int main(void)
               "enlarged grain: merged %.0f%% %.0f%% %.0f%% (one-frame noise %.2f, between frames %.2f, used %.2f)",
               rb.merged_pct[1], rb.merged_pct[2], rb.merged_pct[3], rb.sigma, rb.sigma_pair, rb.sigma_merge);
         free(o4.y); free(o4.u); free(o4.v);
+        {   /* The detail scale: on the same enlarged image, sharpening at scale 2
+             * (filters 2 pixels apart) must bring out more of the image's 2-pixel
+             * detail than at scale 1, which looks too finely. Measured as the
+             * mean |pixel - mean of the 3x3 two pixels apart| on the result. */
+            ir_yuv_t a1 = big[0], a2 = big[0]; double e1 = 0, e2 = 0; int sc;
+            for (sc = 1; sc <= 2; ++sc) {
+                ir_yuv_t *t = sc == 1 ? &a1 : &a2; double *e = sc == 1 ? &e1 : &e2;
+                t->y = malloc((size_t)W * H); memcpy(t->y, big[0].y, (size_t)W * H);
+                yuv_set_detail_scale(sc);
+                yuv_sharpen(t, 3, 1.0f);
+                for (y2 = 4; y2 < H - 4; y2 += 3) for (x2 = 4; x2 < W - 4; x2 += 3) {
+                    const uint8_t *q = t->y + (size_t)y2 * W + x2; int sum = 0, dy, dx;
+                    for (dy = -2; dy <= 2; dy += 2) for (dx = -2; dx <= 2; dx += 2) sum += q[dy * W + dx];
+                    *e += fabs(q[0] - sum / 9.0);
+                }
+                free(t->y);
+            }
+            yuv_set_detail_scale(1);
+            CHECK(e2 > e1 * 1.15, "detail scale 2 sharpens an enlarged image more than scale 1 (%.0f against %.0f)", e2, e1);
+        }
         for (k2 = 0; k2 < 4; ++k2) { free(big[k2].y); free(big[k2].u); free(big[k2].v); }
     }
     {   /* the moving square: the output keeps frame 1's square (at 500..620), not a ghost of the others */

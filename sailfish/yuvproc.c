@@ -68,6 +68,16 @@ static void box_filter(const float *src, float *dst, int w, int h, int r)
     free(tmp);
 }
 
+/* The detail scale: 1 for an image whose pixels are the sensor's own; 2 for
+ * one enlarged twice from the sensor's reading (the JP2's 50 MP: its sensor
+ * reads 12.5 MP, binned 4-in-1, and the ISP enlarges). At 2, every filter
+ * below looks twice as far: the grain and the finest real detail span 2
+ * pixels there, and filters made for 1 pixel saw almost nothing to sharpen
+ * and misread the noise (a third of it). Set before each image by the tool
+ * (yuv_set_detail_scale); 1 by default. */
+static int g_scale = 1;
+void yuv_set_detail_scale(int s) { g_scale = s >= 2 ? 2 : 1; }
+
 /* Colour noise: a cross bilateral on the two chroma planes together. The
  * chroma noise is measured per brightness band (the median deviation of a
  * pixel from its four neighbours), then each pixel is averaged with its
@@ -76,8 +86,8 @@ static void box_filter(const float *src, float *dst, int w, int h, int r)
  * not and stay, even where the luminance is flat or textured. Two
  * separable passes, +-8 pixels. After ProCam's chromaBilateral (BSD-3). */
 #define CB_BANDS 16
-#define CB_RADIUS 8
-typedef struct { const float *inu, *inv, *k; float *outu, *outv; int w, h, axis; const float *sp; } bil_ctx_t;
+#define CB_RADIUS_MAX 16                 /* 8 at scale 1, 16 at scale 2 */
+typedef struct { const float *inu, *inv, *k; float *outu, *outv; int w, h, axis, radius; const float *sp; } bil_ctx_t;
 static void bilateral_rows(void *p, int y0, int y1)
 {
     bil_ctx_t *c = p; int w = c->w, h = c->h, x, y, t;
@@ -85,7 +95,7 @@ static void bilateral_rows(void *p, int y0, int y1)
         for (x = 0; x < w; ++x) {
             size_t i = (size_t)y * w + x;
             float u0 = c->inu[i], v0 = c->inv[i], kk = c->k[i], sw = 0, su = 0, sv = 0;
-            for (t = -CB_RADIUS; t <= CB_RADIUS; ++t) {
+            for (t = -c->radius; t <= c->radius; ++t) {
                 int xx = x, yy = y;
                 size_t j; float du, dv, e, wgt;
                 if (c->axis) { xx = x + t; if (xx < 0) xx = -xx; if (xx >= w) xx = 2 * w - 2 - xx; }
@@ -93,7 +103,7 @@ static void bilateral_rows(void *p, int y0, int y1)
                 j = (size_t)yy * w + xx;
                 du = c->inu[j] - u0; dv = c->inv[j] - v0;
                 e = (du * du + dv * dv) * kk;           /* (d / sigma)^2 / 2 */
-                wgt = e < 8.0f ? c->sp[t + CB_RADIUS] * expf(-e) : 0.0f;
+                wgt = e < 8.0f ? c->sp[t + c->radius] * expf(-e) : 0.0f;
                 sw += wgt; su += wgt * c->inu[j]; sv += wgt * c->inv[j];
             }
             c->outu[i] = sw > 0 ? su / sw : u0; c->outv[i] = sw > 0 ? sv / sw : v0;
@@ -105,7 +115,8 @@ static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t 
     size_t n = (size_t)cw * ch, i;
     float *a = malloc(n * sizeof *a), *b = malloc(n * sizeof *b), *c2 = malloc(n * sizeof *c2), *d = malloc(n * sizeof *d), *k = malloc(n * sizeof *k);
     uint8_t *band = malloc(n);
-    float noise[CB_BANDS], sp[2 * CB_RADIUS + 1], last = -1;
+    const int rad = 8 * g_scale, st = g_scale;     /* the filter's reach and the noise probe's distance */
+    float noise[CB_BANDS], sp[2 * CB_RADIUS_MAX + 1], last = -1;
     unsigned hist[CB_BANDS][256]; unsigned long cnt[CB_BANDS];
     int x, yy, bnd, t, pass;
     if (!a || !b || !c2 || !d || !k || !band) { free(a); free(b); free(c2); free(d); free(k); free(band); return -1; }
@@ -115,11 +126,11 @@ static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t 
             band[(size_t)yy * cw + x] = (uint8_t)(((s[0] + s[1] + s[w] + s[w + 1]) / 4) * CB_BANDS / 256);
         }
     memset(hist, 0, sizeof hist); memset(cnt, 0, sizeof cnt);
-    for (yy = 1; yy < ch - 1; yy += 2)          /* the noise per band: residual against the 4 neighbours */
-        for (x = 1; x < cw - 1; x += 2) {
-            size_t p = (size_t)yy * cw + x;
-            float ru = u[p] - 0.25f * (u[p - 1] + u[p + 1] + u[p - cw] + u[p + cw]);
-            float rv = v[p] - 0.25f * (v[p - 1] + v[p + 1] + v[p - cw] + v[p + cw]);
+    for (yy = st; yy < ch - st; yy += 2)        /* the noise per band: residual against the 4 neighbours, st away */
+        for (x = st; x < cw - st; x += 2) {
+            size_t p = (size_t)yy * cw + x, sc = (size_t)st * cw;
+            float ru = u[p] - 0.25f * (u[p - st] + u[p + st] + u[p - sc] + u[p + sc]);
+            float rv = v[p] - 0.25f * (v[p - st] + v[p + st] + v[p - sc] + v[p + sc]);
             int r = (int)(sqrtf(0.5f * (ru * ru + rv * rv)) * 8.0f + 0.5f);   /* eighths */
             if (r > 255) r = 255;
             hist[band[p]][r]++; cnt[band[p]]++;
@@ -138,9 +149,9 @@ static int bilateral_chroma(const uint8_t *y, int w, int h, uint8_t *u, uint8_t 
         last = noise[bnd];
     }
     for (i = 0; i < n; ++i) { float s = strength * noise[band[i]]; k[i] = 1.0f / (2.0f * s * s); a[i] = u[i]; b[i] = v[i]; }
-    for (t = -CB_RADIUS; t <= CB_RADIUS; ++t) sp[t + CB_RADIUS] = expf(-0.5f * (float)t * t / 16.0f);   /* spatial sigma 4 */
+    for (t = -rad; t <= rad; ++t) sp[t + rad] = expf(-0.5f * (float)t * t / (16.0f * st * st));   /* spatial sigma 4 x scale */
     for (pass = 0; pass < 2; ++pass) {
-        bil_ctx_t bc = { a, b, k, c2, d, cw, ch, pass == 0, sp };
+        bil_ctx_t bc = { a, b, k, c2, d, cw, ch, pass == 0, rad, sp };
         parallel_rows(bilateral_rows, &bc, ch);
         { float *tmp = a; a = c2; c2 = tmp; tmp = b; b = d; d = tmp; }
     }
@@ -180,7 +191,7 @@ static int median_chroma(int w, int h, uint8_t *u, uint8_t *v, int radius)
     uint8_t *tmp = malloc((size_t)cw * ch);
     med_ctx_t c;
     if (!tmp) return -1;
-    c.w = cw; c.h = ch; c.r = radius;
+    c.w = cw; c.h = ch; c.r = radius * g_scale;     /* a speck spans twice as many pixels at scale 2 */
     c.in = u; c.out = tmp; parallel_rows(median_rows, &c, ch); memcpy(u, tmp, (size_t)cw * ch);
     c.in = v; c.out = tmp; parallel_rows(median_rows, &c, ch); memcpy(v, tmp, (size_t)cw * ch);
     free(tmp);
@@ -194,11 +205,12 @@ static float luma_sigma(const uint8_t *y, int w, int h)
 {
     unsigned hist[256] = { 0 }; unsigned long total = 0, acc = 0;
     int x, yy, k;
+    const int st = g_scale; const long sw = (long)st * w;   /* the 8 neighbours, st away */
     for (yy = 4; yy < h - 4; yy += 8)
         for (x = 4; x < w - 4; x += 8) {
             const uint8_t *s = y + (size_t)yy * w + x;
             int sum = 0, d;
-            sum = s[-w - 1] + s[-w] + s[-w + 1] + s[-1] + s[1] + s[w - 1] + s[w] + s[w + 1];
+            sum = s[-sw - st] + s[-sw] + s[-sw + st] + s[-st] + s[st] + s[sw - st] + s[sw] + s[sw + st];
             d = abs(s[0] * 8 - sum);                 /* 8 x (pixel - mean of the 8 around) */
             d = d / 8;
             if (d > 255) d = 255;
@@ -415,16 +427,17 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
  * part of it (the strength) is added back, except where it is smaller
  * than the noise, where nothing is added: grain is not sharpened. Done
  * after the merge, on a frame with less noise than any single one. */
-typedef struct { const uint8_t *src; uint8_t *dst; int w, h; float amount, thresh; } sharp_ctx_t;
+typedef struct { const uint8_t *src; uint8_t *dst; int w, h, st; float amount, thresh; } sharp_ctx_t;
 static void sharpen_rows(void *p, int y0, int y1)
 {
-    sharp_ctx_t *c = p; int w = c->w, h = c->h, x, y;
+    sharp_ctx_t *c = p; int w = c->w, h = c->h, st = c->st, x, y;
+    const long sw = (long)st * w;                   /* the 3x3 around, st pixels apart */
     for (y = y0; y < y1; ++y) {
         const uint8_t *s = c->src + (size_t)y * w; uint8_t *d = c->dst + (size_t)y * w;
-        if (y == 0 || y == h - 1) { memcpy(d, s, (size_t)w); continue; }
-        d[0] = s[0]; d[w - 1] = s[w - 1];
-        for (x = 1; x < w - 1; ++x) {
-            int sum = s[x - w - 1] + s[x - w] + s[x - w + 1] + s[x - 1] + s[x + 1] + s[x + w - 1] + s[x + w] + s[x + w + 1];
+        if (y < st || y >= h - st) { memcpy(d, s, (size_t)w); continue; }
+        for (x = 0; x < st; ++x) { d[x] = s[x]; d[w - 1 - x] = s[w - 1 - x]; }
+        for (x = st; x < w - st; ++x) {
+            int sum = s[x - sw - st] + s[x - sw] + s[x - sw + st] + s[x - st] + s[x + st] + s[x + sw - st] + s[x + sw] + s[x + sw + st];
             float detail = s[x] - (sum + s[x]) / 9.0f, ad = fabsf(detail), o;
             if (ad <= c->thresh) { d[x] = s[x]; continue; }
             /* a soft start: the part above the threshold counts, so the rule has no step */
@@ -441,7 +454,7 @@ void yuv_sharpen(ir_yuv_t *f, int level, float sigma)
     if (!f || !f->y || level < 1 || level > 5) return;
     out = malloc((size_t)f->w * f->h);
     if (!out) return;
-    c.src = f->y; c.dst = out; c.w = f->w; c.h = f->h; c.amount = amounts[level];
+    c.src = f->y; c.dst = out; c.w = f->w; c.h = f->h; c.st = g_scale; c.amount = amounts[level];
     c.thresh = 1.0f * sigma;                         /* the fine detail of pure noise: about 0.9 sigma */
     parallel_rows(sharpen_rows, &c, f->h);
     memcpy(f->y, out, (size_t)f->w * f->h);

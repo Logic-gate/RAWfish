@@ -25,5 +25,10 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
  * and 4 times the fine detail added back), sigma the noise the detail must
  * exceed. */
 void yuv_sharpen(ir_yuv_t *f, int level, float sigma);
+/* The detail scale of the next images: 1 (pixels are the sensor's) or 2
+ * (enlarged twice from the sensor's reading, e.g. the JP2's 50 MP). Every
+ * filter (noise estimates, colour filter, false-colour median, sharpening)
+ * looks that many pixels apart. */
+void yuv_set_detail_scale(int s);
 
 #endif

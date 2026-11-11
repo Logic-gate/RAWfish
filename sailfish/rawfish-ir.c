@@ -1670,6 +1670,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     static char cap[OUT_SIZE];
     int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0, want_dng = 0;
     int light = 0;                               /* snap: a light photo (light=1) */
+    int detail_scale = 1;                        /* the filters' scale for this photo (1, or 2 for an enlarged 50 MP) */
     char dngfile[1200] = "";
     ir_yuv_t dn; yuv_denoise_report_t rep;
     memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
@@ -1746,6 +1747,13 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     memcpy(cap, out, OUT_SIZE);                          /* the engine's report      */
     cap[OUT_SIZE - 1] = '\0';
     if (colour < 0) colour = denoise ? 2 : 0;                /* denoise=on alone: the normal colour filter */
+    {   /* The filters' scale: 2 for a photo enlarged twice from the sensor's
+         * reading (the JP2's 50 MP), else 1 (see yuv_set_detail_scale). */
+        typedef int (*scale_fn)(int);
+        scale_fn sf = (scale_fn)a_dlsym(bridge, "indraw_detail_scale");
+        detail_scale = sf ? sf(f.w) : 1;
+        yuv_set_detail_scale(detail_scale);
+    }
     if (denoise) {                                        /* our own: colour, and the frames merged */
         const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
         int nin = (n == 1 && nev == 0) ? 1 : n;
@@ -1806,10 +1814,10 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f", jlen, quality, t1 - t0);
         if (do_save) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"saved_frames\":%d", saved);
         if (denoise == 1) snprintf(out + strlen(out), OUT_SIZE - strlen(out),
-                              ",\"denoise\":{\"frames\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
+                              ",\"denoise\":{\"frames\":%d,\"scale\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
                               "\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
                               "\"shifts\":[[%d,%d],[%d,%d],[%d,%d]],\"merged_pct\":[%.0f,%.0f,%.0f]}",
-                              (n == 1 && nev == 0) ? 1 : n, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
+                              (n == 1 && nev == 0) ? 1 : n, detail_scale, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
                               rep.ms_align, rep.ms_merge, rep.ms_colour,
                               rep.shift_dy[1], rep.shift_dx[1], rep.shift_dy[2], rep.shift_dx[2], rep.shift_dy[3], rep.shift_dx[3],
                               rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
