@@ -5344,6 +5344,30 @@ static void zoom_af_region(void)
     g.af_zoom_on = on;
 }
 
+/* The automatic exposure meters WHAT THE VIEWFINDER SHOWS when no light
+ * point is set: a zone over the display window (zoom, loupe and pan), weight
+ * 1000. Explicit, so that removing the sun gives back exactly the metering it
+ * had before it (the same zone): neither the template's zone written back
+ * (0365: all zero, which the JP2's HAL took for a corner of the image: after
+ * the sun it settled 2 stops brighter, 50 ms ISO 5333 against 40 ms ISO 1513
+ * before, until the phone moved), nor a removed key (kept by the HAL), nor a
+ * whole-array zone of weight 0 did. It follows the loupe: in the loupe the
+ * exposure is that of the detail shown. */
+static void shown_ae_region(int32_t r[5])
+{
+    int32_t ax, ay, aw, ah;
+    double vw[4] = { 0, 0, 1, 1 };
+    if (active_array(&ax, &ay, &aw, &ah, NULL)) { memset(r, 0, 5 * sizeof *r); return; }
+    pthread_mutex_lock(&g.lock);
+    if (g.have_view_win && g.view_win[2] > 0 && g.view_win[3] > 0) memcpy(vw, g.view_win, sizeof vw);
+    pthread_mutex_unlock(&g.lock);
+    r[0] = ax + (int32_t)(vw[0] * aw);
+    r[1] = ay + (int32_t)(vw[1] * ah);
+    r[2] = r[0] + (int32_t)(vw[2] * aw); if (r[2] > ax + aw) r[2] = ax + aw;
+    r[3] = r[1] + (int32_t)(vw[3] * ah); if (r[3] > ay + ah) r[3] = ay + ah;
+    r[4] = 1000;
+}
+
 /* A point of the viewfinder for the exposure and / or the focus.
  * do_ae, do_af: 0 keep what is there, 1 set at (nx, ny), 2 clear (the
  * exposure meters the whole image; the focus goes back to the mode's).
@@ -5454,6 +5478,7 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         all[n++] = g.still_request;
         if (g.raw_request) all[n++] = g.raw_request;
         if (g.meter_request) all[n++] = g.meter_request;
+        if (g.yuv_request) all[n++] = g.yuv_request;     /* our JPG's capture: the same zones (it was missing) */
         /* The focus button's mode decides what a tap does: continuous modes
          * keep focusing on the region all the time (no lock, no trigger);
          * the others get one scan on it, then hold (AUTO). Read from the
@@ -5478,7 +5503,7 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
              * is absent, so the sun's spot stayed) gives that back. */
             if (do_ae == 1) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, region);
             else if (g.ae_region_on && do_ae == 0) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.ae_region);
-            else ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.tpl_ae_regions);
+            else { int32_t sr[5]; shown_ae_region(sr); ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, sr); }
             if (do_af == 1) {
                 ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AF_MODE, 1, &af_mode);
                 ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, af_region);
@@ -5507,6 +5532,11 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
+    /* The sun removed: "meter again, now, on what is shown". An AE precapture
+     * makes the HAL run its metering sequence at once; left alone it drifted
+     * back over seconds, or only once the phone moved. (No AF part: the focus
+     * is left as it is. No flash: the flash mode is off unless asked.) */
+    if (do_ae == 2) send_trigger(ACAMERA_CONTROL_AF_TRIGGER_IDLE, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
     jw_init(&w, out, out_size);
     /* (live_*: the HAL's exposure on the last frame BEFORE this change, so that
      * the log shows what the automatic exposure was before a point and after
@@ -6359,6 +6389,22 @@ IR_API int indraw_view_window(double x, double y, double w, double h, char *out,
     g.view_win[0] = x; g.view_win[1] = y; g.view_win[2] = w; g.view_win[3] = h;
     g.have_view_win = !(x <= 0 && y <= 0 && w >= 0.9999 && h >= 0.9999);
     pthread_mutex_unlock(&g.lock);
+    /* Without a light point the exposure meters what is shown (see
+     * shown_ae_region): from the first view window on (the interface sends
+     * one at start), and again whenever the zoom, loupe or pan change it. */
+    if (g.session && g.preview_request && !g.ae_region_on) {
+        int32_t sr[5];
+        ACaptureRequest *all[6], *reqs[1];
+        int n = 0, i;
+        shown_ae_region(sr);
+        all[n++] = g.preview_request; all[n++] = g.trigger_request; all[n++] = g.still_request;
+        if (g.raw_request) all[n++] = g.raw_request;
+        if (g.meter_request) all[n++] = g.meter_request;
+        if (g.yuv_request) all[n++] = g.yuv_request;
+        for (i = 0; i < n; ++i) if (all[i]) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, sr);
+        reqs[0] = g.preview_request;
+        ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
+    }
     jw_init(&w_, out, out_size);
     jw_add(&w_, "{\"ok\":true,\"view\":[%.4f,%.4f,%.4f,%.4f]}", x, y, w, h);
     return IR_OK;

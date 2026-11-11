@@ -73,8 +73,13 @@ repository). Newest first.
 - Removing the sun gives back the camera's own automatic exposure, as
   before the sun. "No point" was sent as a whole-image zone of weight 0,
   which the camera took as a zone and metered differently; then (0363) as
-  no zone at all, which the camera took as "keep the last one". The
-  camera's own zones, read when the session opens, are now written back.
+  no zone at all, which the camera took as "keep the last one", then as
+  the camera's own zone (all zero), which it took for a corner of the
+  image (2 stops too bright, seen in the log). Now, without a sun, the
+  exposure meters exactly what the viewfinder shows (zoom and loupe
+  included), from the start; removing the sun puts that zone back and asks
+  the camera to meter again at once, instead of drifting back over
+  seconds or waiting for the phone to move.
   The same error changed the automatic exposure after a mere focus touch.
   The log gives the camera's exposure before the sun (the touch's reply)
   and 2.5 s after its removal (aestate), to check it.
