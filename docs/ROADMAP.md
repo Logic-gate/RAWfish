@@ -45,6 +45,42 @@ Each item says why, so it can be picked up later without re-deriving it.
   readers are bounded and tested (no memory fault found); a library would
   remove a class of misreadings of odd but valid JSON. Not urgent.
 
+### Focus (open, November 2026)
+
+- **A touch at the top of the frame focuses farther than at the bottom,
+  on the same object.** Seen on the JP2 in manual focus: the same object
+  moved from the bottom to the top of the frame reads a farther distance.
+  Not optical: with the phone turned 180 degrees (the interface turns
+  with it) the effect stays tied to the SCREEN, not to the sensor. Checked
+  and in order: the touch area is exactly the viewfinder zone (same
+  origin, same size); the viewfinder has the frame's proportions (4:3, no
+  cropping on the screen); the screen -> frame -> sensor mapping agrees to
+  the pixel in the log, and the two rotation conversions are exact
+  inverses; the HAL reports the preview's crop as the whole array. One
+  cause left with exactly this signature: the preview covering a little
+  LESS of the sensor than the HAL reports (an undeclared crop inside the
+  ISP). The zones would then be right at the centre and pushed outwards
+  towards the edges: above the object at the top (background: farther),
+  below it at the bottom (foreground: nearer), following the screen; the
+  square, drawn by the inverse mapping, would still sit under the finger.
+  To check: phone on a support, a screenshot of the viewfinder, then a
+  photo without moving; compare the edges. Same edges: drop this lead.
+  The viewfinder shows less: measure the factor and size the zones on the
+  preview's real field. The same effect should then exist left-right.
+  Left as is for now (November 2026).
+
+- **The manual distance shown is not reliable away from the centre.** It
+  is the HAL's lens position converted through a focus table measured at
+  the centre; with the effect above, and with the steep scale in metres
+  (one 0.05 D step is 20 m to infinity, 180 of the 200 steps lie within
+  the last 90 cm), the number misleads. Replacements considered: the step
+  number (0 = infinity .. 200 = 10 cm on the JP2: honest, repeatable, the
+  volume keys move it one by one); a scale between a mountain (infinity)
+  and a flower (close-up) with a sliding mark; coarse bands (close-up,
+  near, middle, far, infinity: still the table, with jumps at the bounds);
+  the distance kept only for a point near the centre and marked "≈"
+  elsewhere. Leaning: the step number with the small scale. To decide.
+
 ### From the November 2026 review (open)
 
 - **Two very long files**: `android/rawfish-ir.c` (about 7300 lines) and
