@@ -5369,18 +5369,30 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * place that knows the crop. The region is 6 % of the frame's short
          * side, so in the loupe it is as many times smaller as the loupe
          * magnifies: a precise spot. */
-        int32_t pc[4], cx, cy;
+        int32_t pc[4], cx, cy, shown;
+        double vw[4] = { 0, 0, 1, 1 };
         preview_crop(ax, ay, aw, ah, pc);
         cx = pc[0] + (int32_t)(nx * pc[2]);
         cy = pc[1] + (int32_t)(ny * pc[3]);
-        side = (pc[2] < pc[3] ? pc[2] : pc[3]) * 5 / 100;   /* the exposure spot: 5 % of the frame */
+        /* The zones are sized on what the viewfinder SHOWS (the frame, cut
+         * further by the display window of the loupe and pan): the loupe
+         * makes them as many times smaller on the subject as it magnifies,
+         * so it can be used to point the focus or the light precisely. */
+        pthread_mutex_lock(&g.lock);
+        if (g.have_view_win && g.view_win[2] > 0 && g.view_win[3] > 0) memcpy(vw, g.view_win, sizeof vw);
+        pthread_mutex_unlock(&g.lock);
+        {
+            int32_t sw = (int32_t)(pc[2] * vw[2]), sh = (int32_t)(pc[3] * vw[3]);
+            shown = sw < sh ? sw : sh;                   /* the short side of what is shown, array pixels */
+        }
+        side = shown * 5 / 100;                          /* the exposure spot: 5 % of the view */
         if (side < 16) side = 16;
         if (do_ae == 1) {                           /* the RAW meter's spot, array-normalised */
             pthread_mutex_lock(&g.lock);
             g.spot_x = (float)(cx - ax) / aw;
             g.spot_y = (float)(cy - ay) / ah;
-            g.spot_hw = 0.025f * pc[2] / aw;        /* 5 % of the FRAME: smaller in the loupe */
-            g.spot_hh = 0.025f * pc[3] / ah;
+            g.spot_hw = 0.025f * (float)(pc[2] * vw[2]) / aw;   /* 5 % of the VIEW: smaller in the loupe */
+            g.spot_hh = 0.025f * (float)(pc[3] * vw[3]) / ah;
             pthread_mutex_unlock(&g.lock);
         }
         region[0] = cx - side / 2; if (region[0] < ax) region[0] = ax;
@@ -5388,23 +5400,15 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         region[2] = region[0] + side; if (region[2] > ax + aw) region[2] = ax + aw;
         region[3] = region[1] + side; if (region[3] > ay + ah) region[3] = ay + ah;
         region[4] = weight;
-        /* The FOCUS region never shrinks below 5 % of the array's short side:
-         * a contrast autofocus needs texture to work on, and in the loupe the
-         * exposure spot (above) becomes tiny -- with the same box the JP2
-         * locked 2 taps out of 20 in the loupe, nearly every one outside it.
-         * The light stays a precise spot; the focus keeps a window it can use. */
-        af_side = (aw < ah ? aw : ah) * 5 / 100;
-        /* and is 10 % of the frame's short side, a size of its own (0.3.8).
-         * 5 % (tried first) failed too often on plain surfaces, a floor at 3 m:
-         * too little detail for the HAL to lock; 10 % still keeps a thin
-         * subject's background mostly out when the subject fills the square.
-         * Until 0.3.8 it took the exposure region's side, 6 % then 5 %; the
-         * two are independent now. The marker on the screen is a square of
-         * exactly this size (the interface computes it the same way). */
-        {
-            int frame10 = (pc[2] < pc[3] ? pc[2] : pc[3]) * 10 / 100;
-            if (af_side < frame10) af_side = frame10;
-        }
+        /* The focus zone: 10 % of the view's short side, a size of its own
+         * (0.3.8; it used to take the exposure zone's, 6 % then 5 %). 5 % of
+         * the frame failed too often on plain surfaces. It follows the loupe
+         * like the exposure's: no floor in sensor pixels any more (there was
+         * one at 5 % of the array, after small zones locked 2 touches out of
+         * 20 in the loupe); a search that does not lock now shows plainly
+         * (the square turns red), and the loupe is meant to aim precisely. */
+        af_side = shown * 10 / 100;
+        if (af_side < 32) af_side = 32;
         af_region[0] = cx - af_side / 2; if (af_region[0] < ax) af_region[0] = ax;
         af_region[1] = cy - af_side / 2; if (af_region[1] < ay) af_region[1] = ay;
         af_region[2] = af_region[0] + af_side; if (af_region[2] > ax + aw) af_region[2] = ax + aw;

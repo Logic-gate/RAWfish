@@ -52,17 +52,18 @@ repository). Newest first.
   calibration. Only a real focus is held: a search that ends "locked
   but not focused" (the lens wherever the scan gave up, often infinity)
   keeps the previous distance (the lens goes back there, and the
-  FOCUS button shows it, in red until a search locks or the volume keys
-  set a distance), the square is
-  dashed and no distance shows under it.
+  FOCUS button shows it), the square turns red and stays red until a
+  search locks, the volume keys set a distance or the mode changes, and no
+  distance shows under it.
 - The focus region of a touch is 6 % of the frame again. It had shrunk to
   5 % with the exposure spot in 0.2.3 (the two shared one size), which was
   not meant. The engine's reply to a touch now gives the focus region as
   well as the exposure's.
 - **The focus marker is a square of the focus zone's real size**: 10 % of
-  the frame's short side (at least 5 % of the sensor's, so it grows with
-  the zoom and with the loupe). It was a circle of a fixed size, unrelated
-  to the zone. The zone has its own size now: it used to take the exposure
+  the viewfinder's short side. The zones are sized on what the viewfinder
+  shows, so the loupe makes them as many times smaller on the subject as it
+  magnifies: the focus (10 %) and the light (5 %) can be aimed precisely.
+  It was a circle of a fixed size, unrelated to the zone. The zone has its own size now: it used to take the exposure
   zone's (6 %, then 5 % since 0.2.3); 5 % failed too often on plain
   surfaces. Aim so that the subject fills the square. The engine's reply
   to a touch gives the focus zone.

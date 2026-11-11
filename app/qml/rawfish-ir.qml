@@ -326,10 +326,10 @@ ApplicationWindow {
             readonly property real focusDiopters: fcs.diopters !== undefined ? fcs.diopters : 1.0
             readonly property int  circleAf: fcs.circle !== undefined ? fcs.circle : 0   // 1 searching, 4 sharp, 5 unsure, 6 failed, 7 sun
             // Manual focus: the last touch's search failed (5 locked but not
-            // focused, 6 failed): the lens went back to the distance in force,
-            // and the FOCUS button shows it in red until a search locks (4), a
-            // volume step sets a distance by hand, or the mode changes. Removing
-            // the dashed square does not clear it.
+            // focused, 6 failed): the lens went back to the distance in force
+            // (the FOCUS button shows it), and the SQUARE is red until a search
+            // locks (4), a volume step sets a distance by hand, or the mode
+            // changes.
             property bool focusUnlocked: false
             onCircleAfChanged: {
                 if (focusMode !== "manual") return
@@ -1800,15 +1800,13 @@ ApplicationWindow {
                     // What the controller says of its search: 1 searching, 4 sharp,
                     // 5 locked but unsure, 6 failed, 7 a light-only reference (sun).
                     afState: page.circleAf
-                    // The focus region on the screen, by the engine's rule: 10 % of the
-                    // frame's short side, at least 5 % of the sensor's (zoom z: the
-                    // frame is 1/z of the sensor, so max(10 %, 5 % x z) of the frame);
-                    // the loupe shows 1/loupe of the frame, so the square grows with it.
-                    regionSide: {
-                        var z = page.vws.zoom > 1 ? page.vws.zoom : 1
-                        var vwf = viewfinder.viewWindow.width > 0 ? viewfinder.viewWindow.width : 1
-                        return Math.max(0.10, 0.05 * z) * Math.min(viewfinderZone.width, viewfinderZone.height) / vwf
-                    }
+                    // The focus region on the screen: 10 % of the viewfinder's short
+                    // side, as the engine sizes it on what is shown (in the loupe the
+                    // zone on the subject shrinks, the square on the screen does not).
+                    regionSide: 0.10 * Math.min(viewfinderZone.width, viewfinderZone.height)
+                    // Red, and it stays so, after a manual search that did not lock
+                    // (until a lock, a volume step or a mode change).
+                    colour: page.focusUnlocked ? "#ff4040" : "white"
                     sun: page.circleAf === 7
                     visible: opacity > 0
                     opacity: 0
@@ -2084,10 +2082,7 @@ ApplicationWindow {
                             // calibration (the HAL's lens value taken as 1:1), white
                             // once a table is in force (caps focus_cal).
                             value: page.focusModeLabel(page.focusMode)
-                            // ... and red while a manual touch's search has not locked
-                            // (page.focusUnlocked): the distance shown is the one the lens
-                            // went back to, not one the camera focused at.
-                            textColor: page.focusMode === "manual" && (!(viewfinder.caps.focusCal > 0) || page.focusUnlocked) ? "#ff6060" : "white"
+                            textColor: page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
                             onCycle: {
                                 // auto <-> manual. Entering manual by this button starts
                                 // one search in the middle of the frame: the distance found
