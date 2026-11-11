@@ -31,8 +31,8 @@ Requires:       qt5-qtdeclarative-import-sensors
 # Nemo.KeepAlive (screen on during a stack)
 Requires:       nemo-qml-plugin-policy-qt5
 Requires:       nemo-qml-plugin-configuration-qt5
-# Nemo.Ngf: the haptic feedback (shutter, TYPE)
-Requires:       qml(Nemo.Ngf)
+# QtFeedback: the vibrations (release, TYPE)
+Requires:       qml(QtFeedback)
 Requires:       libkeepalive
 # The engine (library + controller + CLI) is its own package, rawfish-ir-cli,
 # built by scripts/build-engine-rpm.sh at the top of the repository; it can be

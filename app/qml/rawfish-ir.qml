@@ -25,7 +25,7 @@ import Nemo.Policy 1.0             // volume keys (Resource.ScaleButton)
 import Nemo.Configuration 1.0      // /apps/rawfish-ir/output: the system Settings page's values
 import Nemo.KeepAlive 1.2          // keep the screen on during a stacked exposure
 import Qt.labs.folderlistmodel 2.1 // the gallery: files of ~/Pictures/RAWfish-ir
-import Nemo.Ngf 1.0                // haptic feedback: the shutter, a TYPE change (an idea of IvanV's ProCam)
+import QtFeedback 5.0              // vibrations of a set length: the release, a TYPE change (an idea of IvanV's ProCam)
 import com.indraw 1.0
 
 ApplicationWindow {
@@ -383,12 +383,15 @@ ApplicationWindow {
             // it back (onSettledChanged): the circle stayed, and needed a second
             // tap. The state's styling now only touches a circle meant to show.
             property bool circleShown: false
-            // Haptic feedback, through the system's own events (the phone's
-            // vibration settings apply): the system camera's shutter event at the
-            // release, and the light tick of a pulley menu's step when TYPE
-            // changes. With thanks to IvanV (ProCam) for the idea.
-            NonGraphicalFeedback { id: shutterFeedback; event: "camera_shutter" }
-            NonGraphicalFeedback { id: typeFeedback; event: "pulldown_highlight" }
+            // Vibrations of a set length (rawfish-ir.conf: hapticShutter,
+            // hapticType, in ms; 0 = none): at the release, and a very short tick
+            // when TYPE changes. A system event was tried first: the system
+            // camera's shutter event did not vibrate (it is tied to the shutter
+            // sound), and a pulley menu's tick was too strong for TYPE; a
+            // HapticsEffect lets the length be chosen. With thanks to IvanV
+            // (ProCam) for the idea.
+            HapticsEffect { id: shutterFeedback; intensity: 1.0; duration: settingsMenu.hapticShutterMs }
+            HapticsEffect { id: typeFeedback; intensity: 1.0; duration: settingsMenu.hapticTypeMs }
             // A bracket in jpg is taken by the camera's own JPEG, not by our
             // processing: said when the bracket is chosen, or when the type comes
             // to jpg with a bracket already chosen.
@@ -1026,7 +1029,7 @@ ApplicationWindow {
                 // The release: a short vibration as the capture starts (at the
                 // press, or at the end of the timer's countdown); the white flash
                 // comes later, when the photo is taken and the phone may move.
-                shutterFeedback.play()
+                if (settingsMenu.hapticShutterMs > 0) shutterFeedback.start()
                 if (page.imageType === "snap") {
                     if (page.ownJpeg)
                         // ours, light: one frame, our processing at its defaults (the
@@ -2043,7 +2046,7 @@ ApplicationWindow {
                                 // when a DNG already comes with each JPG), JPG, snap.
                                 var t = page.rawAvailable && settingsMenu.advanced && !page.dngWithJpg ? ["raw", "jpg", "snap"] : ["jpg", "snap"]
                                 page.imageType = t[(t.indexOf(page.imageType)+1) % t.length]
-                                typeFeedback.play()                       // a very light tick
+                                if (settingsMenu.hapticTypeMs > 0) typeFeedback.start()   // a very short tick
                             }
                         }
                         CycleButton {

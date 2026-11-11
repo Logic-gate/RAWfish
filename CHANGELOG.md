@@ -16,11 +16,10 @@ repository). Newest first.
 
 ## 0.3.8 (beta) — a vibration at the shutter and at a change of type (patch 0352)
 - A short vibration at the release (the press, or the end of the timer),
-  and a very light one at each press of TYPE. The white flash keeps its
-  meaning: it comes when the photo is taken and the phone may move.
-  They are the system's own feedback events (the camera's shutter, the
-  tick of a pulley menu), so the phone's vibration settings apply. With
-  thanks to IvanV (ProCam) for the idea.
+  and a very short one at each press of TYPE. The white flash keeps its
+  meaning: it comes when the photo is taken and the phone may move. Their
+  lengths are in rawfish-ir.conf (hapticShutter 40 ms, hapticType 8 ms; 0
+  turns one off). With thanks to IvanV (ProCam) for the idea.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the
