@@ -1800,10 +1800,10 @@ ApplicationWindow {
                     // What the controller says of its search: 1 searching, 4 sharp,
                     // 5 locked but unsure, 6 failed, 7 a light-only reference (sun).
                     afState: page.circleAf
-                    // The focus region on the screen: 10 % of the viewfinder's short
+                    // The focus region on the screen: 15 % of the viewfinder's short
                     // side, as the engine sizes it on what is shown (in the loupe the
                     // zone on the subject shrinks, the square on the screen does not).
-                    regionSide: 0.10 * Math.min(viewfinderZone.width, viewfinderZone.height)
+                    regionSide: 0.15 * Math.min(viewfinderZone.width, viewfinderZone.height)
                     // Red, and it stays so, after a manual search that did not lock
                     // (until a lock, a volume step or a mode change).
                     colour: page.focusUnlocked ? "#ff4040" : "white"

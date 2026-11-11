@@ -5370,7 +5370,7 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * side, so in the loupe it is as many times smaller as the loupe
          * magnifies: a precise spot. */
         int32_t pc[4], cx, cy, shown;
-        double vw[4] = { 0, 0, 1, 1 };
+        double vw[4] = { 0, 0, 1, 1 };                   /* what is shown: fractions of the ACTIVE ARRAY */
         preview_crop(ax, ay, aw, ah, pc);
         cx = pc[0] + (int32_t)(nx * pc[2]);
         cy = pc[1] + (int32_t)(ny * pc[3]);
@@ -5378,12 +5378,24 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * further by the display window of the loupe and pan): the loupe
          * makes them as many times smaller on the subject as it magnifies,
          * so it can be used to point the focus or the light precisely. */
-        pthread_mutex_lock(&g.lock);
-        if (g.have_view_win && g.view_win[2] > 0 && g.view_win[3] > 0) memcpy(vw, g.view_win, sizeof vw);
-        pthread_mutex_unlock(&g.lock);
+        /* g.view_win is normalised in the active array (the controller's
+         * display window: zoom, loupe and pan together), NOT in the frame:
+         * what is shown is view_win x the array. (0361 multiplied it by the
+         * frame, already cut by the zoom and loupe: with any zoom or loupe the
+         * zones shrank twice, by the square of the magnification -- at x4 a
+         * focus zone of 0.6 % of the sensor, on which the HAL could not lock.)
+         * Without a view window: the frame. */
         {
-            int32_t sw = (int32_t)(pc[2] * vw[2]), sh = (int32_t)(pc[3] * vw[3]);
+            int have;
+            int32_t sw, sh;
+            pthread_mutex_lock(&g.lock);
+            have = g.have_view_win && g.view_win[2] > 0 && g.view_win[3] > 0;
+            if (have) memcpy(vw, g.view_win, sizeof vw);
+            pthread_mutex_unlock(&g.lock);
+            sw = have ? (int32_t)(vw[2] * aw) : pc[2];
+            sh = have ? (int32_t)(vw[3] * ah) : pc[3];
             shown = sw < sh ? sw : sh;                   /* the short side of what is shown, array pixels */
+            if (!have) { vw[2] = (double)pc[2] / aw; vw[3] = (double)pc[3] / ah; }   /* the same, as array fractions */
         }
         side = shown * 5 / 100;                          /* the exposure spot: 5 % of the view */
         if (side < 16) side = 16;
@@ -5391,8 +5403,8 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
             pthread_mutex_lock(&g.lock);
             g.spot_x = (float)(cx - ax) / aw;
             g.spot_y = (float)(cy - ay) / ah;
-            g.spot_hw = 0.025f * (float)(pc[2] * vw[2]) / aw;   /* 5 % of the VIEW: smaller in the loupe */
-            g.spot_hh = 0.025f * (float)(pc[3] * vw[3]) / ah;
+            g.spot_hw = 0.025f * (float)vw[2];          /* 5 % of the VIEW (array fractions): smaller in the loupe */
+            g.spot_hh = 0.025f * (float)vw[3];
             pthread_mutex_unlock(&g.lock);
         }
         region[0] = cx - side / 2; if (region[0] < ax) region[0] = ax;
@@ -5400,14 +5412,15 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         region[2] = region[0] + side; if (region[2] > ax + aw) region[2] = ax + aw;
         region[3] = region[1] + side; if (region[3] > ay + ah) region[3] = ay + ah;
         region[4] = weight;
-        /* The focus zone: 10 % of the view's short side, a size of its own
+        /* The focus zone: 15 % of the view's short side, a size of its own
          * (0.3.8; it used to take the exposure zone's, 6 % then 5 %). 5 % of
-         * the frame failed too often on plain surfaces. It follows the loupe
+         * the frame failed too often on plain surfaces, 10 % still did on the
+         * JP2's HAL. It follows the loupe
          * like the exposure's: no floor in sensor pixels any more (there was
          * one at 5 % of the array, after small zones locked 2 touches out of
          * 20 in the loupe); a search that does not lock now shows plainly
          * (the square turns red), and the loupe is meant to aim precisely. */
-        af_side = shown * 10 / 100;
+        af_side = shown * 15 / 100;
         if (af_side < 32) af_side = 32;
         af_region[0] = cx - af_side / 2; if (af_region[0] < ax) af_region[0] = ax;
         af_region[1] = cy - af_side / 2; if (af_region[1] < ay) af_region[1] = ay;
@@ -5477,8 +5490,8 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
     jw_init(&w, out, out_size);
-    /* "region" is the exposure's square (5 % of the frame); "af_region" the
-     * focus's (6 %, at least 5 % of the array), the one a focus tap uses. */
+    /* "region" is the exposure's square (5 % of the view); "af_region" the
+     * focus's (15 % of the view), the one a focus tap uses. */
     jw_add(&w, "{\"ok\":true,\"ae\":%s,\"af\":%s,\"continuous\":%s,\"region\":[%d,%d,%d,%d],\"af_region\":[%d,%d,%d,%d]}",
            do_ae == 1 ? "true" : "false", do_af == 1 ? "true" : "false", continuous ? "true" : "false",
            region[0], region[1], region[2], region[3], af_region[0], af_region[1], af_region[2], af_region[3]);
