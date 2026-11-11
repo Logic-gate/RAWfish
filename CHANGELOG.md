@@ -52,7 +52,8 @@ repository). Newest first.
   calibration. Only a real focus is held: a search that ends "locked
   but not focused" (the lens wherever the scan gave up, often infinity)
   keeps the previous distance (the lens goes back there, and the
-  FOCUS button shows it, in red until a search locks), the square is
+  FOCUS button shows it, in red until a search locks or the volume keys
+  set a distance), the square is
   dashed and no distance shows under it.
 - The focus region of a touch is 6 % of the frame again. It had shrunk to
   5 % with the exposure spot in 0.2.3 (the two shared one size), which was

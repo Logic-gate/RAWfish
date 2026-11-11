@@ -327,8 +327,9 @@ ApplicationWindow {
             readonly property int  circleAf: fcs.circle !== undefined ? fcs.circle : 0   // 1 searching, 4 sharp, 5 unsure, 6 failed, 7 sun
             // Manual focus: the last touch's search failed (5 locked but not
             // focused, 6 failed): the lens went back to the distance in force,
-            // and the FOCUS button shows it in red until a search locks (4), or
-            // the mode changes. Removing the dashed square does not clear it.
+            // and the FOCUS button shows it in red until a search locks (4), a
+            // volume step sets a distance by hand, or the mode changes. Removing
+            // the dashed square does not clear it.
             property bool focusUnlocked: false
             onCircleAfChanged: {
                 if (focusMode !== "manual") return
@@ -342,7 +343,9 @@ ApplicationWindow {
                 var m = 1 / focusDiopters
                 return (m >= 10 ? m.toFixed(1) : m.toFixed(2)) + qsTr(" m")
             }
-            function stepFocus(dir) { viewfinder.sendCommand("fc step " + dir) }   // > 0 = farther
+            // A volume step: a distance chosen by hand, which also ends the red of a
+            // failed search (the distance is now the user's own, not a miss).
+            function stepFocus(dir) { page.focusUnlocked = false; viewfinder.sendCommand("fc step " + dir) }   // > 0 = farther
             // --- Geometry: the controller's (sailfish/ctl_view.c, step 5) ----
             // The page works in DISPLAY-window coordinates (0..1 across what the
             // viewfinder shows), undoing the view rotation; the controller keeps
