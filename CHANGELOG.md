@@ -14,6 +14,21 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.5 (beta) — the engine really at 12.5 MP; YUV columns greyed for a bracket (patch 0349)
+- **The menu said 12.5 MP while the photos came out at 50.** With no size
+  stored (none chosen, or forgotten on a camera change), the engine starts
+  on its largest size; the menu then shows the default, and was meant to
+  restart the engine at it. That check only ran when the camera's list of
+  sizes changed, which a start on the same camera does not do, and it
+  compared the default with the stored size rather than with the size the
+  engine runs. It now runs at every start of the engine and compares with
+  what runs; it restarts once at most for a given size (if the engine
+  cannot take it, the log says so and it is left there). The once-per-
+  install step of 0.3.4 now writes a line in the log.
+- The four columns of RAWfish-ir's own processing (Frames, Colour NR,
+  Moiré, Sharpen) are greyed when a bracket is chosen: its three photos are
+  the camera's own JPEG. A touch on them says why.
+
 ## 0.3.4 (beta) — four frames help again at night; the 12.5 MP default reaches updates; manual ISO and speed of cameras 1 and 2 (patch 0348)
 - **Frames 4 did little at 50 megapixels in low light.** There the JP2 gives
   its 50 MP as an enlarged 12.5 MP image: neighbouring pixels share their

@@ -66,7 +66,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+91"/>
+        <location filename="../qml/SettingsMenu.qml" line="+105"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,7 +160,7 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+311"/>
+        <location line="+338"/>
         <location line="+44"/>
         <location line="+7"/>
         <location line="+7"/>
@@ -170,7 +170,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-424"/>
+        <location line="-451"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -366,7 +366,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+165"/>
+        <location line="+166"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -376,7 +376,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+127"/>
+        <location line="+153"/>
         <source>Flash</source>
         <translation type="unfinished"></translation>
     </message>
@@ -483,15 +483,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+11"/>
-        <location line="+6"/>
-        <location line="+7"/>
-        <location line="+7"/>
+        <location line="-395"/>
         <source>JPG only: RAWfish-ir&apos;s processing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-19"/>
+        <location line="+1"/>
+        <source>bracket: the camera&apos;s own JPEG, not RAWfish-ir&apos;s processing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+406"/>
         <source>Frames</source>
         <translation type="unfinished"></translation>
     </message>
@@ -823,7 +825,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/rawfish-ir.qml" line="+272"/>
+        <location filename="../qml/rawfish-ir.qml" line="+271"/>
         <source>selfie</source>
         <translation type="unfinished"></translation>
     </message>
@@ -865,7 +867,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+13"/>
         <location line="+3"/>
         <location line="+153"/>
         <location line="+1880"/>

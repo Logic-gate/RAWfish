@@ -44,6 +44,8 @@ Item {
     // version, a stored size equal to the camera's largest is taken for that
     // old default and cleared (whoever wants 50 MP chooses it again, once).
     property bool sizeDefaultApplied: false
+    property string settleTried: ""                // the size a settle last restarted the engine for
+    property string settleReported: ""
     // "" (the default, nothing saved): the RAW's shape -- 4:3 on the JP2,
     // 16:9 on the XA2 -- so an untouched install takes all the sensor gives.
     property string formatSaved: ""
@@ -91,6 +93,11 @@ Item {
     property int sceneMode: 0                      // 0 = off (atomic controls)
     property bool showScenes: false                // the Settings page's switch (scenes in the menu)
     property bool processingColumns: false         // the Settings page's switch (JPG processing in the menu)
+    // RAWfish-ir's own JPG processing applies to jpg alone, and not to a
+    // bracket: its three photos are the camera's JPEG.
+    readonly property bool yuvColumnsOff: imageType !== "jpg" || bracket !== "off"
+    readonly property string yuvColumnsHint: imageType !== "jpg" ? qsTr("JPG only: RAWfish-ir's processing")
+                                                                  : qsTr("bracket: the camera's own JPEG, not RAWfish-ir's processing")
     property int peakTweak: 0                      // -30 | 0 | +30 (% on the device value)
     property int zebraTweak: 0
     property string imageType: "jpg"               // from the deck, for the size rules
@@ -367,13 +374,28 @@ Item {
         if (!sizeDefaultApplied) {
             var largest = sizesFor(format)[0]
             sizeDefaultApplied = true; save("sizeDefaultApplied", 1)
+            viewfinder.sendCommand("# size default (once): stored \"" + captureSize + "\", largest " + largest
+                                   + (captureSize !== "" && captureSize === largest ? ": taken for the old default, cleared" : ": kept"))
             if (captureSize !== "" && captureSize === largest) {
                 captureSize = ""; save("captureSize", "")
                 save(format === "16:9" ? "captureSize169" : "captureSize43", "")
             }
         }
         var e = effectiveSize()
-        if (e === captureSize) return
+        // The engine must run at the size in force. captureSize "" (nothing
+        // chosen, or forgotten on a camera change) starts it on "max": the
+        // default (12.5 MP) then differs from what runs, and a restart follows.
+        // (0.3.4 returned when e equalled captureSize, and with captureSize ""
+        // the menu showed 12.5 MP while the engine stayed at 50.)
+        if (e === captureSize && e === runningSize) return
+        // One restart per size: if the engine comes back at another size
+        // anyway (it fell back to "max" after a failure), say so and stop,
+        // rather than restart at every caps.
+        if (e === settleTried && e !== runningSize) {
+            if (settleTried !== settleReported) { settleReported = settleTried; viewfinder.sendCommand("# settle: " + e + " asked, the engine runs " + runningSize + " (left so)") }
+            return
+        }
+        if (e !== runningSize) settleTried = e
         viewfinder.sendCommand("# settle: format " + format + " wants " + e + ", engine runs " + runningSize
                                + (e === runningSize ? " (kept)" : " (restart)"))
         if (e === runningSize) { captureSize = e; save("captureSize", e) }   /* already so: no restart */
@@ -385,6 +407,9 @@ Item {
     // camera just opened at 6560x4928, hence a second engine start on every
     // switch (ui 170). Qt.callLater runs it once the bindings have settled.
     onJpegSizesChanged: Qt.callLater(settleSize)
+    // And at every caps (each engine start): a start on the same camera brings
+    // the same list, and a list that does not change sends no signal.
+    Connections { target: viewfinder; onCapsChanged: Qt.callLater(menu.settleSize) }
 
     // --- the overlay ---
     Rectangle { anchors.fill: parent; color: "black"; opacity: 0.6 }
@@ -477,27 +502,27 @@ Item {
             // it (otherwise in rawfish-ir.conf only). Saved to the same keys.
             MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
                 defaultValue: 1
-                dimmed: menu.imageType !== "jpg"; dimmedHint: qsTr("JPG only: RAWfish-ir's processing")
+                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                 caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
                 labelFor: function(v) { return v === 1 ? qsTr("One frame") : qsTr("%1 frames merged (less grain)").arg(v) }
                 onPicked: { menu.yuvFrames = value; menu.save("jpgFrames", value) } }
             MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
                 defaultValue: 2
-                dimmed: menu.imageType !== "jpg"; dimmedHint: qsTr("JPG only: RAWfish-ir's processing")
+                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                 caption: qsTr("Colour NR"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
                 labelFor: function(v) { return v === 0 ? qsTr("Colour noise filter off") : qsTr("Colour noise filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
                 shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
                 onPicked: { menu.yuvColour = value; menu.save("jpgNoiseColourFilter", value) } }
             MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
                 defaultValue: 0
-                dimmed: menu.imageType !== "jpg"; dimmedHint: qsTr("JPG only: RAWfish-ir's processing")
+                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                 caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
                 labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
                 shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
                 onPicked: { menu.yuvMedian = value; menu.save("jpgMoireFilter", value) } }
             MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
                 defaultValue: 3
-                dimmed: menu.imageType !== "jpg"; dimmedHint: qsTr("JPG only: RAWfish-ir's processing")
+                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                 caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
                 labelFor: function(v) { return v === 0 ? qsTr("RAWfish sharpening off") : qsTr("RAWfish sharpening: %1 x the fine detail").arg([0, 0.5, 1, 1.5, 2.5, 4][v]) }
                 shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
