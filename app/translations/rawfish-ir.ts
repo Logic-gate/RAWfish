@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../rawfish-ir-preview.cpp" line="+1124"/>
+        <location filename="../rawfish-ir-preview.cpp" line="+1192"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -66,7 +66,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+105"/>
+        <location filename="../qml/SettingsMenu.qml" line="+106"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,7 +160,7 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+338"/>
+        <location line="+341"/>
         <location line="+44"/>
         <location line="+7"/>
         <location line="+7"/>
@@ -170,7 +170,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-451"/>
+        <location line="-454"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -376,7 +376,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+153"/>
+        <location line="+156"/>
         <source>Flash</source>
         <translation type="unfinished"></translation>
     </message>
@@ -452,12 +452,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-17"/>
-        <location line="+17"/>
-        <source>snap: one small size, the camera&apos;s own JPEG</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location line="-16"/>
         <source>Format</source>
         <translation type="unfinished"></translation>
@@ -483,17 +477,28 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-395"/>
+        <location line="-398"/>
         <source>JPG only: RAWfish-ir&apos;s processing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-1"/>
+        <source>snap: RAWfish-ir&apos;s processing at its defaults</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>bracket: the camera&apos;s own JPEG, not RAWfish-ir&apos;s processing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+406"/>
+        <location line="+379"/>
+        <location line="+17"/>
+        <source>snap: one light size, for utility shots</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <source>Frames</source>
         <translation type="unfinished"></translation>
     </message>
@@ -825,7 +830,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/rawfish-ir.qml" line="+271"/>
+        <location filename="../qml/rawfish-ir.qml" line="+286"/>
         <source>selfie</source>
         <translation type="unfinished"></translation>
     </message>
@@ -870,13 +875,13 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <location line="+13"/>
         <location line="+3"/>
         <location line="+153"/>
-        <location line="+1880"/>
+        <location line="+1887"/>
         <location line="+27"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-2062"/>
+        <location line="-2069"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
@@ -960,7 +965,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+255"/>
+        <location line="+262"/>
         <location line="+807"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>

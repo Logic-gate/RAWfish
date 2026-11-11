@@ -43,7 +43,7 @@ exposure here".
 | Part | What it is |
 |---|---|
 | **FOCAL** | the camera, shown by its 35 mm-equivalent focal length; tap to switch camera |
-| **TYPE** | **DNG (RAW)**; **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +RAW" when Settings saves a DNG with each JPG); **snap**, the camera's own JPEG at a small size (5 megapixels) for utility shots such as a receipt or a sign, marked SNAP on the viewfinder |
+| **TYPE** | **DNG (RAW)**; **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +RAW" when Settings saves a DNG with each JPG); **snap**, a light photo for utility shots such as a receipt or a sign: our own processing at its defaults, the image averaged down to about 2048 px wide (2048 × 1536, 3 MP, on the JP2), marked SNAP on the viewfinder. TYPE never restarts the camera between these three |
 
 | **FOCUS** | auto, or a distance: manual (see "Focus") |
 | histogram | the tones of **what the viewfinder shows** (zoomed or in the loupe: that area), per colour, with clipping bars at each end. In **jpg** it is measured on the processed image; in **raw** on the sensor data itself, so it sits further left and narrower (no tone curve lifting the shadows), and its left bar is bigger: it counts photosites at or below black, where noise puts about half of the truly dark ones -- shadows with no information, as the DNG will hold them. With a reference circle, the circle's own tones are drawn as bright outlines over it |

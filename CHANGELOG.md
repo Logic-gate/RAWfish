@@ -14,6 +14,18 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
+- **snap is now our own light photo**, no longer the camera's JPEG: the
+  same full-size image as jpg, averaged down by blocks to about 2048 px
+  wide (2048 × 1536, 3 MP, on the JP2), with our processing at its
+  defaults (one frame; the processing columns stay greyed in snap) and the
+  menu's JPEG quality. jpg, DNG and snap share one session: **TYPE never
+  restarts the camera**. Only choosing a bracket in jpg still does (its
+  photos are the camera's JPEG), a rare case. Exif Software reads "snap
+  from YUV".
+- On a phone without our image (separate sessions, the Xperia 10 III),
+  snap stays the camera's own small JPEG, as before.
+
 ## 0.3.6 (beta) — each version starts clean, earlier files kept aside; the engine starts at the size shown (patch 0350)
 - **A newly installed version starts from its own defaults.** At its first
   start it moves the earlier settings and device files (rawfish-ir.conf,

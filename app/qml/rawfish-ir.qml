@@ -33,7 +33,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "205"                             // shown in the deck
+    readonly property string uiVersion: "206"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -223,25 +223,40 @@ ApplicationWindow {
                 // What the engine opens beside the viewfinder (streams=):
                 //  - RAW in every session where the camera has it: the white-
                 //    balance pick and the RAW meter measure on it;
-                //  - jpg and raw share ONE session (our YUV stream + RAW), so
-                //    switching between them is instant; a bracket adds the
-                //    camera's JPEG stream (brackets are HAL JPEGs);
-                //  - snap, and jpg where our YUV is not possible (exclusive
-                //    streams, or a session that refused it): the camera's JPEG
-                //    stream (at the snap size for snap, see jpegOverride).
+                //  - jpg, raw and snap share ONE session (our YUV stream + RAW),
+                //    so TYPE never restarts the engine (snap is our YUV, binned
+                //    finer); a bracket adds the camera's JPEG stream (brackets
+                //    are HAL JPEGs: one restart when it is chosen, a rare case);
+                //  - where our YUV is not possible (exclusive streams, or a
+                //    session that refused it): the camera's JPEG stream, at the
+                //    snap size for snap (see jpegOverride).
                 // A change of this list restarts the engine (about a second).
                 var raw = page.rawAvailable ? ",raw" : ""
-                if (page.imageType === "snap" || !page.ownJpeg) return "jpeg" + raw
+                if (!page.ownJpeg) return "jpeg" + raw
                 var s = "yuv" + raw                                   // jpg and raw alike
                 if (page.imageType === "jpg" && settingsMenu.bracket !== "off") s += ",jpeg"
                 return s
             }
             onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
             Component.onCompleted: viewfinder.sessionStreams = sessionStreams
-            // snap: the camera's JPEG at a small size: rawfish-ir.conf's snapSize
-            // if the camera lists it, else the largest 4:3 size of at most 5
-            // megapixels. The session is opened at that size while in snap.
-            readonly property size snapSize: {
+            // snap, two ways:
+            //  - where our YUV is possible (ownJpeg): OUR light photo, from the
+            //    same session as jpg and raw (no restart): the full-size YUV
+            //    averaged by blocks to about 2048 px wide (2048 x 1536, 3 MP on
+            //    the JP2), our processing at its defaults, quality from the menu;
+            //  - elsewhere (exclusive streams, the 10 III): the camera's JPEG at a
+            //    small size, rawfish-ir.conf's snapSize if listed, else the
+            //    largest 4:3 size of at most 5 MP, in a session of its own.
+            readonly property size snapSize: ownJpeg ? snapFromYuv : snapFromHal
+            readonly property size snapFromYuv: {
+                // the same rule as the engine's (yuv_copy): the widest size, divided
+                // by the smallest whole number that brings it to 2048 or less
+                var list = viewfinder.caps.jpegSizes ? viewfinder.caps.jpegSizes : []
+                if (list.length === 0) return Qt.size(0, 0)
+                var p = String(list[0]).split("x"), w = Number(p[0]), h = Number(p[1]), k = Math.ceil(w / 2048)
+                return Qt.size(Math.floor(w / k) & ~1, Math.floor(h / k) & ~1)
+            }
+            readonly property size snapFromHal: {
                 var list = viewfinder.caps.jpegSizes ? viewfinder.caps.jpegSizes : []
                 var want = settingsMenu.snapSize, best = Qt.size(0, 0), i
                 for (i = 0; i < list.length; ++i) {
@@ -251,7 +266,7 @@ ApplicationWindow {
                 }
                 return best
             }
-            readonly property size jpegOverride: imageType === "snap" ? snapSize : Qt.size(0, 0)
+            readonly property size jpegOverride: imageType === "snap" && !ownJpeg ? snapFromHal : Qt.size(0, 0)
             onJpegOverrideChanged: viewfinder.jpegSizeOverride = jpegOverride
             // Starts in continuous focus (the "auto" label): the camera follows
             // the scene by itself until the user asks for more.
@@ -1002,9 +1017,16 @@ ApplicationWindow {
             // shots for a bracket -- from the settings sent here.
             function shoot() {
                 if (page.imageType === "snap") {
-                    // the camera's JPEG, noise reduction and sharpening HQ, one shot
-                    viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=jpg q=" + settingsMenu.effQuality
-                                           + " noise=hq_noise edge=hq_edge bracket=off denoise_sigma=1 snap=1")
+                    if (page.ownJpeg)
+                        // ours, light: one frame, our processing at its defaults (the
+                        // menu's processing columns are greyed in snap), no DNG
+                        viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=yuv q=" + settingsMenu.effQuality
+                                               + " noise=off_noise edge=hq_edge bracket=off denoise_sigma=1"
+                                               + " frames=1 colour=2 median=0 sharpen=3 snap=1")
+                    else
+                        // the camera's JPEG, noise reduction and sharpening HQ, one shot
+                        viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=jpg q=" + settingsMenu.effQuality
+                                               + " noise=hq_noise edge=hq_edge bracket=off denoise_sigma=1 snap=1")
                     return
                 }
                 // Our own JPEG (type=yuv) is one photo: a bracket in jpg goes to the

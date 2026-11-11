@@ -619,6 +619,7 @@ static struct {
     AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
+    int yuv_light;                               /* the next captures are snap's: binned to about 2048 px wide (indraw_set_yuv_light) */
     int32_t ae_region[5]; int ae_region_on;      /* the exposure point in force (a long press), kept across focus taps */
     char jpeg_label[24];                         /* the next HAL JPEG's kind in Exif Software ("snap"), used once */
     int checks;                                  /* reports carry the viewfinder-vs-photo "check" (off by default: ~2 KB per shot) */
@@ -2803,7 +2804,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     setup_colour_temperature();              /* the camera->XYZ matrix, for the WB temperature */
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
-    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0;
+    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0; g.yuv_light = 0;
     g.awb_auto_results = 0;
     g.vw_n = 0;
     g.af_tapped = 0; g.af_zoom_on = 0; g.scene_mode = 0;   /* a new session starts with no scene */
@@ -6776,6 +6777,10 @@ static int yuv_copy(AImage *img, ir_yuv_t *f)
     AImage_getWidth(img, &sw); AImage_getHeight(img, &sh);
     sw &= ~1; sh &= ~1;
     if (sw < 16 || sh < 16) return -1;
+    /* snap: a light photo, the stream averaged by blocks to about 2048 px
+     * wide (8192 / 4 = 2048 x 1536 on the JP2, 3 MP): the binning that makes
+     * the 12.5 MP photo, only coarser; no resampling, no other stream. */
+    if (g.yuv_light) { int kl = (sw + 2047) / 2048; if (kl > k) k = kl; }
     w = (sw / k) & ~1; h = (sh / k) & ~1;        /* the photo's size: the stream's divided by k */
     if (w < 16 || h < 16) return -1;
     f->y = malloc((size_t)w * h);
@@ -6945,6 +6950,13 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* snap from our own YUV: the next captures are binned to about 2048 px wide
+ * (on 1), or at the photo's size again (on 0). Set around a capture. */
+IR_API void indraw_set_yuv_light(int on)
+{
+    g.yuv_light = on ? 1 : 0;
+}
+
 /* The next HAL JPEG's kind, written in its Exif Software ("snap"). */
 IR_API void indraw_set_jpeg_label(const char *label)
 {

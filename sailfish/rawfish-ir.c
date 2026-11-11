@@ -1654,6 +1654,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     char file[1200];
     static char cap[OUT_SIZE];
     int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0, want_dng = 0;
+    int light = 0;                               /* snap: a light photo (light=1) */
     char dngfile[1200] = "";
     ir_yuv_t dn; yuv_denoise_report_t rep;
     memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
@@ -1688,6 +1689,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         else if (!strcmp(tok, "dng=1")) want_dng = 1;     /* a DNG of the same instant, same name */
         else if (!strcmp(tok, "dng=0")) want_dng = 0;
         else if (!strcmp(tok, "denoise=on")) denoise = 1;
+        else if (!strcmp(tok, "light=1")) light = 1;          /* snap: binned to about 2048 px wide */
         else if (!strncmp(tok, "colour=", 7)) { colour = atoi(tok + 7); if (colour < 0 || colour > 5) { emit("{\"ok\":false,\"error\":\"yuv: colour=0..5\"}"); return 1; } denoise = 1; }
         else if (!strncmp(tok, "median=", 7)) { median = atoi(tok + 7); if (median < 0 || median > 4) { emit("{\"ok\":false,\"error\":\"yuv: median=0..4\"}"); return 1; } denoise = 1; }
         else if (!strncmp(tok, "sharpen=", 8)) { sharpen = atoi(tok + 8); if (sharpen < 0 || sharpen > 5) { emit("{\"ok\":false,\"error\":\"yuv: sharpen=0..5\"}"); return 1; } }
@@ -1708,11 +1710,19 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             dngfile[0] = '\0';
         } else if (n == 1 && nev == 0) { nev = 1; ev[0] = 0.0f; }
     }
-    if (n == 1 && nev == 0) {
-        if (yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE)) { emit(out); return 1; }
-    } else {
-        if (yb(n, nev ? ev : NULL, exposure_ns, iso, timeout_for(exposure_ns), frames, ts, out, OUT_SIZE)) { emit(out); return 1; }
-        f = frames[0];                               /* the JPEG is the first frame */
+    {   /* snap (light=1): the engine bins this capture to about 2048 px wide;
+         * set for it alone, cleared after whatever the outcome */
+        typedef void (*light_fn)(int);
+        light_fn lf = (light_fn)a_dlsym(bridge, "indraw_set_yuv_light");
+        int failed;
+        if (lf) lf(light);
+        if (n == 1 && nev == 0)
+            failed = yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE);
+        else
+            failed = yb(n, nev ? ev : NULL, exposure_ns, iso, timeout_for(exposure_ns), frames, ts, out, OUT_SIZE);
+        if (lf) lf(0);
+        if (failed) { emit(out); return 1; }
+        if (!(n == 1 && nev == 0)) f = frames[0];   /* the JPEG is the first frame */
     }
     if (do_save) {
         for (k = 0; k < (n == 1 && nev == 0 ? 1 : n); ++k)
@@ -1754,8 +1764,8 @@ static int cmd_yuv(void *bridge, char **save, char *out)
          * JPEG ("RAWfish-ir x.y.z (HAL JPEG)") and ours tell apart in any
          * viewer's Exif panel: frames merged, colour filter, false-colour
          * median and sharpening levels. */
-        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (JPG from YUV: frames %d, colour %d, moire %d, sharpen %d)",
-                 (n == 1 && nev == 0) ? 1 : n, denoise ? colour : 0, denoise ? median : 0, sharpen);
+        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d, colour %d, moire %d, sharpen %d)",
+                 light ? "snap" : "JPG", (n == 1 && nev == 0) ? 1 : n, denoise ? colour : 0, denoise ? median : 0, sharpen);
         ex.software = sw;
         ex.datetime = dt;
         ex.exposure_ns = f.exposure_ns; ex.iso = f.iso;

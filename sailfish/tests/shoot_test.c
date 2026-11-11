@@ -50,6 +50,11 @@ int main(void)
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 3 && !strncmp(lines[0], "jpeg ", 5) && !strncmp(lines[2], "jpeg ", 5), "yuv with an EV bracket: three jpeg exposures");
     r.yuv = 0; r.bracket = -1;
+    /* 3c'. snap from our YUV: light=1, and no DNG even if asked. */
+    r.yuv = 1; r.snap = 1; r.dng = 1; r.bracket = -1;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && !strncmp(lines[0], "yuv ", 4) && strstr(lines[0], " light=1") && !strstr(lines[0], "dng=1"), "snap from yuv: light=1, no DNG");
+    r.yuv = 0; r.snap = 0; r.dng = 0;
     /* 3c. snap: the HAL JPEG with its label for the Exif. */
     r.snap = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);

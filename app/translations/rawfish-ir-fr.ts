@@ -34,7 +34,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../rawfish-ir-preview.cpp" line="+1124" />
+        <location filename="../rawfish-ir-preview.cpp" line="+1192" />
         <source>process error</source>
         <translation>erreur de processus</translation>
     </message>
@@ -65,7 +65,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+105" />
+        <location filename="../qml/SettingsMenu.qml" line="+106" />
         <source>Off</source>
         <translation>Off</translation>
     </message>
@@ -159,7 +159,7 @@
         <location line="-4" />
         <location line="+19" />
         <location line="+2" />
-        <location line="+338" />
+        <location line="+341" />
         <location line="+44" />
         <location line="+7" />
         <location line="+7" />
@@ -169,7 +169,7 @@
         <translation>off</translation>
     </message>
     <message>
-        <location line="-451" />
+        <location line="-454" />
         <source>face</source>
         <translation>visage</translation>
     </message>
@@ -375,7 +375,7 @@
         <translation>%1 Mpx</translation>
     </message>
     <message>
-        <location line="+153" />
+        <location line="+156" />
         <source>Flash</source>
         <translation>Flash</translation>
     </message>
@@ -451,12 +451,6 @@
         <translation>Le RAW n'a qu'une taille et un format : ceux du capteur</translation>
     </message>
     <message>
-        <location line="-17" />
-        <location line="+17" />
-        <source>snap: one small size, the camera's own JPEG</source>
-        <translation>snap : une petite taille, le JPEG de l'appareil</translation>
-    </message>
-    <message>
         <location line="-16" />
         <source>Format</source>
         <translation>Format</translation>
@@ -482,17 +476,28 @@
         <translation>Résolution</translation>
     </message>
     <message>
-        <location line="-395" />
+        <location line="-398" />
         <source>JPG only: RAWfish-ir's processing</source>
         <translation>JPG seulement : le traitement de RAWfish-ir</translation>
     </message>
     <message>
-        <location line="+1" />
+        <location line="-1" />
+        <source>snap: RAWfish-ir's processing at its defaults</source>
+        <translation>snap : le traitement RAWfish-ir à ses valeurs par défaut</translation>
+    </message>
+    <message>
+        <location line="+2" />
         <source>bracket: the camera's own JPEG, not RAWfish-ir's processing</source>
         <translation>bracket : le JPEG de l'appareil, sans le traitement RAWfish-ir</translation>
     </message>
     <message>
-        <location line="+406" />
+        <location line="+379" />
+        <location line="+17" />
+        <source>snap: one light size, for utility shots</source>
+        <translation>snap : une taille légère, pour les photos utilitaires</translation>
+    </message>
+    <message>
+        <location line="+13" />
         <source>Frames</source>
         <translation>Images</translation>
     </message>
@@ -830,7 +835,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
 <context>
     <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/rawfish-ir.qml" line="+271" />
+        <location filename="../qml/rawfish-ir.qml" line="+286" />
         <source>selfie</source>
         <translation>selfie</translation>
     </message>
@@ -877,13 +882,13 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <location line="+13" />
         <location line="+3" />
         <location line="+153" />
-        <location line="+1880" />
+        <location line="+1887" />
         <location line="+27" />
         <source>auto</source>
         <translation>auto</translation>
     </message>
     <message>
-        <location line="-2062" />
+        <location line="-2069" />
         <source>macro</source>
         <translation>macro</translation>
     </message>
@@ -967,7 +972,7 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>bulle : pas de mesure</translation>
     </message>
     <message>
-        <location line="+255" />
+        <location line="+262" />
         <location line="+807" />
         <source>zebra</source>
         <translation>zébra</translation>

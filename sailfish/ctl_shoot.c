@@ -37,9 +37,10 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
      * (it used to be taken, and its bracket dropped in silence); it goes on
      * to the camera's JPEG below, burst or three exposures. */
     if (req->yuv && req->bracket < 0) {
-        n = snprintf(lines[0], CTL_SHOOT_LINE, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s%s", req->name,
+        /* snap from our YUV: one light photo (light=1), never with a DNG */
+        n = snprintf(lines[0], CTL_SHOOT_LINE, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s%s%s", req->name,
                      req->frames == 2 || req->frames == 4 ? req->frames : 1, req->colour, req->median, req->sharpen,
-                     req->quality > 0 ? req->quality : 95, req->dng ? " dng=1" : "", farg);
+                     req->quality > 0 ? req->quality : 95, req->dng && !req->snap ? " dng=1" : "", req->snap ? " light=1" : "", farg);
         if (xs->fixed_pair) snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " exp=%.7f iso=%d", ns / 1e9, iso);
         return 1;
     }

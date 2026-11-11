@@ -19,10 +19,6 @@ Each item says why, so it can be picked up later without re-deriving it.
 
 ### Features
 
-- **snap: settle its size by use** (done in 0.2.3 at the largest 4:3 size
-  of at most 5 megapixels, 2592x1944 on the JP2; snapSize in
-  rawfish-ir.conf to try 3264x2448).
-
 - **A shorter shutter delay with ZSL** (zero shutter lag): the camera keeps
   the last full-resolution frames, unprocessed, in a ring buffer; at the
   press the app takes the frame of that instant and sends it back to the
