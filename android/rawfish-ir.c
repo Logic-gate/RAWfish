@@ -5434,7 +5434,6 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * trigger whose AF mode or region differs from the repeating request
          * was ignored on the JP2: only the first tap worked), and the photo
          * requests so the capture does not re-meter elsewhere. */
-        int32_t none[5] = { ax, ay, ax + aw, ay + ah, 0 };
         ACaptureRequest *all[6];
         int n = 0, i;
         all[n++] = g.preview_request;
@@ -5458,9 +5457,15 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
             uint8_t lk = g.ae_lock ? ACAMERA_CONTROL_AE_LOCK_ON : ACAMERA_CONTROL_AE_LOCK_OFF;
             if (!all[i]) continue;
             ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AE_LOCK, 1, &lk);
-            /* the exposure region: set here, cleared, or the one in force kept */
-            ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5,
-                                         do_ae == 1 ? region : (do_ae == 0 && g.ae_region_on) ? g.ae_region : none);
+            /* The exposure region: a light point set here or kept; otherwise NO
+             * region at all, the entry removed, so that the HAL meters as it
+             * does by itself. (Until 0.3.8 "no point" was a whole-array region of
+             * weight 0, which the HAL takes as a region and meters differently:
+             * after the sun was removed, or after a mere focus touch, the
+             * automatic exposure was no longer what it was before.) */
+            if (do_ae == 1) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, region);
+            else if (g.ae_region_on && do_ae == 0) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.ae_region);
+            else ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 0, NULL);
             if (do_af == 1) {
                 ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AF_MODE, 1, &af_mode);
                 ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, af_region);
@@ -5469,13 +5474,13 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
     }
     if (do_ae == 1) { memcpy(g.ae_region, region, sizeof g.ae_region); g.ae_region_on = 1; }
     else if (do_ae == 2) g.ae_region_on = 0;
-    if (do_af == 2) {                                   /* the focus back to the whole image (or our zoom region) */
-        int32_t none5[5] = { ax, ay, ax + aw, ay + ah, 0 };
+    if (do_af == 2) {                                   /* the focus back to the HAL's own (or our zoom region) */
         ACaptureRequest *af_all[6]; int na = 0, k;
         af_all[na++] = g.preview_request; af_all[na++] = g.trigger_request; af_all[na++] = g.still_request;
         if (g.raw_request) af_all[na++] = g.raw_request;
         if (g.meter_request) af_all[na++] = g.meter_request;
-        for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 5, none5);
+        /* no region (the entry removed), as for the exposure above */
+        for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 0, NULL);
         zoom_af_region();                               /* cleared while zoomed: the middle third */
     }
     reqs[0] = g.preview_request;

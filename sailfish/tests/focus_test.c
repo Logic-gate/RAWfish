@@ -59,6 +59,9 @@ int main(void)
     CHECK(!strcmp(last(), "tap 0.2000 0.3000 ae") && st.light_ref && spot_last == 1, "long press: 'tap ae', light point, spot on");
     ctl_focus_ref(f, 0.7, 0.7, t += 100);
     CHECK(!strcmp(last(), "tap 0.7000 0.7000 af") && st.light_ref, "a focus tap keeps the light point");
+    ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
+    ctl_focus_set_mode(f, CTL_FOCUS_CONT);
+    CHECK(st.light_ref && count("aeclear") == 0, "a focus mode change keeps the light point (the exposure does not move)");
     ctl_focus_light_clear(f);
     CHECK(!strcmp(last(), "tap 0.5 0.5 aeclear") && !st.light_ref && spot_last == 0, "light cleared: 'aeclear', spot off");
     /* 4. manual: steps, and a tap adopts the distance found. */

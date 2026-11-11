@@ -175,8 +175,8 @@ void ctl_focus_set_mode(ctl_focus_t *f, int mode)
     if (mode < CTL_FOCUS_CONT || mode > CTL_FOCUS_MANUAL) return;
     f->mode = mode;
     f->held = 0;
-    ctl_focus_clear(f);                                          /* a mode change drops the reference */
-    ctl_focus_light_clear(f);
+    ctl_focus_clear(f);                                          /* a mode change drops the FOCUS point only:
+                                                                    the light point is the exposure's, and stays */
     apply_mode(f);
     publish(f);
 }

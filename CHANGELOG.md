@@ -14,7 +14,7 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0359)
+## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
 - A short vibration at the release (the press, or the end of the timer),
   and a very short one at each press of TYPE. The white flash keeps its
   meaning: it comes when the photo is taken and the phone may move. Their
@@ -68,6 +68,13 @@ repository). Newest first.
   plain surfaces. (0361 shrank both zones by the square of the zoom or
   loupe, a calculation error: corrected.) Aim so that the subject fills the square. The engine's reply
   to a touch gives the focus zone.
+- Changing the focus mode (auto / manual) no longer removes the sun: the
+  exposure point belongs to the exposure, and stays.
+- Removing the sun gives back the camera's own automatic exposure, as
+  before the sun. "No point" was sent as a whole-image zone of weight 0,
+  which the camera took as a zone and metered differently; the zone is
+  now removed altogether, for the exposure and for the focus. The same
+  error changed the automatic exposure after a mere focus touch.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the

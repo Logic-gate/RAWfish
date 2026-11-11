@@ -217,10 +217,11 @@ static int focus_command(const char *line)
         ctl_focus_ref(c.foc, 0.5, 0.5, now_ms());
     }
     else if (!strcmp(a, "mode")) {
-        /* A mode change drops the focus point and the light point: the view's
-         * markers go with them (the interface need not ask for it). */
+        /* A focus mode change drops the focus point and its marker; the light
+         * point (the sun) belongs to the exposure and stays, with its marker:
+         * changing how to focus must not change the exposure. */
         ctl_focus_set_mode(c.foc, !strcmp(b, "once") ? CTL_FOCUS_ONCE : !strcmp(b, "manual") ? CTL_FOCUS_MANUAL : CTL_FOCUS_CONT);
-        if (c.view) { ctl_view_clear_ref(c.view); ctl_view_clear_light(c.view); }
+        if (c.view) ctl_view_clear_ref(c.view);
     }
     else if (!strcmp(a, "step")) ctl_focus_step(c.foc, atoi(b));
     else if (!strcmp(a, "distance")) ctl_focus_set_distance(c.foc, atof(b));
