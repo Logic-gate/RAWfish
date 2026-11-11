@@ -5338,7 +5338,7 @@ static void zoom_af_region(void)
 IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_t out_size)
 {
     ACaptureRequest *reqs[1];
-    int32_t ax, ay, aw, ah, region[5], af_region[5], side, af_side;
+    int32_t ax, ay, aw, ah, region[5] = { 0 }, af_region[5] = { 0 }, side, af_side;
     int32_t weight = 1000;                        /* MeteringRectangle weight     */
     uint8_t af_mode;
     int continuous = 0;
@@ -5394,7 +5394,17 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * locked 2 taps out of 20 in the loupe, nearly every one outside it.
          * The light stays a precise spot; the focus keeps a window it can use. */
         af_side = (aw < ah ? aw : ah) * 5 / 100;
-        if (af_side < side) af_side = side;
+        /* and is 5 % of the frame's short side, a size of its own (0.3.8):
+         * small, so that a touch on a branch does not take in what lies behind
+         * it, and no smaller, since below 5 % of the array the HAL locked 2
+         * touches out of 20. Until 0.3.8 it took the exposure region's side,
+         * 6 % then 5 %; the two are independent now. The marker on the screen
+         * is a square of exactly this size (the interface computes it the
+         * same way). */
+        {
+            int frame5 = (pc[2] < pc[3] ? pc[2] : pc[3]) * 5 / 100;
+            if (af_side < frame5) af_side = frame5;
+        }
         af_region[0] = cx - af_side / 2; if (af_region[0] < ax) af_region[0] = ax;
         af_region[1] = cy - af_side / 2; if (af_region[1] < ay) af_region[1] = ay;
         af_region[2] = af_region[0] + af_side; if (af_region[2] > ax + aw) af_region[2] = ax + aw;
@@ -5463,9 +5473,11 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
     jw_init(&w, out, out_size);
-    jw_add(&w, "{\"ok\":true,\"ae\":%s,\"af\":%s,\"continuous\":%s,\"region\":[%d,%d,%d,%d]}",
+    /* "region" is the exposure's square (5 % of the frame); "af_region" the
+     * focus's (6 %, at least 5 % of the array), the one a focus tap uses. */
+    jw_add(&w, "{\"ok\":true,\"ae\":%s,\"af\":%s,\"continuous\":%s,\"region\":[%d,%d,%d,%d],\"af_region\":[%d,%d,%d,%d]}",
            do_ae == 1 ? "true" : "false", do_af == 1 ? "true" : "false", continuous ? "true" : "false",
-           region[0], region[1], region[2], region[3]);
+           region[0], region[1], region[2], region[3], af_region[0], af_region[1], af_region[2], af_region[3]);
     return IR_OK;
 }
 

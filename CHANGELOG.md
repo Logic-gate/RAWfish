@@ -14,7 +14,7 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0357)
+## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0358)
 - A short vibration at the release (the press, or the end of the timer),
   and a very short one at each press of TYPE. The white flash keeps its
   meaning: it comes when the photo is taken and the phone may move. Their
@@ -50,6 +50,17 @@ repository). Newest first.
   before; a search that finds nothing leaves the previous distance; after
   a restart of the camera the distance shown is set again through the
   calibration.
+- The focus region of a touch is 6 % of the frame again. It had shrunk to
+  5 % with the exposure spot in 0.2.3 (the two shared one size), which was
+  not meant. The engine's reply to a touch now gives the focus region as
+  well as the exposure's.
+- **The focus marker is a square of the focus zone's real size**: 5 % of
+  the frame's short side (at least 5 % of the sensor's, so it grows with
+  the zoom and with the loupe). It was a circle of a fixed size, unrelated
+  to the zone. The zone itself has its own size now: it used to take the
+  exposure zone's (6 %, then 5 % since 0.2.3); 5 % is the smallest that
+  still locks reliably, and small enough to keep what lies behind a thin
+  branch out of it. The engine's reply to a touch gives the focus zone.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the

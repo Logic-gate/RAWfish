@@ -1787,6 +1787,15 @@ ApplicationWindow {
                     // What the controller says of its search: 1 searching, 4 sharp,
                     // 5 locked but unsure, 6 failed, 7 a light-only reference (sun).
                     afState: page.circleAf
+                    // The focus region on the screen, by the engine's rule: 5 % of the
+                    // frame's short side, at least 5 % of the sensor's (zoom z: the
+                    // frame is 1/z of the sensor, so max(5 %, 5 % x z) of the frame);
+                    // the loupe shows 1/loupe of the frame, so the square grows with it.
+                    regionSide: {
+                        var z = page.vws.zoom > 1 ? page.vws.zoom : 1
+                        var vwf = viewfinder.viewWindow.width > 0 ? viewfinder.viewWindow.width : 1
+                        return Math.max(0.05, 0.05 * z) * Math.min(viewfinderZone.width, viewfinderZone.height) / vwf
+                    }
                     sun: page.circleAf === 7
                     visible: opacity > 0
                     opacity: 0

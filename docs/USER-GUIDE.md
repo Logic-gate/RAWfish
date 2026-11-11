@@ -93,7 +93,10 @@ The FOCUS button cycles through three modes; the camera starts in **auto**:
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
 
-**The circle** marks the focus point. It stays on screen -- it never
+**The square** marks the focus point, at the exact size of the zone the
+camera focuses on (5 % of the frame's short side; it grows with the zoom
+and the loupe). Touch a part of the subject that fills the square: what
+lies behind it inside the square counts too. It stays on screen -- it never
 disappears by itself: dotted while searching, solid when sharp, dashed when
 it could not focus. Remove it with a touch on it or a change of focus mode.
 In the loupe, the point is as small as the loupe shows. The circle (focus)
