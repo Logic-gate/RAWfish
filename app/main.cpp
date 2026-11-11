@@ -18,6 +18,9 @@ int main(int argc, char *argv[])
     /* Expose the C++ viewfinder to QML as IndrawPreview 1.0. */
     qmlRegisterType<IndrawPreview>("com.indraw", 1, 0, "IndrawPreview");
 
+    /* A newly installed version starts from its own defaults: the earlier
+     * files go to a backup folder first (nothing is deleted). */
+    IndrawPreview::s_archiveNote = IndrawPreview::archiveOnNewVersion();
     IndrawPreview::writeDefaultSettings();   /* rawfish-ir.conf complete, before QML reads it */
     QScopedPointer<QQuickView> view(SailfishApp::createView());
     /* The QML installs to /usr/share/rawfish-ir/qml/ (the Sailjail

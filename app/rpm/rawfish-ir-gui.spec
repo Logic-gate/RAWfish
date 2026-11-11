@@ -1,6 +1,6 @@
 Name:       rawfish-ir-gui
 Summary:    RAWfish-ir camera (the interface)
-Version:    0.3.5
+Version:    0.3.6
 # "beta" in the release, so the files say it: rawfish-ir-...-0.3.0-1.beta.<arch>.rpm.
 # The package's name and the version's order are untouched: the first
 # version after the beta takes a higher Version and a plain "1" here.
@@ -54,7 +54,9 @@ development name, indraw.
 # package shipped the aarch64 binary (October 2026). Two C++ files: a full
 # build takes seconds, so always start clean.
 rm -f *.o moc_*.cpp moc_*.o moc_predefs.h rawfish-ir Makefile .qmake.stash
-%qmake5
+# The package's version and release reach the app: at the first start of
+# a new one it sets the user's earlier files aside (archiveOnNewVersion).
+%qmake5 APP_VERSION=%{version}-%{release}
 %make_build
 
 %install

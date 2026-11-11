@@ -957,12 +957,15 @@ static int start_binder_pool(void)
 }
 
 /* Parses "4096x3072" into w and h. Returns 1 on success. */
-/* "WxH", or "max" (= -1 x -1: the engine picks the largest listed size; for
- * the preview, the largest no wider than 1280). */
+/* "WxH", "max" (= -1 x -1: the engine picks the largest listed size; for
+ * the preview, the largest no wider than 1280), or "default" (= -3 x -3, for
+ * the JPEG: the largest of at most 13 megapixels in the largest size's shape,
+ * the app's default when no size is chosen). */
 static int parse_size(const char *s, int *w, int *h)
 {
     char extra;
     if (s && !strcmp(s, "max")) { *w = *h = -1; return 1; }
+    if (s && !strcmp(s, "default")) { *w = *h = -3; return 1; }
     return s && sscanf(s, "%dx%d%c", w, h, &extra) == 2 && *w > 0 && *h > 0;
 }
 

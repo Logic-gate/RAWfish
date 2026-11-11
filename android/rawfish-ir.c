@@ -403,6 +403,37 @@ static int largest_output_size_within(const ACameraMetadata *chars, int format, 
     }
     return best > 0;
 }
+/* The app's default JPEG size ("default"): among the sizes in the shape of
+ * the largest one (within 2 %) whose width divides the largest's by 1, 2 or
+ * 4 (the sensor's own scales), the largest of at most 13 megapixels: on the
+ * JP2, 4096x3072 out of 8192x6144. The same rule as the menu's (SettingsMenu
+ * defaultSize), so that the engine starts at the size the menu shows even
+ * before the menu has seen the camera's sizes. 0 if none fits. */
+static int largest_output_size(const ACameraMetadata *chars, int format, int max_w, int *w, int *h);
+static int default_jpeg_size(const ACameraMetadata *chars, int *w, int *h)
+{
+    ACameraMetadata_const_entry e;
+    uint32_t i;
+    int lw = 0, lh = 0;
+    long best = 0;
+    if (!largest_output_size(chars, AIMAGE_FORMAT_JPEG, 0, &lw, &lh) || lw <= 0 || lh <= 0) return 0;
+    if (ACameraMetadata_getConstEntry(chars, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
+                                      &e) != ACAMERA_OK || e.type != ACAMERA_TYPE_INT32)
+        return 0;
+    for (i = 0; i + 3 < e.count; i += 4) {
+        int cw = e.data.i32[i + 1], ch = e.data.i32[i + 2];
+        long px = (long)cw * ch;
+        double ratio;
+        if (e.data.i32[i] != AIMAGE_FORMAT_JPEG || e.data.i32[i + 3] != 0 || cw <= 0 || ch <= 0) continue;
+        if (fabs((double)cw / ch - (double)lw / lh) > 0.02 * (double)lw / lh) continue;       /* the largest's shape */
+        ratio = (double)lw / cw;
+        if (fabs(ratio - floor(ratio + 0.5)) > 0.02) continue;
+        if (floor(ratio + 0.5) != 1 && floor(ratio + 0.5) != 2 && floor(ratio + 0.5) != 4) continue;
+        if (px > 13000000L) continue;
+        if (px > best) { best = px; *w = cw; *h = ch; }
+    }
+    return best > 0;
+}
 static int largest_output_size(const ACameraMetadata *chars, int format, int max_w, int *w, int *h)
 {
     ACameraMetadata_const_entry e;
@@ -2679,7 +2710,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* -1 x -1 = let the engine pick: the largest JPEG / RAW16 size, and for
      * the preview the largest YUV size no wider than 1280 (so any camera,
      * front included, opens without the UI knowing its size list). */
-    if (!id || !out || !out_size || (jw <= 0 && jw != -1) || (jh <= 0 && jh != -1) ||
+    if (!id || !out || !out_size || (jw <= 0 && jw != -1 && jw != -3) || (jh <= 0 && jh != -1 && jh != -3) ||
         (pw <= 0 && pw != -1) || (ph <= 0 && ph != -1) ||
         (rw < -1) || (rh < -1) || (rw == 0) != (rh == 0)) return IR_EARG;
     if (g.device) return fail(out, out_size, IR_ESTATE, "open", "already open", 0);
@@ -2697,6 +2728,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         close_all();
         return fail(out, out_size, IR_EARG, "characteristics", "unknown camera id", st);
     }
+    if (jw == -3 && !default_jpeg_size(g.chars, &jw, &jh)) jw = jh = -1;   /* none fits the rule: the largest */
     if (jw == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_JPEG, 0, &jw, &jh)) {
         close_all();
         return fail(out, out_size, IR_EARG, "check", "no jpeg size listed", 0);

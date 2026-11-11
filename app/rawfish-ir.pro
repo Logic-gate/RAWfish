@@ -1,6 +1,10 @@
 # RAWfish-ir Sailfish application (the interface; package rawfish-ir-gui).
 TEMPLATE = app
 TARGET = rawfish-ir
+# The package's version-release, from the spec (%qmake5 APP_VERSION=...);
+# "dev" in a build outside the package, where no file is set aside.
+isEmpty(APP_VERSION): APP_VERSION = dev
+DEFINES += APP_VERSION=\\\"$$APP_VERSION\\\"
 # The engine's program is 'rawfish-ir-cli' (package rawfish-ir-cli); the app
 # is 'rawfish-ir' and launches it as a child process. The sources keep the
 # engine's development name, indraw.

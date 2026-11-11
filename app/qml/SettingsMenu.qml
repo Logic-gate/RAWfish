@@ -360,7 +360,7 @@ Item {
     // change used the PREVIOUS camera's sizes: the JP2's front camera was asked
     // for 8192x6144 (the main camera's 50 MP), which it does not list, and the
     // engine stopped ('# settle: format 4:3 wants 8192x6144', ui 185).
-    onImageTypeChanged: Qt.callLater(settleSize)
+    onImageTypeChanged: settleTimer.restart()
     function setSize(sz) {
         captureSize = sz; save("captureSize", sz)
         if (sz !== "") save(format === "16:9" ? "captureSize169" : "captureSize43", sz)   /* the format's own */
@@ -405,11 +405,14 @@ Item {
     // (runningSize, sensorFormat) are not re-evaluated yet -- the JP2 log
     // showed 'engine runs 4096x3072' (the previous camera's size) for a
     // camera just opened at 6560x4928, hence a second engine start on every
-    // switch (ui 170). Qt.callLater runs it once the bindings have settled.
-    onJpegSizesChanged: Qt.callLater(settleSize)
+    // switch (ui 170). It runs once the bindings have settled: a zero-delay
+    // timer (Qt.callLater is Qt 5.8; this works on any Sailfish OS), restarted
+    // by each trigger, so several triggers in a row make one settle.
+    Timer { id: settleTimer; interval: 0; repeat: false; onTriggered: menu.settleSize() }
+    onJpegSizesChanged: settleTimer.restart()
     // And at every caps (each engine start): a start on the same camera brings
     // the same list, and a list that does not change sends no signal.
-    Connections { target: viewfinder; onCapsChanged: Qt.callLater(menu.settleSize) }
+    Connections { target: viewfinder; onCapsChanged: settleTimer.restart() }
 
     // --- the overlay ---
     Rectangle { anchors.fill: parent; color: "black"; opacity: 0.6 }

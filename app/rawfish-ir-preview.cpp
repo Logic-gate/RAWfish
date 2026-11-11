@@ -247,7 +247,10 @@ void IndrawPreview::start()
     m_gotCaps = false;
     m_startedOverride = m_jpegOverride;
     const QSize capSize = !m_jpegOverride.isEmpty() ? m_jpegOverride : m_captureSize;
-    const QString cap = (capSize.isEmpty() || m_sizeFallback) ? QStringLiteral("max")
+    /* No size chosen: the engine's "default" (the largest of at most 13 MP,
+     * the menu's own rule), so that it starts where the menu says; after a
+     * failure at a chosen size, "max" as before. */
+    const QString cap = m_sizeFallback ? QStringLiteral("max") : capSize.isEmpty() ? QStringLiteral("default")
             : QStringLiteral("%1x%2").arg(capSize.width()).arg(capSize.height());
     const QString prev = m_previewSize.isEmpty() ? QStringLiteral("max")
             : QStringLiteral("%1x%2").arg(m_previewSize.width()).arg(m_previewSize.height());
@@ -380,6 +383,67 @@ void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, cons
 QString IndrawPreview::jpgDir() const { return m_jpgDir; }
 QString IndrawPreview::dngDir() const { return m_dngDir; }
 QString IndrawPreview::capturePrefix() const { return m_prefix; }
+
+/* The first start of a newly installed version sets the user's earlier
+ * files aside, so that the version starts from its own defaults and its own
+ * device profile, and nothing left by an earlier version (a stale key, a
+ * calibration that no longer fits) can make it behave differently from a
+ * fresh install. Nothing is deleted: the files are MOVED into
+ *   ~/.config/com.rawfish/rawfish-ir/backup-<earlier version>-<date>/
+ * keeping their folder (config/ or data/), and the log says what moved. To
+ * take one back, copy it from there to where it was.
+ * Moved: rawfish-ir.conf, simple.json (configuration), override-hal.json,
+ * focus-calibration.json and the measured lens-shading maps (device
+ * profiles). Kept: the photos, the Settings page's choices (output folders,
+ * prefix: in dconf), the examples (rewritten anyway), the log.
+ * "installed-version" in the configuration folder records the version
+ * whose files are in use; a build outside the package ("dev") moves nothing. */
+QString IndrawPreview::s_archiveNote;
+QString IndrawPreview::archiveOnNewVersion()
+{
+    const QString cur = QStringLiteral(APP_VERSION);
+    const QString cfg = QDir::homePath() + QStringLiteral("/.config/com.rawfish/rawfish-ir");
+    const QString data = QDir::homePath() + QStringLiteral("/.local/share/com.rawfish/rawfish-ir/device-profiles");
+    const QString stampPath = cfg + QStringLiteral("/installed-version");
+    QString prev;
+    QStringList moved;
+    if (cur == QLatin1String("dev")) return QString();
+    QDir().mkpath(cfg);
+    {
+        QFile f(stampPath);
+        if (f.open(QIODevice::ReadOnly)) prev = QString::fromUtf8(f.readAll()).trimmed();
+    }
+    if (prev == cur) return QString();
+    {
+        const struct { QString dir, sub, name; } files[] = {
+            { cfg,  QStringLiteral("config"), QStringLiteral("rawfish-ir.conf") },
+            { cfg,  QStringLiteral("config"), QStringLiteral("rawfish-ir.conf.bak") },
+            { cfg,  QStringLiteral("config"), QStringLiteral("simple.json") },
+            { data, QStringLiteral("data"),   QStringLiteral("override-hal.json") },
+            { data, QStringLiteral("data"),   QStringLiteral("focus-calibration.json") },
+        };
+        const QString backup = cfg + QStringLiteral("/backup-") + (prev.isEmpty() ? QStringLiteral("before-") + cur : prev)
+                             + QLatin1Char('-') + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+        for (const auto &e : files) {
+            const QString from = e.dir + QLatin1Char('/') + e.name;
+            if (!QFile::exists(from)) continue;
+            QDir().mkpath(backup + QLatin1Char('/') + e.sub);
+            if (QFile::rename(from, backup + QLatin1Char('/') + e.sub + QLatin1Char('/') + e.name)) moved << e.sub + QLatin1Char('/') + e.name;
+        }
+        /* the measured lens-shading maps: the folder as a whole */
+        const QString shade = data + QStringLiteral("/lens-shading");
+        if (QDir(shade).exists() && !QDir(shade).entryList(QDir::Files).isEmpty()) {
+            QDir().mkpath(backup + QStringLiteral("/data"));
+            if (QDir().rename(shade, backup + QStringLiteral("/data/lens-shading"))) moved << QStringLiteral("data/lens-shading/");
+        }
+        if (moved.isEmpty()) QDir().rmdir(backup);
+        QFile f(stampPath);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(cur.toUtf8() + '\n');
+        if (moved.isEmpty()) return QString();
+        return QStringLiteral("new version %1 (was %2): earlier files set aside in %3: %4")
+                .arg(cur, prev.isEmpty() ? QStringLiteral("unknown") : prev, backup, moved.join(QStringLiteral(", ")));
+    }
+}
 
 void IndrawPreview::installExamples()
 {
@@ -796,6 +860,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         /* the screen's top cutout from the device profile: 1, 0, -1 unknown */
         m_caps.insert(QStringLiteral("notch"), f.value("notch", "-1").toInt());
         m_gotCaps = true;
+        if (!s_archiveNote.isEmpty()) {             /* the first start of a new version: say what was set aside */
+            sendCommand(QStringLiteral("# ") + s_archiveNote);
+            s_archiveNote.clear();
+        }
         m_sizeFallback = false;
         m_yuvFails = 0;
         /* The streams or the JPEG size asked changed while this engine was

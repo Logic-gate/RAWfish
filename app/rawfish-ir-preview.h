@@ -277,7 +277,12 @@ public:
      * rawfish-ir.conf.bak (a previous .bak replaced), so nothing is lost.
      * Returns the backup's path, "" when there was no file. */
     Q_INVOKABLE QString resetSettingsFile();
-    static void writeDefaultSettings();   /* from main(), before any setting is read */
+    static void writeDefaultSettings();
+    /* At the first start of a newly installed version: the user's earlier
+     * configuration and profile files moved to a dated backup folder.
+     * Returns what was done, for the log ("" when nothing moved). */
+    static QString archiveOnNewVersion();
+    static QString s_archiveNote;          /* that text, written to the log once the engine runs */   /* from main(), before any setting is read */
     /* Output settings (validated here; invalid values fall back to the
      * defaults): the prefix charset is the engine's, folders are absolute. */
     Q_INVOKABLE void setOutput(const QString &prefix, const QString &jpgDir, const QString &dngDir);

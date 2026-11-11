@@ -14,6 +14,23 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## 0.3.6 (beta) — each version starts clean, earlier files kept aside; the engine starts at the size shown (patch 0350)
+- **A newly installed version starts from its own defaults.** At its first
+  start it moves the earlier settings and device files (rawfish-ir.conf,
+  simple.json, override-hal.json, focus-calibration.json, the measured
+  lens-shading maps) to `~/.config/com.rawfish/rawfish-ir/backup-<earlier
+  version>-<date>/`, and the log says what moved. Nothing is deleted. The
+  photos and the Settings page's choices stay. During the beta this keeps a
+  stale key or an old calibration from making one phone behave unlike a
+  fresh install.
+- **The engine starts at the size the menu shows.** With no size stored,
+  it started at its largest (50 MP) and relied on the menu to restart it
+  at the default; that step did not run at start (it still waited for a
+  change). The engine now understands "default" (the largest of at most
+  13 MP, the menu's own rule) and the app asks for it, so the first
+  photo is at 12.5 MP without a restart. The menu's own check is deferred
+  by a timer instead of Qt.callLater.
+
 ## 0.3.5 (beta) — the engine really at 12.5 MP; YUV columns greyed for a bracket (patch 0349)
 - **The menu said 12.5 MP while the photos came out at 50.** With no size
   stored (none chosen, or forgotten on a camera change), the engine starts
