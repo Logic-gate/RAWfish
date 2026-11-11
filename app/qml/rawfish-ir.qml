@@ -325,6 +325,16 @@ ApplicationWindow {
             readonly property var fcs: viewfinder.focusState
             readonly property real focusDiopters: fcs.diopters !== undefined ? fcs.diopters : 1.0
             readonly property int  circleAf: fcs.circle !== undefined ? fcs.circle : 0   // 1 searching, 4 sharp, 5 unsure, 6 failed, 7 sun
+            // Manual focus: the last touch's search failed (5 locked but not
+            // focused, 6 failed): the lens went back to the distance in force,
+            // and the FOCUS button shows it in red until a search locks (4), or
+            // the mode changes. Removing the dashed square does not clear it.
+            property bool focusUnlocked: false
+            onCircleAfChanged: {
+                if (focusMode !== "manual") return
+                if (circleAf === 5 || circleAf === 6) focusUnlocked = true
+                else if (circleAf === 4) focusUnlocked = false
+            }
             readonly property bool focusSearching: !!fcs.searching
             readonly property bool lightRef: !!fcs.light
             function focusDistanceLabel() {
@@ -568,7 +578,7 @@ ApplicationWindow {
             }
             // A mode change: the controller drops the focus point and the light
             // point with their markers ("fc mode"); the circle fades here.
-            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0 }
+            onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0; page.focusUnlocked = false }
             // Kept across an engine restart: the manual focus distance and the
             // reference point (the circle). Both live in the engine's process;
             // a restarted engine gets them back once its capabilities are in.
@@ -1787,14 +1797,14 @@ ApplicationWindow {
                     // What the controller says of its search: 1 searching, 4 sharp,
                     // 5 locked but unsure, 6 failed, 7 a light-only reference (sun).
                     afState: page.circleAf
-                    // The focus region on the screen, by the engine's rule: 5 % of the
+                    // The focus region on the screen, by the engine's rule: 10 % of the
                     // frame's short side, at least 5 % of the sensor's (zoom z: the
-                    // frame is 1/z of the sensor, so max(5 %, 5 % x z) of the frame);
+                    // frame is 1/z of the sensor, so max(10 %, 5 % x z) of the frame);
                     // the loupe shows 1/loupe of the frame, so the square grows with it.
                     regionSide: {
                         var z = page.vws.zoom > 1 ? page.vws.zoom : 1
                         var vwf = viewfinder.viewWindow.width > 0 ? viewfinder.viewWindow.width : 1
-                        return Math.max(0.05, 0.05 * z) * Math.min(viewfinderZone.width, viewfinderZone.height) / vwf
+                        return Math.max(0.10, 0.05 * z) * Math.min(viewfinderZone.width, viewfinderZone.height) / vwf
                     }
                     sun: page.circleAf === 7
                     visible: opacity > 0
@@ -1803,10 +1813,12 @@ ApplicationWindow {
                     readonly property bool settled: afState === 2 || afState === 4 || afState === 5 || afState === 6
                     onSettledChanged: if (page.circleShown) opacity = settled ? 0.6 : 1.0
                     MouseArea { anchors.fill: parent; onClicked: page.clearTap() }
-                    // Manual focus: the distance, under the circle.
+                    // Manual focus: the distance found, under the square; nothing when
+                    // the search failed (5 locked but not focused, 6 failed): the lens
+                    // is back at the distance in force, which the FOCUS button shows.
                     Label {
                         anchors { top: parent.bottom; horizontalCenter: parent.horizontalCenter }
-                        visible: page.focusMode === "manual"
+                        visible: page.focusMode === "manual" && page.circleAf !== 5 && page.circleAf !== 6
                         text: page.focusSearching ? "…" : page.focusDistanceLabel()
                         color: "white"; font.pixelSize: Theme.fontSizeSmall
                         style: Text.Outline; styleColor: "black"
@@ -2069,7 +2081,10 @@ ApplicationWindow {
                             // calibration (the HAL's lens value taken as 1:1), white
                             // once a table is in force (caps focus_cal).
                             value: page.focusModeLabel(page.focusMode)
-                            textColor: page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
+                            // ... and red while a manual touch's search has not locked
+                            // (page.focusUnlocked): the distance shown is the one the lens
+                            // went back to, not one the camera focused at.
+                            textColor: page.focusMode === "manual" && (!(viewfinder.caps.focusCal > 0) || page.focusUnlocked) ? "#ff6060" : "white"
                             onCycle: {
                                 // auto <-> manual. Entering manual by this button starts
                                 // one search in the middle of the frame: the distance found

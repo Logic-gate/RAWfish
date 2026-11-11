@@ -79,6 +79,15 @@ int main(void)
     ctl_focus_live(f, 3, 2.0, t += 100);
     ctl_focus_live(f, 6, -1.0, t += 100);                     /* nothing found */
     CHECK(!st.held && !strncmp(last(), "focus ", 6), "manual tap that finds nothing: back to the distance in force");
+    {   /* locked but NOT focused (5): the lens is wherever the scan gave up
+         * (here: infinity): not held, the distance in force stays */
+        double before = st.diopters;
+        ctl_focus_ref(f, 0.5, 0.5, t += 100);
+        ctl_focus_live(f, 3, 1.0, t += 100);
+        ctl_focus_live(f, 5, 0.0, t += 100);
+        CHECK(!st.held && fabs(st.diopters - before) < 1e-9 && strcmp(last(), "focus hold") != 0,
+              "manual tap locked but not focused (5): not held, the distance shown and set stays");
+    }
     /* 5. clear: the reference goes, the mode is restated. */
     ctl_focus_clear(f);
     CHECK(count("tap 0.5 0.5 afclear") >= 1 && st.circle == CTL_CIRCLE_NONE, "clear: the focus region reset, the circle gone");

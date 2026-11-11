@@ -123,10 +123,14 @@ static void outcome(ctl_focus_t *f, int st, double focus_real_d)
          * lens: until 0.3.8 the distance found was rounded to the 0.05 D
          * grid and sent again through the calibration table, which moved the
          * lens away from the HAL's focus (seen: a manual photo softer than
-         * the auto one everywhere). A search that found nothing (or a
-         * position the HAL cannot read) leaves the previous distance. */
+         * the auto one everywhere). A search that did NOT focus leaves the
+         * previous distance: state 6 (failed), and state 5 too, "locked but
+         * not focused": the lens is then wherever the scan gave up, often at
+         * infinity. 0357 held the lens on 5 as well, and a touch on a plain
+         * floor at 3 m showed anything from 1.5 m to infinity depending on
+         * where it was in the frame. Only 4, "focused and locked", is held. */
         f->manual_pick = 0;
-        if ((st == 4 || st == 5) && focus_real_d >= 0) {
+        if (st == 4 && focus_real_d >= 0) {
             send(f, "focus hold");
             f->held = 1;
             f->diopters = focus_real_d;                          /* shown, not sent */

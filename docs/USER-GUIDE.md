@@ -94,7 +94,7 @@ A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
 
 **The square** marks the focus point, at the exact size of the zone the
-camera focuses on (5 % of the frame's short side; it grows with the zoom
+camera focuses on (10 % of the frame's short side; it grows with the zoom
 and the loupe). Touch a part of the subject that fills the square: what
 lies behind it inside the square counts too. It stays on screen -- it never
 disappears by itself: dotted while searching, solid when sharp, dashed when

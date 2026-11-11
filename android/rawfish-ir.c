@@ -5394,16 +5394,16 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * locked 2 taps out of 20 in the loupe, nearly every one outside it.
          * The light stays a precise spot; the focus keeps a window it can use. */
         af_side = (aw < ah ? aw : ah) * 5 / 100;
-        /* and is 5 % of the frame's short side, a size of its own (0.3.8):
-         * small, so that a touch on a branch does not take in what lies behind
-         * it, and no smaller, since below 5 % of the array the HAL locked 2
-         * touches out of 20. Until 0.3.8 it took the exposure region's side,
-         * 6 % then 5 %; the two are independent now. The marker on the screen
-         * is a square of exactly this size (the interface computes it the
-         * same way). */
+        /* and is 10 % of the frame's short side, a size of its own (0.3.8).
+         * 5 % (tried first) failed too often on plain surfaces, a floor at 3 m:
+         * too little detail for the HAL to lock; 10 % still keeps a thin
+         * subject's background mostly out when the subject fills the square.
+         * Until 0.3.8 it took the exposure region's side, 6 % then 5 %; the
+         * two are independent now. The marker on the screen is a square of
+         * exactly this size (the interface computes it the same way). */
         {
-            int frame5 = (pc[2] < pc[3] ? pc[2] : pc[3]) * 5 / 100;
-            if (af_side < frame5) af_side = frame5;
+            int frame10 = (pc[2] < pc[3] ? pc[2] : pc[3]) * 10 / 100;
+            if (af_side < frame10) af_side = frame10;
         }
         af_region[0] = cx - af_side / 2; if (af_region[0] < ax) af_region[0] = ax;
         af_region[1] = cy - af_side / 2; if (af_region[1] < ay) af_region[1] = ay;
