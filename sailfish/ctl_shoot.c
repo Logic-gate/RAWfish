@@ -13,7 +13,9 @@ static int is_stacked(double ns, double shutter_max_ns) { return ns > shutter_ma
 /* "focus=0.500m" / "focus=inf" for a manual focus, "" otherwise. */
 static void focus_arg(const ctl_focus_state_t *fs, char *out, size_t n)
 {
-    if (!fs || fs->mode != CTL_FOCUS_MANUAL) { out[0] = '\0'; return; }
+    /* not manual, or a manual lens held where a touch's search left it: the
+     * photo sends no distance and keeps the lens as it is */
+    if (!fs || fs->mode != CTL_FOCUS_MANUAL || fs->held) { out[0] = '\0'; return; }
     if (fs->diopters <= 0) snprintf(out, n, " focus=inf");
     else snprintf(out, n, " focus=%.3fm", 1.0 / fs->diopters);
 }

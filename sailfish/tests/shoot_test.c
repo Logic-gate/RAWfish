@@ -29,6 +29,10 @@ int main(void)
     fs.mode = CTL_FOCUS_MANUAL; fs.diopters = 2.0;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && !strcmp(lines[0], "jpeg photo focus=0.500m q=95 off_noise fast_edge exp=0.0166667 iso=400"), "held pair + manual focus: focus= and exp= iso=");
+    fs.held = 1;                                              /* manual, lens held at a touch's search */
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && strstr(lines[0], "focus=") == NULL, "manual lens held at a search: the photo sends no distance (keeps the lens)");
+    fs.held = 0;
     /* 3. raw: no quality, no processing. */
     r.raw = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);

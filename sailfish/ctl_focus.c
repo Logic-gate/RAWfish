@@ -33,6 +33,7 @@ struct ctl_focus {
     int searching, seen_active, search_late;
     double search_start_ms;
     int hold_pending, manual_pick;
+    int held;                   /* manual: lens held at a search's lock (see ctl_focus_state_t) */
     double tap_fx, tap_fy;
 
     ctl_focus_state_t last;
@@ -89,6 +90,10 @@ void ctl_focus_restart(ctl_focus_t *f)
     /* a new session: no reference, no search in flight */
     f->searching = 0; f->search_late = 0; f->hold_pending = 0; f->manual_pick = 0;
     f->light_ref = 0; f->circle = CTL_CIRCLE_NONE;
+    /* A new session cannot be held where the old one's search was: manual
+     * goes to the distance shown, through the calibration (as any manual
+     * distance does); a new touch holds the lens again. */
+    f->held = 0;
     set_paused(f, 0);
     apply_mode(f);
     publish(f);
@@ -112,9 +117,23 @@ static void outcome(ctl_focus_t *f, int st, double focus_real_d)
         if (st == 4 || st == 5) send(f, "focus hold");         /* a locked lens is a position */
     }
     if (f->manual_pick) {
+        /* Manual focus, a touch: the lens STAYS where the HAL's search put it
+         * ("focus hold"), and the distance shown is the HAL's own reading of
+         * that position, as it is. Nothing is converted back and sent to the
+         * lens: until 0.3.8 the distance found was rounded to the 0.05 D
+         * grid and sent again through the calibration table, which moved the
+         * lens away from the HAL's focus (seen: a manual photo softer than
+         * the auto one everywhere). A search that found nothing (or a
+         * position the HAL cannot read) leaves the previous distance. */
         f->manual_pick = 0;
-        if (st == 4 && focus_real_d >= 0) f->diopters = snap(focus_real_d);  /* the distance found */
-        send_manual(f);                                          /* manual again, there */
+        if ((st == 4 || st == 5) && focus_real_d >= 0) {
+            send(f, "focus hold");
+            f->held = 1;
+            f->diopters = focus_real_d;                          /* shown, not sent */
+        } else {
+            f->held = 0;
+            send_manual(f);                                      /* back to the distance in force */
+        }
     }
     (void)was_late;                                              /* the light is the hold's, not the search's */
     publish(f);
@@ -151,6 +170,7 @@ void ctl_focus_set_mode(ctl_focus_t *f, int mode)
 {
     if (mode < CTL_FOCUS_CONT || mode > CTL_FOCUS_MANUAL) return;
     f->mode = mode;
+    f->held = 0;
     ctl_focus_clear(f);                                          /* a mode change drops the reference */
     ctl_focus_light_clear(f);
     apply_mode(f);
@@ -159,6 +179,7 @@ void ctl_focus_set_mode(ctl_focus_t *f, int mode)
 void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farther (fewer diopters) */
 {
     if (f->mode != CTL_FOCUS_MANUAL) return;
+    f->held = 0;                                                 /* a distance of the user's: the lens is set to it */
     f->diopters = snap(f->diopters - dir * STEP_D);
     publish(f);                                                  /* the display first: no lag */
     send_manual_opt(f, 0);                                       /* the lens, without waiting */
@@ -166,6 +187,7 @@ void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farthe
 void ctl_focus_set_distance(ctl_focus_t *f, double diopters)
 {
     f->diopters = snap(diopters);
+    f->held = 0;
     if (f->mode == CTL_FOCUS_MANUAL) send_manual(f);
     publish(f);
 }
@@ -222,7 +244,12 @@ void ctl_focus_clear(ctl_focus_t *f)
     f->hold_pending = 0; f->manual_pick = 0;
     f->circle = CTL_CIRCLE_NONE;
     set_paused(f, 0);
-    if (had) { send(f, "tap 0.5 0.5 afclear"); apply_mode(f); } /* the held lens: the mode again */
+    if (had) {
+        send(f, "tap 0.5 0.5 afclear");
+        /* the mode again; but a manual lens held at a search stays where it is
+         * (removing the circle does not move the lens) */
+        if (!(f->mode == CTL_FOCUS_MANUAL && f->held)) apply_mode(f);
+    }
     publish(f);
 }
 void ctl_focus_set_scene(ctl_focus_t *f, int scene_on) { f->scene_on = !!scene_on; }
@@ -235,4 +262,5 @@ void ctl_focus_state(const ctl_focus_t *f, ctl_focus_state_t *out)
     out->circle = f->circle;
     out->searching = f->searching;
     out->light_ref = f->light_ref;
+    out->held = f->held;
 }

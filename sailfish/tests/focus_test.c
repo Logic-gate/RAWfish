@@ -71,7 +71,14 @@ int main(void)
     ctl_focus_ref(f, 0.5, 0.5, t += 100);
     ctl_focus_live(f, 3, 2.0, t += 100);
     ctl_focus_live(f, 4, 2.02, t += 100);                     /* found 2.02 D */
-    CHECK(fabs(st.diopters - 2.0) < 1e-9 && !strncmp(last(), "focus 0.500m", 12), "manual tap: the found distance adopted on the 0.05 D grid");
+    CHECK(!strcmp(last(), "focus hold") && st.held && fabs(st.diopters - 2.02) < 1e-9,
+          "manual tap: the lens held where the HAL put it, its reading shown as is (2.02 D), nothing sent back");
+    ctl_focus_step(f, -1);
+    CHECK(!st.held && !strncmp(last(), "focus ", 6) && strstr(last(), "m nowait"), "a volume step after it: the user's distance, set through the calibration");
+    ctl_focus_ref(f, 0.5, 0.5, t += 100);
+    ctl_focus_live(f, 3, 2.0, t += 100);
+    ctl_focus_live(f, 6, -1.0, t += 100);                     /* nothing found */
+    CHECK(!st.held && !strncmp(last(), "focus ", 6), "manual tap that finds nothing: back to the distance in force");
     /* 5. clear: the reference goes, the mode is restated. */
     ctl_focus_clear(f);
     CHECK(count("tap 0.5 0.5 afclear") >= 1 && st.circle == CTL_CIRCLE_NONE, "clear: the focus region reset, the circle gone");

@@ -33,6 +33,9 @@ typedef struct {
     int circle;                 /* CTL_CIRCLE_* */
     int searching;              /* a search runs (exposure left alone) */
     int light_ref;              /* a reference measures the light (the spot) */
+    int held;                   /* manual: the lens is held where a touch's search left it;
+                                   the distance shown is the HAL's reading, and the photo
+                                   keeps the lens there (it sends no distance) */
 } ctl_focus_state_t;
 
 typedef void (*ctl_focus_cmd_fn)(void *ctx, const char *engine_command);
