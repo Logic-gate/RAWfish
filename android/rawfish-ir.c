@@ -703,6 +703,7 @@ static struct {
     int af_zoom_on;                         /* our zoom AF region is on the requests */
     int spot_on;                            /* the meter measures the tap's spot */
     float spot_hw, spot_hh;                 /* the spot half-size, sensor-normalised (follows the loupe) */
+    int32_t tpl_ae_regions[5], tpl_af_regions[5];   /* the preview template's own zones (or "none": weight 0) */
     int64_t live_exp_ns;                    /* the preview's exposure and ISO, last result */
     int live_iso_v;
     int burst_on;                           /* JPEG callback queues instead of replacing */
@@ -2924,6 +2925,18 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_PREVIEW, &g.preview_request);
     if (st != ACAMERA_OK) SETUP_FAIL("preview_request", "createCaptureRequest", st);
     ACaptureRequest_addTarget(g.preview_request, g.preview_target);
+    {   /* The template's own metering and focus zones, as the HAL meters
+         * before any point is set: what removing a point must give back. A
+         * zone absent from the template is "no specific zone", which Camera2
+         * writes as a zone of weight 0. */
+        ACameraMetadata_const_entry te;
+        memset(g.tpl_ae_regions, 0, sizeof g.tpl_ae_regions);
+        memset(g.tpl_af_regions, 0, sizeof g.tpl_af_regions);
+        if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_CONTROL_AE_REGIONS, &te) == ACAMERA_OK && te.count >= 5)
+            memcpy(g.tpl_ae_regions, te.data.i32, sizeof g.tpl_ae_regions);
+        if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_CONTROL_AF_REGIONS, &te) == ACAMERA_OK && te.count >= 5)
+            memcpy(g.tpl_af_regions, te.data.i32, sizeof g.tpl_af_regions);
+    }
 
     /* Still request: JPEG + preview, so the viewfinder keeps flowing during a photo. */
     st = ACameraDevice_createCaptureRequest(g.device, g.still_template_preview ? TEMPLATE_PREVIEW : TEMPLATE_STILL_CAPTURE, &g.still_request);
@@ -5326,7 +5339,7 @@ static void zoom_af_region(void)
     for (i = 0; i < n; ++i) {
         if (!all[i]) continue;
         if (on) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, r);
-        else    ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 0, NULL);   /* removed */
+        else    ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, g.tpl_af_regions);   /* the template's own, written (an absent key may be kept by the HAL) */
     }
     g.af_zoom_on = on;
 }
@@ -5457,15 +5470,15 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
             uint8_t lk = g.ae_lock ? ACAMERA_CONTROL_AE_LOCK_ON : ACAMERA_CONTROL_AE_LOCK_OFF;
             if (!all[i]) continue;
             ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AE_LOCK, 1, &lk);
-            /* The exposure region: a light point set here or kept; otherwise NO
-             * region at all, the entry removed, so that the HAL meters as it
-             * does by itself. (Until 0.3.8 "no point" was a whole-array region of
-             * weight 0, which the HAL takes as a region and meters differently:
-             * after the sun was removed, or after a mere focus touch, the
-             * automatic exposure was no longer what it was before.) */
+            /* The exposure region: a light point set here or kept; otherwise the
+             * TEMPLATE's own zone, written explicitly, so that the HAL meters as
+             * it did before any point. Neither a whole-array zone of weight 0
+             * (until 0363: metered differently) nor a removed entry (0363: a HAL
+             * that applies settings as changes keeps the last zone when the key
+             * is absent, so the sun's spot stayed) gives that back. */
             if (do_ae == 1) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, region);
             else if (g.ae_region_on && do_ae == 0) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.ae_region);
-            else ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 0, NULL);
+            else ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.tpl_ae_regions);
             if (do_af == 1) {
                 ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AF_MODE, 1, &af_mode);
                 ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, af_region);
@@ -5479,8 +5492,8 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         af_all[na++] = g.preview_request; af_all[na++] = g.trigger_request; af_all[na++] = g.still_request;
         if (g.raw_request) af_all[na++] = g.raw_request;
         if (g.meter_request) af_all[na++] = g.meter_request;
-        /* no region (the entry removed), as for the exposure above */
-        for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 0, NULL);
+        /* the template's own zone, written explicitly, as for the exposure */
+        for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 5, g.tpl_af_regions);
         zoom_af_region();                               /* cleared while zoomed: the middle third */
     }
     reqs[0] = g.preview_request;
@@ -5495,11 +5508,20 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
     jw_init(&w, out, out_size);
+    /* (live_*: the HAL's exposure on the last frame BEFORE this change, so that
+     * the log shows what the automatic exposure was before a point and after
+     * its removal.) */
     /* "region" is the exposure's square (5 % of the view); "af_region" the
      * focus's (15 % of the view), the one a focus tap uses. */
-    jw_add(&w, "{\"ok\":true,\"ae\":%s,\"af\":%s,\"continuous\":%s,\"region\":[%d,%d,%d,%d],\"af_region\":[%d,%d,%d,%d]}",
-           do_ae == 1 ? "true" : "false", do_af == 1 ? "true" : "false", continuous ? "true" : "false",
-           region[0], region[1], region[2], region[3], af_region[0], af_region[1], af_region[2], af_region[3]);
+    {
+        int64_t lx; int li;
+        pthread_mutex_lock(&g.lock); lx = g.live_exp_ns; li = g.live_iso_v; pthread_mutex_unlock(&g.lock);
+        jw_add(&w, "{\"ok\":true,\"ae\":%s,\"af\":%s,\"continuous\":%s,\"region\":[%d,%d,%d,%d],\"af_region\":[%d,%d,%d,%d],"
+                   "\"live_exposure_ns\":%lld,\"live_iso\":%d}",
+               do_ae == 1 ? "true" : "false", do_af == 1 ? "true" : "false", continuous ? "true" : "false",
+               region[0], region[1], region[2], region[3], af_region[0], af_region[1], af_region[2], af_region[3],
+               (long long)lx, li);
+    }
     return IR_OK;
 }
 
@@ -7016,6 +7038,20 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
 IR_API int indraw_detail_scale(int photo_w)
 {
     return g.raw_w > 0 && photo_w * 100 >= g.raw_w * 196 ? 2 : 1;
+}
+
+/* The HAL's automatic exposure on the last frame, for the log (the app asks
+ * for it a moment after the sun is removed, to compare with the reading
+ * before the sun, which the tap's reply carries). */
+IR_API int indraw_ae_state(char *out, size_t out_size)
+{
+    jw_t w;
+    int64_t lx; int li;
+    pthread_mutex_lock(&g.lock); lx = g.live_exp_ns; li = g.live_iso_v; pthread_mutex_unlock(&g.lock);
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"live_exposure_ns\":%lld,\"live_iso\":%d,\"ae_lock\":%d,\"ae_region_on\":%d}",
+           (long long)lx, li, g.ae_lock, g.ae_region_on);
+    return IR_OK;
 }
 
 /* How long a capture may wait for a continuous-AF search in progress at the

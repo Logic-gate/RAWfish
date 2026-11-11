@@ -2639,6 +2639,11 @@ int main(int argc, char **argv)
             else if (!strcmp(cmd, "meter")) failures += cmd_meter(mt, &save, out);
             else if (!strcmp(cmd, "checks")) failures += cmd_checks(bridge, &save, out);
             else if (!strcmp(cmd, "focuswait")) failures += cmd_focuswait(bridge, &save, out);
+            else if (!strcmp(cmd, "aestate")) {               /* the HAL's live exposure, for the log */
+                typedef int (*aes_fn)(char *, size_t);
+                aes_fn af = (aes_fn)a_dlsym(bridge, "indraw_ae_state");
+                if (af) { af(out, OUT_SIZE); emit(out); } else { emit("{\"ok\":false,\"error\":\"aestate: not in this engine\"}"); failures++; }
+            }
             else if (!strcmp(cmd, "zoom")) failures += cmd_zoom(zf, &save, out);
             else if (!strcmp(cmd, "tap")) failures += cmd_tap(tf, &save, out);
             else if (!strcmp(cmd, "wb")) failures += cmd_wb(wf, wm, &save, out);

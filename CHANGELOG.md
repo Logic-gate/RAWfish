@@ -72,9 +72,12 @@ repository). Newest first.
   exposure point belongs to the exposure, and stays.
 - Removing the sun gives back the camera's own automatic exposure, as
   before the sun. "No point" was sent as a whole-image zone of weight 0,
-  which the camera took as a zone and metered differently; the zone is
-  now removed altogether, for the exposure and for the focus. The same
-  error changed the automatic exposure after a mere focus touch.
+  which the camera took as a zone and metered differently; then (0363) as
+  no zone at all, which the camera took as "keep the last one". The
+  camera's own zones, read when the session opens, are now written back.
+  The same error changed the automatic exposure after a mere focus touch.
+  The log gives the camera's exposure before the sun (the touch's reply)
+  and 2.5 s after its removal (aestate), to check it.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the

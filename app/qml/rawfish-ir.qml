@@ -564,7 +564,12 @@ ApplicationWindow {
                 page.showTouchHint()
                 viewfinder.sendCommand("vw light " + q.u.toFixed(4) + " " + q.v.toFixed(4))
             }
+            // After the sun is removed, the HAL's exposure is logged 2.5 s later
+            // ("aestate"), to compare with the reading before the sun (in the
+            // tap's reply): the check that the automatic exposure came back.
+            Timer { id: aeStateTimer; interval: 2500; onTriggered: viewfinder.sendCommand("aestate") }
             function clearLight() {
+                aeStateTimer.restart()
                 viewfinder.sendCommand("vw lightclear")
             }
             function clearTap() {
