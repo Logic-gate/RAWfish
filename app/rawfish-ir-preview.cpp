@@ -770,7 +770,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
                        f.value("w").toDouble(), f.value("h").toDouble());
         if (c.width() > 0 && c.height() > 0 && c != m_frameCrop) { m_frameCrop = c; emit viewWindowChanged(); }
     } else if (name == "wbpick") {
-        emit wbPicked(f.value("ok").toInt() != 0, QString::fromLatin1(f.value("gains")), QString::fromLatin1(f.value("why")));
+        emit wbPicked(f.value("ok").toInt() != 0, QString::fromLatin1(f.value("gains")), QString::fromLatin1(f.value("why")),
+                      QString::fromLatin1(f.value("awb")));
     } else if (name == "cal_progress") {
         emit calProgress(f.value("done").toInt(), f.value("total").toInt());
     } else if (name == "cal_exposure") {

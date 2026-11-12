@@ -105,6 +105,7 @@ closes, and writes the frames added so far with the exposure really reached.
 | `shading calibrate light cct=K` | add a light (colour at temperature K, one position) to the existing calibration |
 | `shading balance=B strength=S maxgain=M` | the measured map's dosing (pivot, strength, maximum gain) |
 | `wb fixed R,GE,GO,B` / `wb fixed off` | keep a white measured before (restored by the interface after a restart) / back to the AWB as the base |
+| `wb offset R,B` / `wb offset off` | a white measured on another camera, carried as red and blue factors on this camera's automatic white (the AWB's gains, red x R, blue x B); a `wb fixed` of this camera takes precedence |
 | `viewwin X Y W H` | the window the interface shows, normalised in the active array (the controller sends it with every view change): the histograms and the viewfinder's centre-weighted mean cover it, whatever the HAL's own frame |
 | `aelock on` / `aelock off` | holds / frees the automatic exposure (a new `tap` with ae, `tap ... clear` and `exposure auto` free it too) |
 | `ev STEPS` | the HAL's compensation steps (`caps` ev_min..ev_max, step ev_step) |

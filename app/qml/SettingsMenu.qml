@@ -215,7 +215,7 @@ Item {
         flash = pick("flash", "off", ["off", "auto", "on", "torch"])
         frameLatencyMs = num("frameLatencyMs", 200, 0, 5000)
         wbShift = num("wbShift", 0, -20, 20)
-        wbFixed = String(viewfinder.setting("wbFixed", "") || "")
+        wbLoad()
         sigmaPreviewFps = num("sigmaPreviewFps", 10, 1, 30)
         shadingPivot = num("shadingPivot", 50, 0, 100)
         shadingStrength = num("shadingStrength", 100, 0, 100)
@@ -245,30 +245,84 @@ Item {
     // warmth by one 5 % step of red/blue, tint by 5 % of green.
     // Step sizes, from the .conf (hand-edited there, not in the menu):
     // fineWarmthStep in 5 % units of red/blue (1 = 5 %), fineTintStep in % of green.
-    // A white balance measured on a neutral object (a long press on the
-    // kelvin or tint readout): "R,Ge,Go,B" gains, "" when none. Kept across
-    // restarts (the app asks at start whether to keep it).
-    property string wbFixed: ""
-    function setWbFixed(gains) {
-        wbFixed = gains; save("wbFixed", gains)
+    // ---- The measured white (a long press on the kelvin or tint readout) ----
+    //
+    // A measured white is the gains R, Ge, Go, B that make the measured object
+    // grey ON THE CAMERA THAT MEASURED IT: each camera's sensor sees colours
+    // its own way, so those gains are not valid on another camera (the JP2's
+    // camera 0 gains, sent to camera 1, gave a colour cast). Since 0.3.8:
+    //  - each camera keeps its own measured white (wbFixedMap: camera id ->
+    //    "R,Ge,Go,B"), applied exact on that camera;
+    //  - the LAST white measured is also kept as an offset from its camera's
+    //    automatic white at that moment (wbOffset: "red factor,blue factor",
+    //    e.g. "1.18,0.91" = 18 % more red, 9 % less blue than automatic). A
+    //    camera with no white of its own gets that offset on top of ITS
+    //    automatic white ("wb offset"): a deliberate colour (a white measured
+    //    on a coloured card) follows to every camera, approximately (each
+    //    camera's automatic white leans its own way).
+    // Kept across restarts (the app asks at start whether to keep them).
+    // Before 0.3.8 one measured white ("wbFixed") was kept for all cameras;
+    // it was measured on RAW, which only camera 0 had: it becomes camera
+    // 0's (wbLoad).
+    property string wbFixedMap: "{}"                  // JSON: { "0": "R,Ge,Go,B", ... }
+    property string wbOffset: ""                       // "R,B" factors, "" when none
+    readonly property string currentCamera: viewfinder ? String(viewfinder.cameraId || "") : ""
+    // This camera's own measured white, "" when it has none.
+    readonly property string wbFixed: {
+        var m = wbParseMap(); return m[currentCamera] !== undefined ? String(m[currentCamera]) : ""
+    }
+    // The offset applies here: a white was measured elsewhere, none here.
+    readonly property bool wbOffsetHere: wbFixed === "" && wbOffset !== ""
+    function wbParseMap() { try { var m = JSON.parse(wbFixedMap); return (m && typeof m === "object") ? m : {} } catch (e) { return {} } }
+    function wbLoad() {
+        wbFixedMap = String(viewfinder.setting("wbFixedMap", "") || "")
+        if (wbFixedMap === "") wbFixedMap = "{}"
+        wbOffset = String(viewfinder.setting("wbOffset", "") || "")
+        var legacy = String(viewfinder.setting("wbFixed", "") || "")
+        if (legacy !== "") {                            // a white kept by 0.3.7 or earlier: camera 0's
+            var m = wbParseMap()
+            if (m["0"] === undefined) m["0"] = legacy
+            wbFixedMap = JSON.stringify(m); save("wbFixedMap", wbFixedMap); save("wbFixed", "")
+        }
+    }
+    // A white just measured on this camera: gains "R,Ge,Go,B", and awb the
+    // camera's automatic white at that moment (from the engine's event).
+    function setWbFixed(gains, awb) {
+        var m = wbParseMap(), g = String(gains).split(","), a = String(awb || "").split(",")
+        m[currentCamera] = String(gains)
+        wbFixedMap = JSON.stringify(m); save("wbFixedMap", wbFixedMap)
+        // The offset: the measured white's red and blue against the
+        // automatic one, each relative to its green (green stays the
+        // reference). Without the automatic white (an old engine), no offset.
+        if (g.length === 4 && a.length === 4 && Number(a[0]) > 0 && Number(a[3]) > 0 && Number(g[1]) > 0 && Number(a[1]) > 0) {
+            var fr = (Number(g[0]) / Number(g[1])) / (Number(a[0]) / Number(a[1]))
+            var fb = (Number(g[3]) / Number(g[1])) / (Number(a[3]) / Number(a[1]))
+            wbOffset = fr.toFixed(4) + "," + fb.toFixed(4)
+        } else wbOffset = ""
+        save("wbOffset", wbOffset)
         wbShift = 0; tint = 0; save("wbShift", 0); save("tint", 0)
         applyLive()
     }
-    // Not on the camera's automatic white: a measured white, a shift or tint,
-    // or a preset mode. The start-up banner offers to keep it or drop it all.
-    readonly property bool wbManualAny: wbFixed !== "" || wbShift !== 0 || tint !== 0 || awbMode !== 1
+    // Not on the camera's automatic white: a measured white (here or carried),
+    // a shift or tint, or a preset mode. The start-up banner offers to keep it
+    // or drop it all.
+    readonly property bool wbManualAny: wbFixed !== "" || wbOffsetHere || wbShift !== 0 || tint !== 0 || awbMode !== 1
+    // Back to automatic drops EVERY camera's measured white and the offset:
+    // one gesture, the automatic white everywhere.
+    function wbDropMeasured() {
+        wbFixedMap = "{}"; save("wbFixedMap", wbFixedMap)
+        wbOffset = ""; save("wbOffset", "")
+        if (viewfinder && viewfinder.running) { viewfinder.sendCommand("wb fixed off"); viewfinder.sendCommand("wb offset off") }
+    }
     function resetWbAll() {
-        var hadFixed = wbFixed !== ""
-        wbFixed = ""; save("wbFixed", "")
+        wbDropMeasured()
         wbShift = 0; tint = 0; save("wbShift", 0); save("tint", 0)
         if (awbMode !== 1) { awbMode = 1; save("awbMode", 1) }
-        if (hadFixed && viewfinder && viewfinder.running) viewfinder.sendCommand("wb fixed off")
         applyLive()                                    // the mode, then shift 0: the camera's AWB again
     }
     function clearWbFixed() {
-        wbFixed = ""; save("wbFixed", "")
+        wbDropMeasured()
         wbShift = 0; tint = 0; save("wbShift", 0); save("tint", 0)
-        if (viewfinder && viewfinder.running) viewfinder.sendCommand("wb fixed off")
         applyLive()
     }
     // The measured lens-shading map's dosing (rawfish-ir.conf, hand-edited; see
@@ -312,7 +366,11 @@ Item {
         viewfinder.sendCommand("preview " + noiseModes[previewNoiseIndex] + " " + edgeModes[previewEdgeIndex])
         viewfinder.sendCommand("shading balance=" + shadingPivot + " strength=" + shadingStrength + " maxgain=" + shadingMaxGain)
         // A measured white first: it is the base the mode and the shifts keep.
+        // This camera's own if it has one, else the offset of a white measured
+        // on another camera (see wbFixedMap). A new session starts with
+        // neither in the engine, so nothing needs clearing here.
         if (advanced && wbFixed !== "") viewfinder.sendCommand("wb fixed " + wbFixed)
+        else if (advanced && wbOffset !== "") viewfinder.sendCommand("wb offset " + wbOffset)
         viewfinder.sendCommand("wb " + (awbCommands[awbMode] || "auto"))
         if (advanced) viewfinder.sendCommand("wb shift=" + wbShift + " tint=" + tint)
         // A scene the camera does not list (another device's setting, a hand

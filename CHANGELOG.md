@@ -91,6 +91,14 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- A measured white is kept per camera: the gains measured on one camera
+  were applied to the others, whose sensors see colours differently (a
+  cast; camera 0's white sent to camera 1 in the log of 13 Nov). Each
+  camera keeps its own; a camera without one gets the last measured white
+  as an offset from its own automatic white ("wb offset R,B": a white
+  measured on purpose on a coloured card follows to every camera,
+  approximately). A white kept by an earlier version becomes camera 0's.
+  Back to automatic drops them all.
 - Measuring the white (hold a readout 2 s) works on the cameras without
   RAW (the JP2's front and wide): there it measures on the viewfinder's
   image, undoing the white balance and colour transform the camera

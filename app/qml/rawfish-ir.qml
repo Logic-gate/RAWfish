@@ -492,7 +492,7 @@ ApplicationWindow {
             property bool pickMessage: false
             function fineReset(what) {
                 page.pickMessage = true
-                if (settingsMenu.wbFixed !== "") {             // a measured white: back to the automatic one
+                if (settingsMenu.wbFixed !== "" || settingsMenu.wbOffsetHere) {   // a measured white (here or carried): back to the automatic one
                     settingsMenu.clearWbFixed()
                     page.fineText = qsTr("auto"); page.fineShown = what
                 } else {
@@ -529,7 +529,7 @@ ApplicationWindow {
                 target: viewfinder
                 onWbPicked: {
                     page.pickMeasuring = false
-                    if (ok) { settingsMenu.setWbFixed(gains); page.fineText = qsTr("WB set") }
+                    if (ok) { settingsMenu.setWbFixed(gains, awb); page.fineText = qsTr("WB set") }
                     else page.fineText = why === "clipped" ? qsTr("too bright: no colour left")
                                        : why === "dark" ? qsTr("too dark to measure")
                                        : qsTr("could not measure")
@@ -549,8 +549,8 @@ ApplicationWindow {
             // Orange when warmer than the camera's white, blue when cooler;
             // magenta when tinted that way, green the other; a measured white
             // in cyan; the deck's colour at zero.
-            readonly property color warmthColor: settingsMenu.wbShift > 0 ? "#ffb060" : settingsMenu.wbShift < 0 ? "#80b8ff" : settingsMenu.wbFixed !== "" ? "#80d8ff" : app.deckTextColor
-            readonly property color tintColor: settingsMenu.tint > 0 ? "#ff70d0" : settingsMenu.tint < 0 ? "#80e0a0" : settingsMenu.wbFixed !== "" ? "#80d8ff" : app.deckTextColor
+            readonly property color warmthColor: settingsMenu.wbShift > 0 ? "#ffb060" : settingsMenu.wbShift < 0 ? "#80b8ff" : (settingsMenu.wbFixed !== "" || settingsMenu.wbOffsetHere) ? "#80d8ff" : app.deckTextColor
+            readonly property color tintColor: settingsMenu.tint > 0 ? "#ff70d0" : settingsMenu.tint < 0 ? "#80e0a0" : (settingsMenu.wbFixed !== "" || settingsMenu.wbOffsetHere) ? "#80d8ff" : app.deckTextColor
             // The tint as a Duv in thousandths: "+4" green side, "−4" magenta side.
             function duvLabel(duv) {
                 var t = Math.round(duv * 1000)

@@ -748,6 +748,11 @@ static struct {
      * that replace the AWB's as the base of the manual white balance (the
      * shifts apply on top), until cleared ("wb fixed off"). */
     int wb_fixed;
+    /* A white measured on ANOTHER camera, carried here as an offset from this
+     * camera's automatic white (0.3.8, see indraw_wb_offset): the AWB's
+     * gains with red and blue multiplied by these two factors. */
+    int wb_offset_on;
+    float wb_offset_r, wb_offset_b;
     float wb_fixed_gains[4];                /* R, Ge, Go, B */
     int wb_shift, wb_tint;                  /* the last manual shift / tint applied */
     int wbpick_pending, wbpick_done, wbpick_status;   /* status 0 ok, 1 clipped, 2 dark */
@@ -1934,7 +1939,7 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
          *    for a HAL that never says so, 12 results after it was enabled.
          * Until then the previous neutral stays: going back to zero and off
          * again at once uses the same base as before. */
-        if (g.wb_shift || g.wb_tint || g.wb_fixed) {
+        if (g.wb_shift || g.wb_tint || g.wb_fixed || g.wb_offset_on) {
             g.awb_auto_results = 0;                     /* manual: the AWB will have to settle again */
         } else if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AWB_MODE, &me) == ACAMERA_OK && me.count &&
                    me.data.u8[0] != ACAMERA_CONTROL_AWB_MODE_OFF &&
@@ -2980,7 +2985,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     setup_colour_temperature();              /* the camera->XYZ matrix, for the WB temperature */
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
-    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0; g.ae_whole_on = 0; g.yuv_light = 0;
+    g.wb_fixed = 0; g.wb_offset_on = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0; g.ae_whole_on = 0; g.yuv_light = 0;
     g.last_scan_wait_ms = -1; g.af_scan_wait_ms = 1000;   /* the app sends rawfish-ir.conf's value at each start */
     g.awb_auto_results = 0;
     g.vw_n = 0;
@@ -3980,7 +3985,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
             fe.count >= 2 && fe.data.f[0] > 0)
             ex.focal_eq_mm = (int)(ex.focal_mm * 36.0f / fe.data.f[0] + 0.5f);
         ex.orientation = 0;                                         /* keep the HAL's tag  */
-        ex.wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;       /* the white the file got */
+        ex.wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;       /* the white the file got */
         ex.exposure_manual = exposure_ns > 0;                       /* a manual pair was asked */
         ex.hal_dropped = &exif_dropped;                             /* reported if not 0 */
         pthread_mutex_unlock(&g.lock);
@@ -4223,7 +4228,7 @@ static void dng_params_from(dng_params_t *p, const ACameraMetadata *res,
      * NEUTRAL_COLOR_POINT is still ITS estimate, not what was applied; the
      * applied gains are in the result (AWB off), and the neutral is their
      * inverse -- the file says what was applied (0.47.21). */
-    p->wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+    p->wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
     {
         /* With the AWB off in this shot's result, its gains are the ones we
          * set (a manual white): the neutral is their inverse.
@@ -5401,7 +5406,7 @@ static int indraw_burst_impl(const char *const *paths, int n, int quality, int n
         ex.datetime = dt; ex.software = "RAWfish-ir " IR_VERSION " (HAL JPEG, burst)";
         ex.flash = exif_flash_value(g.result_ready && g.r_flash_fired);
         ex.digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
-        ex.wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+        ex.wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
         ex.exposure_manual = exposure_ns > 0;
         ex.exposure_ns = exposure_ns; ex.iso = iso;
         if (exif_write_jpeg(paths[k], buf[k], len[k], &ex) && (err = write_file(paths[k], buf[k], len[k]))) rc = IR_EFILE;
@@ -6194,7 +6199,7 @@ IR_API int indraw_wb(int mode, char *out, size_t out_size)
         return fail(out, out_size, IR_ESTATE, "wb", "camera not open", 0);
     if (mode <= 0 || !u8_list_has(g.chars, ACAMERA_CONTROL_AWB_AVAILABLE_MODES, mode))
         return fail(out, out_size, IR_EARG, "wb", "white balance mode not listed", mode);
-    if (g.wb_fixed || ((g.wb_shift || g.wb_tint) && mode == g.awb_mode)) {
+    if (g.wb_fixed || g.wb_offset_on || ((g.wb_shift || g.wb_tint) && mode == g.awb_mode)) {
         /* A measured white rules whatever the mode; and the SAME mode sent
          * again while a shift is in force (the menu restates it with every
          * setting) must not touch anything: re-enabling the AWB, even for a
@@ -6202,7 +6207,7 @@ IR_API int indraw_wb(int mode, char *out, size_t out_size)
          * (a visible jump each time). The mode is recorded for the return. */
         g.awb_mode = mode;
         jw_init(&w, out, out_size);
-        jw_add(&w, "{\"ok\":true,\"awb_mode\":%d,\"kept\":\"%s\"}", mode, g.wb_fixed ? "fixed white" : "manual shift");
+        jw_add(&w, "{\"ok\":true,\"awb_mode\":%d,\"kept\":\"%s\"}", mode, g.wb_fixed ? "fixed white" : g.wb_offset_on ? "white offset" : "manual shift");
         return IR_OK;
     }
     if (g.wb_shift || g.wb_tint) {
@@ -6284,7 +6289,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
     if (g.meter_request) all[n++] = g.meter_request;
     if (shift < -20 || shift > 20 || tint < -100 || tint > 100)
         return fail(out, out_size, IR_EARG, "wb", "shift -20..20, tint -100..100", shift);
-    if (shift == 0 && tint == 0 && !g.wb_fixed) {  /* back to the HAL's AWB     */
+    if (shift == 0 && tint == 0 && !g.wb_fixed && !g.wb_offset_on) {  /* back to the HAL's AWB     */
         pthread_mutex_lock(&g.lock);
         g.wb_shift = 0; g.wb_tint = 0;
         g.wb_base_frozen = 0;                     /* the next shift starts from the AWB's neutral again */
@@ -6317,6 +6322,9 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
             g.wb_base_frozen = 1;
         }
         memcpy(base, g.wb_fixed ? g.wb_fixed_gains : g.wb_base_gains, sizeof base);
+        /* A white carried from another camera: this camera's AWB neutral,
+         * moved the way that white was moved from ITS camera's AWB. */
+        if (!g.wb_fixed && g.wb_offset_on) { base[0] *= g.wb_offset_r; base[3] *= g.wb_offset_b; }
         memcpy(tr, g.wb_base_transform, sizeof tr);
         g.wb_shift = shift; g.wb_tint = tint;         /* from here the results' gains are ours: not read as the AWB's */
         pthread_mutex_unlock(&g.lock);
@@ -6337,7 +6345,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
         return fail(out, out_size, IR_ECAPTURE, "wb", "setRepeatingRequest failed", st);
     jw_init(&w, out, out_size);
     jw_add(&w, "{\"ok\":true,\"manual\":%s,\"fixed\":%s,\"shift\":%d,\"tint\":%d,\"gains\":[%.3f,%.3f,%.3f,%.3f]}",
-           (shift || tint || g.wb_fixed) ? "true" : "false", g.wb_fixed ? "true" : "false", shift, tint, gains[0], gains[1], gains[2], gains[3]);
+           (shift || tint || g.wb_fixed || g.wb_offset_on) ? "true" : "false", g.wb_fixed ? "true" : "false", shift, tint, gains[0], gains[1], gains[2], gains[3]);
     return IR_OK;
 }
 
@@ -6381,6 +6389,41 @@ IR_API int indraw_wb_fixed(const float *gains, char *out, size_t out_size)
     return wb_apply(0, 0, out, out_size);
 }
 
+/* A white measured on another camera, carried to this one (0.3.8).
+ *
+ * Why not just send that white's gains? Gains are the sensor's own: "multiply
+ * this sensor's red by 1.12 and its blue by 3.03 to make a white grey". The
+ * JP2's three cameras have three different sensors, so another camera's gains
+ * give a colour cast. What carries over is how far that white was from its
+ * camera's AUTOMATIC white when it was measured: e.g. "18 % more red and 9 %
+ * less blue than automatic" -- the user's intention, whether a neutral
+ * correction or a deliberate tint (a white measured on a coloured card).
+ *
+ * f = { red factor, blue factor }, each > 0 (1 = no change); NULL clears.
+ * The result: this camera's AWB gains (frozen at the first manual step, as
+ * for the warmth and tint), red and blue multiplied by f. Approximate: each
+ * camera's automatic white leans its own way under the same light. A white
+ * measured on THIS camera (indraw_wb_fixed) takes precedence. */
+IR_API int indraw_wb_offset(const float *f, char *out, size_t out_size)
+{
+    if (!out || !out_size) return IR_EARG;
+    if (!g.session || !g.preview_request) return fail(out, out_size, IR_ESTATE, "wb", "camera not open", 0);
+    if (f) {
+        if (!(f[0] > 0.1f && f[0] < 10.0f && f[1] > 0.1f && f[1] < 10.0f))
+            return fail(out, out_size, IR_EARG, "wb", "offset factors out of range", 0);
+        if (!g.wb_base_frozen && !wb_wait_awb()) return fail(out, out_size, IR_ESTATE, "wb", "no AWB result yet", 0);
+        pthread_mutex_lock(&g.lock);
+        g.wb_offset_r = f[0]; g.wb_offset_b = f[1];
+        g.wb_offset_on = 1;
+        pthread_mutex_unlock(&g.lock);
+    } else {
+        pthread_mutex_lock(&g.lock);
+        g.wb_offset_on = 0;
+        pthread_mutex_unlock(&g.lock);
+    }
+    return wb_apply(g.wb_shift, g.wb_tint, out, out_size);
+}
+
 /* Measures the white on a neutral object -- the spot of a light reference,
  * else the middle of what is shown -- on one RAW frame, and fixes it (as
  * indraw_wb_fixed). The interface learns the outcome from the event
@@ -6393,7 +6436,7 @@ IR_API int indraw_wb_pick(char *out, size_t out_size)
     int done = 0, status = 0, from_vf = 0;
     double rgb[3];
     float gains[4];
-    char ev[120];
+    char ev[160];
     if (!out || !out_size) return IR_EARG;
     if (!g.session) return fail(out, out_size, IR_ESTATE, "wb", "camera not open", 0);
     /* With RAW: the meter thread measures on a RAW frame. Without (the JP2's
@@ -6432,7 +6475,18 @@ IR_API int indraw_wb_pick(char *out, size_t out_size)
         emit_event("wbpick ok=0 why=apply\n");
         return IR_ECAPTURE;
     }
-    snprintf(ev, sizeof ev, "wbpick ok=1 gains=%.4f,%.4f,%.4f,%.4f\n", gains[0], gains[1], gains[2], gains[3]);
+    /* With the camera's automatic white at the time of the measure (its
+     * frozen base if a manual white was already in force): the interface
+     * keeps the ratio between the two, to carry this white to another
+     * camera as an offset (indraw_wb_offset). */
+    {
+        float awb[4];
+        pthread_mutex_lock(&g.lock);
+        memcpy(awb, g.wb_base_frozen ? g.wb_base_gains : g.awb_gains, sizeof awb);
+        pthread_mutex_unlock(&g.lock);
+        snprintf(ev, sizeof ev, "wbpick ok=1 gains=%.4f,%.4f,%.4f,%.4f awb=%.4f,%.4f,%.4f,%.4f\n",
+                 gains[0], gains[1], gains[2], gains[3], awb[0], awb[1], awb[2], awb[3]);
+    }
     emit_event(ev);
     return IR_OK;
 }
@@ -7231,7 +7285,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
         if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
     f->exposure_ns = g.result_ready ? g.r_exposure_ns : -1;
     f->iso = g.result_ready ? g.r_iso : -1;
-    f->wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+    f->wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
     f->flash = exif_flash_value(0);                         /* a YUV capture never fires the flash */
     f->digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
     pthread_mutex_unlock(&g.lock);
@@ -7469,7 +7523,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     }
     for (k = 0; k < n; ++k) {
         frames[k].exposure_manual = 1;
-        frames[k].wb_manual = g.wb_fixed || g.wb_shift || g.wb_tint;
+        frames[k].wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
         frames[k].flash = exif_flash_value(0);              /* a YUV burst never fires the flash (a torch is a light) */
         frames[k].digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, &e) == ACAMERA_OK && e.count)

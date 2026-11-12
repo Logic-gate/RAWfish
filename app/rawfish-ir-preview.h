@@ -323,7 +323,9 @@ signals:
     void stackStarted(int n);                  /* the engine began a stack of n frames */
     /* A white-balance pick's outcome: ok with the gains "R,Ge,Go,B", or the
      * reason it failed (clipped, dark, timeout, no_raw, apply). */
-    void wbPicked(bool ok, const QString &gains, const QString &why);
+    /* awb: the camera's automatic white at the time of the measure ("R,Ge,Go,B"),
+     * to carry the measured white to another camera as an offset (0.3.8). */
+    void wbPicked(bool ok, const QString &gains, const QString &why, const QString &awb);
     /* The lens-shading calibration (engine 'shading calibrate'): its
      * progress (captures done / total), the exposure it settled on, and
      * its outcome (the file written, or why it failed). */

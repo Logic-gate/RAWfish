@@ -2485,6 +2485,7 @@ int main(int argc, char **argv)
         indraw_view_window_fn vwf = (indraw_view_window_fn)a_dlsym(bridge, "indraw_view_window");
         indraw_wb_pick_fn wbp = (indraw_wb_pick_fn)a_dlsym(bridge, "indraw_wb_pick");
         indraw_wb_fixed_fn wbx = (indraw_wb_fixed_fn)a_dlsym(bridge, "indraw_wb_fixed");
+        indraw_wb_fixed_fn wbo = (indraw_wb_fixed_fn)a_dlsym(bridge, "indraw_wb_offset");   /* same shape: floats or NULL */
         indraw_loupe_fn lf = (indraw_loupe_fn)a_dlsym(bridge, "indraw_loupe");
         indraw_set_focus_cal_fn setcal_cmd = (indraw_set_focus_cal_fn)a_dlsym(bridge, "indraw_set_focus_calibration");
         {   /* abort paths: SIGUSR1 from the app, stdin hang-up (app gone) */
@@ -2754,6 +2755,21 @@ int main(int argc, char **argv)
              * the controller's lock, so the events keep flowing. */
             if (!strcmp(cmd, "shading") && save && !strncmp(save, "calibrate", 9)) {
                 failures += cmd_shading(&save, out);   /* drives captures; ctl_engine_busy inside */
+                continue;
+            }
+            /* "wb offset R,B | off": a white measured on another camera, carried
+             * here as red and blue factors on this camera's automatic white
+             * (indraw_wb_offset); it may also wait for the AWB's first result. */
+            if (!strcmp(cmd, "wb") && save && !strncmp(save, "offset", 6)) {
+                char *a1 = strtok_r(NULL, " \t\r\n", &save), *a2 = strtok_r(NULL, " \t\r\n", &save);
+                float fv[2];
+                (void)a1;
+                ctl_engine_busy(1);
+                if (!wbo) { emit("{\"ok\":false,\"error\":\"wb: bridge has no indraw_wb_offset\"}"); failures++; }
+                else if (a2 && !strcmp(a2, "off")) { failures += wbo(NULL, out, OUT_SIZE) != 0; emit(out); }
+                else if (!a2 || sscanf(a2, "%f,%f", &fv[0], &fv[1]) != 2) { emit("{\"ok\":false,\"error\":\"wb offset: R,B or off\"}"); failures++; }
+                else { failures += wbo(fv, out, OUT_SIZE) != 0; emit(out); }
+                ctl_engine_busy(0);
                 continue;
             }
             if (!strcmp(cmd, "wb") && save && (!strncmp(save, "pick", 4) || !strncmp(save, "fixed", 5))) {
