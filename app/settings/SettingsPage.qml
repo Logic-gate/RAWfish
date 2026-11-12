@@ -206,7 +206,7 @@ Page {
             SectionHeader { text: qsTr("Log") }
             TextSwitch {
                 text: qsTr("Detailed log")
-                description: qsTr("For a bug report: each photo's report also carries the histogram the app showed and the photo's own, so that the zebra and the histogram can be checked. About 2 KB more per photo. Takes effect at the next start of RAWfish-ir.")
+                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own. Takes effect at the next start of RAWfish-ir.")
                 checked: device.extraLog
                 onCheckedChanged: device.extraLog = checked
             }

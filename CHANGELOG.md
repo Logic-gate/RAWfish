@@ -91,6 +91,13 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- The log keeps only what helps when a user has a problem: each start
+  (device, streams, caps, the settings sent), each photo (the press, the
+  capture, the report), every error with the command that caused it, the
+  diagnostics. Gestures, wheels, focus taps, the sun, the orientation,
+  every "ok" reply and the camera's request templates are in the detailed
+  log only (Settings > Log). On the logs of 11 and 12 November: 7 % and
+  5 % of the lines.
 - Menu: new order (mode, flash, timer, grid, format, resolution, quality,
   white balance, bracket, JPG processing, level); the four JPG
   processing columns (frames, colour noise, moiré, sharpening) are framed

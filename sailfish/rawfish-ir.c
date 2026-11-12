@@ -118,20 +118,105 @@ static android_dlopen_fn a_dlopen; /* libhybris' dlopen for Android libraries */
 static android_dlsym_fn a_dlsym;   /* libhybris' dlsym                         */
 static FILE *g_log;                /* --log file, or NULL                       */
 
-/* Appends "HH:MM:SS.mmm <prefix><text>" to the log (no-op without --log).
- * Milliseconds since 0.47.70: a command and its reply in the same second
- * said nothing about a 0.5 s capture against a 2 s one. */
+/* "HH:MM:SS.mmm" now. Milliseconds since 0.47.70: a command and its reply
+ * in the same second said nothing about a 0.5 s capture against a 2 s one. */
+static void log_stamp(char stamp[16])
+{
+    char hms[12];
+    struct timespec ts;
+    struct tm tm;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    localtime_r(&ts.tv_sec, &tm);
+    strftime(hms, sizeof hms, "%H:%M:%S", &tm);
+    snprintf(stamp, 16, "%.8s.%03d", hms, (int)(ts.tv_nsec / 1000000L) % 1000);   /* "HH:MM:SS.mmm", 12 chars */
+}
+
+/* Appends "<stamp> <prefix><text>" to the log (no-op without --log). */
+static void log_line_at(const char *stamp, const char *prefix, const char *text)
+{
+    if (!g_log) return;
+    fprintf(g_log, "%s %s%s\n", stamp, prefix, text);
+    fflush(g_log);                              /* survive a crash          */
+}
 static void log_line(const char *prefix, const char *text)
 {
     char stamp[16];
-    struct timespec ts;
-    struct tm tm;
     if (!g_log) return;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    localtime_r(&ts.tv_sec, &tm);
-    strftime(stamp, sizeof stamp, "%H:%M:%S", &tm);
-    fprintf(g_log, "%s.%03ld %s%s\n", stamp, ts.tv_nsec / 1000000L, prefix, text);
-    fflush(g_log);                              /* survive a crash          */
+    log_stamp(stamp);
+    log_line_at(stamp, prefix, text);
+}
+
+/* ---- What the log keeps (0376, the user's choice: "only what really
+ * helps when a user has a problem") ----
+ *
+ * The normal log keeps: each session's start (the command line, version,
+ * device, streams, shading, the caps), the settings sent at the start as
+ * commands only (their "ok" replies are not written), every photo (the
+ * press, the capture line, the report), every error preceded by the
+ * command that caused it, the "#" diagnostics, and the end.
+ *
+ * The detailed log (Settings > "Detailed log", which sends "checks on")
+ * keeps everything, as before 0376: the gestures (loupe, pan, view window,
+ * zoom), the wheels and the exposure modes, the focus taps and the sun with
+ * their replies, the orientation, aestate, the controller's engine lines,
+ * every reply, and the camera's request templates (logged at the start,
+ * held until "checks on" says the log is detailed).
+ *
+ * Each command is classed when it arrives (log_command); its replies (emit)
+ * follow its class. The class is per thread: the main loop's commands and
+ * the controller's (its reader thread) do not mix their replies. */
+enum { LOG_FULL = 0, LOG_CMD, LOG_NONE };       /* command + replies / command / neither (errors aside) */
+static int g_log_detail;                         /* "checks on": everything is written */
+static __thread int t_log_class;                 /* the current command's class (LOG_FULL outside one) */
+static __thread char t_pending[16 + 4 + 256];    /* a command not written yet: stamp, prefix, text */
+static __thread int t_pending_on;
+static char *g_templates;                        /* the start's "# templates", until "checks on" */
+
+static int log_detailed(void) { return __atomic_load_n(&g_log_detail, __ATOMIC_RELAXED); }
+
+/* The commands of the normal log, by first word. "c> " lines are the
+ * controller's: only its capture lines are kept. */
+static int log_class(const char *prefix, const char *line)
+{
+    static const char *const capture[] = { "jpeg", "raw", "stack", "burst", "yuv", "noiseprofile", NULL };
+    static const char *const chatty[] = { "xp", "fc", "vw", "exposure", "ev", "meter", "tap", "focus",
+                                          "zoom", "loupe", "viewwin", "orient", "aestate", "aelock",
+                                          "afwait", "preview-frame", NULL };
+    char w[24] = "";
+    int i;
+    if (log_detailed()) return LOG_FULL;
+    if (sscanf(line, "%23s", w) != 1) return LOG_NONE;                            /* an empty line */
+    for (i = 0; capture[i]; ++i) if (!strcmp(w, capture[i])) return LOG_FULL;      /* a photo and its report */
+    if (!strcmp(prefix, "c> ")) return LOG_NONE;                                   /* the controller's other lines */
+    if (w[0] == '#' || !strcmp(w, "sh") || !strcmp(w, "quit") || !strcmp(w, "calib")) return LOG_FULL;
+    if (!strcmp(w, "wb") && (strstr(line, " pick") || strstr(line, " fixed"))) return LOG_FULL;  /* a white measured */
+    if (!strcmp(w, "shading") && strstr(line, " calibrate")) return LOG_FULL;
+    for (i = 0; chatty[i]; ++i) if (!strcmp(w, chatty[i])) return LOG_NONE;
+    return LOG_CMD;                                                                /* a setting: the command only */
+}
+
+/* A command arrives: written now, or held to be written only if it fails. */
+static void log_command(const char *prefix, const char *line)
+{
+    char stamp[16];
+    if (!g_log) return;
+    log_stamp(stamp);
+    t_log_class = log_class(prefix, line);
+    t_pending_on = 0;
+    if (t_log_class != LOG_NONE) { log_line_at(stamp, prefix, line); return; }
+    snprintf(t_pending, sizeof t_pending, "%s %s%s", stamp, prefix, line);
+    t_pending_on = 1;
+}
+
+/* A reply: written as its command's class says; an error always, with its
+ * command if that was held. */
+static void log_reply(const char *json)
+{
+    if (!g_log) return;
+    if (t_log_class == LOG_FULL || log_detailed()) { log_line("", json); return; }
+    if (strncmp(json, "{\"ok\":false", 11)) return;                  /* an "ok": not in the normal log */
+    if (t_pending_on) { fprintf(g_log, "%s\n", t_pending); t_pending_on = 0; }
+    log_line("", json);
 }
 
 /* Prints one JSON result on stdout and copies it to the log. */
@@ -143,7 +228,7 @@ static void emit(const char *json)
         puts(json);
         fflush(stdout);                         /* readers see it at once   */
     }
-    log_line("", json);                         /* always to the log        */
+    log_reply(json);                            /* to the log, as its command's class says */
 }
 
 /* Resolves the device-profiles directory, honouring the Sailjail sandbox.
@@ -2072,7 +2157,7 @@ static void controller_engine_line(const char *text)
     char line[256], *save = NULL, *cmd;
     snprintf(line, sizeof line, "%s", text);
     line[strcspn(line, "\r\n")] = '\0';
-    log_line("c> ", line);
+    log_command("c> ", line);                   /* the reader thread's own class (thread-local) */
     cmd = strtok_r(line, " \t", &save);
     if (!cmd) return;
     if (!strcmp(cmd, "exposure")) cmd_exposure(g_pe, &save, out);
@@ -2545,7 +2630,9 @@ int main(int argc, char **argv)
                  * (AF mode, intent, vendor keys with type and value) */
                 typedef int (*tpl_rep_fn)(char *, size_t);
                 tpl_rep_fn tr = (tpl_rep_fn)a_dlsym(bridge, "indraw_template_report");
-                if (tr && tr(out, sizeof out) == 0) log_line("# templates: ", out);
+                /* Detailed log only: held until "checks on" (sent after the
+                 * start) writes it, dropped otherwise. */
+                if (tr && tr(out, sizeof out) == 0) { free(g_templates); g_templates = strdup(out); }
             }
             /* Vendor (chipset) request keys the device profile asks for. */
             g_bridge_for_vendor = bridge;
@@ -2612,7 +2699,12 @@ int main(int argc, char **argv)
         while (getline(&line, &cap, stdin) > 0) {
             char *save = NULL, *cmd;
             line[strcspn(line, "\r\n")] = '\0'; /* drop the newline for the log  */
-            log_line("> ", line);                /* (a separator line per command used to double the log) */
+            /* "checks on|off" decides the log's detail before it is classed */
+            if (!strncmp(line, "checks ", 7)) {
+                __atomic_store_n(&g_log_detail, !strcmp(line + 7, "on"), __ATOMIC_RELAXED);
+                if (log_detailed() && g_templates) { log_line("# templates (at the start): ", g_templates); free(g_templates); g_templates = NULL; }
+            }
+            log_command("> ", line);             /* written now, or held for an error (log_class) */
             if (!strncmp(line, "xp ", 3) || !strncmp(line, "fc ", 3) || !strncmp(line, "vw ", 3) ||
                 !strncmp(line, "sh ", 3)) {       /* the controller's own commands */
                 char cap[256];
@@ -2621,7 +2713,7 @@ int main(int argc, char **argv)
                  * here like typed ones (long: without the lock) */
                 while (ctl_pop_capture(cap, sizeof cap)) {
                     char *csave = NULL, *ccmd;
-                    log_line("c> ", cap);
+                    log_command("c> ", cap);
                     ccmd = strtok_r(cap, " \t", &csave);
                     if (!ccmd) continue;
                     ctl_engine_busy(1);
