@@ -91,6 +91,11 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- The flash fires again with "jpg" and "snap": since our JPG replaced the
+  camera's, those photos never armed it. In automatic exposure: pre-flash
+  metering, then the flash; with a manual pair, "on" fires one flash and
+  "auto" does not fire (no metering to judge by). With "on" or "auto",
+  our JPG is one frame (a merge cannot mix flashed and unflashed frames).
 - In a manual or priority exposure, the value over the sun (and the
   number over the histogram in full manual) is the stops from a neutral
   grey correctly exposed, with the settings in force: ISO 500 -> 1000

@@ -1107,7 +1107,11 @@ ApplicationWindow {
                                        + settingsMenu.photoProcessingFields()
                                        + " bracket=" + settingsMenu.effBracket
                                        + " denoise_sigma=" + settingsMenu.stackDenoise
-                                       + (isYuv ? " frames=" + settingsMenu.yuvFrames + " colour=" + settingsMenu.yuvColour
+                                       // A flash fires on one frame: with "on" or "auto" our JPG is
+                                       // one frame, whatever the Frames column says (a merge of
+                                       // flashed and unflashed frames would be a mess).
+                                       + (isYuv ? " frames=" + (settingsMenu.flash === "on" || settingsMenu.flash === "auto" ? 1 : settingsMenu.yuvFrames)
+                                                + " colour=" + settingsMenu.yuvColour
                                                   + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
                                                   + (outputConf.jpgWithDng && page.rawAvailable ? " dng=1" : "") : ""))
             }

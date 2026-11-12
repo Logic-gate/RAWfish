@@ -7326,6 +7326,15 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     if (!g.session) return fail(out, out_size, IR_ESTATE, "yuv", "camera not open", 0);
     if (!g.yuv_request) return fail(out, out_size, IR_ESTATE, "yuv", "no yuv stream (open with yuv=WxH|max)", 0);
     if (set_exposure(g.yuv_request, exposure_ns, iso, out, out_size)) return IR_EARG;
+    /* The flash, as for the camera's JPEG and the RAW (0.3.8: since our JPG
+     * replaced the camera's, "jpg" and "snap" never fired it). In automatic
+     * exposure the AE mode set just above carries it (pre-flash metering in
+     * the precapture, then the flash with the shot); with a manual pair,
+     * "on" fires one flash with the shot and "auto" does not fire (no
+     * metering to judge by) -- see flash_arm. Disarmed after the submit, so
+     * the request never flashes on its own. One frame only: a burst of 2 or
+     * 4 merged frames is not flashed (the interface sends 1 with a flash). */
+    flash_arm(g.yuv_request, exposure_ns > 0);
     pthread_mutex_lock(&g.lock);
     if (g.yuv_image) { AImage_delete(g.yuv_image); g.yuv_image = NULL; }
     g.capture_failed = 0;
@@ -7336,6 +7345,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     prepare_capture(g.yuv_request, focus_mode, focus_diopters, exposure_ns <= 0 && iso <= 0, &a3);
     reqs[0] = g.yuv_request;
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL);
+    flash_disarm(g.yuv_request);                /* the request is copied at submit */
     af_release(focus_mode);
     if (st != ACAMERA_OK) return fail(out, out_size, IR_ECAPTURE, "capture", "capture refused", st);
     dl = deadline_in(timeout_ms);
