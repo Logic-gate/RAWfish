@@ -91,6 +91,11 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- Menu: new order (mode, flash, timer, grid, format, resolution, quality,
+  white balance, bracket, JPG processing, level); the four JPG
+  processing columns (frames, colour noise, moiré, sharpening) are framed
+  together with their name under them, greyed together; the menu always
+  opens on its left end.
 - "Write the device profile" (Settings): the camera page shows "Probing
   the camera…" while the probe runs (the screen waits for it, up to 15 s);
   until now it froze without a word.

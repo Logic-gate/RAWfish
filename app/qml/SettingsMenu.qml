@@ -5,11 +5,14 @@
  * items (icon or short text), four columns per page, pages side by side
  * with dots. Everything atomic: one column = one control.
  *
- * Columns: flash, mode, self-timer, format, resolution, JPEG quality, white
- * balance presets, noise reduction, sharpening (and the viewfinder's, if the
- * Settings page asks), bracketing, grid, Σ denoise (the zebra and peaking
- * tweaks are in rawfish-ir.conf only); the scenes only when the Settings page's switch is on (grouped
- * modes override the atomic controls). The fine white balance lives on the
+ * Columns, in this order (November 2026): mode, flash (if the camera has
+ * one), self-timer, grid, format, resolution, JPEG quality, white balance
+ * presets, bracketing, the JPG processing group (frames, colour noise,
+ * moiré, sharpening: framed together, if the Settings page asks), level;
+ * then, hidden unless the Settings page's switches are on, the focus
+ * calibration and the scenes (grouped modes override the atomic controls).
+ * The Σ denoise and the zebra and peaking tweaks are in rawfish-ir.conf only.
+ * The band opens on its left end. The fine white balance lives on the
  * deck (the ± around the shutter), no longer here; the capture's 3A wait is
  * the engine's default (1.5 s). Values persist in the app's settings file
  * (viewfinder.setting / setSetting); the live ones are re-sent to the engine
@@ -433,6 +436,10 @@ Item {
     // the same list, and a list that does not change sends no signal.
     Connections { target: viewfinder; onCapsChanged: settleTimer.restart() }
 
+    // The band always opens on its left end (Mode first): it is wider than
+    // the screen, and it used to reopen wherever it had been left.
+    onVisibleChanged: if (visible) { band.cancelFlick(); band.contentX = 0 }
+
     // --- the overlay ---
     Rectangle { anchors.fill: parent; color: "black"; opacity: 0.6 }
     // Outside the columns: a tap closes the menu, and so does an upward swipe
@@ -469,14 +476,14 @@ Item {
             id: row
             x: Theme.horizontalPageMargin
             spacing: Theme.paddingMedium
-            // Flash: off / auto / on (fires with the photo; automatic exposure
-            // meters with a pre-flash first, ~0.5-1 s more) / torch (continuous).
-            // First column, in simple mode too.
             MenuColumn { width: band.colW; header: header
                 caption: qsTr("Mode"); values: [false, true]; current: menu.advanced
                 labelFor: function(v) { return v ? qsTr("Advanced: wheels, raw, every control") : qsTr("Simple: JPEG, automatic") }
                 shortFor: function(v) { return v ? qsTr("adv") : qsTr("simp") }
                 onPicked: { menu.advanced = value; menu.save("advanced", value ? 1 : 0) } }
+            // Flash: off / auto / on (fires with the photo; automatic exposure
+            // meters with a pre-flash first, ~0.5-1 s more) / torch (continuous).
+            // Right after Mode, in simple mode too.
             MenuColumn { visible: !!(menu.viewfinder && menu.viewfinder.caps.flash)
                 width: band.colW; header: header
                 caption: qsTr("Flash"); values: ["off", "auto", "on", "torch"]; current: menu.flash
@@ -492,6 +499,16 @@ Item {
                 shortFor: function(v) { return v === 0 ? qsTr("off") : v + "s" }
                 iconFor: function(v) { return v === 0 ? "icon-camera-timer" : "icon-camera-timer-" + v + "s" }
                 onPicked: { menu.timerSec = value; menu.save("timerSec", value) } }
+            // Rule-of-thirds grid (its notch button became the level).
+            MenuColumn { width: band.colW; header: header
+                caption: qsTr("Grid"); values: [false, true]; current: menu.gridOn
+                labelFor: function(v) { return v ? qsTr("Grid on") : qsTr("Grid off") }
+                shortFor: function(v) { return v ? qsTr("on") : qsTr("off") }
+                iconFor: function(v) { return v ? "icon-camera-grid-thirds" : "icon-camera-grid-none" }
+                // The menu holds the state (the page reads it): loading it from the
+                // settings file used to break a binding, so a second tap on "off"
+                // was taken for no change and the grid stayed on.
+                onPicked: { menu.gridOn = value; menu.save("gridOn", value ? 1 : 0) } }
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).
             MenuColumn { visible: menu.simpleMenuHas("format"); width: band.colW; header: header
@@ -520,35 +537,6 @@ Item {
                 labelFor: function(v) { return v }
                 shortFor: function(v) { return menu.mp(v) }
                 onPicked: menu.setSize(value) }
-            // RAWfish-ir's JPG processing, when Settings > Camera menu asks for
-            // it (otherwise in rawfish-ir.conf only). Saved to the same keys.
-            MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
-                defaultValue: 1
-                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
-                labelFor: function(v) { return v === 1 ? qsTr("One frame") : qsTr("%1 frames merged (less grain)").arg(v) }
-                onPicked: { menu.yuvFrames = value; menu.save("jpgFrames", value) } }
-            MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
-                defaultValue: 2
-                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                caption: qsTr("Colour NR"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
-                labelFor: function(v) { return v === 0 ? qsTr("Colour noise filter off") : qsTr("Colour noise filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
-                shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                onPicked: { menu.yuvColour = value; menu.save("jpgNoiseColourFilter", value) } }
-            MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
-                defaultValue: 0
-                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
-                labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
-                shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
-                onPicked: { menu.yuvMedian = value; menu.save("jpgMoireFilter", value) } }
-            MenuColumn { visible: menu.advanced && menu.processingColumns; width: band.colW; header: header
-                defaultValue: 3
-                dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
-                labelFor: function(v) { return v === 0 ? qsTr("RAWfish sharpening off") : qsTr("RAWfish sharpening: %1 x the fine detail").arg([0, 0.5, 1, 1.5, 2.5, 4][v]) }
-                shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                onPicked: { menu.yuvSharpen = value; menu.save("jpgSharpen", value) } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: no JPEG quality")
                 caption: qsTr("Quality"); values: [20, 40, 60, 80, 90, 95, 100]; current: menu.jpegQuality
@@ -571,6 +559,60 @@ Item {
                                               : qsTr("3 frames, ±%1 EV").arg(v) }
                 shortFor: function(v) { return v === "off" ? qsTr("off") : v === "0" ? "x3" : "±" + v }
                 onPicked: { menu.bracket = value; menu.save("bracket", value) } }
+            // RAWfish-ir's JPG processing, when Settings > Camera menu asks for
+            // it (otherwise in rawfish-ir.conf only). Saved to the same keys.
+            // The four columns are one group, set off by a faint frame with its
+            // name under them, and greyed together (yuvColumnsOff): they act on
+            // our JPG only, not on RAW, snap, Σ or the camera's own JPEG.
+            Item {
+                id: jpgGroup
+                visible: menu.advanced && menu.processingColumns
+                width: jpgRow.width; height: jpgRow.height + jpgGroupName.height + Theme.paddingSmall
+                Rectangle {                                  // the frame, a little wider than the columns
+                    anchors { fill: parent; leftMargin: -Theme.paddingSmall; rightMargin: -Theme.paddingSmall }   // (not above: the band clips there)
+                    radius: Theme.paddingMedium
+                    color: Theme.highlightBackgroundColor; opacity: menu.yuvColumnsOff ? 0.06 : 0.15
+                    border { width: 1; color: Theme.highlightColor }
+                }
+                Row {
+                    id: jpgRow
+                    spacing: Theme.paddingMedium
+                MenuColumn { width: band.colW; header: header
+                    defaultValue: 1
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
+                    labelFor: function(v) { return v === 1 ? qsTr("One frame") : qsTr("%1 frames merged (less grain)").arg(v) }
+                    onPicked: { menu.yuvFrames = value; menu.save("jpgFrames", value) } }
+                MenuColumn { width: band.colW; header: header
+                    defaultValue: 2
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Colour NR"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
+                    labelFor: function(v) { return v === 0 ? qsTr("Colour noise filter off") : qsTr("Colour noise filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
+                    shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
+                    onPicked: { menu.yuvColour = value; menu.save("jpgNoiseColourFilter", value) } }
+                MenuColumn { width: band.colW; header: header
+                    defaultValue: 0
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
+                    labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
+                    shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
+                    onPicked: { menu.yuvMedian = value; menu.save("jpgMoireFilter", value) } }
+                MenuColumn { width: band.colW; header: header
+                    defaultValue: 3
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
+                    labelFor: function(v) { return v === 0 ? qsTr("RAWfish sharpening off") : qsTr("RAWfish sharpening: %1 x the fine detail").arg([0, 0.5, 1, 1.5, 2.5, 4][v]) }
+                    shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
+                    onPicked: { menu.yuvSharpen = value; menu.save("jpgSharpen", value) } }
+                }
+                Label {                                      // the group's name, under its columns
+                    id: jpgGroupName
+                    anchors { top: jpgRow.bottom; horizontalCenter: parent.horizontalCenter }
+                    text: qsTr("JPG processing")
+                    font.pixelSize: Theme.fontSizeTiny
+                    color: Theme.highlightColor; opacity: menu.yuvColumnsOff ? Theme.opacityLow : 1.0
+                }
+            }
             // The level's zero: "zeroed" once recorded (a long press on "level"
             // with the phone upright), "factory" clears it.
             MenuColumn { width: band.colW; header: header
@@ -578,16 +620,6 @@ Item {
                 labelFor: function(v) { return v === "zeroed" ? qsTr("Level zero: as recorded (hold \"level\" with the phone upright)") : qsTr("Level zero: the sensor's own") }
                 shortFor: function(v) { return v === "zeroed" ? qsTr("zeroed") : qsTr("factory") }
                 onPicked: { if (value === "factory") menu.clearLevelZero(); else if (!menu.levelZeroed) header.show(qsTr("Hold \"level\" with the phone upright to record the zero")) } }
-            // Rule-of-thirds grid (its notch button became the level).
-            MenuColumn { width: band.colW; header: header
-                caption: qsTr("Grid"); values: [false, true]; current: menu.gridOn
-                labelFor: function(v) { return v ? qsTr("Grid on") : qsTr("Grid off") }
-                shortFor: function(v) { return v ? qsTr("on") : qsTr("off") }
-                iconFor: function(v) { return v ? "icon-camera-grid-thirds" : "icon-camera-grid-none" }
-                // The menu holds the state (the page reads it): loading it from the
-                // settings file used to break a binding, so a second tap on "off"
-                // was taken for no change and the grid stayed on.
-                onPicked: { menu.gridOn = value; menu.save("gridOn", value ? 1 : 0) } }
             // Focus calibration assistant. Focus (circle) on a target at one of
             // these distances, wait for the solid circle, then tap the distance:
             // the engine records "this distance = the lens value it has now" in

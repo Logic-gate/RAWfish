@@ -587,6 +587,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>JPG processing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+1"/>
         <source>Bracket</source>
         <translation type="unfinished"></translation>

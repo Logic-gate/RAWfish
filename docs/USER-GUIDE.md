@@ -190,17 +190,19 @@ columns or swipe up to close.
 | Column | What it sets |
 |---|---|
 | Mode | the first column: **simple** (jpg or snap, automatic focus and exposure, a brightness slider instead of the wheels, the cameras named standard / wide / tele / selfie) or **advanced** |
+| Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. In automatic exposure the camera measures with a pre-flash first, so the shot takes half a second to a second longer. When the exposure is held (a wheel touched, or a circle in automatic) "auto" cannot judge and does not fire; "on" always fires. No flash in a burst. |
 | Timer | off, 3 s, 10 s |
+| Grid | rule-of-thirds lines |
 | Format | 4:3 or 16:9. By default, the shape of the RAW the camera gives ("as the RAW": 4:3 on the JP2, 16:9 on the Xperia XA2); the other one crops. The viewfinder takes the photo's shape (grey bands only if the camera has no preview of that shape) |
 | Resolution | the JPEG sizes this camera offers; greyed in RAW (the sensor's size) and in snap (its own small size, shown) |
 | Quality | JPEG quality: 20, 40, 60, 80, 90, 95 (default) or 100 |
 | White bal. | automatic or a preset (daylight, cloudy, tungsten...) |
-| Frames, Colour NR, Moiré, Sharpen | RAWfish-ir's processing of the **jpg**, shown when Settings > Camera menu > "JPG processing in the camera menu" is on (else set in `rawfish-ir.conf`): frames merged (1, 2, 4), the colour noise filter, the false-colour filter and the sharpening; the default of each has a green ring |
-| Bracket | (not in snap; in jpg the three photos are the camera's own JPEG, as a line in the viewfinder says when the bracket is chosen) off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
-| Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. In automatic exposure the camera measures with a pre-flash first, so the shot takes half a second to a second longer. When the exposure is held (a wheel touched, or a circle in automatic) "auto" cannot judge and does not fire; "on" always fires. No flash in a burst. |
-| Grid | rule-of-thirds lines |
-| Σ denoise | for Σ (stacked) shots only: 2x or 4x the frames for less noise, 2x or 4x the time |
+| Bracket | (not in snap, not with a Σ shutter: there it shows "off", greyed, and the chosen bracket comes back when the shutter leaves Σ; in jpg the three photos are the camera's own JPEG, as a line in the viewfinder says when the bracket is chosen) off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
+| JPG processing: Frames, Colour NR, Moiré, Sharpen | four columns framed together, named under them: RAWfish-ir's processing of the **jpg**, shown when Settings > Camera menu > "JPG processing in the camera menu" is on (else set in `rawfish-ir.conf`): frames merged (1, 2, 4), the colour noise filter, the false-colour filter and the sharpening; the default of each has a green ring. Greyed together outside our jpg (raw, snap, Σ, a bracket) |
+| Level | the level's zero: "factory" (the sensor's) or "zeroed" (recorded by holding "level" with the phone upright) |
 | Focus cal. | the focus calibration assistant (when enabled in Settings) |
+
+The band always opens on its left end. The Σ denoise (2x or 4x the frames for a Σ shot) is set in `rawfish-ir.conf`, not in the menu.
 
 In **simple** mode the menu only keeps the flash, timer, format and white balance (this
 can be changed in `~/.config/com.rawfish/rawfish-ir/simple.json`, see the README).
