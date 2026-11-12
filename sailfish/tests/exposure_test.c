@@ -86,6 +86,22 @@ int main(void)
     for (i = 0; i < 5; ++i) frame(e, t += 100);
     CHECK(fabs(last_state.offset_stops - 2.0) < 0.3, "manual: scene 2 stops brighter -> offset +2");
     CHECK(!isnan(last_state.ev100), "manual: EV100 available (aperture known)");
+    /* 3b. Stops from a neutral grey (0.3.8): the same +2 in "stops"; it
+     *     follows the settings (ISO doubled -> +1 more), and a clipped
+     *     metered area marks the value as a floor. */
+    CHECK(last_state.stops_valid && fabs(last_state.stops - 2.0) < 0.3 && last_state.stops_clip == 0,
+          "manual: stops +2 from grey");
+    ctl_exp_set_iso(e, last_state.iso * 2);
+    for (i = 0; i < 5; ++i) frame(e, t += 100);
+    CHECK(fabs(last_state.stops - 3.0) < 0.3, "manual: ISO doubled -> stops +3");
+    ctl_exp_meter_clip(e, 0, 40);                                /* 40 % of the area at white */
+    frame(e, t += 100);
+    CHECK(last_state.stops_clip == 1, "manual: a clipped area marks the stops as a floor");
+    ctl_exp_meter_clip(e, 0, 0);
+    frame(e, t += 100);
+    CHECK(last_state.stops_clip == 0, "manual: no clipping, no mark");
+    ctl_exp_set_iso(e, last_state.iso / 2);
+    for (i = 0; i < 5; ++i) frame(e, t += 100);
     /* 4. Back to automatic: ev 0 and exposure auto, once. */
     before = ncmds;
     ctl_exp_reset_auto(e);

@@ -1885,7 +1885,7 @@ ApplicationWindow {
                 }
                 // The exposure's point (a long press): a sun. The exposure meters
                 // a 5 % spot there; in a manual or priority exposure the light
-                // there shows above it (an absolute EV at ISO 100: a spot meter).
+                // there shows above it (stops from a neutral grey: a spot meter).
                 // A tap on it: the exposure back to the whole image.
                 FocusCircle {
                     id: lightMarker
@@ -1898,8 +1898,14 @@ ApplicationWindow {
                     MouseArea { anchors.fill: parent; onClicked: page.clearLight() }
                     Label {
                         anchors { bottom: parent.top; horizontalCenter: parent.horizontalCenter }
-                        visible: !exposure.fullAuto && !isNaN(exposure.meteredEv100)
-                        text: "EV " + exposure.meteredEv100.toFixed(1)
+                        // Stops from a neutral grey correctly exposed, with the
+                        // settings in force (0.3.8): ISO 500 -> 1000 adds one.
+                        // It replaced the spot's absolute EV100 (the scene's
+                        // light, which does not move with the settings: it
+                        // read as a value going the wrong way). "≥ +2.5": the
+                        // spot is clipped, at least that much.
+                        visible: !exposure.fullAuto && exposure.stopsValid
+                        text: exposure.stopsText()
                         color: "white"; font.pixelSize: Theme.fontSizeSmall
                         style: Text.Outline; styleColor: "black"
                     }
@@ -2253,10 +2259,9 @@ ApplicationWindow {
                             visible: exposure.fullManual
                             color: app.deckTextColor
                             font { pixelSize: Theme.fontSizeLarge; bold: true }
-                            text: exposure.manualOffsetValid
-                                  ? (exposure.manualOffsetStops > 0 ? "+" : "")
-                                    + exposure.manualOffsetStops.toFixed(1)
-                                  : "\u2014"
+                            // the same measure as the sun's label (with its
+                                // "at least / at most" marks when clipped)
+                            text: exposure.stopsText()
                         }
 
                         // Shutter (Jolla system icon) with zoom + above and zoom -

@@ -47,6 +47,17 @@ typedef struct {
     double offset_stops;        /* full manual: + brighter than automatic */
     int offset_valid;
     double ev100;               /* the metered light level; NAN without aperture */
+    /* Not in automatic: how many stops the metered area (the sun's spot, or
+     * else the view) sits above (+) or below (-) a neutral grey correctly
+     * exposed -- the grey the camera's own automatic exposure aims at, at
+     * EV 0 -- with the settings in force. ISO 500 -> 1000: one stop more.
+     * stops_clip: +1 when much of the area is clipped white (the value is
+     * then a floor: at least that much), -1 when most of it is crushed
+     * black (a ceiling), 0 otherwise. (0.3.8; full manual's offset_stops
+     * is the same measure, without the clip flags.) */
+    double stops;
+    int stops_valid;
+    int stops_clip;
     /* A Σ (stacked) shutter's preview: one frame of pv_ms at a raised ISO
      * stands for the stack (exposure = time x gain). pv_slow: the ISO limit
      * forced a frame longer than the target rate's; deficit_stops > 0: even
@@ -78,6 +89,10 @@ void ctl_exp_restart(ctl_exposure_t *e);
 /* Events from the engine. */
 void ctl_exp_live(ctl_exposure_t *e, int iso, double exp_ns, int ae_state);
 void ctl_exp_sample(ctl_exposure_t *e, double mean, int frame_iso, double frame_exp_ns, double now_ms);
+/* The metered area's clipped (green near white) and crushed (near black)
+ * shares, in percent, from the same meter line, given just before its
+ * ctl_exp_sample: they qualify the "stops" value (see stops_clip). */
+void ctl_exp_meter_clip(ctl_exposure_t *e, double lo_pct, double hi_pct);
 
 /* Commands from the interface. */
 void ctl_exp_touch_iso(ctl_exposure_t *e);        /* the ISO wheel touched: pinned where it is */

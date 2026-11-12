@@ -110,12 +110,12 @@ void ctl_engine_busy(int busy)
 }
 static void exp_state(void *ctx, const ctl_exp_state_t *s)
 {
-    char line[320];
+    char line[420];
     (void)ctx;
     snprintf(line, sizeof line,
-             "xpstate iso=%d exp_ns=%.0f iso_manual=%d shutter_manual=%d full_auto=%d full_manual=%d "
+             "xpstate stops=%.2f stops_valid=%d stops_clip=%d iso=%d exp_ns=%.0f iso_manual=%d shutter_manual=%d full_auto=%d full_manual=%d "
              "fixed=%d spot=%d ev=%d offset=%.3f offset_valid=%d pv_ms=%.0f pv_slow=%d deficit=%.2f too_dark=%d ev100=%s\n",
-             s->iso, s->shutter_ns, s->iso_manual, s->shutter_manual, s->full_auto, s->full_manual,
+             s->stops, s->stops_valid, s->stops_clip, s->iso, s->shutter_ns, s->iso_manual, s->shutter_manual, s->full_auto, s->full_manual,
              s->fixed_pair, s->spot_hold, s->ev_steps, s->offset_stops, s->offset_valid,
              s->pv_ms, s->pv_slow, s->deficit_stops, s->too_dark,
              isnan(s->ev100) ? "nan" : "");
@@ -224,12 +224,14 @@ static void on_event(const char *line)
             if (c.foc) ctl_focus_live(c.foc, (int)fieldd(line, "af_state", 0), fieldd(line, "focus_real", -1), now_ms());
             if (c.view) ctl_view_tick(c.view, now_ms());  /* a throttled loupe command, if any */
         } else if (!strncmp(line, "meter ", 6)) {
+            ctl_exp_meter_clip(c.exp, fieldd(line, "mclip_lo", 0), fieldd(line, "mclip_hi", 0));
             ctl_exp_sample(c.exp, fieldd(line, "mean", 0), (int)fieldd(line, "iso", 0), fieldd(line, "exp_ns", 0), now_ms());
         } else if (!strncmp(line, "vfmeter ", 8)) {
             /* the frame's own pair when the engine knew it, else the live one */
             int iso = (int)fieldd(line, "iso", 0);
             double exp_ns = fieldd(line, "exp_ns", 0);
             if (iso <= 0 || exp_ns <= 0) { iso = c.live_iso; exp_ns = c.live_exp_ns; }
+            ctl_exp_meter_clip(c.exp, fieldd(line, "mclip_lo", 0), fieldd(line, "mclip_hi", 0));
             ctl_exp_sample(c.exp, fieldd(line, "mean", 0), iso, exp_ns, now_ms());
         }
     }

@@ -91,6 +91,12 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- In a manual or priority exposure, the value over the sun (and the
+  number over the histogram in full manual) is the stops from a neutral
+  grey correctly exposed, with the settings in force: ISO 500 -> 1000
+  adds one. It was the scene's absolute EV100, which does not move with
+  the settings. "≥ +2.5": the metered area is clipped, at least that
+  much; "≤ -4.0": crushed black, at most that much.
 - Detailed log: every 2 s, the viewfinder's pace -- frames per second,
   the camera's own delay (a frame's age when it reaches us, from its
   sensor timestamp, where the camera stamps with the boot clock) and the

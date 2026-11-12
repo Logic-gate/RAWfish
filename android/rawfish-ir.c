@@ -1027,6 +1027,11 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
     static double last_ms = 0;
     long hist[3][64] = {{0}}, n = 0, lo = 0, hi = 0, peak = 1;
     long shist[3][64] = {{0}}, speak = 1;              /* the spot's own histogram */
+    /* How much of the METERED area (the spot, or else the window) is clipped
+     * white (green >= 250) or crushed black (green <= 5): with much of it
+     * clipped, the mean is a floor, not a measure (the controller's "stops",
+     * 0.3.8). */
+    long m_n = 0, m_hi = 0, m_lo = 0;
     double sum = 0, wsum = 0, now = now_ms();
     int x, y, c, i, spot_on;
     int hx0, hy0, hx1, hy1, hstep;
@@ -1056,6 +1061,7 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
                 for (x = bx0; x < bx1; x += bstep) {
                     const uint8_t *px = rgb + (y * w + x) * 3;
                     sum += lut[px[1]]; wsum += 1.0;
+                    m_n++; m_hi += px[1] >= 250; m_lo += px[1] <= 5;
                     for (c = 0; c < 3; ++c) shist[c][px[c] >> 2]++;
                 }
         } else spot_on = 0;                          /* the spot is out of this frame: centre-weighted */
@@ -1093,6 +1099,7 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
                 double weight = (cy && x >= hx0 + (hx1 - hx0) / 4 && x < hx0 + 3 * (hx1 - hx0) / 4) ? 3.0 : 1.0;
                 sum += weight * lut[px[1]];
                 wsum += weight;
+                m_n++; m_hi += px[1] >= 250; m_lo += px[1] <= 5;
             }
             for (c = 0; c < 3; ++c) {
                 hist[c][px[c] >> 2]++;
@@ -1111,8 +1118,9 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
      * loop know at once whether a frame already shows the pair it sent. */
     g.vf_last_mean = sum / wsum; g.vf_last_clip_hi = 100.0 * hi / n;   /* for a capture's report: viewfinder vs photo */
     memcpy(g.vf_last_hist, hist, sizeof g.vf_last_hist);
-    p += snprintf(p, (size_t)(end - p), "vfmeter mean=%.5f clip_lo=%.3f clip_hi=%.3f iso=%d exp_ns=%lld hist=",
-                  sum / wsum, 100.0 * lo / n, 100.0 * hi / n, iso, (long long)exp_ns);
+    p += snprintf(p, (size_t)(end - p), "vfmeter mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f iso=%d exp_ns=%lld hist=",
+                  sum / wsum, 100.0 * lo / n, 100.0 * hi / n,
+                  m_n ? 100.0 * m_lo / m_n : 0.0, m_n ? 100.0 * m_hi / m_n : 0.0, iso, (long long)exp_ns);
     for (c = 0; c < 3 && p < end; ++c) {
         for (i = 0; i < 64 && p < end; ++i)
             p += snprintf(p, (size_t)(end - p), "%s%ld", i ? "," : "", hist[c][i] * 1000 / peak);
@@ -1529,6 +1537,7 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     double range, sum_g = 0, wsum = 0;
     long hist[3][64], peak = 1, n = 0, lo = 0, hi = 0;
     long shist[3][64] = {{0}}, speak = 1;              /* the spot's own histogram */
+    long m_n = 0, m_hi = 0, m_lo = 0;                  /* the metered area's clipped / crushed share (0.3.8) */
     int vx0 = 0, vy0 = 0, vx1 = 0, vy1 = 0;            /* the DISPLAYED area, for the histogram */
     char line[2400], *p = line, *end = line + sizeof line;
 
@@ -1630,6 +1639,10 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
                 gsum = (cfa == 0 || cfa == 3) ? q[1] + q[2] : q[0] + q[3];
                 sum_g += gsum / 2.0 - black;
                 wsum += 1.0;
+                {   /* the metered area's clipped / crushed share (as vf_meter) */
+                    double gn = (gsum / 2.0 - black) / range;
+                    m_n++; m_hi += gn >= 0.98; m_lo += gn <= 0.002;
+                }
                 /* ... and the spot's own histogram (R, G, B of the quad) */
                 switch (cfa) {
                 case 0:  rv = q[0]; bv = q[3]; break;
@@ -1694,6 +1707,10 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
             v[0] = rv; v[1] = (g1 + g2) / 2; v[2] = bv;
             sum_g += weight * (v[1] - black);
             wsum += weight;
+            if (!spot_on) {                           /* metered here: count its clipping */
+                double gn = (v[1] - black) / range;
+                m_n++; m_hi += gn >= 0.98; m_lo += gn <= 0.002;
+            }
             for (c = 0; c < 3; ++c) {
                 double nv = (v[c] - black) / range;
                 if (nv <= 0) { lo++; k = 0; }
@@ -1710,9 +1727,10 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     memcpy(g.meter_last_hist, hist, sizeof g.meter_last_hist);   /* for a DNG's report: meter vs photo */
 
     p += snprintf(p, (size_t)(end - p),
-                  "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f hist=",
+                  "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f hist=",
                   (long long)ts, iso, (long long)exposure_ns,
-                  sum_g / wsum / range, 100.0 * lo / n, 100.0 * hi / n);
+                  sum_g / wsum / range, 100.0 * lo / n, 100.0 * hi / n,
+                  m_n ? 100.0 * m_lo / m_n : 0.0, m_n ? 100.0 * m_hi / m_n : 0.0);
     for (c = 0; c < 3 && p < end; ++c) {
         for (x = 0; x < 64 && p < end; ++x)
             p += snprintf(p, (size_t)(end - p), "%s%ld", x ? "," : "", hist[c][x] * 1000 / peak);

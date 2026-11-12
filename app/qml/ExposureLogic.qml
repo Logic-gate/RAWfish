@@ -40,6 +40,18 @@ Item {
     readonly property real manualOffsetStops: st.offset !== undefined ? st.offset : 0
     readonly property bool manualOffsetValid: !!st.offsetValid
     readonly property real meteredEv100: st.ev100 !== undefined ? st.ev100 : NaN
+    // Stops from a neutral grey correctly exposed (not in automatic): the
+    // metered area (the sun's spot, or the view) with the settings in force;
+    // stopsClip +1 = a floor (clipped white), -1 = a ceiling (crushed black).
+    readonly property real stops: st.stops !== undefined ? st.stops : 0
+    readonly property bool stopsValid: !!st.stopsValid
+    readonly property int stopsClip: st.stopsClip !== undefined ? st.stopsClip : 0
+    // "+1.3", "-0.7", "≥ +2.5" (at least: clipped), "≤ -4.0" (at most: crushed).
+    function stopsText() {
+        if (!stopsValid) return "\u2014"
+        var v = (stops > 0 ? "+" : stops < 0 ? "\u2212" : "") + Math.abs(stops).toFixed(1)
+        return (stopsClip > 0 ? "\u2265 " : stopsClip < 0 ? "\u2264 " : "") + v
+    }
     // A Σ preview at its limits (the controller's report): slowed by the ISO
     // limit; darker than the photo by `pvDeficit` stops; too dark to measure.
     readonly property real pvMs: st.pvMs !== undefined ? st.pvMs : 0

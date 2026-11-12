@@ -908,6 +908,9 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         st.insert(QStringLiteral("pvSlow"), f.value("pv_slow").toInt() != 0);
         st.insert(QStringLiteral("deficit"), f.value("deficit").toDouble());
         st.insert(QStringLiteral("tooDark"), f.value("too_dark").toInt() != 0);
+        st.insert(QStringLiteral("stops"), f.value("stops").toDouble());           /* from a neutral grey (0.3.8) */
+        st.insert(QStringLiteral("stopsValid"), f.value("stops_valid").toInt() != 0);
+        st.insert(QStringLiteral("stopsClip"), f.value("stops_clip").toInt());
         const QByteArray ev100 = f.value("ev100");
         st.insert(QStringLiteral("ev100"), ev100 == "nan" || ev100.isEmpty() ? qQNaN() : ev100.toDouble());
         m_exposureState = st;

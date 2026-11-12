@@ -43,6 +43,9 @@ struct ctl_exposure {
     double offset_stops;
     int offset_valid;
     double ev100;
+    double stops;               /* see ctl_exp_state_t.stops */
+    int stops_valid, stops_clip;
+    double mclip_lo, mclip_hi;  /* the last meter line's clipped / crushed shares, % */
 
     double pv_target_ns;        /* a Σ preview frame: as short as this, ISO permitting */
     double pv_ns;               /* the preview frame time last sent */
@@ -284,6 +287,25 @@ static void spot_correct(ctl_exposure_t *e, double mean, int frame_iso, double f
     send_pair(e, e->spot_iso, e->spot_shutter_ns);
 }
 
+void ctl_exp_meter_clip(ctl_exposure_t *e, double lo_pct, double hi_pct) { e->mclip_lo = lo_pct; e->mclip_hi = hi_pct; }
+
+/* The stops from a neutral grey (see ctl_exp_state_t.stops). mean: what the
+ * photo would read (a Σ preview's deficit already applied). The grey is
+ * the calibrated target WITHOUT the EV compensation: target(e) carries the
+ * EV wheel's stops in priority modes, and "correctly exposed" means EV 0.
+ * Example: the target is 0.18, the spot reads 0.36 -> +1.0; the user then
+ * halves the ISO -> the spot reads 0.18 -> 0.0. Clip thresholds: more than
+ * 10 % of the area at white, or more than half at black, and the mean no
+ * longer moves with the exposure as it should. */
+static void update_stops(ctl_exposure_t *e, double mean)
+{
+    double grey = target(e) / pow(2.0, ev_stops(e));
+    if (full_auto(e) || !(mean > 0) || !(grey > 0)) { e->stops_valid = 0; return; }
+    e->stops = log2d(mean / grey);
+    e->stops_valid = 1;
+    e->stops_clip = e->mclip_hi > 10.0 ? 1 : e->mclip_lo > 50.0 ? -1 : 0;
+}
+
 void ctl_exp_sample(ctl_exposure_t *e, double mean, int frame_iso, double frame_exp_ns, double now_ms)
 {
     double err, gain;
@@ -291,6 +313,7 @@ void ctl_exp_sample(ctl_exposure_t *e, double mean, int frame_iso, double frame_
     update_metered_ev(e, mean, frame_iso, frame_exp_ns);
     if (e->spot_hold) {
         if (e->spot_steps > 0) spot_correct(e, mean, frame_iso, frame_exp_ns);
+        update_stops(e, mean);
         publish(e);
         return;
     }
@@ -318,9 +341,10 @@ void ctl_exp_sample(ctl_exposure_t *e, double mean, int frame_iso, double frame_
         int stacked = e->shutter_manual && is_stacked(e, e->manual_shutter_ns);
         int dark = stacked && e->pv_at_limit && mean < 0.004;
         if (dark != e->too_dark) { e->too_dark = dark; publish(e); }
-        if (dark) return;                   /* leave the pair alone: no measure */
+        if (dark) { if (e->stops_valid) { e->stops_valid = 0; publish(e); } return; }   /* no measure */
         if (stacked) mean *= e->pv_deficit;
     }
+    update_stops(e, mean);
     err = log2d(target(e) / mean);          /* stops to add to reach the target */
     if (full_manual(e)) {
         e->offset_stops = -err;             /* + = brighter than automatic would pick */
@@ -442,6 +466,9 @@ void ctl_exp_state(const ctl_exposure_t *e, ctl_exp_state_t *out)
     out->offset_stops = e->offset_stops;
     out->offset_valid = e->offset_valid;
     out->ev100 = e->ev100;
+    out->stops = e->stops;
+    out->stops_valid = e->stops_valid && !full_auto(e);
+    out->stops_clip = e->stops_clip;
     {
         int stacked = e->shutter_manual && is_stacked(e, e->manual_shutter_ns);
         out->pv_ms = stacked ? e->pv_ns / 1e6 : 0;
