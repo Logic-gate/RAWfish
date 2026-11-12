@@ -109,13 +109,19 @@ logChecks=false
 ; The YUV stream's size for JPG: jpeg = the photo's size, taken through the
 ; largest listed YUV size that is a whole multiple of it, averaged down (the
 ; normal case: a mid-size YUV stream makes the JP2's viewfinder lag, the full
-; size does not); where none is, the camera's largest stream averaged down to
-; within 8 % of the size asked (the selfie camera: 3280x2464 photos from its
-; 6560x4928 stream); max = the largest, processed at that size (slow); or a
+; size does not); max = the largest, processed at that size (slow); or a
 ; WIDTHxHEIGHT the camera lists, which sets the photo's size to that size
 ; on EVERY camera (a 1280x960 stream makes 1.2 MP photos). A test key.
 ;                                               values: jpeg, max, WxH  default jpeg
 jpgYuvStream=jpeg
+; JPG, with jpgYuvStream=jpeg: where the camera lists no YUV stream that is a
+; whole multiple of the photo's size (the JP2's selfie camera: its 3264x2448
+; photo, and an in-between stream makes its viewfinder lag), take the camera's
+; LARGEST stream and average it down, within 8 % of the size asked (3280x2464
+; photos from its 6560x4928 stream). A new rule, off until tried: 0 = as before.
+; Cameras that already have an exact multiple (camera 0) are not affected.
+;                                               values: 0, 1            default 0
+jpgYuvFromLargestStream=0
 ; snap (in TYPE): the camera driver's own JPEG at a small size, for utility
 ; shots (a receipt, a sign), noise reduction and sharpening HQ. Its size, as
 ; WIDTHxHEIGHT among the camera's JPEG sizes ("" = the largest 4:3 size of

@@ -11,7 +11,9 @@
  * The first choice is exact: a listed stream that is exactly k times the
  * photo's size (camera 0: 8192x6144 for 4096x3072). This file is the second:
  * when none exists, the LARGEST listed stream, averaged down by the factor
- * that brings it closest to the size asked, if it comes close enough.
+ * that brings it closest to the size asked, if it comes close enough. The
+ * engine uses it only when asked to (yuv=jpeg+largest, set by the interface
+ * from rawfish-ir.conf's jpgYuvFromLargestStream, off by default).
  *
  * Camera 1 as the example: its largest stream is 6560x4928, the photo asked
  * 3264x2448. Divided by 2 the stream gives 3280x2464: 0.5 % wider and

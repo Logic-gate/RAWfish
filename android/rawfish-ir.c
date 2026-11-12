@@ -629,7 +629,9 @@ static struct {
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
     long vf_last_hist[3][64];                    /* and its histogram (bins of 4 levels, r;g;b) */
     long meter_last_hist[3][64];                 /* the RAW meter's last histogram (k_hist_edge bins) */
-    int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, 0 none) */
+    int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, -2 as the JPEG, -3 as the JPEG
+                                             * with the largest-stream rule, 0 none) */
+    int yuv_from_largest;                   /* -3 was asked: see yuvsize.h; 0 = the rule off, the engine as before 0.3.8 */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
     /* "captured kind=..." still owed for the photo in progress (NULL: none).
@@ -3009,6 +3011,10 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     if (g.yuv_w == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &g.yuv_w, &g.yuv_h))
         g.yuv_w = g.yuv_h = 0;
     g.yuv_down = 1;
+    /* -3: "as the JPEG" (-2) plus the largest-stream rule below, which is an
+     * opt-in (rawfish-ir.conf jpgYuvFromLargestStream): left off, nothing
+     * here differs from the engine before 0.3.8. */
+    if (g.yuv_w == -3) { g.yuv_w = g.yuv_h = -2; g.yuv_from_largest = 1; }
     if (g.yuv_w == -2) {
         /* "As the JPEG": the photo's size, but through the LARGEST listed YUV
          * size that is a whole multiple of it, averaged down on copy. A
@@ -3018,14 +3024,15 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         int k, bw = 0, bh = 0, bk = 0, lw = 0, lh = 0, ak = 0;
         for (k = 4; k >= 2; --k)
             if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw * k, jh * k)) { bw = jw * k; bh = jh * k; bk = k; break; }
-        /* No exact multiple: the largest stream the camera lists, if it can
-         * be averaged down to about the size asked (yuvsize.h). The selfie
+        /* No exact multiple, and the rule asked for (yuv=jpeg+largest): the
+         * largest stream the camera lists, if it can be averaged down to about
+         * the size asked (yuvsize.h). The selfie
          * camera of the JP2 (photo 3264x2448, largest stream 6560x4928) used
          * to get a 3264x2448 stream here, and its viewfinder lagged. The
          * photo is then the stream's size over k (3280x2464), not exactly the
          * size asked. A camera whose largest stream is the photo's own size
          * (camera 2: 4096x3072) gets no factor and keeps the next branch. */
-        if (!bk && largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &lw, &lh)) ak = yuv_binned_k(jw, jh, lw, lh);
+        if (g.yuv_from_largest && !bk && largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &lw, &lh)) ak = yuv_binned_k(jw, jh, lw, lh);
         if (bk) { g.yuv_w = bw; g.yuv_h = bh; g.yuv_down = bk; }
         else if (ak) { g.yuv_w = lw; g.yuv_h = lh; g.yuv_down = ak; }
         else if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh)) { g.yuv_w = jw; g.yuv_h = jh; }
@@ -7268,8 +7275,10 @@ static int yuv_copy(AImage *img, ir_yuv_t *f)
  * the largest; 0,0 none). For a JPEG compressed by the command line. */
 IR_API int indraw_set_yuv_size(int w, int h)
 {
-    /* -1,-1: the largest; -2,-2: the JPEG's size (the one the user chose) */
-    if (!((w == -1 && h == -1) || (w == -2 && h == -2) || (w == 0 && h == 0) || (w > 0 && h > 0 && !(w & 1) && !(h & 1)))) return IR_EARG;
+    /* -1,-1: the largest; -2,-2: the JPEG's size (the one the user chose);
+     * -3,-3: the same, and where no listed stream is an exact multiple of it,
+     * the camera's largest stream averaged down (yuvsize.h) */
+    if (!((w == -1 && h == -1) || (w == -2 && h == -2) || (w == -3 && h == -3) || (w == 0 && h == 0) || (w > 0 && h > 0 && !(w & 1) && !(h & 1)))) return IR_EARG;
     g.yuv_w = w; g.yuv_h = h;
     return IR_OK;
 }

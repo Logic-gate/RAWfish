@@ -97,15 +97,17 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
-- The selfie camera's viewfinder no longer lags with our JPG: its 3264x2448
-  photo had no YUV stream it could be averaged down from, so a stream of
-  that in-between size was opened, which makes the JP2's viewfinder lag
-  (a 1280x960 stream, tried with jpgYuvStream, did not). The engine now
-  opens the camera's largest stream and averages it by 2: photos of
-  3280x2464 instead of 3264x2448, at the next engine start (a camera
-  switch restarts it). Cameras 0 and 2 are unchanged. Other shapes than
-  4:3 on that camera (16:9) keep their exact stream. The caps line of the
-  log gives the stream in force (yuv_stream=WxH/k).
+- The selfie camera's viewfinder lags with our JPG: its 3264x2448 photo
+  has no YUV stream it can be averaged down from, so a stream of that
+  in-between size is opened, which makes the JP2's viewfinder lag (a
+  1280x960 stream, tried with jpgYuvStream, did not). New, OFF until
+  tried: jpgYuvFromLargestStream=1 in rawfish-ir.conf makes the engine open
+  the camera's largest stream and average it by 2: photos of 3280x2464
+  instead of 3264x2448, from the next engine start (a camera switch
+  restarts it). Cameras with an exact multiple (camera 0) are never
+  affected; other shapes than 4:3 on that camera (16:9) keep their exact
+  stream. With the key at 0 the engine behaves as before. The caps line of
+  the log gives the stream in force (yuv_stream=WxH/k).
 - The flash makes everything automatic: with the flash "on" or "auto"
   (on a camera that has one) the exposure and the focus go automatic,
   their manual controls (ISO, speed, FOCUS) are greyed, and a touch on
