@@ -91,6 +91,12 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- "Write the device profile" (Settings): the camera page shows "Probing
+  the camera…" while the probe runs (the screen waits for it, up to 15 s);
+  until now it froze without a word.
+- Documentation: a power loss right after a photo can, exceptionally,
+  leave it cut (no fsync, accepted); porting: check that the white
+  balance reaches our JPG on another phone.
 - With a stacked shutter (Σ) the bracket shows "off" and is greyed (a
   tap says why): a Σ is one long exposure. The chosen bracket is kept and
   comes back when the shutter leaves Σ, as the type does.

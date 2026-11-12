@@ -411,6 +411,7 @@ ApplicationWindow {
             readonly property bool bracketByHal: imageType === "jpg" && ownJpeg && settingsMenu.effBracket !== "off"
             onBracketByHalChanged: if (bracketByHal) { page.noticeText = qsTr("bracket: taken as the camera's own JPEG"); noticeTimer.restart() }
             property string noticeText: ""                 // a line in the viewfinder for a few seconds
+            property bool probing: false                   // the device profile being written (Settings asked)
             Timer { id: noticeTimer; interval: 3500; onTriggered: page.noticeText = "" }
             // The touch rule, said each time: a two-second line in the viewfinder.
             property bool touchHintShown: false
@@ -1270,12 +1271,24 @@ ApplicationWindow {
                     // Settings app changes them (effective at the next start).
                     // A pending "write the device profile" request is served
                     // first: probe is a short separate process.
+                    // runProbe() waits for the probe (up to 15 s) and the screen
+                    // does not move meanwhile: "Probing the camera..." is shown
+                    // first, the probe run 0.2 s later so that a frame with the
+                    // message is drawn before the wait. (The probe only reads
+                    // the cameras' characteristics, it does not open one: the
+                    // engine starting meanwhile is no conflict.)
                     Component.onCompleted: {
                         app.applyOutput(viewfinder)
-                        if (deviceConf.probeRequested) {
+                        if (deviceConf.probeRequested) { page.probing = true; probeTimer.start() }
+                    }
+                    Timer {
+                        id: probeTimer
+                        interval: 200
+                        onTriggered: {
                             var ok = viewfinder.runProbe()
                             deviceConf.probeRequested = false
                             deviceConf.probeDone = ok ? Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm") : qsTr("failed, see the log")
+                            page.probing = false
                         }
                     }
                     // The lens-shading assistant asked for in Settings: pushed
@@ -1359,6 +1372,14 @@ ApplicationWindow {
                     visible: page.noticeText !== "" && viewfinder.running
                     text: page.noticeText
                     color: "white"; font.pixelSize: Theme.fontSizeSmall
+                    style: Text.Outline; styleColor: "black"
+                }
+                // The probe asked in Settings: the screen waits for it.
+                Label {
+                    anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter }
+                    visible: page.probing
+                    text: qsTr("Probing the camera…")
+                    color: "white"; font.pixelSize: Theme.fontSizeMedium
                     style: Text.Outline; styleColor: "black"
                 }
                 // The touch rule, two seconds after each tap or hold.

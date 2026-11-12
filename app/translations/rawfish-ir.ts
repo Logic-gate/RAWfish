@@ -998,6 +998,10 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Probing the camera…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+64"/>
         <source>Starting camera…</source>
         <translation type="unfinished"></translation>

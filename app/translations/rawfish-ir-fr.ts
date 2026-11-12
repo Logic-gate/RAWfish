@@ -1005,6 +1005,10 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>échec, voir le journal</translation>
     </message>
     <message>
+        <source>Probing the camera…</source>
+        <translation>Sondage de la caméra…</translation>
+    </message>
+    <message>
         <location line="+64" />
         <source>Starting camera…</source>
         <translation>Démarrage de l'appareil photo…</translation>

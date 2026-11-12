@@ -62,8 +62,11 @@ installs RAWfish-ir on a device that is not the author's.
   app dies mid-stack, the engine sees its stdin close, aborts the stack at
   the next sub-frame, writes the frames accumulated so far and closes the
   camera. The user can abort from the screen the same way (SIGUSR1).
-- Files are written through `.part` + rename: a failure never leaves a
+- Files are written through `.part` + rename: a write error never leaves a
   truncated photo behind. An Exif-writer failure falls back to the plain JPEG.
+  A power loss or a crash within a second or so after a photo can,
+  exceptionally, leave it empty or cut: the files are not synced to the
+  flash (no fsync), which would slow the next shot. Accepted (November 2026).
 
 ## Known limits (not safety issues)
 

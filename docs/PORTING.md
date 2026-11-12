@@ -73,6 +73,16 @@ exposure ceiling, the focus calibration, the aid thresholds (below).
 9. Stacking: take a Σ4s shot and a plain shot of the same scene and compare
    sharpness (the lens must not move) and exposure; the first stack also
    measures the HAL's per-frame latency for the wheel's time estimates.
+10. Our JPG (the YUV stream) and the white balance: the engine sends the
+   white balance (menu preset, warm/tint shift, the white picked by a long
+   press) and the scene mode to the viewfinder, the camera's JPEG and the
+   RAW requests only, not to our JPG's capture requests. On the JP2 the
+   camera's 3A is one state driven by the viewfinder's request, so our JPG
+   gets them anyway (checked November 2026); another HAL may honour each
+   request's own setting instead. Check: choose "Incandescent" (the
+   viewfinder turns blue), take our JPG with 1 and with 4 frames: both must
+   be as blue as the viewfinder. If not, the white balance must be sent to
+   g.yuv_request and g.yuv_burst_req[] too (as the zoom is, since 0368).
 
 ## What to send back for the repository
 
