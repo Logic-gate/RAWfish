@@ -481,6 +481,12 @@ int dng_write(const char *path, const dng_params_t *p)
 
     if (!path || !p || !p->pixels || p->width <= 0 || p->height <= 0) return -1;
     pixel_bytes = (size_t)p->width * p->height * 2; /* 16 bits per sample       */
+    /* A classic TIFF has 32-bit offsets: the pixels and everything before
+     * them must stay under 4 GiB. 16 MB of headroom for the directories,
+     * the Exif and the GainMap (a few hundred KB in practice). Far beyond
+     * any phone sensor (the JP2's 50 MP RAW is 100 MB); said rather than
+     * written wrong (audit, November 2026). */
+    if ((uint64_t)p->width * (uint64_t)p->height * 2u > 0xFFFFFFFFu - (16u << 20)) return EFBIG;
     if (snprintf(tmp, sizeof tmp, "%s.part", path) >= (int)sizeof tmp) return -1;
 
     /* Build the GainMap blob once; it is referenced from IFD0's trailing blob. */

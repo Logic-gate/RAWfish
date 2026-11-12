@@ -42,7 +42,9 @@ typedef struct {
 #define CTL_SHOOT_LINE 256
 
 /* Fills lines[] with the engine commands and returns their number (0 if the
- * request is invalid). shutter_max_ns / exp_min_ns: the camera's limits. */
+ * request is invalid, or if a line would not fit in CTL_SHOOT_LINE: nothing
+ * is taken rather than a cut command). shutter_max_ns / exp_min_ns: the
+ * camera's limits. */
 int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
                     double shutter_max_ns, double exp_min_ns,
                     const ctl_focus_state_t *fs, char lines[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE]);

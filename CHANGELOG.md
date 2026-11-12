@@ -91,6 +91,15 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- Robustness (two audits, November 2026): an exposure given as nan, inf
+  or beyond 11 days is refused (its conversion was undefined); iso= and
+  stk_denoise= must be whole numbers in range ("iso=abc" was taken as 0,
+  the camera's AE); a shutter press whose command would not fit is
+  refused and said, instead of a cut command; an over-long event line is
+  dropped and said, instead of being read cut; caps without an ISO range
+  are said (the exposure control stays off); the controller frees what
+  it made if it cannot start; a DNG over 4 GiB is refused (32-bit TIFF
+  offsets). The controller's diagnostics go to the log ("# ...").
 - Detailed log (Settings): the viewfinder's crop as the camera reports
   it, at each change, and in our JPG's report the crop asked for the
   photo and the one the camera used (asked_crop, hal_crop), to tell a

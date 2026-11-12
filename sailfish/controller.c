@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,6 +159,19 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
  * comes from them.) */
 void ctl_set_log(ctl_log_fn log) { c.log = log; }
 
+/* A diagnostic: to the log (ctl_set_log, "# ..." in rawfish-ir.log) and to
+ * stderr (the system journal: the interface forwards the CLI's stderr). */
+static void note(const char *fmt, ...)
+{
+    char t[256];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(t, sizeof t, fmt, ap);
+    va_end(ap);
+    if (c.log) c.log(t);
+    fprintf(stderr, "rawfish-ir-cli: controller: %s\n", t);
+}
+
 /* One event line from the engine: read by the exposure behaviour, then
  * passed on to the interface as it is -- except the diagnostics meant for
  * the log only (halcrop: the viewfinder's crop as the camera reports it,
@@ -186,6 +200,12 @@ static void on_event(const char *line)
             caps.focal_eq = fieldd(line, "focal_eq", 26);
             caps.aperture = fieldd(line, "aperture", 0);
             c.caps = caps;
+            /* Without an ISO range the exposure behaviour stays off (not
+             * ready) and sends nothing: said once per caps line, otherwise a
+             * cut or malformed caps line left the exposure silently dead
+             * (audit, November 2026). */
+            if (caps.iso_min <= 0 || caps.iso_max < caps.iso_min)
+                note("caps without a valid ISO range (iso_min=%d iso_max=%d): exposure control off", caps.iso_min, caps.iso_max);
             ctl_exp_set_caps(c.exp, &caps);
             if (c.view) { ctl_view_set_caps(c.view, fieldd(line, "zoom_max", 1), (int)fieldd(line, "crop_free", 0)); ctl_view_restart(c.view); }
             if (c.foc) ctl_focus_restart(c.foc);         /* a (re)started engine: the mode again */
@@ -305,6 +325,13 @@ static int shoot_command(const char *line)
     ctl_focus_state(c.foc, &fs);
     c.capture_i = 0;
     c.capture_n = ctl_shoot_lines(&r, &xs, c.caps.shutter_max_ns, c.caps.exp_min_ns, &fs, c.capture_q);
+    /* Nothing to take (no name, or a line that would not fit): said, instead
+     * of a press that silently does nothing. The interface does not wait for
+     * an answer to "sh", so this changes nothing else; the log says it. */
+    if (c.capture_n == 0) {
+        note("sh: nothing taken (no name, or a capture line too long)");
+        if (c.emit) c.emit("{\"ok\":false,\"error\":\"sh: nothing taken (no name, or a capture line too long)\"}\n");
+    }
     return 1;
 }
 int ctl_pop_capture(char *buf, size_t n)
@@ -344,6 +371,7 @@ static void *reader(void *arg)
 {
     char buf[4096], line[4096];
     size_t have = 0;
+    int overlong = 0;                                   /* the line did not fit */
     (void)arg;
     for (;;) {
         ssize_t n = read(c.rd, buf, sizeof buf);
@@ -351,10 +379,20 @@ static void *reader(void *arg)
         if (n == 0) break;                              /* writer closed           */
         for (ssize_t i = 0; i < n; ++i) {
             if (have < sizeof line - 1) line[have++] = buf[i];
+            else overlong = 1;
             if (buf[i] == '\n') {
                 line[have] = '\0';
-                on_event(line);
+                /* A line longer than the buffer was cut, and a cut line was
+                 * still read (a field missing, a number cut short) and passed
+                 * on (audit, November 2026). Now it is dropped and said in
+                 * the log (note). No line of
+                 * today's engine comes near (check-host.sh: the longest,
+                 * vfmeter, is 2600 bytes), and the interface drops SF2M
+                 * packets over 4096 bytes anyway. */
+                if (overlong) note("an event line over %zu bytes dropped", sizeof line - 1);
+                else on_event(line);
                 have = 0;
+                overlong = 0;
             }
         }
     }
@@ -381,8 +419,15 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
     c.exp = ctl_exp_new(exp_cmd, exp_state, NULL);
     c.foc = ctl_focus_new(foc_cmd, foc_state, foc_pause, foc_spot, NULL);
     c.view = ctl_view_new(view_cmd, view_state, view_ref, NULL);
-    if (pthread_create(&c.thread, NULL, reader, NULL) != 0) {
-        perror("rawfish-ir-cli: controller: thread");
+    /* A failed allocation, or no thread: everything made here is undone (the
+     * three behaviours were left allocated until 0.3.8, audit November 2026;
+     * the process stopped soon after, so it never mattered in practice). */
+    if (!c.exp || !c.foc || !c.view || pthread_create(&c.thread, NULL, reader, NULL) != 0) {
+        if (!c.exp || !c.foc || !c.view) fprintf(stderr, "rawfish-ir-cli: controller: out of memory\n");
+        else perror("rawfish-ir-cli: controller: thread");
+        ctl_view_free(c.view); c.view = NULL;
+        ctl_focus_free(c.foc); c.foc = NULL;
+        ctl_exp_free(c.exp); c.exp = NULL;
         close(c.rd); close(c.wr); c.rd = c.wr = -1;
         return -1;
     }

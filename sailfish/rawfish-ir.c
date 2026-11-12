@@ -998,9 +998,34 @@ static int parse_exposure(const char *s, int64_t *ns)
     double sec;
     char extra;
     if (sscanf(s, "%lf%c", &sec, &extra) != 1 || sec <= 0) return 0; /* seconds   */
+    /* sscanf also reads "nan", "inf" and 1e30: the cast to int64_t below is
+     * then undefined (INT64_MIN seen on x86; audit, November 2026). The
+     * engine refused them later by its range check, but the value must not
+     * be made at all. 1e6 s (11 days) is far beyond any film= or exp= the
+     * engine takes (a stack is 4096 frames at most), and keeps the cast
+     * defined (int64_t holds about 9.2e9 s). */
+    if (!isfinite(sec) || sec > 1e6) return 0;
     *ns = (int64_t)(sec * 1e9 + 0.5);
     return 1;
 }
+
+/* Parses a whole decimal integer in [lo, hi]. atoi() took "iso=abc" as 0
+ * (the camera's AE for a photo, no error) and "iso=99999999999" as whatever
+ * the overflow gave; docs/ROBUSTNESS.md promises range checks on every
+ * option (audit, November 2026). Returns 1 on success. */
+static int parse_int(const char *s, int lo, int hi, int *out)
+{
+    char *end;
+    long v;
+    errno = 0;
+    v = strtol(s, &end, 10);
+    if (errno || end == s || *end != '\0' || v < lo || v > hi) return 0;
+    *out = (int)v;
+    return 1;
+}
+/* iso=N on a capture line: 0 (= not given: the camera's AE, or the stream's
+ * pair) up to a million; the engine checks the sensor's own range. */
+#define PARSE_ISO(tok, iso) parse_int((tok) + 4, 0, 1000000, &(iso))
 
 /* Focus mode codes, same values as IR_FOCUS_* on the Android side. */
 #define F_KEEP 0
@@ -1197,8 +1222,7 @@ static int cmd_exposure(indraw_preview_exposure_fn pe, char **save, char *out)
         else if (!strncmp(tok, "exp=", 4)) {
             if (!parse_exposure(tok + 4, &exposure_ns)) { emit("{\"ok\":false,\"error\":\"exposure: bad exp\"}"); return 1; }
         } else if (!strncmp(tok, "iso=", 4)) {
-            iso = atoi(tok + 4);
-            if (iso <= 0) { emit("{\"ok\":false,\"error\":\"exposure: bad iso\"}"); return 1; }
+            if (!PARSE_ISO(tok, iso) || iso <= 0) { emit("{\"ok\":false,\"error\":\"exposure: bad iso\"}"); return 1; }
         } else { emit("{\"ok\":false,\"error\":\"exposure: unknown option\"}"); return 1; }
     }
     if (!is_auto && (exposure_ns <= 0 || iso <= 0)) {
@@ -1460,8 +1484,12 @@ static int cmd_stack(indraw_stack_fn stack, char **save, char *out)
             if (!parse_exposure(tok + 5, &film_ns)) { emit("{\"ok\":false,\"error\":\"stack: bad film\"}"); return 1; }
         } else if (!strncmp(tok, "sub=", 4)) {
             if (!parse_exposure(tok + 4, &sub_ns)) { emit("{\"ok\":false,\"error\":\"stack: bad sub\"}"); return 1; }
-        } else if (!strncmp(tok, "stk_denoise=", 12)) stk_denoise = atoi(tok + 12);
-        else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
+        } else if (!strncmp(tok, "stk_denoise=", 12)) {
+            /* 1, 2 or 4: the engine says so; here only "a number" */
+            if (!parse_int(tok + 12, 1, 4, &stk_denoise)) { emit("{\"ok\":false,\"error\":\"stack: bad stk_denoise (1, 2 or 4)\"}"); return 1; }
+        } else if (!strncmp(tok, "iso=", 4)) {
+            if (!PARSE_ISO(tok, iso)) { emit("{\"ok\":false,\"error\":\"stack: bad iso\"}"); return 1; }
+        }
         else { emit("{\"ok\":false,\"error\":\"stack: unknown option\"}"); return 1; }
     }
     if (!film_ns) { emit("{\"ok\":false,\"error\":\"stack: film= required\"}"); return 1; }
@@ -1507,7 +1535,9 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
                 return 1;
             }
         }
-        else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
+        else if (!strncmp(tok, "iso=", 4)) {
+            if (!PARSE_ISO(tok, iso)) { emit("{\"ok\":false,\"error\":\"raw: bad iso\"}"); return 1; }
+        }
         else if ((v = parse_variant(tok))) variant |= v;
         else if (!strncmp(tok, "focus=", 6)) {
             if (!parse_focus(tok + 6, &focus_mode, &focus_diopters)) {
@@ -1565,7 +1595,9 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
                 return 1;
             }
         }
-        else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
+        else if (!strncmp(tok, "iso=", 4)) {
+            if (!PARSE_ISO(tok, iso)) { emit("{\"ok\":false,\"error\":\"jpeg: bad iso\"}"); return 1; }
+        }
         else if ((v = parse_variant(tok))) variant |= v;
         else if (lookup(k_noise, tok, &nr)) continue;   /* a *_noise name       */
         else if (lookup(k_edge, tok, &edge)) continue;  /* a *_edge name        */
@@ -1688,7 +1720,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     while ((tok = strtok_r(NULL, " \t\r\n", save))) {
         if (!strncmp(tok, "q=", 2)) quality = atoi(tok + 2);
         else if (!strncmp(tok, "exp=", 4)) { if (!parse_exposure(tok + 4, &exposure_ns)) { emit("{\"ok\":false,\"error\":\"yuv: bad exp\"}"); return 1; } }
-        else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
+        else if (!strncmp(tok, "iso=", 4)) {
+            if (!PARSE_ISO(tok, iso)) { emit("{\"ok\":false,\"error\":\"yuv: bad iso\"}"); return 1; }
+        }
         else if (!strncmp(tok, "focus=", 6)) { if (!parse_focus(tok + 6, &focus_mode, &focus_diopters)) { emit("{\"ok\":false,\"error\":\"yuv: bad focus\"}"); return 1; } }
         else if (!strncmp(tok, "n=", 2)) { n = atoi(tok + 2); if (n < 1 || n > 4) { emit("{\"ok\":false,\"error\":\"yuv: n=1..4\"}"); return 1; } }
         else if (!strncmp(tok, "ev=", 3)) {         /* ev=0,-2,... one per frame */
@@ -1850,7 +1884,9 @@ static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
         if (!strncmp(tok, "n=", 2)) n = atoi(tok + 2);
         else if (!strncmp(tok, "q=", 2)) quality = atoi(tok + 2);
         else if (!strncmp(tok, "exp=", 4)) { if (!parse_exposure(tok + 4, &exposure_ns)) { emit("{\"ok\":false,\"error\":\"burst: bad exp\"}"); return 1; } }
-        else if (!strncmp(tok, "iso=", 4)) iso = atoi(tok + 4);
+        else if (!strncmp(tok, "iso=", 4)) {
+            if (!PARSE_ISO(tok, iso)) { emit("{\"ok\":false,\"error\":\"burst: bad iso\"}"); return 1; }
+        }
         else if (lookup(k_noise, tok, &nr) || lookup(k_edge, tok, &edge)) continue;
         else { emit("{\"ok\":false,\"error\":\"burst: unknown option\"}"); return 1; }
     }

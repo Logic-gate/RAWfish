@@ -5,10 +5,31 @@
 #include "ctl_shoot.h"
 
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 static int is_stacked(double ns, double shutter_max_ns) { return ns > shutter_max_ns + 1; }
+
+/* Appends to a capture line of CTL_SHOOT_LINE bytes, *len its length so far.
+ * Returns 0 when the text does not fit: the caller then refuses the whole
+ * press (returns 0, no line), because a cut line could still run -- with
+ * its exp= or iso= missing or cut short. Until 0.3.8 a second snprintf
+ * wrote at lines[0] + n with n the length WANTED by the first, which past
+ * the end was undefined behaviour (audit, November 2026; not reachable with
+ * today's names and options, at most ~200 bytes). */
+static int put(char *line, size_t *len, const char *fmt, ...)
+{
+    va_list ap;
+    int n;
+    if (*len >= CTL_SHOOT_LINE) return 0;
+    va_start(ap, fmt);
+    n = vsnprintf(line + *len, CTL_SHOOT_LINE - *len, fmt, ap);
+    va_end(ap);
+    if (n < 0 || (size_t)n >= CTL_SHOOT_LINE - *len) { line[0] = '\0'; return 0; }
+    *len += (size_t)n;
+    return 1;
+}
 
 /* "focus=0.500m" / "focus=inf" for a manual focus, "" otherwise. */
 static void focus_arg(const ctl_focus_state_t *fs, char *out, size_t n)
@@ -24,9 +45,10 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
                     double shutter_max_ns, double exp_min_ns,
                     const ctl_focus_state_t *fs, char lines[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE])
 {
-    char q[96] = "", farg[32], head[224];
+    char q[96] = "", farg[32];
     double ns, smax = shutter_max_ns > 0 ? shutter_max_ns : 500000000.0;
-    int iso, n = 0;
+    int iso;
+    size_t len = 0;
     if (!req || !xs || !lines || !req->name[0]) return 0;
     ns = xs->shutter_ns; iso = xs->iso;
     if (!req->raw) {
@@ -40,26 +62,29 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
      * to the camera's JPEG below, burst or three exposures. */
     if (req->yuv && req->bracket < 0) {
         /* snap from our YUV: one light photo (light=1), never with a DNG */
-        n = snprintf(lines[0], CTL_SHOOT_LINE, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s%s%s", req->name,
-                     req->frames == 2 || req->frames == 4 ? req->frames : 1, req->colour, req->median, req->sharpen,
-                     req->quality > 0 ? req->quality : 95, req->dng && !req->snap ? " dng=1" : "", req->snap ? " light=1" : "", farg);
-        if (xs->fixed_pair) snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " exp=%.7f iso=%d", ns / 1e9, iso);
+        if (!put(lines[0], &len, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s%s%s", req->name,
+                 req->frames == 2 || req->frames == 4 ? req->frames : 1, req->colour, req->median, req->sharpen,
+                 req->quality > 0 ? req->quality : 95, req->dng && !req->snap ? " dng=1" : "", req->snap ? " light=1" : "", farg))
+            return 0;
+        if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
         return 1;
     }
     /* A stacked shutter with a pair: a stack. */
     if (!xs->full_auto && is_stacked(ns, smax)) {
-        snprintf(lines[0], CTL_SHOOT_LINE, "stack %s film=%.3f iso=%d stk_denoise=%d",
-                 req->name, ns / 1e9, iso, req->denoise > 1 ? req->denoise : 1);
+        if (!put(lines[0], &len, "stack %s film=%.3f iso=%d stk_denoise=%d",
+                 req->name, ns / 1e9, iso, req->denoise > 1 ? req->denoise : 1))
+            return 0;
         return 1;
     }
-    snprintf(head, sizeof head, "%s %s%s%s%s", req->raw ? "raw" : "jpeg", req->name, farg, req->raw ? "" : q,
-             !req->raw && req->snap ? " label=snap" : "");
     /* x3 in JPEG: one burst; the pair goes along when held. */
     if (req->bracket == 0 && !req->raw) {
-        n = snprintf(lines[0], CTL_SHOOT_LINE, "burst %s n=3%s", req->name, q);
-        if (xs->fixed_pair) snprintf(lines[0] + n, CTL_SHOOT_LINE - n, " exp=%.7f iso=%d", ns / 1e9, iso);
+        if (!put(lines[0], &len, "burst %s n=3%s", req->name, q)) return 0;
+        if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
         return 1;
     }
+    /* The head of a jpeg / raw line, the same for the bracket's three. */
+#define HEAD(line, l) put(line, l, "%s %s%s%s%s", req->raw ? "raw" : "jpeg", req->name, farg, \
+                          req->raw ? "" : q, !req->raw && req->snap ? " label=snap" : "")
     /* Bracket: three real exposures around the pair (x3 in raw: three the same). */
     if (req->bracket >= 0) {
         int stops = req->bracket, k;
@@ -68,12 +93,14 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
             double e = ns * pow(2.0, list[k]);
             if (e < exp_min_ns) e = exp_min_ns;
             if (e > smax) e = smax;
-            snprintf(lines[k], CTL_SHOOT_LINE, "%s exp=%.7f iso=%d", head, e / 1e9, iso);
+            len = 0;
+            if (!HEAD(lines[k], &len) || !put(lines[k], &len, " exp=%.7f iso=%d", e / 1e9, iso)) return 0;
         }
         return 3;
     }
     /* One photo: with the held pair, or in the camera's AE. */
-    if (xs->fixed_pair) snprintf(lines[0], CTL_SHOOT_LINE, "%s exp=%.7f iso=%d", head, ns / 1e9, iso);
-    else snprintf(lines[0], CTL_SHOOT_LINE, "%s", head);
+    if (!HEAD(lines[0], &len)) return 0;
+    if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
     return 1;
+#undef HEAD
 }
