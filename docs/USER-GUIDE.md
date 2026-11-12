@@ -190,7 +190,7 @@ columns or swipe up to close.
 | Column | What it sets |
 |---|---|
 | Mode | the first column: **simple** (jpg or snap, automatic focus and exposure, a brightness slider instead of the wheels, the cameras named standard / wide / tele / selfie) or **advanced** |
-| Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. In automatic exposure the camera measures with a pre-flash first, so the shot takes half a second to a second longer. When the exposure is held (a wheel touched, or a circle in automatic) "auto" cannot judge and does not fire; "on" always fires. No flash in a burst. |
+| Flash | off, auto (when dark), on, torch (continuous light); shown only if the camera has a flash. The flash makes everything automatic: with "auto" or "on" the exposure and the focus go automatic ("Toggling to full auto." if something was manual), the ISO, speed and FOCUS controls are greyed (a touch on them, or a tap or hold in the viewfinder, says "Flash is activated: full auto."), and the camera measures with a pre-flash first, so the shot takes half a second to a second longer. What was manual comes back when the flash goes off; the EV compensation stays available. The torch changes nothing. No flash in a burst, a bracket (shown "off", greyed) or a Σ. Our JPG is one frame with the flash. |
 | Timer | off, 3 s, 10 s |
 | Grid | rule-of-thirds lines |
 | Format | 4:3 or 16:9. By default, the shape of the RAW the camera gives ("as the RAW": 4:3 on the JP2, 16:9 on the Xperia XA2); the other one crops. The viewfinder takes the photo's shape (grey bands only if the camera has no preview of that shape) |

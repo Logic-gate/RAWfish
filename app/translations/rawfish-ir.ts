@@ -705,6 +705,10 @@
         <source>Scene %1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Flash: no bracketing</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>ShadingAssistant</name>
@@ -1172,6 +1176,14 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+15"/>
         <source>FOCUS</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Flash is activated: full auto.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Toggling to full auto.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

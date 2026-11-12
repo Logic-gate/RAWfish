@@ -429,6 +429,7 @@ ApplicationWindow {
             Timer { id: touchHintTimer; interval: 2000; onTriggered: page.touchHintShown = false }
             function showTouchHint() { page.touchHintShown = true; touchHintTimer.restart() }
             function tapAt(px, py) {
+                if (page.flashAuto) { page.flashLockedNotice(); return }   // the flash: full auto, no focus point
                 page.showTouchHint()
                 // Continuous ("auto"): the camera chooses where to focus, a touch
                 // does not move it (the HAL ignores a region in that mode).
@@ -459,7 +460,7 @@ ApplicationWindow {
                 id: startManualTimer
                 interval: 1500
                 onTriggered: {
-                    if (!menuConf.startManual || !settingsMenu.advanced) return
+                    if (!menuConf.startManual || !settingsMenu.advanced || page.flashAuto) return   // (with the flash on, everything stays automatic)
                     var d = Number(viewfinder.setting("lastFocusD", -1))
                     var iso = Number(viewfinder.setting("lastIso", 0))
                     var ns = Number(viewfinder.setting("lastShutterNs", 0))
@@ -572,6 +573,7 @@ ApplicationWindow {
             // The exposure's point (a long press), its own marker and command.
             readonly property bool lightShown: !!page.vws.hasLight && !!page.fcs.light
             function lightAt(px, py) {
+                if (page.flashAuto) { page.flashLockedNotice(); return }   // the flash: full auto, no exposure point
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
                 page.showTouchHint()
                 viewfinder.sendCommand("vw light " + q.u.toFixed(4) + " " + q.v.toFixed(4))
@@ -956,6 +958,84 @@ ApplicationWindow {
             readonly property bool sceneOn: settingsMenu.showScenes && settingsMenu.sceneMode > 1
                                             && settingsMenu.sceneAvailable.indexOf(settingsMenu.sceneMode) >= 0
             onSceneOnChanged: { viewfinder.sendCommand("fc scene " + (sceneOn ? "on" : "off")); if (sceneOn) exposure.stopSpot() }
+
+            // ---- The flash makes everything automatic (0.3.8) ----
+            //
+            // Why: the flash needs the camera's own automatic exposure. It
+            // meters with a pre-flash, then fires with the photo, and the
+            // focus is the camera's too. With a manual pair (the user's, or a
+            // sun's) there is nothing to meter: "on" fires a single flash with
+            // the shot, "auto" does not fire at all -- the photos taken with
+            // the flash on in manual (13 Nov) had neither the double flash nor
+            // a focus before it.
+            //
+            // What: while the flash is "on" or "auto" on a camera that has
+            // one (settingsMenu.flashAuto; the torch is a light, not a flash,
+            // and changes nothing):
+            //   - the exposure goes automatic (the sun is removed; the EV
+            //     compensation stays, it is part of automatic), the focus
+            //     goes to the camera's own (auto);
+            //   - the manual controls (ISO, speed, FOCUS) are greyed; a touch
+            //     on them, or on the viewfinder (tap: focus, hold: exposure
+            //     point), says "Flash is activated: full auto.";
+            //   - what was manual is remembered and comes back when the flash
+            //     goes off (or the camera has none): the ISO and speed through
+            //     the same restore as after an engine restart (which also
+            //     carries them to another camera), the focus mode and its
+            //     distance.
+            // The state change is applied 250 ms after the flash state settles
+            // (flashSettleTimer), so that a camera switch passing through a
+            // camera without a flash does not flip back and forth.
+            readonly property bool flashAuto: settingsMenu.flashAuto
+            readonly property bool controlsLocked: sceneOn || flashAuto
+            property bool flashApplied: false          // the state the interface is in
+            property var flashSaved: null              // what was manual before the flash
+            Timer { id: flashSettleTimer; interval: 250; onTriggered: page.settleFlash() }
+            onFlashAutoChanged: flashSettleTimer.restart()
+            function flashNotice(text) { page.noticeText = text; noticeTimer.restart() }
+            function flashLockedNotice() { flashNotice(qsTr("Flash is activated: full auto.")) }
+            function settleFlash() {
+                if (flashAuto === flashApplied) return
+                flashApplied = flashAuto
+                if (flashAuto) goFullAuto(); else backToManual()
+            }
+            function goFullAuto() {
+                var expManual = exposure.kIsoManual || exposure.kShutterManual
+                var focusManual = page.focusMode === "manual"
+                var sun = page.lightShown
+                // exposure.k*: the interface's copy of the engine's state, kept
+                // at every change; taken now, before the automatic is sent.
+                flashSaved = { expManual: expManual, isoManual: exposure.kIsoManual, iso: exposure.kIso,
+                               shutterManual: exposure.kShutterManual, shutterNs: exposure.kShutterNs,
+                               camera: exposure.kCamera, aperture: exposure.kAperture,
+                               focusManual: focusManual, diopters: page.keptDiopters, focusCamera: viewfinder.cameraId }
+                if (expManual || sun) {
+                    var ev = exposure.kEv
+                    page.backToAuto()                     // exposure automatic (EV 0), the sun removed
+                    if (ev !== 0) exposure.setEv(ev)      // the compensation stays
+                }
+                if (focusManual) page.focusMode = "cont"  // "fc mode cont" goes with it (onFocusModeChanged)
+                if (expManual || focusManual || sun) flashNotice(qsTr("Toggling to full auto."))
+            }
+            function backToManual() {
+                var s = flashSaved
+                flashSaved = null
+                if (!s) return
+                if (s.expManual) {
+                    // The values as they were, then the restore an engine restart
+                    // uses (it scales them if the camera is another one). The EV
+                    // is left as it is now: it may have changed during the flash.
+                    exposure.kIsoManual = s.isoManual; exposure.kIso = s.iso
+                    exposure.kShutterManual = s.shutterManual; exposure.kShutterNs = s.shutterNs
+                    exposure.kCamera = s.camera; exposure.kAperture = s.aperture
+                    exposure.restore()
+                }
+                if (s.focusManual && !page.sceneOn) {
+                    page.focusMode = "manual"
+                    if (s.diopters >= 0 && s.focusCamera === viewfinder.cameraId)
+                        viewfinder.sendCommand("fc distance " + s.diopters.toFixed(3))   // the distance as it was (another camera: its own, afresh)
+                }
+            }
             // A stacked exposure (Σ) is a RAW-only feature: the TYPE button is
             // forced to raw and greyed while a Σ speed is selected (a JPEG of a
             // many-frame stack is not meaningful). Remember the type to restore.
@@ -1111,7 +1191,7 @@ ApplicationWindow {
                                        // A flash fires on one frame: with "on" or "auto" our JPG is
                                        // one frame, whatever the Frames column says (a merge of
                                        // flashed and unflashed frames would be a mess).
-                                       + (isYuv ? " frames=" + (settingsMenu.flash === "on" || settingsMenu.flash === "auto" ? 1 : settingsMenu.yuvFrames)
+                                       + (isYuv ? " frames=" + (settingsMenu.flashAuto ? 1 : settingsMenu.yuvFrames)
                                                 + " colour=" + settingsMenu.yuvColour
                                                   + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
                                                   + (outputConf.jpgWithDng && page.rawAvailable ? " dng=1" : "") : ""))
@@ -2146,7 +2226,8 @@ ApplicationWindow {
                             compact: page.compactDeck
                             caption: qsTr("FOCUS")
                             visible: !settingsMenu.simpleHides("focus")   // simple mode: auto focus, no button
-                            enabled: !page.sceneOn; opacity: page.sceneOn ? Theme.opacityLow : 1.0
+                            // Scenes: off. The flash: greyed but touchable, to say why.
+                            enabled: !page.sceneOn; opacity: page.controlsLocked ? Theme.opacityLow : 1.0
                             // Manual focus shows the distance; the others a short label.
                             // The distance is red while this camera has no focus
                             // calibration (the HAL's lens value taken as 1:1), white
@@ -2158,6 +2239,7 @@ ApplicationWindow {
                                 // one search in the middle of the frame: the distance found
                                 // is the manual one to begin with (a start that restores a
                                 // manual distance does not search: it keeps that distance).
+                                if (page.flashAuto) { page.flashLockedNotice(); return }   // the flash: the camera's own focus
                                 if (page.focusMode === "manual") { page.focusMode = "cont"; return }
                                 page.focusMode = "manual"                 // "fc mode manual" goes first (onFocusModeChanged)
                                 viewfinder.sendCommand("fc search")
@@ -2441,7 +2523,7 @@ ApplicationWindow {
                         ValueWheel {
                             anchors.fill: parent
                             visible: !settingsMenu.simpleHides("wheels")
-                            enabled: !page.sceneOn; opacity: page.sceneOn ? Theme.opacityLow : 1.0
+                            enabled: !page.controlsLocked; opacity: page.controlsLocked ? Theme.opacityLow : 1.0
                             model: page.shutterModel
                             currentValue: exposure.displayShutterNs
                             live: !exposure.shutterManual
@@ -2452,6 +2534,9 @@ ApplicationWindow {
                             onTouched: exposure.touchShutter()
                             onValueSelected: exposure.setShutterNs(value)
                         }
+                        // With the flash on the wheel is greyed (it does not take touches):
+                        // a touch here says why.
+                        MouseArea { anchors.fill: parent; z: 10; enabled: page.flashAuto; onClicked: page.flashLockedNotice() }
                         Label {
                             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
                             visible: !exposure.shutterManual && !settingsMenu.simpleHides("wheels")
@@ -2470,7 +2555,7 @@ ApplicationWindow {
                             anchors.fill: parent
                             anchors.leftMargin: page.compactDeck ? Theme.paddingLarge : 0   // compact: a little to the right
                             visible: !settingsMenu.simpleHides("wheels")
-                            enabled: !page.sceneOn; opacity: page.sceneOn ? Theme.opacityLow : 1.0
+                            enabled: !page.controlsLocked; opacity: page.controlsLocked ? Theme.opacityLow : 1.0
                             model: page.isoModel
                             currentValue: exposure.displayIso
                             live: !exposure.isoManual
@@ -2479,6 +2564,9 @@ ApplicationWindow {
                             onTouched: exposure.touchIso()
                             onValueSelected: exposure.setIso(value)
                         }
+                        // With the flash on the wheel is greyed (it does not take touches):
+                        // a touch here says why.
+                        MouseArea { anchors.fill: parent; z: 10; enabled: page.flashAuto; onClicked: page.flashLockedNotice() }
                         Label {
                             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
                             visible: !exposure.isoManual && !settingsMenu.simpleHides("wheels")

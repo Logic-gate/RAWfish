@@ -97,6 +97,16 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- The flash makes everything automatic: with the flash "on" or "auto"
+  (on a camera that has one) the exposure and the focus go automatic,
+  their manual controls (ISO, speed, FOCUS) are greyed, and a touch on
+  them or on the viewfinder (tap, hold) says "Flash is activated: full
+  auto."; switching it on says "Toggling to full auto." when something was
+  manual. What was manual comes back when the flash goes off (the ISO and
+  speed, the focus mode and its distance); the EV compensation stays
+  available; the torch changes nothing; a bracket shows "off", greyed.
+  The photos taken with the flash on in manual (13 Nov) had no pre-flash
+  and no focus before the flash: nothing to meter.
 - The flash fires again with "jpg" and "snap": since our JPG replaced the
   camera's, those photos never armed it. In automatic exposure: pre-flash
   metering, then the flash; with a manual pair, "on" fires one flash and

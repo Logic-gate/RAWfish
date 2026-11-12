@@ -704,6 +704,10 @@
         <source>Scene %1</source>
         <translation>Scène %1</translation>
     </message>
+    <message>
+        <source>Flash: no bracketing</source>
+        <translation>Flash : pas de bracketing</translation>
+    </message>
 </context>
 <context>
     <name>ShadingAssistant</name>
@@ -1180,6 +1184,14 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <location line="+15" />
         <source>FOCUS</source>
         <translation>MàP</translation>
+    </message>
+    <message>
+        <source>Flash is activated: full auto.</source>
+        <translation>Flash activé : tout automatique.</translation>
+    </message>
+    <message>
+        <source>Toggling to full auto.</source>
+        <translation>Passage en tout automatique.</translation>
     </message>
 </context>
 </TS>

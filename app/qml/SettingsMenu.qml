@@ -74,7 +74,17 @@ Item {
     // back when the shutter leaves Σ, as the type does (typeBeforeStack).
     // Everything that sends or decides by the bracket reads effBracket.
     property bool stackSelected: false
-    readonly property string effBracket: stackSelected ? "off" : bracket
+    // The flash makes the photo fully automatic (0.3.8): in automatic
+    // exposure the camera meters with a pre-flash, then fires with the
+    // photo; with a manual pair there is nothing to meter and "on" fires a
+    // lone flash. So while the flash is "on" or "auto" (and this camera has
+    // one) the interface puts the exposure and the focus in automatic and
+    // greys their manual controls (rawfish-ir.qml, flashAuto). A bracket is
+    // three photos at chosen exposures: with an automatic exposure they
+    // would be three identical photos, so it shows "off" and is greyed too
+    // (its chosen value is kept and comes back, as with the Σ).
+    readonly property bool flashAuto: (flash === "on" || flash === "auto") && !!(viewfinder && viewfinder.caps && viewfinder.caps.flash)
+    readonly property string effBracket: (stackSelected || flashAuto) ? "off" : bracket
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     // JPG: RAWfish-ir's own processing of the ISP's image (rawfish-ir.conf only).
@@ -609,8 +619,10 @@ Item {
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                dimmed: menu.imageType === "snap" || menu.stackSelected
-                dimmedHint: menu.stackSelected ? qsTr("Σ: one long exposure, no bracketing") : qsTr("snap: one shot, no bracketing")
+                dimmed: menu.imageType === "snap" || menu.stackSelected || menu.flashAuto
+                dimmedHint: menu.stackSelected ? qsTr("Σ: one long exposure, no bracketing")
+                          : menu.flashAuto ? qsTr("Flash: no bracketing")
+                          : qsTr("snap: one shot, no bracketing")
                 caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.effBracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
                                               : v === "0" ? qsTr("3 frames in a row, same exposure")
