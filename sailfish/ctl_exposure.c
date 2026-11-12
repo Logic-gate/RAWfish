@@ -54,6 +54,13 @@ struct ctl_exposure {
     int spot_iso;
     double spot_shutter_ns;
     int spot_steps;
+    /* The HAL's automatic pair when the sun was set (the "before"), and the
+     * return to it when the sun is removed: that pair sent first, then the
+     * HAL's AE given back (see ctl_exp_spot_stop). */
+    int before_iso;
+    double before_shutter_ns;
+    int seeding;                /* the before pair is sent; auto follows    */
+    int seed_lines;             /* "ae" lines seen since                     */
 
     ctl_exp_state_t last_state;
     int have_state;
@@ -181,6 +188,7 @@ static void apply(ctl_exposure_t *e)
 {
     if (!e->ready) return;
     if (e->spot_hold) { e->last_pair[0] = '\0'; send_pair(e, e->spot_iso, e->spot_shutter_ns); publish(e); return; }
+    if (e->seeding) { e->last_pair[0] = '\0'; send_pair(e, e->before_iso, e->before_shutter_ns); publish(e); return; }
     if (full_auto(e)) { send_auto(e); publish(e); return; }
     if (e->iso_manual && !e->shutter_manual) send_pair(e, e->manual_iso, e->auto_shutter_ns);
     else if (e->shutter_manual && !e->iso_manual) send_pair(e, e->auto_iso, e->manual_shutter_ns);
@@ -236,6 +244,21 @@ void ctl_exp_live(ctl_exposure_t *e, int iso, double exp_ns, int ae_state)
     e->live_iso = iso;
     e->live_exp_ns = exp_ns;
     e->live_ae_state = ae_state;
+    /* Back from a sun: the HAL's AE is given back once the frames are at
+     * the before pair (two "ae" lines, so that it is the frames' and not a
+     * line in flight), or after 8 lines (about a second) whatever they say:
+     * the AE must never stay off. Counted on the "ae" lines, which keep
+     * coming while the meter is paused. */
+    if (e->seeding) {
+        int there = e->sent_iso > 0 && iso > 0 && exp_ns > 0
+                    && fabs((double)iso / e->sent_iso - 1) < 0.03 && fabs(exp_ns / e->sent_shutter_ns - 1) < 0.03;
+        e->seed_lines++;
+        if ((there && e->seed_lines >= 2) || e->seed_lines >= 8) {
+            e->seeding = 0;
+            e->auto_sent = 0;
+            if (full_auto(e)) send_auto(e);
+        }
+    }
     publish(e);
 }
 
@@ -359,7 +382,7 @@ void ctl_exp_touch_iso(ctl_exposure_t *e)
     e->manual_iso = display_iso(e);
     if (!e->shutter_manual) e->auto_shutter_ns = live_shutter(e);
     e->iso_manual = 1;
-    e->spot_hold = 0; e->spot_steps = 0;            /* a pinned wheel ends a held spot */
+    e->spot_hold = 0; e->spot_steps = 0; e->seeding = 0;            /* a pinned wheel ends a held spot */
     apply(e);
 }
 void ctl_exp_touch_shutter(ctl_exposure_t *e)
@@ -368,21 +391,21 @@ void ctl_exp_touch_shutter(ctl_exposure_t *e)
     e->manual_shutter_ns = display_shutter(e);
     if (!e->iso_manual) e->auto_iso = live_iso(e);
     e->shutter_manual = 1;
-    e->spot_hold = 0; e->spot_steps = 0;
+    e->spot_hold = 0; e->spot_steps = 0; e->seeding = 0;
     apply(e);
 }
 void ctl_exp_set_iso(ctl_exposure_t *e, int iso)
 {
     if (!e->iso_manual) { if (!e->shutter_manual) e->auto_shutter_ns = live_shutter(e); e->iso_manual = 1; }
     e->manual_iso = iso;
-    e->spot_hold = 0; e->spot_steps = 0;
+    e->spot_hold = 0; e->spot_steps = 0; e->seeding = 0;
     apply(e);
 }
 void ctl_exp_set_shutter(ctl_exposure_t *e, double ns)
 {
     if (!e->shutter_manual) { if (!e->iso_manual) e->auto_iso = live_iso(e); e->shutter_manual = 1; }
     e->manual_shutter_ns = ns;
-    e->spot_hold = 0; e->spot_steps = 0;
+    e->spot_hold = 0; e->spot_steps = 0; e->seeding = 0;
     apply(e);
 }
 void ctl_exp_set_ev(ctl_exposure_t *e, int steps)
@@ -397,7 +420,7 @@ void ctl_exp_reset_auto(ctl_exposure_t *e)
 {
     e->iso_manual = 0; e->shutter_manual = 0; e->ev_steps = 0;
     e->offset_valid = 0;
-    e->spot_hold = 0; e->spot_steps = 0;
+    e->spot_hold = 0; e->spot_steps = 0; e->seeding = 0;
     send_ev(e);
     send_auto(e);
     publish(e);
@@ -406,17 +429,33 @@ void ctl_exp_spot_start(ctl_exposure_t *e)
 {
     if (!full_auto(e)) return;
     e->spot_iso = live_iso(e); e->spot_shutter_ns = live_shutter(e);
+    /* the HAL's own pair before the sun: what removing it comes back to */
+    if (!e->seeding) { e->before_iso = e->spot_iso; e->before_shutter_ns = e->spot_shutter_ns; }
+    e->seeding = 0;
     e->last_pair[0] = '\0'; e->sent_iso = 0; e->sent_shutter_ns = 0;
     e->spot_steps = 4;
     e->spot_hold = 1;
     publish(e);
 }
+/* The sun removed, in automatic: the pair the HAL's AE had before the sun
+ * is sent first, and the AE given back only once the frames are at it
+ * (ctl_exp_live). Given back straight from the sun's pair, the HAL started
+ * from those frames: after a DARK point they were overexposed, their
+ * highlights clipped, and the AE settled too bright and stayed there (its
+ * own tolerance): +0.5 to +1.5 stops in the log of 12 Nov, against an exact
+ * return after a bright point (frames underexposed, nothing clipped).
+ * Started from its own before pair, the AE stays there if the scene has not
+ * changed, and moves as usual if it has. */
 void ctl_exp_spot_stop(ctl_exposure_t *e)
 {
     if (!e->spot_hold) return;
     e->spot_hold = 0; e->spot_steps = 0;
     e->auto_sent = 0;
-    if (full_auto(e)) send_auto(e);
+    if (full_auto(e) && e->before_iso > 0 && e->before_shutter_ns > 0) {
+        e->seeding = 1; e->seed_lines = 0;
+        e->last_pair[0] = '\0';
+        send_pair(e, e->before_iso, e->before_shutter_ns);
+    } else if (full_auto(e)) send_auto(e);
     publish(e);
 }
 void ctl_exp_set_paused(ctl_exposure_t *e, int paused) { e->paused = !!paused; }

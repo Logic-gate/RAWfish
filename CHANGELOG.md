@@ -76,13 +76,19 @@ repository). Newest first.
   no zone at all, which the camera took as "keep the last one", then as
   the camera's own zone (all zero), which it took for a corner of the
   image (2 stops too bright, seen in the log), until the phone moved.
-  Removing the sun now gives the camera's own zones back AND asks it to
-  meter again at once (an AE precapture). For a day (0366) the exposure
+  Removing the sun now gives the camera's own zones back, sends first
+  the exposure the camera had chosen before the sun, and gives the
+  automatic exposure back once the viewfinder is at it (a few frames):
+  the camera starts again from its own choice, stays there if nothing has
+  changed and adapts if the phone moved. Given back straight from the
+  sun's exposure (0367, with an AE precapture), it came back exactly
+  after a bright point but too bright after a dark one (+0.5 to +1.5
+  stops): it re-metered on overexposed, clipped frames. For a day (0366) the exposure
   metered the displayed image instead: it came back exactly after the
   sun, but it was no longer the camera's own metering (a plain average
   of what is shown, the zoom and loupe included), and every move of the
   loupe re-sent the camera's request, up to 76 times a second; withdrawn
-  (0367), the precapture kept.
+  (0367).
 - Our JPG of 2 or 4 merged frames follows the zoom: it was taken full
   frame (its frames have their own capture requests, which the zoom
   never reached), while its Exif said zoomed.

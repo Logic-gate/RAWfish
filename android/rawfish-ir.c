@@ -5529,15 +5529,12 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
-    /* The sun removed: "meter again, now". An AE precapture makes the HAL run
-     * its metering sequence at once, with its own metering (the template's
-     * zones, written back above); left alone it stayed where the sun had put
-     * it, 2 stops off, until the phone moved (log of 11 Nov, 0365). Kept from
-     * 0366, whose log showed the exposure back to the value before the sun
-     * after each of six removals; whether the precapture alone does it, with
-     * the camera's own metering, is what 0367 tests. (No AF part: the focus
-     * is left as it is. No flash: the flash mode is off unless asked.) */
-    if (do_ae == 2) send_trigger(ACAMERA_CONTROL_AF_TRIGGER_IDLE, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
+    /* (No AE precapture on aeclear any more. 0366-0367 sent one so that the
+     * HAL metered again at once; after a DARK point it metered on overexposed
+     * frames and settled too bright (log of 12 Nov). The controller now sends
+     * the HAL's own pair from before the sun first and gives the AE back once
+     * the frames are at it (ctl_exp_spot_stop): this aeclear arrives while
+     * that pair is in force, when a precapture trigger means nothing.) */
     jw_init(&w, out, out_size);
     /* (live_*: the HAL's exposure on the last frame BEFORE this change, so that
      * the log shows what the automatic exposure was before a point and after

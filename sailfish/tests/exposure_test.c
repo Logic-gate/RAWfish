@@ -60,8 +60,8 @@ int main(void)
 {
     ctl_caps_t caps = { 100, 3200, 1000000.0, 500000000.0, 1.0 / 3, 26, 1.88 };
     ctl_exposure_t *e;
-    double t = 0;
-    int i, before;
+    double t = 0, before_ns = 0;
+    int i, before, before_iso = 0;
 
     /* 1. Calibration in automatic: the target follows the HAL's converged mean. */
     e = ctl_exp_new(on_cmd, on_state, NULL);
@@ -97,6 +97,9 @@ int main(void)
     for (i = 0; i < 5; ++i) frame(e, t += 100);
     before = ncmds;
     scene_L = 0.025;                                             /* a dark spot: 2 stops under the calibrated 0.40 */
+    {   /* the HAL's pair before the sun, as the state shows it in automatic */
+        before_iso = last_state.iso; before_ns = last_state.shutter_ns;
+    }
     ctl_exp_spot_start(e);
     for (i = 0; i < 30; ++i) frame(e, t += 100);
     CHECK(last_state.spot_hold && last_state.fixed_pair && last_state.full_auto, "spot: held in automatic, fixed pair");
@@ -106,7 +109,27 @@ int main(void)
     for (i = 0; i < 20; ++i) frame(e, t += 100);
     CHECK(ncmds == before, "spot: nothing more sent while held");
     ctl_exp_spot_stop(e);
-    CHECK(!strcmp(last_cmd(), "exposure auto") && !last_state.spot_hold, "spot stop: back to the HAL's AE");
+    {
+        double sec; int iso;
+        CHECK(sscanf(last_cmd(), "exposure exp=%lf iso=%d", &sec, &iso) == 2 && iso == before_iso
+              && fabs(sec * 1e9 / before_ns - 1) < 1e-3 && !last_state.spot_hold,
+              "spot stop: the HAL's pair from before the sun sent first");
+    }
+    hal_apply_cmd();                                             /* it enters the fake HAL's queue */
+    frame(e, t += 100);
+    CHECK(strcmp(last_cmd(), "exposure auto") != 0, "spot stop: the AE not given back before the frames are at that pair");
+    for (i = 0; i < 4; ++i) frame(e, t += 100);
+    CHECK(!strcmp(last_cmd(), "exposure auto") && last_state.full_auto, "spot stop: then back to the HAL's AE, once");
+    /* 5b. The AE never stays off: frames that never reach the pair (a HAL
+     *     that ignores it) give the AE back after 8 lines anyway. */
+    hal_iso = 400; hal_ns = 16666667; scene_L = 0.10;
+    for (i = 0; i < 5; ++i) frame(e, t += 100);
+    ctl_exp_spot_start(e);
+    for (i = 0; i < 30; ++i) frame(e, t += 100);
+    ctl_exp_spot_stop(e);
+    before = ncmds;
+    for (i = 0; i < 8; ++i) ctl_exp_live(e, 1234, 12345678, 0); /* never the pair */
+    CHECK(count("exposure auto") > 0 && !strcmp(last_cmd(), "exposure auto"), "spot stop: AE given back after 8 lines even if the pair never shows");
     /* 6. Stacked (Σ) shutter: one preview frame of the same exposure, as
      *    short as the target rate (10 /s) allows within the maximum ISO. */
     hal_iso = 400; hal_ns = 16666667;
