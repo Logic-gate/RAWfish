@@ -37,6 +37,7 @@ static struct {
     int deferred;               /* a controller command was dropped meanwhile  */
     int ui_paused, focus_paused; /* the two reasons to leave the exposure alone */
     ctl_caps_t caps;             /* the last caps, for the shoot decisions */
+    ctl_log_fn log;              /* diagnostics to the log, or NULL           */
     char capture_q[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE];
     int capture_n, capture_i;
 } c = { .rd = -1, .wr = -1,
@@ -153,11 +154,23 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
     if (c.emit) c.emit(line);
 }
 
+/* (The interface still draws from ae / vfmeter / meter, and its histogram
+ * comes from them.) */
+void ctl_set_log(ctl_log_fn log) { c.log = log; }
+
 /* One event line from the engine: read by the exposure behaviour, then
- * passed on to the interface as it is (it still draws from ae / vfmeter /
- * meter, and its histogram comes from them). */
+ * passed on to the interface as it is -- except the diagnostics meant for
+ * the log only (halcrop: the viewfinder's crop as the camera reports it,
+ * with the detailed log), which go to the log and nowhere else. */
 static void on_event(const char *line)
 {
+    if (!strncmp(line, "halcrop ", 8)) {
+        char t[128];
+        snprintf(t, sizeof t, "viewfinder crop (camera result) %.80s", line + 8);   /* four numbers: 80 is plenty */
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
     ctl_lock();
     if (c.exp) {
         if (!strncmp(line, "caps ", 5)) {

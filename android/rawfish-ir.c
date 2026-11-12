@@ -649,6 +649,7 @@ static struct {
     int r_ae_state, r_af_state;
     int r_nr, r_edge;                       /* modes the camera reports applied  */
     float r_focus_diopters;
+    int32_t r_crop[4];                      /* the last still result's crop (SCALER_CROP_REGION); r_crop[2] 0 = not given */
 
     /* Live exposure of the preview (UI-facing, see indraw_preview_exposure):
      * what the repeating request asks for, mirrored on the meter request. */
@@ -856,7 +857,8 @@ static int write_sf2m(int fd, const char *text, int len)
  * (0.47.58). A blocking fd (run mode: the terminal) never returns EAGAIN. */
 static int event_is_state(const char *text)
 {
-    return !strncmp(text, "ae ", 3) || !strncmp(text, "vfmeter ", 8) || !strncmp(text, "meter ", 6);
+    return !strncmp(text, "ae ", 3) || !strncmp(text, "vfmeter ", 8) || !strncmp(text, "meter ", 6)
+        || !strncmp(text, "halcrop ", 8);           /* a diagnostic: never worth a wait */
 }
 static void emit_event(const char *text)
 {
@@ -1199,6 +1201,16 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                         snprintf(line, sizeof line, "fcrop x=%.5f y=%.5f w=%.5f h=%.5f\n",
                                  (double)(crop[0] - ax) / aw, (double)(crop[1] - ay) / ah,
                                  (double)crop[2] / aw, (double)crop[3] / ah);
+                    /* Detailed log only (g.checks, Settings "Detailed log"): the
+                     * crop the camera says it used for the viewfinder, at each
+                     * change -- the controller writes it to the log. A state
+                     * line: dropped, never waited for, if the pipe is full.
+                     * Sent before out_lock is taken below (emit_event takes it). */
+                    if (g.checks) {
+                        char hl[96];
+                        snprintf(hl, sizeof hl, "halcrop %d %d %d %d\n", crop[0], crop[1], crop[2], crop[3]);
+                        emit_event(hl);
+                    }
                 }
                 vf_meter(rgb, w, h, found ? crop : g.sent_crop, f_iso, f_exp);   /* the viewfinder meter */
                 pthread_mutex_lock(&g.out_lock);        /* serialise with SF2M     */
@@ -1630,6 +1642,10 @@ static void on_capture_completed(void *ctx, ACameraCaptureSession *s,
     if (ACameraMetadata_getConstEntry(res, ACAMERA_EDGE_MODE, &e) == ACAMERA_OK &&
         e.type == ACAMERA_TYPE_BYTE && e.count)
         g.r_edge = e.data.u8[0];               /* sharpening really used        */
+    memset(g.r_crop, 0, sizeof g.r_crop);
+    if (ACameraMetadata_getConstEntry(res, ACAMERA_SCALER_CROP_REGION, &e) == ACAMERA_OK &&
+        e.type == ACAMERA_TYPE_INT32 && e.count == 4)
+        memcpy(g.r_crop, e.data.i32, sizeof g.r_crop);   /* the crop really used (detailed log) */
     if (g.r_meta) ACameraMetadata_free(g.r_meta);
     g.r_meta = ACameraMetadata_copy(res);      /* whole result, for the RAW sidecar */
     g.result_ready = 1;                        /* publish                       */
@@ -5344,30 +5360,6 @@ static void zoom_af_region(void)
     g.af_zoom_on = on;
 }
 
-/* The automatic exposure meters WHAT THE VIEWFINDER SHOWS when no light
- * point is set: a zone over the display window (zoom, loupe and pan), weight
- * 1000. Explicit, so that removing the sun gives back exactly the metering it
- * had before it (the same zone): neither the template's zone written back
- * (0365: all zero, which the JP2's HAL took for a corner of the image: after
- * the sun it settled 2 stops brighter, 50 ms ISO 5333 against 40 ms ISO 1513
- * before, until the phone moved), nor a removed key (kept by the HAL), nor a
- * whole-array zone of weight 0 did. It follows the loupe: in the loupe the
- * exposure is that of the detail shown. */
-static void shown_ae_region(int32_t r[5])
-{
-    int32_t ax, ay, aw, ah;
-    double vw[4] = { 0, 0, 1, 1 };
-    if (active_array(&ax, &ay, &aw, &ah, NULL)) { memset(r, 0, 5 * sizeof *r); return; }
-    pthread_mutex_lock(&g.lock);
-    if (g.have_view_win && g.view_win[2] > 0 && g.view_win[3] > 0) memcpy(vw, g.view_win, sizeof vw);
-    pthread_mutex_unlock(&g.lock);
-    r[0] = ax + (int32_t)(vw[0] * aw);
-    r[1] = ay + (int32_t)(vw[1] * ah);
-    r[2] = r[0] + (int32_t)(vw[2] * aw); if (r[2] > ax + aw) r[2] = ax + aw;
-    r[3] = r[1] + (int32_t)(vw[3] * ah); if (r[3] > ay + ah) r[3] = ay + ah;
-    r[4] = 1000;
-}
-
 /* A point of the viewfinder for the exposure and / or the focus.
  * do_ae, do_af: 0 keep what is there, 1 set at (nx, ny), 2 clear (the
  * exposure meters the whole image; the focus goes back to the mode's).
@@ -5503,7 +5495,12 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
              * is absent, so the sun's spot stayed) gives that back. */
             if (do_ae == 1) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, region);
             else if (g.ae_region_on && do_ae == 0) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.ae_region);
-            else { int32_t sr[5]; shown_ae_region(sr); ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, sr); }
+            else ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.tpl_ae_regions);
+            /* (0366 metered the display window here, weight 1000: the
+             * camera's own metering was lost from the start, and every
+             * view-window change re-sent the repeating request. Back to the
+             * template's zones, the camera's own metering, as at start; the
+             * precapture below makes it meter again at once.) */
             if (do_af == 1) {
                 ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AF_MODE, 1, &af_mode);
                 ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, af_region);
@@ -5532,9 +5529,13 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
-    /* The sun removed: "meter again, now, on what is shown". An AE precapture
-     * makes the HAL run its metering sequence at once; left alone it drifted
-     * back over seconds, or only once the phone moved. (No AF part: the focus
+    /* The sun removed: "meter again, now". An AE precapture makes the HAL run
+     * its metering sequence at once, with its own metering (the template's
+     * zones, written back above); left alone it stayed where the sun had put
+     * it, 2 stops off, until the phone moved (log of 11 Nov, 0365). Kept from
+     * 0366, whose log showed the exposure back to the value before the sun
+     * after each of six removals; whether the precapture alone does it, with
+     * the camera's own metering, is what 0367 tests. (No AF part: the focus
      * is left as it is. No flash: the flash mode is off unless asked.) */
     if (do_ae == 2) send_trigger(ACAMERA_CONTROL_AF_TRIGGER_IDLE, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
     jw_init(&w, out, out_size);
@@ -6389,22 +6390,9 @@ IR_API int indraw_view_window(double x, double y, double w, double h, char *out,
     g.view_win[0] = x; g.view_win[1] = y; g.view_win[2] = w; g.view_win[3] = h;
     g.have_view_win = !(x <= 0 && y <= 0 && w >= 0.9999 && h >= 0.9999);
     pthread_mutex_unlock(&g.lock);
-    /* Without a light point the exposure meters what is shown (see
-     * shown_ae_region): from the first view window on (the interface sends
-     * one at start), and again whenever the zoom, loupe or pan change it. */
-    if (g.session && g.preview_request && !g.ae_region_on) {
-        int32_t sr[5];
-        ACaptureRequest *all[6], *reqs[1];
-        int n = 0, i;
-        shown_ae_region(sr);
-        all[n++] = g.preview_request; all[n++] = g.trigger_request; all[n++] = g.still_request;
-        if (g.raw_request) all[n++] = g.raw_request;
-        if (g.meter_request) all[n++] = g.meter_request;
-        if (g.yuv_request) all[n++] = g.yuv_request;
-        for (i = 0; i < n; ++i) if (all[i]) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, sr);
-        reqs[0] = g.preview_request;
-        ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
-    }
+    /* Only recorded (the tap zones are sized on it): no request goes to the
+     * camera here. 0366 re-sent the repeating request at every change, up to
+     * 76 times a second while a finger moved the loupe. */
     jw_init(&w_, out, out_size);
     jw_add(&w_, "{\"ok\":true,\"view\":[%.4f,%.4f,%.4f,%.4f]}", x, y, w, h);
     return IR_OK;
@@ -6989,7 +6977,22 @@ static void yuv_check_json(jw_t *w, const ir_yuv_t *f0)
     for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", g.vf_last_hist[c][i]); if (c < 2) jw_add(w, ";"); }
     jw_add(w, "\",\"photo_hist\":\"");
     for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", ph[c][i]); if (c < 2) jw_add(w, ";"); }
-    jw_add(w, "\"}");
+    jw_add(w, "\"");
+    /* The crop asked for this photo (the digital zoom) and the one the
+     * camera's result says it used, in active-array pixels: a photo not
+     * zoomed as the viewfinder was would show here (log of 12 Nov: a zoom
+     * that seemed to fail after the loupe, not reproduced). hal_crop
+     * [0,0,0,0]: the result did not give it. */
+    {
+        int32_t ax, ay, aw, ah, pc[4] = { 0, 0, 0, 0 }, rc[4];
+        if (!active_array(&ax, &ay, &aw, &ah, NULL)) photo_crop(ax, ay, aw, ah, pc);
+        pthread_mutex_lock(&g.lock);
+        memcpy(rc, g.r_crop, sizeof rc);
+        pthread_mutex_unlock(&g.lock);
+        jw_add(w, ",\"asked_crop\":[%d,%d,%d,%d],\"hal_crop\":[%d,%d,%d,%d]",
+               pc[0], pc[1], pc[2], pc[3], rc[0], rc[1], rc[2], rc[3]);
+    }
+    jw_add(w, "}");
 }
 
 IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,

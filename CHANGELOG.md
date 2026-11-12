@@ -75,11 +75,18 @@ repository). Newest first.
   which the camera took as a zone and metered differently; then (0363) as
   no zone at all, which the camera took as "keep the last one", then as
   the camera's own zone (all zero), which it took for a corner of the
-  image (2 stops too bright, seen in the log). Now, without a sun, the
-  exposure meters exactly what the viewfinder shows (zoom and loupe
-  included), from the start; removing the sun puts that zone back and asks
-  the camera to meter again at once, instead of drifting back over
-  seconds or waiting for the phone to move.
+  image (2 stops too bright, seen in the log), until the phone moved.
+  Removing the sun now gives the camera's own zones back AND asks it to
+  meter again at once (an AE precapture). For a day (0366) the exposure
+  metered the displayed image instead: it came back exactly after the
+  sun, but it was no longer the camera's own metering (a plain average
+  of what is shown, the zoom and loupe included), and every move of the
+  loupe re-sent the camera's request, up to 76 times a second; withdrawn
+  (0367), the precapture kept.
+- Detailed log (Settings): the viewfinder's crop as the camera reports
+  it, at each change, and in our JPG's report the crop asked for the
+  photo and the one the camera used (asked_crop, hal_crop), to tell a
+  photo not zoomed as the viewfinder was.
   The same error changed the automatic exposure after a mere focus touch.
   The log gives the camera's exposure before the sun (the touch's reply)
   and 2.5 s after its removal (aestate), to check it.

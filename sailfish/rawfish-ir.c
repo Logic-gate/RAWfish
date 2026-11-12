@@ -2027,6 +2027,9 @@ static indraw_focus_fn g_focusfn;
 static indraw_zoom_fn g_zf;
 static indraw_loupe_fn g_lf;
 static indraw_view_window_fn g_vwf;
+/* The controller's diagnostics (ctl_set_log): a "# " line in the log. */
+static void controller_log(const char *text) { log_line("# ", text); }
+
 static void controller_engine_line(const char *text)
 {
     static char out[OUT_SIZE];
@@ -2555,6 +2558,7 @@ int main(int argc, char **argv)
              * it too. Without it (older library) the engine streams them itself. */
             g_pe = pe; g_evfn = evfn; g_mt = mt; g_tf = tf; g_focusfn = focusfn; g_zf = zf; g_lf = lf; g_vwf = vwf;
             g_focus_opt = (indraw_focus_opt_fn)a_dlsym(bridge, "indraw_focus_opt");
+            ctl_set_log(controller_log);         /* its diagnostics into our log */
             ctl_start((indraw_emit_fn)a_dlsym(bridge, "indraw_emit"),
                       (indraw_set_event_fd_fn)a_dlsym(bridge, "indraw_set_event_fd"),
                       controller_engine_line);

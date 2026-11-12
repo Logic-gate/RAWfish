@@ -33,6 +33,12 @@ typedef void (*ctl_engine_line_fn)(const char *line);
  * itself, as without a controller). */
 int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_line_fn engine_line);
 
+/* Where the controller writes a diagnostic line for the log (the CLI's
+ * --log file, as "# <text>"); NULL (the default) drops them. Lines without
+ * the newline. Set before ctl_start. */
+typedef void (*ctl_log_fn)(const char *text);
+void ctl_set_log(ctl_log_fn log);
+
 /* One lock for everything that touches the engine or the controller's
  * state, recursive: the CLI takes it around each stdin command, the
  * controller's reader thread around each event. Engine calls from two
