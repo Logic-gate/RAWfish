@@ -114,6 +114,8 @@ run_test /tmp/indraw-view-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/ctl_shoot.c" -o /dev/null
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shoot-test "$root/sailfish/tests/shoot_test.c" "$root/sailfish/ctl_shoot.c" -lm
 run_test /tmp/indraw-shoot-test
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-yuvsize-test "$root/sailfish/tests/yuvsize_test.c" -lm
+run_test /tmp/indraw-yuvsize-test
 echo "sailfish/rawfish-ir.c: OK (-O2)"
 
 # RPM specs: in %install every line is a shell command, so a line that is

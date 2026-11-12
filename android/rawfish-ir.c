@@ -79,6 +79,7 @@
 #include "yuvframe.h"            /* the full-resolution YUV frame for the CLI's JPEG */
 IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "colortemp.h"           /* the white balance as a colour temperature */
+#include "yuvsize.h"             /* the YUV stream a photo is averaged down from */
 #include "shading.h"             /* the measured lens-shading calibration     */
 #include "shading_build.h"       /* building one from flat-field captures     */
 #include "yuv.h"                 /* the preview's YUV -> RGB conversion       */
@@ -3014,10 +3015,19 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
          * mid-size YUV stream (4096x3072 on the JP2) makes the HAL's
          * viewfinder lag by a second (a "video" path, it seems), the full
          * sensor size does not; and the averaging is a free 2x2 binning. */
-        int k, bw = 0, bh = 0, bk = 0;
+        int k, bw = 0, bh = 0, bk = 0, lw = 0, lh = 0, ak = 0;
         for (k = 4; k >= 2; --k)
             if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw * k, jh * k)) { bw = jw * k; bh = jh * k; bk = k; break; }
+        /* No exact multiple: the largest stream the camera lists, if it can
+         * be averaged down to about the size asked (yuvsize.h). The selfie
+         * camera of the JP2 (photo 3264x2448, largest stream 6560x4928) used
+         * to get a 3264x2448 stream here, and its viewfinder lagged. The
+         * photo is then the stream's size over k (3280x2464), not exactly the
+         * size asked. A camera whose largest stream is the photo's own size
+         * (camera 2: 4096x3072) gets no factor and keeps the next branch. */
+        if (!bk && largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &lw, &lh)) ak = yuv_binned_k(jw, jh, lw, lh);
         if (bk) { g.yuv_w = bw; g.yuv_h = bh; g.yuv_down = bk; }
+        else if (ak) { g.yuv_w = lw; g.yuv_h = lh; g.yuv_down = ak; }
         else if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh)) { g.yuv_w = jw; g.yuv_h = jh; }
         else if (!largest_output_size_within(g.chars, AIMAGE_FORMAT_YUV_420_888, jw, jh, &g.yuv_w, &g.yuv_h)) {
             close_all();
@@ -5933,10 +5943,11 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s facing=%s raw_cams=%s focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
-             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, facing, rawcams, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
+             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, facing, rawcams,
+             g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
         if (n && line[n - 1] == '\n') line[--n] = '\0';
