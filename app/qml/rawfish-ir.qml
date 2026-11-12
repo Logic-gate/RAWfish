@@ -223,7 +223,8 @@ ApplicationWindow {
             readonly property string sessionStreams: {
                 // What the engine opens beside the viewfinder (streams=):
                 //  - RAW in every session where the camera has it: the white-
-                //    balance pick and the RAW meter measure on it;
+                //    balance pick and the RAW meter measure on it (a camera
+                //    without RAW: the pick measures on the viewfinder instead);
                 //  - jpg, raw and snap share ONE session (our YUV stream + RAW),
                 //    so TYPE never restarts the engine (snap is our YUV, binned
                 //    finer); a bracket adds the camera's JPEG stream (brackets
@@ -232,7 +233,16 @@ ApplicationWindow {
                 //    session that refused it): the camera's JPEG stream, at the
                 //    snap size for snap (see jpegOverride).
                 // A change of this list restarts the engine (about a second).
-                var raw = page.rawAvailable ? ",raw" : ""
+                // RAW is ALWAYS asked, whatever the camera: the engine opens it
+                // only where the camera has one (no RAW16 size: skipped, see
+                // indraw_open), so asking costs nothing on the JP2's front and
+                // wide cameras. It used to be asked from page.rawAvailable, i.e.
+                // from the caps of the camera running BEFORE a switch: every
+                // switch between a camera with RAW and one without started the
+                // new camera with the old one's choice, then restarted it once
+                // its own caps arrived -- 0.6 to 1.5 s lost at each switch (log
+                // of 13 Nov 2026).
+                var raw = ",raw"
                 if (!page.ownJpeg) return "jpeg" + raw
                 var s = "yuv" + raw                                   // jpg and raw alike
                 if (page.imageType === "jpg" && settingsMenu.effBracket !== "off") s += ",jpeg"

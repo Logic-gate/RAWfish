@@ -91,6 +91,10 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- Switching cameras starts the new camera once: it was started with the
+  previous camera's RAW choice, then restarted when its own capabilities
+  arrived (0.6 to 1.5 s lost at each switch). RAW is now always asked; the
+  engine opens it only where the camera has one.
 - Our JPG of 2 or 4 merged frames is merged onto its SHARPEST frame (it
   was always the first, often shaken by the press): a merge is never
   sharper than its reference. Another frame replaces the first only when
