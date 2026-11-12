@@ -713,7 +713,14 @@ static struct {
     int jpeg_qn;
     int flash_mode;                         /* 0 off, 1 auto, 2 on, 3 torch (indraw_flash) */
     int ae_lock;                            /* automatic exposure held (indraw_ae_lock)    */
-    struct { int64_t ts; int32_t crop[4]; int iso; int64_t exp_ns; } crop_ring[8];
+    struct {
+        int64_t ts; int32_t crop[4]; int iso; int64_t exp_ns;
+        /* The white balance this frame was rendered with, from its result:
+         * the gains (R, G even, G odd, B) and the 3x3 colour transform
+         * (row-major). A white measured on the viewfinder's image (a camera
+         * without RAW, see wbpick_from_view) must undo exactly these. */
+        int has_wb; float gains[4]; double tr[9];
+    } crop_ring[8];
                                             /* preview results by timestamp: crop and pair */
     int crop_ring_pos;
     int32_t sent_crop[4];                   /* the last crop announced with a frame (fcrop) */
@@ -745,6 +752,11 @@ static struct {
     int wb_shift, wb_tint;                  /* the last manual shift / tint applied */
     int wbpick_pending, wbpick_done, wbpick_status;   /* status 0 ok, 1 clipped, 2 dark */
     double wbpick_rgb[3];                   /* the measured white, camera RGB (black-subtracted) */
+    /* A camera without RAW: the white is measured on the viewfinder's image
+     * instead, and the result is directly the gains to set (see
+     * wbpick_from_view). wbpick_from_vf says which of the two answered. */
+    int wbpick_from_vf;
+    float wbpick_gains[4];
     int af_wait_ms;                         /* how long a capture waits for 3A (0 = 1500) */
     int af_scan_wait_ms;                    /* continuous AF scanning at the release: wait up to this for it to settle (0 = never) */
     int last_scan_wait_ms;                  /* how long the last capture waited for that (for its report; -1 = it did not need to) */
@@ -1110,6 +1122,127 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
     if (p < end - 1) { *p++ = '\n'; *p = '\0'; emit_event(line); }
 }
 
+/* ---- Measuring the white on the viewfinder's image (cameras without RAW) ----
+ *
+ * The usual white pick (the long press) reads the camera's RAW data: there
+ * the colour of a white object is the sensor's own, untouched, and the gains
+ * that make it neutral follow directly (G/R and G/B). The JP2's front and
+ * wide cameras give no RAW at all, so until 0.3.8 the pick just failed there
+ * ("no RAW stream"). This is the fallback: the same measure, on the
+ * viewfinder's image -- the YUV frame the camera has already processed.
+ *
+ * That image has gone through three steps, which are undone in turn:
+ *   1. the white-balance gains G (one per colour), multiplied in;
+ *   2. the colour transform T (a 3x3 matrix, camera colours -> sRGB);
+ *   3. the tone curve (the camera's own, close to sRGB's gamma).
+ * So, for the measured patch:
+ *   - step 3 is undone with the 2.2 power the viewfinder meter already uses
+ *     (an approximation: the camera's curve is not exactly that one);
+ *   - step 2 is undone exactly with T's inverse, T taken from THIS frame's
+ *     result (the ring of results, record_result_crop): c = inverse(T) . rgb;
+ *   - c is then the patch's colour after the gains: if the patch is white,
+ *     c should be grey (equal values). The new gains are the old ones
+ *     corrected by how far c is from grey: R' = R . c_g / c_r and
+ *     B' = B . c_g / c_b (green stays the reference).
+ *
+ * Precision: as good as the tone-curve approximation, which matters little
+ * near grey (the three values are close, and the same curve bends them alike)
+ * and more for a strongly coloured patch. A second pick on the same white
+ * starts from the corrected gains and comes closer still. Same refusals as
+ * the RAW pick: a patch with clipped values has lost its colour; a too-dark
+ * one is mostly noise. */
+static int invert3(const double m[9], double inv[9])
+{
+    /* The inverse of a 3x3 matrix by its cofactors (adjugate / determinant).
+     * Returns 0 if the matrix cannot be inverted (determinant ~ 0). */
+    double det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+    if (fabs(det) < 1e-9) return 0;
+    inv[0] =  (m[4] * m[8] - m[5] * m[7]) / det; inv[1] = -(m[1] * m[8] - m[2] * m[7]) / det; inv[2] =  (m[1] * m[5] - m[2] * m[4]) / det;
+    inv[3] = -(m[3] * m[8] - m[5] * m[6]) / det; inv[4] =  (m[0] * m[8] - m[2] * m[6]) / det; inv[5] = -(m[0] * m[5] - m[2] * m[3]) / det;
+    inv[6] =  (m[3] * m[7] - m[4] * m[6]) / det; inv[7] = -(m[0] * m[7] - m[1] * m[6]) / det; inv[8] =  (m[0] * m[4] - m[1] * m[3]) / det;
+    return 1;
+}
+/* Called by the viewfinder's listener on each frame while a pick waits and
+ * the session has no RAW (g.meter_request NULL). rgb: the frame, 8-bit RGB,
+ * w x h; crop: the sensor area it shows; gains / tr: the white balance it
+ * was rendered with (has_wb 0: its result did not say, and the pick fails
+ * with status 3). Sets wbpick_status (0 ok, 1 clipped, 2 dark, 3 no white
+ * balance known), wbpick_gains, and wakes indraw_wb_pick.
+ *
+ * A worked example, with T the identity for simplicity: the frame was
+ * rendered with gains R 2.0, B 1.5, and a white sheet reads (linear)
+ * 0.50, 0.40, 0.20 -- too red, too little blue. c = (0.50, 0.40, 0.20);
+ * R' = 2.0 x 0.40 / 0.50 = 1.6 (less red), B' = 1.5 x 0.40 / 0.20 = 3.0
+ * (more blue): with these the sheet reads 0.40, 0.40, 0.40, grey. */
+static void wbpick_from_view(const uint8_t *rgb, int w, int h, const int32_t crop[4],
+                             int has_wb, const float gains[4], const double tr[9])
+{
+    double cx, cy, hw, hh, lin[3] = { 0, 0, 0 }, n = 0, clipped = 0, inv[9], c[3];
+    int32_t ax, ay, aw, ah;
+    int spot_on, x0, x1, y0, y1, x, y, step, status = 0, k;
+    float out_g[4] = { 1, 1, 1, 1 };
+    /* Where: the light spot if one is set, else the middle of what the
+     * interface shows (12 % of its width and height), exactly as the RAW pick. */
+    pthread_mutex_lock(&g.lock);
+    spot_on = g.spot_on; cx = g.spot_x; cy = g.spot_y;
+    hw = g.spot_hw > 0 ? g.spot_hw : 0.06; hh = g.spot_hh > 0 ? g.spot_hh : 0.06;
+    if (!spot_on) {
+        if (g.have_view_win) { cx = g.view_win[0] + g.view_win[2] / 2; cy = g.view_win[1] + g.view_win[3] / 2;
+                               hw = 0.06 * g.view_win[2]; hh = 0.06 * g.view_win[3]; }
+        else { cx = 0.5; cy = 0.5; hw = 0.06; hh = 0.06; }
+    }
+    pthread_mutex_unlock(&g.lock);
+    /* That box is in sensor coordinates (0..1 of the active array); this
+     * frame shows only the crop: map the box into the frame's pixels. */
+    if (crop && crop[2] > 0 && crop[3] > 0 && !active_array(&ax, &ay, &aw, &ah, NULL)) {
+        x0 = (int)(((cx - hw) * aw + ax - crop[0]) / crop[2] * w); x1 = (int)(((cx + hw) * aw + ax - crop[0]) / crop[2] * w);
+        y0 = (int)(((cy - hh) * ah + ay - crop[1]) / crop[3] * h); y1 = (int)(((cy + hh) * ah + ay - crop[1]) / crop[3] * h);
+    } else {
+        x0 = (int)((cx - hw) * w); x1 = (int)((cx + hw) * w); y0 = (int)((cy - hh) * h); y1 = (int)((cy + hh) * h);
+    }
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > w) x1 = w;
+    if (y1 > h) y1 = h;
+    /* The mean colour of the box, each value linearised (undoing the tone
+     * curve, step 3) BEFORE averaging, as light adds up linearly. About 4000
+     * samples; a value of 250 or more counts as clipped. */
+    step = (int)sqrt((double)(x1 - x0 + 1) * (y1 - y0 + 1) / 4000.0);
+    if (step < 1) step = 1;
+    for (y = y0; y < y1; y += step)
+        for (x = x0; x < x1; x += step) {
+            const uint8_t *px = rgb + ((size_t)y * w + x) * 3;
+            if (px[0] >= 250 || px[1] >= 250 || px[2] >= 250) clipped += 1;
+            for (k = 0; k < 3; ++k) lin[k] += pow(px[k] / 255.0, 2.2);
+            n += 1;
+        }
+    if (n < 1 || clipped > 0.02 * n) status = 1;                    /* no colour left in a clipped white */
+    else {
+        for (k = 0; k < 3; ++k) lin[k] /= n;
+        if (lin[1] < 0.004) status = 2;                              /* darker than ~1/16 of white: noise */
+        else if (!has_wb || !invert3(tr, inv)) status = 3;           /* the frame's white balance is unknown */
+        else {
+            /* Step 2 undone: c = inverse(T) . lin, the patch's colour right
+             * after the gains. Then the gains corrected so that c is grey. */
+            for (k = 0; k < 3; ++k) c[k] = inv[3 * k] * lin[0] + inv[3 * k + 1] * lin[1] + inv[3 * k + 2] * lin[2];
+            if (c[0] <= 0 || c[1] <= 0 || c[2] <= 0) status = 2;    /* a patch too dark or too far from grey */
+            else {
+                out_g[0] = (float)(gains[0] * c[1] / c[0]);
+                out_g[1] = gains[1]; out_g[2] = gains[2];
+                out_g[3] = (float)(gains[3] * c[1] / c[2]);
+            }
+        }
+    }
+    pthread_mutex_lock(&g.lock);
+    g.wbpick_status = status;
+    memcpy(g.wbpick_gains, out_g, sizeof g.wbpick_gains);
+    g.wbpick_from_vf = 1;
+    g.wbpick_pending = 0;
+    g.wbpick_done = 1;
+    pthread_cond_broadcast(&g.cond);
+    pthread_mutex_unlock(&g.lock);
+}
+
 static void on_preview_image(void *ctx, AImageReader *reader)
 {
     AImage *img = NULL;
@@ -1181,16 +1314,23 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                  * HAL applies a new crop some frames after it is asked to, and
                  * a display computed from the request would jump meanwhile. */
                 AImage_getTimestamp(img, &ts);
-                int f_iso = 0;
+                int f_iso = 0, f_has_wb = 0, vf_pick;
                 int64_t f_exp = 0;
+                float f_gains[4] = { 1, 1, 1, 1 };
+                double f_tr[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
                 pthread_mutex_lock(&g.lock);
                 for (k = 0; k < 8; ++k)
                     if (g.crop_ring[k].ts == ts) {
                         memcpy(crop, g.crop_ring[k].crop, sizeof crop);
                         f_iso = g.crop_ring[k].iso; f_exp = g.crop_ring[k].exp_ns;
+                        f_has_wb = g.crop_ring[k].has_wb;
+                        memcpy(f_gains, g.crop_ring[k].gains, sizeof f_gains);
+                        memcpy(f_tr, g.crop_ring[k].tr, sizeof f_tr);
                         found = 1;
                         break;
                     }
+                /* a white pick waiting, and no RAW to measure it on: this frame */
+                vf_pick = g.wbpick_pending && !g.meter_request;
                 pthread_mutex_unlock(&g.lock);
                 line[0] = '\0';
                 /* g.sent_crop is read and written by this listener thread
@@ -1214,6 +1354,9 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                     }
                 }
                 vf_meter(rgb, w, h, found ? crop : g.sent_crop, f_iso, f_exp);   /* the viewfinder meter */
+                /* Only a frame whose result was found: its white balance must
+                 * be the one it was rendered with, not a guess. */
+                if (vf_pick && found) wbpick_from_view(rgb, w, h, crop, f_has_wb, f_gains, f_tr);
                 pthread_mutex_lock(&g.out_lock);        /* serialise with SF2M     */
                 fd = g.stream_fd;                       /* re-read: a stop may have landed */
                 broke = 0;
@@ -1728,6 +1871,19 @@ static void record_result_crop(const ACameraMetadata *res)
          * tagged with it (the loop's settle check then needs no guessing) */
         g.crop_ring[k].iso = (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_SENSITIVITY, &ie) == ACAMERA_OK && ie.count) ? ie.data.i32[0] : 0;
         g.crop_ring[k].exp_ns = (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_EXPOSURE_TIME, &xe) == ACAMERA_OK && xe.count) ? xe.data.i64[0] : 0;
+        {   /* ... and its white balance (gains and colour transform), for a
+             * white measured on this very frame (wbpick_from_view) */
+            ACameraMetadata_const_entry ge, tre;
+            int j;
+            g.crop_ring[k].has_wb = 0;
+            if (ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_GAINS, &ge) == ACAMERA_OK && ge.count == 4 &&
+                ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_TRANSFORM, &tre) == ACAMERA_OK && tre.count == 9) {
+                for (j = 0; j < 4; ++j) g.crop_ring[k].gains[j] = ge.data.f[j];
+                for (j = 0; j < 9; ++j)
+                    g.crop_ring[k].tr[j] = tre.data.r[j].denominator ? (double)tre.data.r[j].numerator / tre.data.r[j].denominator : 0.0;
+                g.crop_ring[k].has_wb = 1;
+            }
+        }
     }
 }
 
@@ -6234,30 +6390,44 @@ IR_API int indraw_wb_fixed(const float *gains, char *out, size_t out_size)
 IR_API int indraw_wb_pick(char *out, size_t out_size)
 {
     struct timespec dl = deadline_in(2500);
-    int done = 0, status = 0;
+    int done = 0, status = 0, from_vf = 0;
     double rgb[3];
     float gains[4];
     char ev[120];
     if (!out || !out_size) return IR_EARG;
     if (!g.session) return fail(out, out_size, IR_ESTATE, "wb", "camera not open", 0);
-    if (!g.meter_request) { emit_event("wbpick ok=0 why=no_raw\n"); return fail(out, out_size, IR_ESTATE, "wb", "no RAW stream", 0); }
+    /* With RAW: the meter thread measures on a RAW frame. Without (the JP2's
+     * front and wide cameras): the viewfinder's listener measures on its
+     * next frame (wbpick_from_view), which needs the viewfinder streamed. */
+    if (!g.meter_request) {
+        int streaming;
+        pthread_mutex_lock(&g.out_lock);
+        streaming = g.stream_fd >= 0;
+        pthread_mutex_unlock(&g.out_lock);
+        if (!streaming) { emit_event("wbpick ok=0 why=no_raw\n"); return fail(out, out_size, IR_ESTATE, "wb", "no RAW stream and no viewfinder", 0); }
+    }
     pthread_mutex_lock(&g.lock);
     g.wbpick_done = 0;
+    g.wbpick_from_vf = 0;
     g.wbpick_pending = 1;
     pthread_cond_broadcast(&g.cond);                /* wake the meter thread */
     while (!g.wbpick_done)
         if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
-    done = g.wbpick_done; status = g.wbpick_status;
+    done = g.wbpick_done; status = g.wbpick_status; from_vf = g.wbpick_from_vf;
     memcpy(rgb, g.wbpick_rgb, sizeof rgb);
+    memcpy(gains, g.wbpick_gains, sizeof gains);
     g.wbpick_pending = 0;
     pthread_mutex_unlock(&g.lock);
     if (!done || status) {
-        snprintf(ev, sizeof ev, "wbpick ok=0 why=%s\n", !done ? "timeout" : status == 1 ? "clipped" : "dark");
+        /* status 3 (the viewfinder's white balance unknown) has no word of
+         * its own in the interface: "timeout", a plain "could not measure" */
+        snprintf(ev, sizeof ev, "wbpick ok=0 why=%s\n", !done || status == 3 ? "timeout" : status == 1 ? "clipped" : "dark");
         emit_event(ev);
-        return fail(out, out_size, IR_ECAPTURE, "wb", !done ? "no measure" : status == 1 ? "clipped" : "too dark", status);
+        return fail(out, out_size, IR_ECAPTURE, "wb", !done ? "no measure" : status == 1 ? "clipped" : status == 2 ? "too dark" : "no white balance in the frame's result", status);
     }
-    /* the gains that make this camera RGB neutral, green at 1 */
-    gains[0] = (float)(rgb[1] / rgb[0]); gains[1] = 1.0f; gains[2] = 1.0f; gains[3] = (float)(rgb[1] / rgb[2]);
+    /* From RAW: the gains that make this camera RGB neutral, green at 1.
+     * From the viewfinder: wbpick_from_view gave the gains already. */
+    if (!from_vf) { gains[0] = (float)(rgb[1] / rgb[0]); gains[1] = 1.0f; gains[2] = 1.0f; gains[3] = (float)(rgb[1] / rgb[2]); }
     if (indraw_wb_fixed(gains, out, out_size) != IR_OK) {
         emit_event("wbpick ok=0 why=apply\n");
         return IR_ECAPTURE;

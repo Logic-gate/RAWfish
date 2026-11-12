@@ -91,6 +91,11 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- Measuring the white (hold a readout 2 s) works on the cameras without
+  RAW (the JP2's front and wide): there it measures on the viewfinder's
+  image, undoing the white balance and colour transform the camera
+  rendered it with. It failed there ("no RAW stream", 7 tries in the log
+  of 13 Nov).
 - Switching cameras starts the new camera once: it was started with the
   previous camera's RAW choice, then restarted when its own capabilities
   arrived (0.6 to 1.5 s lost at each switch). RAW is now always asked; the
