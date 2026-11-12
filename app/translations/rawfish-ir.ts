@@ -583,6 +583,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Σ: one long exposure, no bracketing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+1"/>
         <source>Bracket</source>
         <translation type="unfinished"></translation>

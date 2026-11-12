@@ -91,6 +91,9 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- With a stacked shutter (Σ) the bracket shows "off" and is greyed (a
+  tap says why): a Σ is one long exposure. The chosen bracket is kept and
+  comes back when the shutter leaves Σ, as the type does.
 - Robustness (two audits, November 2026): an exposure given as nan, inf
   or beyond 11 days is refused (its conversion was undefined); iso= and
   stk_denoise= must be whole numbers in range ("iso=abc" was taken as 0,

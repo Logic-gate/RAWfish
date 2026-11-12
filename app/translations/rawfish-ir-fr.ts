@@ -582,6 +582,10 @@
         <translation>snap : une prise, sans bracketing</translation>
     </message>
     <message>
+        <source>Σ: one long exposure, no bracketing</source>
+        <translation>Σ : une seule longue pose, sans bracketing</translation>
+    </message>
+    <message>
         <location line="+1" />
         <source>Bracket</source>
         <translation>Bracketing</translation>

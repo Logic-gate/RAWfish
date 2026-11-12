@@ -235,7 +235,7 @@ ApplicationWindow {
                 var raw = page.rawAvailable ? ",raw" : ""
                 if (!page.ownJpeg) return "jpeg" + raw
                 var s = "yuv" + raw                                   // jpg and raw alike
-                if (page.imageType === "jpg" && settingsMenu.bracket !== "off") s += ",jpeg"
+                if (page.imageType === "jpg" && settingsMenu.effBracket !== "off") s += ",jpeg"
                 return s
             }
             onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
@@ -408,7 +408,7 @@ ApplicationWindow {
             // A bracket in jpg is taken by the camera's own JPEG, not by our
             // processing: said when the bracket is chosen, or when the type comes
             // to jpg with a bracket already chosen.
-            readonly property bool bracketByHal: imageType === "jpg" && ownJpeg && settingsMenu.bracket !== "off"
+            readonly property bool bracketByHal: imageType === "jpg" && ownJpeg && settingsMenu.effBracket !== "off"
             onBracketByHalChanged: if (bracketByHal) { page.noticeText = qsTr("bracket: taken as the camera's own JPEG"); noticeTimer.restart() }
             property string noticeText: ""                 // a line in the viewfinder for a few seconds
             Timer { id: noticeTimer; interval: 3500; onTriggered: page.noticeText = "" }
@@ -1089,12 +1089,12 @@ ApplicationWindow {
                 // bracket was sent with type=yuv, which ignores it: one photo came
                 // out instead of three.
                 var isRaw = (page.imageType === "raw")
-                var isYuv = (page.imageType === "jpg" && page.ownJpeg && settingsMenu.bracket === "off")
+                var isYuv = (page.imageType === "jpg" && page.ownJpeg && settingsMenu.effBracket === "off")
                 viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix
                                        + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
-                                       + " bracket=" + settingsMenu.bracket
+                                       + " bracket=" + settingsMenu.effBracket
                                        + " denoise_sigma=" + settingsMenu.stackDenoise
                                        + (isYuv ? " frames=" + settingsMenu.yuvFrames + " colour=" + settingsMenu.yuvColour
                                                   + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
@@ -1885,6 +1885,7 @@ ApplicationWindow {
                 processingColumns: menuConf.processingColumns
                 snapActualSize: page.snapSize.width > 0 ? page.snapSize.width + "x" + page.snapSize.height : ""
                 imageType: page.imageType
+                stackSelected: page.stackSelected      // Σ: the bracket shows "off", greyed
                 onPeakTweakChanged: page.applyAidThresholds()
                 onZebraTweakChanged: page.applyAidThresholds()
                 // Simple mode is JPEG only.

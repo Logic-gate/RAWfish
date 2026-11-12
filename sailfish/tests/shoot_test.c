@@ -68,6 +68,12 @@ int main(void)
     xs.shutter_ns = 2e9; r.denoise = 2;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && !strcmp(lines[0], "stack photo film=2.000 iso=400 stk_denoise=2"), "Σ2s: a stack, denoise x2");
+    /* 4b. Σ with a bracket that reached us anyway (the interface sends
+     *     "off" with Σ): still one stack, never three (the stack comes first). */
+    r.bracket = 2; r.raw = 1;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 1 && !strncmp(lines[0], "stack ", 6), "Σ with a bracket: one stack, the bracket ignored");
+    r.bracket = -1; r.raw = 0;
     /* 5. bracket x3 in JPEG: one burst with the pair; in raw three shots. */
     xs.shutter_ns = 16666667; r.denoise = 1; r.bracket = 0; r.raw = 0; fs.mode = CTL_FOCUS_ONCE;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);

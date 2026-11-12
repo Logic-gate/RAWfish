@@ -65,6 +65,13 @@ Item {
     // Bracketing: "off", "0" (three shots in a row at the same exposure, for a
     // short moment), or "1".."3" (three shots at -N, 0, +N stops).
     property string bracket: "off"
+    // A stacked shutter (Σ) is one long exposure made of many frames: no
+    // bracket with it. While Σ is chosen the bracket in force is "off" and
+    // its column greyed; the chosen value is kept (saved as it is) and comes
+    // back when the shutter leaves Σ, as the type does (typeBeforeStack).
+    // Everything that sends or decides by the bracket reads effBracket.
+    property bool stackSelected: false
+    readonly property string effBracket: stackSelected ? "off" : bracket
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     // JPG: RAWfish-ir's own processing of the ISP's image (rawfish-ir.conf only).
@@ -95,7 +102,7 @@ Item {
     property bool processingColumns: false         // the Settings page's switch (JPG processing in the menu)
     // RAWfish-ir's own JPG processing applies to jpg alone, and not to a
     // bracket: its three photos are the camera's JPEG.
-    readonly property bool yuvColumnsOff: imageType !== "jpg" || bracket !== "off"
+    readonly property bool yuvColumnsOff: imageType !== "jpg" || effBracket !== "off"
     readonly property string yuvColumnsHint: imageType === "snap" ? qsTr("snap: RAWfish-ir's processing at its defaults")
                                            : imageType !== "jpg" ? qsTr("JPG only: RAWfish-ir's processing")
                                                                   : qsTr("bracket: the camera's own JPEG, not RAWfish-ir's processing")
@@ -556,8 +563,9 @@ Item {
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
             MenuColumn { visible: menu.advanced; width: band.colW; header: header
-                dimmed: menu.imageType === "snap"; dimmedHint: qsTr("snap: one shot, no bracketing")
-                caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.bracket
+                dimmed: menu.imageType === "snap" || menu.stackSelected
+                dimmedHint: menu.stackSelected ? qsTr("Σ: one long exposure, no bracketing") : qsTr("snap: one shot, no bracketing")
+                caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.effBracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
                                               : v === "0" ? qsTr("3 frames in a row, same exposure")
                                               : qsTr("3 frames, ±%1 EV").arg(v) }
