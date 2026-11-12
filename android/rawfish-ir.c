@@ -623,6 +623,7 @@ static struct {
     int32_t ae_region[5]; int ae_region_on;      /* the exposure point in force (a long press), kept across focus taps */
     int ae_whole_on;                             /* since a sun was removed: the AE zone is the whole image, weight 1000 */
     char jpeg_label[24];                         /* the next HAL JPEG's kind in Exif Software ("snap"), used once */
+    int ts_realtime;                             /* the camera stamps frames with the boot clock (vf_pace) */
     int checks;                                  /* reports carry the viewfinder-vs-photo "check" (off by default: ~2 KB per shot) */
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
     long vf_last_hist[3][64];                    /* and its histogram (bins of 4 levels, r;g;b) */
@@ -876,7 +877,8 @@ static int write_sf2m(int fd, const char *text, int len)
 static int event_is_state(const char *text)
 {
     return !strncmp(text, "ae ", 3) || !strncmp(text, "vfmeter ", 8) || !strncmp(text, "meter ", 6)
-        || !strncmp(text, "halcrop ", 8);           /* a diagnostic: never worth a wait */
+        || !strncmp(text, "halcrop ", 8)            /* diagnostics: never worth a wait */
+        || !strncmp(text, "vfpace ", 7);
 }
 static void emit_event(const char *text)
 {
@@ -1248,6 +1250,55 @@ static void wbpick_from_view(const uint8_t *rgb, int w, int h, const int32_t cro
     pthread_mutex_unlock(&g.lock);
 }
 
+/* ---- The viewfinder's pace, for the detailed log (0.3.8) ----
+ *
+ * A viewfinder that "lags" can mean two different things, with two different
+ * causes: few frames per second (the camera delivers slowly), or frames that
+ * arrive late (each image shows the scene as it was some time ago). Seen on
+ * the JP2's selfie camera (13 Nov): the image follows a movement late. To
+ * tell where the time goes, every 2 s, with the detailed log on, one line:
+ *   fps      frames that reached us per second;
+ *   lat_ms   the age of a frame when we receive it: now minus the moment
+ *            the sensor exposed it (its timestamp), mean and worst. This is
+ *            the camera's own delay (exposure, ISP, buffers), before us. It
+ *            can only be measured when the camera stamps its frames with the
+ *            system's boot clock (SENSOR_INFO_TIMESTAMP_SOURCE = REALTIME);
+ *            otherwise the line says lat=unknown.
+ *   ours_ms  the time WE spend on a frame (conversion to RGB, the meter,
+ *            sending it to the interface), mean and worst.
+ * What the interface then takes to draw the frame is not counted.
+ * The line goes to the controller as "vfpace ..." (a state event: dropped,
+ * never waited for) and from there to the log only. */
+static void vf_pace(int64_t sensor_ts, double ours_ms)
+{
+    static double win_start = 0, lat_sum = 0, lat_max = 0, ours_sum = 0, ours_max = 0;
+    static int frames = 0, lat_n = 0;
+    double now = now_ms();
+    if (!g.checks) { win_start = 0; return; }
+    if (win_start == 0) { win_start = now; frames = 0; lat_n = 0; lat_sum = lat_max = ours_sum = ours_max = 0; }
+    frames++;
+    ours_sum += ours_ms; if (ours_ms > ours_max) ours_max = ours_ms;
+    if (g.ts_realtime && sensor_ts > 0) {
+        struct timespec bt;
+        double lat;
+        clock_gettime(CLOCK_BOOTTIME, &bt);         /* the clock REALTIME timestamps use */
+        lat = ((double)bt.tv_sec * 1e9 + bt.tv_nsec - (double)sensor_ts) / 1e6;
+        if (lat >= 0 && lat < 10000) { lat_sum += lat; if (lat > lat_max) lat_max = lat; lat_n++; }
+    }
+    if (now - win_start >= 2000) {
+        char line[160];
+        double secs = (now - win_start) / 1000.0;
+        if (lat_n > 0)
+            snprintf(line, sizeof line, "vfpace fps=%.1f lat_ms=%.0f lat_max_ms=%.0f ours_ms=%.1f ours_max_ms=%.1f\n",
+                     frames / secs, lat_sum / lat_n, lat_max, ours_sum / frames, ours_max);
+        else
+            snprintf(line, sizeof line, "vfpace fps=%.1f lat=unknown ours_ms=%.1f ours_max_ms=%.1f\n",
+                     frames / secs, ours_sum / frames, ours_max);
+        emit_event(line);
+        win_start = now; frames = 0; lat_n = 0; lat_sum = lat_max = ours_sum = ours_max = 0;
+    }
+}
+
 static void on_preview_image(void *ctx, AImageReader *reader)
 {
     AImage *img = NULL;
@@ -1307,6 +1358,7 @@ static void on_preview_image(void *ctx, AImageReader *reader)
         pthread_mutex_unlock(&g.out_lock);
         if (fd >= 0 && ready) {
             int w = 0, h = 0;
+            double t_ours = now_ms();                   /* our share of the frame's time (vf_pace) */
             uint8_t *rgb = yuv_to_rgb(img, &w, &h);
             if (rgb) {
                 int broke, k, found = 0;
@@ -1372,6 +1424,7 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                 }
                 pthread_mutex_unlock(&g.out_lock);
                 free(rgb);
+                vf_pace(ts, now_ms() - t_ours);         /* detailed log only */
             }
         }
     }
@@ -2992,6 +3045,8 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     g.af_tapped = 0; g.af_zoom_on = 0; g.scene_mode = 0;   /* a new session starts with no scene */
     if (!g.shade_balance && !g.shade_strength) { g.shade_balance = 50; g.shade_strength = 100; g.shade_max_gain = 5; }
     g.lens_front = 0;
+    g.ts_realtime = ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_TIMESTAMP_SOURCE, &e) == ACAMERA_OK && e.count &&
+                    e.data.u8[0] == ACAMERA_SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME;
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_FACING, &e) == ACAMERA_OK && e.count)
         g.lens_front = e.data.u8[0] == ACAMERA_LENS_FACING_FRONT;
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_ORIENTATION, &e) ==

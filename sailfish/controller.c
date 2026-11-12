@@ -174,10 +174,18 @@ static void note(const char *fmt, ...)
 
 /* One event line from the engine: read by the exposure behaviour, then
  * passed on to the interface as it is -- except the diagnostics meant for
- * the log only (halcrop: the viewfinder's crop as the camera reports it,
- * with the detailed log), which go to the log and nowhere else. */
+ * the log only (halcrop: the viewfinder's crop as the camera reports it;
+ * vfpace: the viewfinder's frame rate and delays -- both with the detailed
+ * log), which go to the log and nowhere else. */
 static void on_event(const char *line)
 {
+    if (!strncmp(line, "vfpace ", 7)) {        /* the viewfinder's pace (detailed log, see vf_pace) */
+        char t[200];
+        snprintf(t, sizeof t, "viewfinder pace %.160s", line + 7);
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
     if (!strncmp(line, "halcrop ", 8)) {
         char t[128];
         snprintf(t, sizeof t, "viewfinder crop (camera result) %.80s", line + 8);   /* four numbers: 80 is plenty */
