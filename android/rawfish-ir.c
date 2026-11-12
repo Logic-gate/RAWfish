@@ -5964,7 +5964,7 @@ IR_API int indraw_loupe(float factor, float cx, float cy, char *out, size_t out_
 IR_API int indraw_zoom(float factor, char *out, size_t out_size)
 {
     ACameraMetadata_const_entry e;
-    ACaptureRequest *reqs[1], *all[5];
+    ACaptureRequest *reqs[1], *all[9];
     int32_t crop[4], ax = 0, ay = 0, aw = 0, ah = 0, n = 0, i;
     float max_zoom = 1.0f;
     camera_status_t st;
@@ -5988,6 +5988,11 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
     if (g.yuv_request) all[n++] = g.yuv_request;   /* our JPEG is a finished photo: it follows the zoom (a DNG does not) */
+    /* ... and so does our JPEG of 2 or 4 merged frames, taken with its own
+     * requests (one per frame, indraw_yuv_burst): they were left out, so a
+     * multi-frame JPG came out unzoomed while its Exif said zoomed (found
+     * by the user, 12 Nov). (Its DNG is the RAW stream: full frame anyway.) */
+    for (i = 0; i < 4; ++i) if (g.yuv_burst_req[i]) all[n++] = g.yuv_burst_req[i];
     for (i = 0; i < n; ++i)
         if (all[i]) ACaptureRequest_setEntry_i32(all[i], ACAMERA_SCALER_CROP_REGION, 4, crop);
     {   /* the preview: the zoom window, and the loupe inside it if one is open.

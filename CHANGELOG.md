@@ -83,6 +83,13 @@ repository). Newest first.
   of what is shown, the zoom and loupe included), and every move of the
   loupe re-sent the camera's request, up to 76 times a second; withdrawn
   (0367), the precapture kept.
+- Our JPG of 2 or 4 merged frames follows the zoom: it was taken full
+  frame (its frames have their own capture requests, which the zoom
+  never reached), while its Exif said zoomed.
+- A double tap in the loupe closes it (back to the zoom in force). A
+  single tap in the loupe now waits 0.3 s before it places the focus
+  point, so that a double tap does not move it; outside the loupe a tap
+  acts at once, as before.
 - Detailed log (Settings): the viewfinder's crop as the camera reports
   it, at each change, and in our JPG's report the crop asked for the
   photo and the one the camera used (asked_crop, hal_crop), to tell a

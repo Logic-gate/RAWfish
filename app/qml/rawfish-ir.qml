@@ -860,6 +860,28 @@ ApplicationWindow {
             // circle measures a spot: a tap in the loupe meters there, precisely).
             property real loupe: 1.0
             readonly property bool loupeOpen: page.loupe > 1.01
+            // A double tap in the loupe closes it (back to the zoom in force,
+            // not to x1). So that its first tap does not move the focus point,
+            // a single tap IN THE LOUPE waits loupeTapMs before it acts: a
+            // second tap within that time closes the loupe instead. Outside
+            // the loupe a tap acts at once, and a double tap does nothing more.
+            readonly property int loupeTapMs: 300
+            property real pendingTapX: 0
+            property real pendingTapY: 0
+            Timer {
+                id: loupeTapTimer
+                interval: page.loupeTapMs
+                onTriggered: page.tapAt(page.pendingTapX, page.pendingTapY)
+            }
+            function viewfinderTap(px, py) {
+                if (!page.loupeOpen) { page.tapAt(px, py); return }
+                if (loupeTapTimer.running) { loupeTapTimer.stop(); page.loupe = 1; return }   // the second tap
+                page.pendingTapX = px; page.pendingTapY = py
+                loupeTapTimer.restart()
+            }
+            // A loupe closed any other way (a pinch, a restart) drops a waiting
+            // tap: its point was taken in the loupe's coordinates.
+            onLoupeOpenChanged: if (!loupeOpen) loupeTapTimer.stop()
             onLoupeChanged: viewfinder.sendCommand("vw loupe " + page.loupe.toFixed(3))
             // Rule-of-thirds grid: the menu's Grid column owns it (persisted there).
             readonly property bool gridOn: settingsMenu.gridOn
@@ -1596,7 +1618,7 @@ ApplicationWindow {
                             if (dragging === "menu")
                                 settingsMenu.settle(settingsMenu.y - viewfinderZone.y > -settingsMenu.height * 0.8)   // 20 % pulled: open
                             else if (Math.abs(mouse.x - startX) + Math.abs(mouse.y - startY) <= Theme.paddingLarge)
-                                page.tapAt(mouse.x, mouse.y)       // a tap = the focus here
+                                page.viewfinderTap(mouse.x, mouse.y)   // a tap = the focus here (in the loupe: after 0.3 s, a double tap closes it)
                             // (a drag that never said menu or gallery is nothing, not a tap)
                             dragging = ""
                         }

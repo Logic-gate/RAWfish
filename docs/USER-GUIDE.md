@@ -31,6 +31,7 @@ is the exposure you get.
 | two fingers apart / together | focus loupe, up to 12x, for the viewfinder only (the photo is not zoomed): up to the camera's limit (about 4x on the JP2) the sensor's real detail, beyond that an enlargement; a red frame and diagonal say it is on |
 | one finger, loupe on | moves around in the magnified image; while a finger moves, the exposure does not change and the view is an enlargement (smooth); when it stops, the sensor's real detail comes back and the exposure, the wheels and AE work as usual. On cameras that can only magnify the centre, the real detail is largest in the middle and the view is enlarged more the further you move from it |
 | touch or hold, loupe on | the same, on a spot as small as the loupe shows: a precise focus point, a precise spot measurement. The circle and the sun follow the loupe and the zoom |
+| double tap, loupe on | closes the loupe (back to the zoom in force). A single touch in the loupe acts 0.3 s later, so that a double tap does not move the focus point |
 | swipe down | opens the settings menu |
 | swipe left to right | opens the gallery (a clearly sideways swipe: a slanting downward one opens the menu instead) |
 
