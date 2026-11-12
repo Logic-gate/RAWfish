@@ -91,6 +91,12 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- Gallery: a picture pinched in and back out to its size no longer
+  locks the swipe until a tap (it is zoomed out by itself when back
+  within 8 % of the screen).
+- The camera button says "Std" (the word "standard" was cut); in
+  continuous focus a tap says "Auto: tap to focus disabled. Hold for
+  exposure."
 - The flash fires again with "jpg" and "snap": since our JPG replaced the
   camera's, those photos never armed it. In automatic exposure: pre-flash
   metering, then the flash; with a manual pair, "on" fires one flash and

@@ -878,7 +878,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+0"/>
-        <source>standard</source>
+        <source>Std</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1036,7 +1036,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+24"/>
-        <source>auto focus · hold: exposure here</source>
+        <source>Auto: tap to focus disabled. Hold for exposure.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

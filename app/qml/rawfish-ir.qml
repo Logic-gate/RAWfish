@@ -296,7 +296,8 @@ ApplicationWindow {
                 var c = viewfinder.caps, i = page.cameraIds.indexOf(viewfinder.cameraId)
                 if (i >= 0 && page.cameraFacing.length > i && page.cameraFacing[i] === "front") return qsTr("selfie")
                 if (!(c.focalEq > 0)) return ""
-                return c.focalEq < 22 ? qsTr("wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("standard")
+                // "Std", not "standard": the word was cut on the camera button
+                return c.focalEq < 22 ? qsTr("wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("Std")
             }
             function imageTypeLabel(t) {
                 switch (t) {
@@ -1400,7 +1401,7 @@ ApplicationWindow {
                 Label {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge * 2 }
                     visible: page.touchHintShown && viewfinder.running
-                    text: page.focusMode === "cont" ? qsTr("auto focus · hold: exposure here")
+                    text: page.focusMode === "cont" ? qsTr("Auto: tap to focus disabled. Hold for exposure.")
                                                     : qsTr("touch: focus · hold: exposure here")
                     color: "white"; font.pixelSize: Theme.fontSizeExtraSmall
                     style: Text.Outline; styleColor: "black"

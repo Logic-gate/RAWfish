@@ -174,6 +174,24 @@ Item {
                     overlay.active = !zoomed
                 }
                 onClicked: { if (zoomed) zoomOut(); else overlay.active = !overlay.active }
+                // Pinched in, then pinched back out to (nearly) the fitted size:
+                // the viewer still reported itself zoomed, so the strip stayed
+                // locked -- no swipe to the next picture or back to the camera --
+                // until a tap zoomed it out (13 Nov: "it feels buggy"). While
+                // zoomed, every 0.3 s: if the picture is back within 8 % of the
+                // screen in both directions, it is zoomed out for good, which
+                // unlocks the strip at once. contentWidth / contentHeight are
+                // the viewer's (a Flickable's) scaled picture; if a viewer did
+                // not give them, nothing happens (the tap still works).
+                Timer {
+                    interval: 300; repeat: true
+                    running: viewer.zoomed && viewer.active
+                    onTriggered: {
+                        var cw = Number(viewer.contentWidth), ch = Number(viewer.contentHeight)
+                        if (!(cw > 0) || !(ch > 0) || viewer.width <= 0 || viewer.height <= 0) return
+                        if (Math.max(cw / viewer.width, ch / viewer.height) < 1.08) viewer.zoomOut()
+                    }
+                }
                 // Sees every touch first and lets it through (accepted: false),
                 // so a pinch still zooms: it only records that a finger came.
                 MouseArea {

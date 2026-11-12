@@ -883,8 +883,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+0" />
-        <source>standard</source>
-        <translation>standard</translation>
+        <source>Std</source>
+        <translation>Std</translation>
     </message>
     <message>
         <location line="+4" />
@@ -1043,8 +1043,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+24" />
-        <source>auto focus · hold: exposure here</source>
-        <translation>mise au point auto · appui long : exposition ici</translation>
+        <source>Auto: tap to focus disabled. Hold for exposure.</source>
+        <translation>Auto : mise au point au toucher désactivée. Appui long : exposition.</translation>
     </message>
     <message>
         <location line="+1" />
