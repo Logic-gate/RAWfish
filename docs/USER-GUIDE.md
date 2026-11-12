@@ -204,8 +204,10 @@ columns or swipe up to close.
 
 The band always opens on its left end. The Σ denoise (2x or 4x the frames for a Σ shot) is set in `rawfish-ir.conf`, not in the menu.
 
-In **simple** mode the menu only keeps the flash, timer, format and white balance (this
-can be changed in `~/.config/com.rawfish/rawfish-ir/simple.json`, see the README).
+In **simple** mode the menu keeps the mode, the flash (if the camera has
+one), the grid and the level, plus the timer, format and white balance (these
+three can be changed in `~/.config/com.rawfish/rawfish-ir/simple.json`, see
+the README).
 
 ## The gallery (swipe left to right)
 
