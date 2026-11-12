@@ -91,6 +91,12 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- The lens-shading assistant calibrates a camera that gives RAW (the map
+  corrects DNG files only): it opened on whatever camera was running, the
+  JP2's front or wide one included, and did not say which. It now names
+  the camera, switches by itself to the only one with RAW, offers a choice
+  when several have it, and says so when none has. The caps list which
+  cameras give RAW (raw_cams).
 - A measured white is kept per camera: the gains measured on one camera
   were applied to the others, whose sensors see colours differently (a
   cast; camera 0's white sent to camera 1 in the log of 13 Nov). Each

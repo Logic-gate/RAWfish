@@ -834,6 +834,30 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <source>Back to the camera</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>No camera of this phone gives RAW: the map corrects DNG files only, there is nothing to calibrate.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Camera %1: the only camera of this phone that gives RAW (the map corrects DNG files only).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Several cameras give RAW: choose the one to calibrate (the map corrects DNG files only).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Camera %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starting camera %1…</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>rawfish-ir</name>

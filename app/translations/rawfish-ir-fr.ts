@@ -839,6 +839,30 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <source>Back to the camera</source>
         <translation>Retour à l'appareil photo</translation>
     </message>
+    <message>
+        <source>No camera of this phone gives RAW: the map corrects DNG files only, there is nothing to calibrate.</source>
+        <translation>Aucune caméra de ce téléphone ne fournit de RAW : la carte ne corrige que les fichiers DNG, il n’y a rien à calibrer.</translation>
+    </message>
+    <message>
+        <source>Camera %1: the only camera of this phone that gives RAW (the map corrects DNG files only).</source>
+        <translation>Caméra %1 : la seule caméra de ce téléphone qui fournit du RAW (la carte ne corrige que les fichiers DNG).</translation>
+    </message>
+    <message>
+        <source>Several cameras give RAW: choose the one to calibrate (the map corrects DNG files only).</source>
+        <translation>Plusieurs caméras fournissent du RAW : choisissez celle à calibrer (la carte ne corrige que les fichiers DNG).</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>Caméra</translation>
+    </message>
+    <message>
+        <source>Camera %1</source>
+        <translation>Caméra %1</translation>
+    </message>
+    <message>
+        <source>Starting camera %1…</source>
+        <translation>Démarrage de la caméra %1…</translation>
+    </message>
 </context>
 <context>
     <name>rawfish-ir</name>

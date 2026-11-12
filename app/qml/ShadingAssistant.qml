@@ -16,6 +16,16 @@
  * Nothing here changes the camera page; leaving pops back to it, which uses
  * the new file at its next engine start (restart()).
  *
+ * Which camera (0.3.8): the map corrects DNG files only, so only a camera
+ * that gives RAW can be calibrated. The assistant opens over the camera
+ * running at the start, which may have none (the JP2's front and wide
+ * cameras). The caps list which cameras give RAW (raw_cams, read from every
+ * camera's characteristics without opening them):
+ *   - none: the assistant says so and offers no measurement;
+ *   - one: it switches to that camera by itself and names it ("Camera 0");
+ *   - several: step 1 offers a choice; picking one switches to it.
+ * The camera is named by its number, as the interface's camera button does.
+ *
  * The lens positions are the HAL's own values (no focus calibration), spread
  * over the lens's range: 0 = infinity, then up to the closest position the
  * HAL reports in caps (min_focus_diopters) -- six positions, as measured on
@@ -52,6 +62,27 @@ Page {
     // from the camera page later; here we only show the thumbnail the engine
     // writes for the LAST capture of the calibration when it is kept
     property string previewPath: ""
+
+    // --- which camera: those that give RAW ---------------------------------
+    // caps.cameras: every camera id; caps.rawCams: 1 / 0 for each, same order.
+    // Unknown (an engine before 0.3.8): every camera assumed to have RAW, as
+    // before (the measurement then fails by itself on one without).
+    readonly property var rawCameras: {
+        var c = viewfinder && viewfinder.caps ? viewfinder.caps : {}, ids = c.cameras || [], r = c.rawCams, out = []
+        for (var i = 0; i < ids.length; ++i) if (r === undefined || r.length !== ids.length || r[i] === 1) out.push(String(ids[i]))
+        return out
+    }
+    readonly property string cameraHere: viewfinder ? String(viewfinder.cameraId) : ""
+    readonly property bool hereHasRaw: rawCameras.indexOf(cameraHere) >= 0
+    // The engine restarts when the camera changes: measuring waits for it.
+    readonly property bool ready: hereHasRaw && viewfinder && viewfinder.running
+    // One camera with RAW and the assistant opened on another: switch to it.
+    function settleCamera() {
+        if (!viewfinder || hereHasRaw || rawCameras.length !== 1) return
+        viewfinder.cameraId = rawCameras[0]
+    }
+    Component.onCompleted: settleCamera()
+    onRawCamerasChanged: settleCamera()          // the caps may come after the page
 
     // --- lens positions: 6 over the HAL's range ---------------------------
     function lensList() {
@@ -118,6 +149,35 @@ Page {
                                "nor between the captures: only the lens moves, by itself.")
                 }
 
+                // The camera being calibrated: named, or chosen among several.
+                Label {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * Theme.horizontalPageMargin
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: assistant.rawCameras.length === 0 ? "#ff8080" : Theme.highlightColor
+                    visible: assistant.rawCameras.length !== 1 || assistant.hereHasRaw
+                    text: assistant.rawCameras.length === 0
+                          ? qsTr("No camera of this phone gives RAW: the map corrects DNG files only, there is nothing to calibrate.")
+                          : assistant.rawCameras.length === 1
+                            ? qsTr("Camera %1: the only camera of this phone that gives RAW (the map corrects DNG files only).").arg(assistant.cameraHere)
+                            : qsTr("Several cameras give RAW: choose the one to calibrate (the map corrects DNG files only).")
+                }
+                ComboBox {
+                    label: qsTr("Camera")
+                    visible: assistant.rawCameras.length > 1
+                    currentIndex: Math.max(0, assistant.rawCameras.indexOf(assistant.cameraHere))
+                    menu: ContextMenu {
+                        Repeater {
+                            model: assistant.rawCameras
+                            MenuItem { text: qsTr("Camera %1").arg(modelData) }
+                        }
+                    }
+                    onCurrentIndexChanged: if (assistant.viewfinder && assistant.rawCameras[currentIndex] !== undefined &&
+                                               assistant.rawCameras[currentIndex] !== assistant.cameraHere)
+                                               assistant.viewfinder.cameraId = assistant.rawCameras[currentIndex]
+                }
+
                 ComboBox {
                     label: qsTr("What to measure")
                     currentIndex: assistant.full ? 0 : 1
@@ -153,7 +213,10 @@ Page {
 
                 Button {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: qsTr("Start the measurement")
+                    text: assistant.hereHasRaw && !assistant.ready ? qsTr("Starting camera %1…").arg(assistant.rawCameras.length === 1 ? assistant.rawCameras[0] : assistant.cameraHere)
+                                                                   : qsTr("Start the measurement")
+                    visible: assistant.rawCameras.length > 0
+                    enabled: assistant.ready
                     onClicked: assistant.start()
                 }
             }

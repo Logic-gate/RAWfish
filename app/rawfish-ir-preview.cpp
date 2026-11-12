@@ -827,6 +827,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         for (const QByteArray &fc : f.value("facing").split(','))
             if (!fc.isEmpty()) facing.append(QString::fromLatin1(fc));
         m_caps.insert(QStringLiteral("facing"), facing);
+        QVariantList rawCams;                      /* each camera gives RAW (1) or not (0), in the order of "cameras" (0.3.8) */
+        for (const QByteArray &rc : f.value("raw_cams").split(','))
+            if (!rc.isEmpty()) rawCams.append(rc.toInt());
+        m_caps.insert(QStringLiteral("rawCams"), rawCams);
         m_caps.insert(QStringLiteral("focusCal"), f.value("focus_cal", "0").toInt());   /* calibration points in force */
         {   /* the camera's RAW capability, independent of this session's streams */
             const QList<QByteArray> rc = f.value("raw_cap", "0x0").split('x');

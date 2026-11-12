@@ -112,6 +112,14 @@ white balance (normalised to the centre now).
 
 ## The assistant (ui 156)
 
+Which camera (0.3.8): the map corrects DNG files only, so only a camera
+that gives RAW can be calibrated; on the JP2 that is camera 0 alone. The
+caps list which cameras give RAW (`raw_cams`, from every camera's
+characteristics). With one, the assistant switches to it by itself and names
+it ("Camera 0: the only camera of this phone that gives RAW"); with several,
+step 1 offers a choice; with none, it says so and measures nothing. Each map
+is named after its camera and RAW size and serves that camera only.
+
 Settings > RAWfish-ir > "Calibrate the lens shading" sets a request; at its
 next start the camera page pushes `ShadingAssistant.qml` over itself (the
 engine keeps running and the page drives it). Step 1 prepares (what is
