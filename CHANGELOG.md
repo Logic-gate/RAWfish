@@ -70,25 +70,20 @@ repository). Newest first.
   to a touch gives the focus zone.
 - Changing the focus mode (auto / manual) no longer removes the sun: the
   exposure point belongs to the exposure, and stays.
-- Removing the sun gives back the camera's own automatic exposure, as
-  before the sun. "No point" was sent as a whole-image zone of weight 0,
-  which the camera took as a zone and metered differently; then (0363) as
-  no zone at all, which the camera took as "keep the last one", then as
-  the camera's own zone (all zero), which it took for a corner of the
-  image (2 stops too bright, seen in the log), until the phone moved.
-  Removing the sun now gives the camera's own zones back, sends first
-  the exposure the camera had chosen before the sun, and gives the
-  automatic exposure back once the viewfinder is at it (a few frames):
-  the camera starts again from its own choice, stays there if nothing has
-  changed and adapts if the phone moved. Given back straight from the
-  sun's exposure (0367, with an AE precapture), it came back exactly
-  after a bright point but too bright after a dark one (+0.5 to +1.5
-  stops): it re-metered on overexposed, clipped frames. For a day (0366) the exposure
-  metered the displayed image instead: it came back exactly after the
-  sun, but it was no longer the camera's own metering (a plain average
-  of what is shown, the zoom and loupe included), and every move of the
-  loupe re-sent the camera's request, up to 76 times a second; withdrawn
-  (0367).
+- Removing the sun gives back the exposure from before it. Until the
+  first sun the camera meters as it does by itself; removing a sun now
+  writes a real zone over the whole image (weight 1000) and asks the
+  camera to meter again at once (an AE precapture); that zone stays until
+  the camera restarts. Everything else was tried and failed on the JP2:
+  a whole-image zone of weight 0 (metered differently), no zone at all
+  (0363: "keep the last one"), the camera's own zone, all zero (0365,
+  0367: it went on metering the sun's spot until the phone moved, ~2
+  stops too bright after a dark point), and sending the exposure from
+  before the sun first (0369: ignored). For a day (0366) the exposure
+  metered the displayed image from the start: exact after a sun, but no
+  longer the camera's own metering, and every move of the loupe re-sent
+  the camera's request (up to 76 times a second). The zone is fixed on
+  the whole image: the zoom and the loupe never re-send it.
 - Our JPG of 2 or 4 merged frames follows the zoom: it was taken full
   frame (its frames have their own capture requests, which the zoom
   never reached), while its Exif said zoomed.

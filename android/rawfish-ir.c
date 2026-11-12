@@ -621,6 +621,7 @@ static struct {
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
     int yuv_light;                               /* the next captures are snap's: binned to about 2048 px wide (indraw_set_yuv_light) */
     int32_t ae_region[5]; int ae_region_on;      /* the exposure point in force (a long press), kept across focus taps */
+    int ae_whole_on;                             /* since a sun was removed: the AE zone is the whole image, weight 1000 */
     char jpeg_label[24];                         /* the next HAL JPEG's kind in Exif Software ("snap"), used once */
     int checks;                                  /* reports carry the viewfinder-vs-photo "check" (off by default: ~2 KB per shot) */
     double vf_last_mean, vf_last_clip_hi;        /* the viewfinder's last measure (vf_meter) */
@@ -2823,7 +2824,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     setup_colour_temperature();              /* the camera->XYZ matrix, for the WB temperature */
     g.sensor_orientation = 0;                /* JPEG_ORIENTATION uses this (JP2: 90) */
     g.device_rot = 0;
-    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0; g.yuv_light = 0;
+    g.wb_fixed = 0; g.wb_shift = 0; g.wb_tint = 0; g.wbpick_pending = 0; g.wb_base_frozen = 0; g.ae_region_on = 0; g.ae_whole_on = 0; g.yuv_light = 0;
     g.last_scan_wait_ms = -1; g.af_scan_wait_ms = 1000;   /* the app sends rawfish-ir.conf's value at each start */
     g.awb_auto_results = 0;
     g.vw_n = 0;
@@ -5465,6 +5466,7 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * requests so the capture does not re-meter elsewhere. */
         ACaptureRequest *all[6];
         int n = 0, i;
+        const int32_t whole_ae[5] = { ax, ay, ax + aw, ay + ah, 1000 };   /* the whole active array (as 0366 at zoom 1) */
         all[n++] = g.preview_request;
         all[n++] = g.trigger_request;
         all[n++] = g.still_request;
@@ -5493,14 +5495,20 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
              * (until 0363: metered differently) nor a removed entry (0363: a HAL
              * that applies settings as changes keeps the last zone when the key
              * is absent, so the sun's spot stayed) gives that back. */
+            /* Without a point: the template's zones (the camera's own
+             * metering) until a sun is removed; from then on a REAL zone over
+             * the whole image, weight 1000 (whole_ae). The JP2 takes the
+             * template's zone (all zero) as nothing new and goes on metering
+             * the sun's last spot until the phone moves: after a dark point
+             * it settled ~2 stops too bright (logs of 12 Nov, 0367 and 0369),
+             * while a real zone, with the precapture below, came back exactly
+             * six times out of six (0366, 11 Nov). Fixed on the whole image:
+             * unlike 0366 it does not follow the zoom or the loupe, so the
+             * view window never re-sends the request. */
             if (do_ae == 1) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, region);
             else if (g.ae_region_on && do_ae == 0) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.ae_region);
+            else if (do_ae == 2 || g.ae_whole_on) ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, whole_ae);
             else ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AE_REGIONS, 5, g.tpl_ae_regions);
-            /* (0366 metered the display window here, weight 1000: the
-             * camera's own metering was lost from the start, and every
-             * view-window change re-sent the repeating request. Back to the
-             * template's zones, the camera's own metering, as at start; the
-             * precapture below makes it meter again at once.) */
             if (do_af == 1) {
                 ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AF_MODE, 1, &af_mode);
                 ACaptureRequest_setEntry_i32(all[i], ACAMERA_CONTROL_AF_REGIONS, 5, af_region);
@@ -5508,7 +5516,7 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         }
     }
     if (do_ae == 1) { memcpy(g.ae_region, region, sizeof g.ae_region); g.ae_region_on = 1; }
-    else if (do_ae == 2) g.ae_region_on = 0;
+    else if (do_ae == 2) { g.ae_region_on = 0; g.ae_whole_on = 1; }   /* the whole-image zone from now on (a new session drops it) */
     if (do_af == 2) {                                   /* the focus back to the HAL's own (or our zoom region) */
         ACaptureRequest *af_all[6]; int na = 0, k;
         af_all[na++] = g.preview_request; af_all[na++] = g.trigger_request; af_all[na++] = g.still_request;
@@ -5529,12 +5537,13 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
-    /* (No AE precapture on aeclear any more. 0366-0367 sent one so that the
-     * HAL metered again at once; after a DARK point it metered on overexposed
-     * frames and settled too bright (log of 12 Nov). The controller now sends
-     * the HAL's own pair from before the sun first and gives the AE back once
-     * the frames are at it (ctl_exp_spot_stop): this aeclear arrives while
-     * that pair is in force, when a precapture trigger means nothing.) */
+    /* The sun removed: "meter again, now", on the whole-image zone written
+     * above. An AE precapture makes the HAL run its metering sequence at once;
+     * left alone it stayed where the sun had put it until the phone moved.
+     * The pair 0366 proved (zone + precapture: six returns out of six). (No
+     * AF part: the focus is left as it is. No flash: the flash mode is off
+     * unless asked.) */
+    if (do_ae == 2) send_trigger(ACAMERA_CONTROL_AF_TRIGGER_IDLE, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START);
     jw_init(&w, out, out_size);
     /* (live_*: the HAL's exposure on the last frame BEFORE this change, so that
      * the log shows what the automatic exposure was before a point and after
@@ -7100,8 +7109,8 @@ IR_API int indraw_ae_state(char *out, size_t out_size)
     int64_t lx; int li;
     pthread_mutex_lock(&g.lock); lx = g.live_exp_ns; li = g.live_iso_v; pthread_mutex_unlock(&g.lock);
     jw_init(&w, out, out_size);
-    jw_add(&w, "{\"ok\":true,\"live_exposure_ns\":%lld,\"live_iso\":%d,\"ae_lock\":%d,\"ae_region_on\":%d}",
-           (long long)lx, li, g.ae_lock, g.ae_region_on);
+    jw_add(&w, "{\"ok\":true,\"live_exposure_ns\":%lld,\"live_iso\":%d,\"ae_lock\":%d,\"ae_region_on\":%d,\"ae_whole\":%d}",
+           (long long)lx, li, g.ae_lock, g.ae_region_on, g.ae_whole_on);   /* ae_whole: the whole-image zone (after a sun) */
     return IR_OK;
 }
 
