@@ -91,6 +91,11 @@ repository). Newest first.
   single tap in the loupe now waits 0.3 s before it places the focus
   point, so that a double tap does not move it; outside the loupe a tap
   acts at once, as before.
+- Our JPG of 2 or 4 merged frames is merged onto its SHARPEST frame (it
+  was always the first, often shaken by the press): a merge is never
+  sharper than its reference. Another frame replaces the first only when
+  it is clearly sharper (3 %). The report gives the reference ("ref") and
+  each frame's sharpness; about 20-40 ms per frame.
 - The log keeps only what helps when a user has a problem: each start
   (device, streams, caps, the settings sent), each photo (the press, the
   capture, the report), every error with the command that caused it, the

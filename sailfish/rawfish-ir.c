@@ -1876,6 +1876,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     if (denoise) {                                        /* our own: colour, and the frames merged */
         const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
         int nin = (n == 1 && nev == 0) ? 1 : n;
+        yuv_set_pick_sharpest(nev == 0);                  /* frames of different exposures (ev=): always the first */
         if (yuv_denoise(in, nin, colour, median, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"denoise failed (memory)\"}"); return 1; }
     }
     if (sharpen) {                                        /* ours, on the merged frame */
@@ -1932,14 +1933,25 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         jw_quote_into(out, OUT_SIZE, file);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"bytes\":%lu,\"quality\":%d,\"compress_ms\":%.1f", jlen, quality, t1 - t0);
         if (do_save) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"saved_frames\":%d", saved);
-        if (denoise == 1) snprintf(out + strlen(out), OUT_SIZE - strlen(out),
-                              ",\"denoise\":{\"frames\":%d,\"scale\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
-                              "\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
-                              "\"shifts\":[[%d,%d],[%d,%d],[%d,%d]],\"merged_pct\":[%.0f,%.0f,%.0f]}",
-                              (n == 1 && nev == 0) ? 1 : n, detail_scale, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
-                              rep.ms_align, rep.ms_merge, rep.ms_colour,
-                              rep.shift_dy[1], rep.shift_dx[1], rep.shift_dy[2], rep.shift_dx[2], rep.shift_dy[3], rep.shift_dx[3],
-                              rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
+        if (denoise == 1) {
+            /* Per frame, in the order taken (frame 1 first): its shift onto
+             * the reference, the share it added, its sharpness (% of the
+             * sharpest); "ref" is the reference's number (1-based), the
+             * sharpest frame since 0.3.8 (the first before). */
+            int nf = (n == 1 && nev == 0) ? 1 : n, j;
+            char sh[96] = "", mp[48] = "", sp[48] = "";
+            for (j = 0; j < nf && j < 4; ++j) {
+                snprintf(sh + strlen(sh), sizeof sh - strlen(sh), "%s[%d,%d]", j ? "," : "", rep.shift_dy[j], rep.shift_dx[j]);
+                snprintf(mp + strlen(mp), sizeof mp - strlen(mp), "%s%.0f", j ? "," : "", rep.merged_pct[j]);
+                snprintf(sp + strlen(sp), sizeof sp - strlen(sp), "%s%.0f", j ? "," : "", rep.sharp_pct[j]);
+            }
+            snprintf(out + strlen(out), OUT_SIZE - strlen(out),
+                     ",\"denoise\":{\"frames\":%d,\"scale\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
+                     "\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
+                     "\"ref\":%d,\"sharpness_pct\":[%s],\"shifts\":[%s],\"merged_pct\":[%s]}",
+                     nf, detail_scale, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
+                     rep.ms_align, rep.ms_merge, rep.ms_colour, rep.ref + 1, sp, sh, mp);
+        }
         if (sharpen) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"sharpen\":{\"level\":%d,\"ms\":%.0f}", sharpen, rep.ms_sharpen);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
     }

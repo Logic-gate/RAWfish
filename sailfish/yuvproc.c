@@ -272,10 +272,43 @@ static void find_shift(const uint8_t *ya, const uint8_t *yb, int w, int h, int *
     free(a8); free(b8); free(a4); free(b4);
 }
 
-/* Merging the frames: each later frame is shifted onto the first, then
- * added where its luminance differs from the first by no more than the
+/* The sharpest frame (0.3.8, November 2026). Hand shake blurs some frames
+ * of a burst more than others -- the first often, shaken by the press --
+ * and a merge is never sharper than its reference: what moved, and is
+ * rejected, comes from the reference alone. So the reference is the frame
+ * whose detail is strongest: the mean squared gradient of its luminance
+ * (pixels g_scale apart), on the central 80 % (the borders hold the least
+ * of the subject), every row. The grain adds about 4 sigma^2 to that
+ * mean in every frame alike (all share their exposure and ISO), and is
+ * taken off (noise2 = 4 sigma^2 of the first frame), so that the scores
+ * compare the blur. At full resolution and on every row: a 2x2 binning,
+ * or every other row, made the score depend on where an edge fell (a
+ * frame shifted by an odd number of pixels scored 40 % lower, or 35 %
+ * higher, on a sharp test pattern). One read of each frame: ~20-40 ms per
+ * 12.5 MP frame. */
+static int g_pick_sharpest = 1;
+void yuv_set_pick_sharpest(int on) { g_pick_sharpest = on ? 1 : 0; }
+static double sharpness(const uint8_t *y, int w, int h, double noise2)
+{
+    const int st = g_scale;
+    int x0 = w / 10, x1 = w - w / 10 - st, y0 = h / 10, y1 = h - h / 10 - st, x, yy;
+    double s = 0;
+    long cnt = 0;
+    for (yy = y0; yy < y1; ++yy) {
+        const uint8_t *r = y + (size_t)yy * w, *rd = r + (size_t)st * w;
+        for (x = x0; x < x1; ++x) {
+            int gx = r[x + st] - r[x], gy = rd[x] - r[x];
+            s += gx * gx + gy * gy; cnt++;
+        }
+    }
+    s = cnt ? s / cnt - noise2 : 0;
+    return s > 0 ? s : 0;
+}
+
+/* Merging the frames: each other frame is shifted onto the reference, then
+ * added where its luminance differs from the reference by no more than the
  * noise allows (a soft threshold on the local mean difference); where it
- * differs more, something moved, and the first frame stands alone. The
+ * differs more, something moved, and the reference stands alone. The
  * weights are the same for the colour planes. */
 typedef struct {
     const ir_yuv_t *ref, *f; int dy, dx, w, h;
@@ -338,11 +371,27 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
 {
     static const float strengths[6] = { 0.0f, 1.0f, 2.0f, 3.0f, 5.0f, 8.0f };   /* times the measured noise; 5 and 8 are deliberately too much */
     const ir_yuv_t *ref = &frames[0];
-    int w = ref->w, h = ref->h, k;
+    int w = ref->w, h = ref->h, k, r = 0, first_pair = 1;
     size_t np = (size_t)w * h, nc = (size_t)(w / 2) * (h / 2);
     double t0;
     memset(rep, 0, sizeof *rep);
     if (n < 1 || n > 4 || !ref->y) return -1;
+    /* The reference: the sharpest frame. Another frame replaces the first
+     * only when it is clearly sharper (by 3 %): between frames alike, the
+     * scores differ by their grain alone, and the first, the nearest to the
+     * press, stays. */
+    if (n > 1 && g_pick_sharpest) {
+        double sc[4];
+        int m = 0;                                      /* the sharpest */
+        t0 = now_ms();
+        float sg = luma_sigma(frames[0].y, w, h);       /* the burst's grain (the same ISO for all) */
+        for (k = 0; k < n; ++k) { sc[k] = sharpness(frames[k].y, w, h, 4.0 * sg * sg); if (sc[k] > sc[m]) m = k; }
+        if (sc[m] > sc[0] * 1.03) r = m;
+        for (k = 0; k < n; ++k) rep->sharp_pct[k] = sc[m] > 0 ? (float)(100.0 * sc[k] / sc[m]) : 0;
+        rep->ms_align += now_ms() - t0;                 /* counted with the alignment */
+    }
+    rep->ref = r;
+    ref = &frames[r];
     *out = *ref;
     out->y = malloc(np); out->u = malloc(nc); out->v = malloc(nc);
     if (!out->y || !out->u || !out->v) { free(out->y); free(out->u); free(out->v); out->y = out->u = out->v = NULL; return -1; }
@@ -351,7 +400,7 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
      * noise of 0: the merge's threshold would be 0 and its weights 0/0. Half
      * a level is the 8-bit image's own rounding, the least noise there is. */
     if (!(rep->sigma >= 0.5f)) rep->sigma = 0.5f;
-    rep->merged_pct[0] = 100.0f;
+    rep->merged_pct[r] = 100.0f;
     rep->sigma_merge = rep->sigma;
     if (n == 1) {
         memcpy(out->y, ref->y, np); memcpy(out->u, ref->u, nc); memcpy(out->v, ref->v, nc);
@@ -362,15 +411,17 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
         if (!ay || !au || !av || !wy || !wc || !d || !db) { free(ay); free(au); free(av); free(wy); free(wc); free(d); free(db); free(out->y); free(out->u); free(out->v); out->y = out->u = out->v = NULL; return -1; }
         for (i = 0; i < np; ++i) { ay[i] = ref->y[i]; wy[i] = 1; }
         for (i = 0; i < nc; ++i) { au[i] = ref->u[i]; av[i] = ref->v[i]; wc[i] = 1; }
-        for (k = 1; k < n; ++k) {
+        for (k = 0; k < n; ++k) {
             merge_ctx_t mc; diff_ctx_t dc;
+            if (k == r) continue;                       /* the reference is already in */
             t0 = now_ms();
             find_shift(ref->y, frames[k].y, w, h, &rep->shift_dy[k], &rep->shift_dx[k]);
             rep->ms_align += now_ms() - t0;
             t0 = now_ms();
             dc.a = ref->y; dc.b = frames[k].y; dc.dy = rep->shift_dy[k]; dc.dx = rep->shift_dx[k]; dc.w = w; dc.h = h; dc.d = d;
             parallel_rows(diff_rows, &dc, h);
-            if (k == 1) {
+            if (first_pair) {                           /* the reference and the first frame merged onto it */
+                first_pair = 0;
                 /* The merge's noise, measured where it matters: between the
                  * frames. The estimate on one frame (luma_sigma: a pixel against
                  * its 8 neighbours) assumes the grain changes from one pixel to

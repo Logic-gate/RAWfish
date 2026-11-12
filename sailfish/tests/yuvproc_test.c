@@ -55,6 +55,45 @@ int main(void)
     float n4 = noise_in(out.y, W, 100, 100, 400, 250);
     CHECK(n4 < n1 * 0.62f, "flat area noise %.2f -> %.2f (4 frames: expected about /2)", n1, n4);
     CHECK(rep.merged_pct[1] > 90 && rep.merged_pct[3] > 85, "merged share %.0f%% %.0f%% %.0f%%", rep.merged_pct[1], rep.merged_pct[2], rep.merged_pct[3]);
+    /* Frames alike (the same blur, their own grain): the first stays the
+     * reference (another must be 3 % sharper to replace it). */
+    CHECK(rep.ref == 0, "frames alike: the first stays the reference (sharpness %.0f %.0f %.0f %.0f %%)",
+          rep.sharp_pct[0], rep.sharp_pct[1], rep.sharp_pct[2], rep.sharp_pct[3]);
+    {   /* The sharpest frame is the reference: frames 1, 2 and 4 shaken
+         * (a 5-pixel horizontal blur, as a hand moving during the exposure),
+         * frame 3 sharp. The merge must take frame 3 as its reference, and
+         * the result must keep its detail: high-pass energy on a textured
+         * area well above a merge onto a shaken frame. */
+        ir_yuv_t sb[4], os, of; yuv_denoise_report_t rs, rf; int k3, x3, y3;
+        double es = 0, ef = 0;
+        for (k3 = 0; k3 < 4; ++k3) {
+            sb[k3] = make(W, H, 0, 0, 500, 2.0f, 200u + (unsigned)k3);
+            if (k3 != 2) {                               /* shaken: a 5-px horizontal box blur */
+                uint8_t *t = malloc((size_t)W * H);
+                for (y3 = 0; y3 < H; ++y3) for (x3 = 0; x3 < W; ++x3) {
+                    int a = 0, c = 0, i3;
+                    for (i3 = -2; i3 <= 2; ++i3) { int xx = x3 + i3; if (xx >= 0 && xx < W) { a += sb[k3].y[(size_t)y3 * W + xx]; c++; } }
+                    t[(size_t)y3 * W + x3] = (uint8_t)(a / c);
+                }
+                memcpy(sb[k3].y, t, (size_t)W * H); free(t);
+            }
+        }
+        CHECK(yuv_denoise(sb, 4, 0, 0, &os, &rs) == 0 && rs.ref == 2 && rs.sharp_pct[2] > 99.9f && rs.sharp_pct[0] < 90,
+              "the sharp frame 3 is the reference (ref %d; sharpness %.0f %.0f %.0f %.0f %%)",
+              rs.ref + 1, rs.sharp_pct[0], rs.sharp_pct[1], rs.sharp_pct[2], rs.sharp_pct[3]);
+        CHECK(rs.merged_pct[2] == 100.0f && rs.shift_dy[2] == 0 && rs.shift_dx[2] == 0, "the reference reported as 100 %% and unshifted");
+        yuv_set_pick_sharpest(0);                        /* as an ev= list asks: always the first */
+        CHECK(yuv_denoise(sb, 4, 0, 0, &of, &rf) == 0 && rf.ref == 0, "pick off: the first is the reference");
+        yuv_set_pick_sharpest(1);
+        for (y3 = 100; y3 < 600; ++y3) for (x3 = 100; x3 < 900; ++x3) {     /* high-pass: pixel - its left and right mean */
+            double ds = os.y[(size_t)y3 * W + x3] - 0.5 * (os.y[(size_t)y3 * W + x3 - 1] + os.y[(size_t)y3 * W + x3 + 1]);
+            double df = of.y[(size_t)y3 * W + x3] - 0.5 * (of.y[(size_t)y3 * W + x3 - 1] + of.y[(size_t)y3 * W + x3 + 1]);
+            es += ds * ds; ef += df * df;
+        }
+        CHECK(es > 1.3 * ef, "merged onto the sharp frame: detail energy %.0f against %.0f onto the first (shaken)", es, ef);
+        for (k3 = 0; k3 < 4; ++k3) { free(sb[k3].y); free(sb[k3].u); free(sb[k3].v); }
+        free(os.y); free(os.u); free(os.v); free(of.y); free(of.u); free(of.v);
+    }
     {   /* Enlarged grain: frames whose grain spans 2x2 pixels (as the JP2's 50
          * MP night frames, a 12.5 MP image upscaled). The one-frame estimate
          * reads low; the merge must still take the frames. (On real JP2 frames
