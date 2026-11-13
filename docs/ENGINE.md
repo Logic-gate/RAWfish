@@ -148,7 +148,9 @@ a 64-bin RGB histogram of the frame just sent, at most every 100 ms),
 `captured`, `written`, `stack_start n=` (a stack began), `progress`, `stack_done`,
 with the detailed log (`checks on`) `halcrop X Y W H` (the viewfinder's crop
 as its capture result reports it) and `vfpace fps= lat_ms= ours_ms=` (every
-2 s: frames per second, a frame's age when received, our time per frame) --
+2 s: frames per second, a frame's age when received, our time per frame) and
+`afreg X0 Y0 X1 Y1 W n=` (the focus zone the camera's result says it used,
+at each change) --
 both written to the log by the controller, not passed on --, and `fcrop
 x= y= w= h=` -- sent right before a frame whose crop differs from the
 previous one: the crop that frame was really taken with (from its capture

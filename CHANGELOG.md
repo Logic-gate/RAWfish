@@ -97,6 +97,10 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- Detailed log: the focus zone the camera says it used (its result's AF
+  zone), at each change, beside the zone we sent (the touch's reply): the
+  18 mm focuses in one part of the viewfinder only, while the zone sent
+  matches the touch.
 - The 18 mm's focus touch (test key focusTouchContinuous=1, off by
   default): its AUTO search scans only from where the lens is towards
   infinity (trace of 14 Nov: 15 failures of 15 ran down to infinity), so

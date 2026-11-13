@@ -221,6 +221,13 @@ static void note(const char *fmt, ...)
  * log), which go to the log and nowhere else. */
 static void on_event(const char *line)
 {
+    if (!strncmp(line, "afreg ", 6)) {         /* the AF zone the camera used (detailed log) */
+        char t[200];
+        snprintf(t, sizeof t, "AF zone used by the camera (result): %.150s", line + 6);
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
     if (!strncmp(line, "vfpace ", 7)) {        /* the viewfinder's pace (detailed log, see vf_pace) */
         char t[200];
         snprintf(t, sizeof t, "viewfinder pace %.160s", line + 7);

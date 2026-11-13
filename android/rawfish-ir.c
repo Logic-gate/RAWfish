@@ -888,7 +888,8 @@ static int event_is_state(const char *text)
 {
     return !strncmp(text, "ae ", 3) || !strncmp(text, "vfmeter ", 8) || !strncmp(text, "meter ", 6)
         || !strncmp(text, "halcrop ", 8)            /* diagnostics: never worth a wait */
-        || !strncmp(text, "vfpace ", 7);
+        || !strncmp(text, "vfpace ", 7)
+        || !strncmp(text, "afreg ", 6);
 }
 static void emit_event(const char *text)
 {
@@ -2004,6 +2005,21 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
     if (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count)
         g.live_exp_ns = e.data.i64[0];          /* for a burst in auto: freeze this */
     record_result_crop(res);                   /* for "fcrop" with this frame      */
+    /* Detailed log only: the focus zone the camera says it USED (its result's
+     * AF_REGIONS), at each change. On the 18 mm a focus touch works in one
+     * part of the viewfinder only (14 Nov) while the zone we send matches the
+     * touch exactly; whether the camera uses that zone, another, or clips it,
+     * this tells. A state event: dropped, never waited for (we hold g.lock). */
+    if (g.checks && ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_REGIONS, &e) == ACAMERA_OK && e.count >= 5) {
+        static int32_t last_afr[5] = { -1, -1, -1, -1, -1 };
+        if (memcmp(last_afr, e.data.i32, sizeof last_afr)) {
+            char hl[128];
+            memcpy(last_afr, e.data.i32, sizeof last_afr);
+            snprintf(hl, sizeof hl, "afreg %d %d %d %d %d n=%d\n", e.data.i32[0], e.data.i32[1], e.data.i32[2], e.data.i32[3],
+                     e.data.i32[4], (int)(e.count / 5));
+            emit_event(hl);
+        }
+    }
     if (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_SENSITIVITY, &e) == ACAMERA_OK && e.count)
         g.live_iso_v = e.data.i32[0];
     /* Remember the AWB's own gains and transform while it runs: manual white
