@@ -64,6 +64,9 @@ Corrections wired today (both optional, per camera):
 - `focus_max_diopters`: the lens' real closest stop in HAL units, when it
   stops before the declared one (the JP2's 18 mm declares 20, stops near 9).
   The manual range ends there.
+- `focus_step_percent`: the volume keys' manual steps above about 1 D as a
+  share of the value (the JP2's 18 mm: 8, 0 to 9 D in 48 presses). Absent:
+  the constant 0.05 D steps.
 - `min_frame_ns`: the minimum frame duration for manual exposure (the floor a
   manual shutter is clamped to). Default is 1/30 s (`33333333`); set this if the
   device accepts shorter or needs longer.

@@ -109,9 +109,10 @@ repository). Newest first.
   (its lens stops near 9 while it declares 20: the keys now stop at 9).
 - A camera without a focus calibration shows its lens value in diopters
   ("1.50 D") instead of a guessed distance in red.
-- The volume keys move the manual focus faster in the near range: steps of
-  0.05 D up to 1 D, then about 8 % of the value; 0 to 9 D takes 48 presses
-  instead of 180.
+- On the 18 mm, the volume keys move the manual focus faster in the near
+  range: steps of 0.05 D up to 1 D, then about 8 % of the value; 0 to 9 D
+  takes 48 presses instead of 180 (device profile key
+  `focus_step_percent`). The other cameras keep their 0.05 D steps.
 - The log gives, at each start, what the camera says of its zones
   ("# regions:"): how many it takes for the exposure, the white balance
   and the focus, the arrays they are measured in (with distortion

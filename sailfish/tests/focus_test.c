@@ -68,7 +68,7 @@ int main(void)
     ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
     CHECK(!strncmp(last(), "focus 1.000m", 12), "manual: 'focus 1.000m' (1 D)");
     ctl_focus_step(f, -1); ctl_focus_step(f, -1);
-    CHECK(fabs(st.diopters - 1.20) < 1e-9 && !strcmp(last(), "focus 0.833m nowait"), "two steps nearer from 1 D: 1.10 then 1.20 D (8 % steps above 1 D), sent without the lens wait");
+    CHECK(fabs(st.diopters - 1.10) < 1e-9 && !strcmp(last(), "focus 0.909m nowait"), "two steps nearer: 1.10 D (constant 0.05 D steps), sent without the lens wait");
     for (i = 0; i < 40; ++i) ctl_focus_step(f, +1);
     CHECK(st.diopters == 0 && !strcmp(last(), "focus inf nowait"), "stepping farther stops at infinity");
     ctl_focus_ref(f, 0.5, 0.5, t += 100);
@@ -107,7 +107,7 @@ int main(void)
     CHECK(fabs(st.diopters - 18.0) < 1e-9, "a fixed-focus camera's 0: the closest distance kept");
     ctl_focus_set_max(f, 12.0);                                  /* another camera, closer limit */
     ctl_focus_step(f, 1);                                        /* one step farther (> 0 = farther) from the clamped 12 */
-    CHECK(fabs(st.diopters - 11.10) < 1e-9, "another camera's closer limit: the distance clamped to it, then stepped from there (a step of 8 %)");
+    CHECK(fabs(st.diopters - 11.95) < 1e-9, "another camera's closer limit: the distance clamped to it, then stepped from there");
     /* 4c. "Continuous then lock" (the 18 mm, 0.3.8): a manual touch searches
      *     with the continuous AF, locks once it settled, holds on 4. */
     ctl_focus_set_max(f, 20.0);
@@ -143,7 +143,9 @@ int main(void)
     /* 5. clear: the reference goes, the mode is restated. */
     ctl_focus_clear(f);
     CHECK(count("tap 0.5 0.5 afclear") >= 1 && st.circle == CTL_CIRCLE_NONE, "clear: the focus region reset, the circle gone");
-    /* 6. the volume steps over the near range (last: it leaves the lens at 9 D) */
+    /* 6. a camera with focus_step_percent 8 (the 18 mm): the near range in
+     *    about 45 presses, not 180 (last: it leaves the lens at 9 D) */
+    ctl_focus_set_step_pct(f, 8);
     ctl_focus_set_touch(f, 0);
     ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
     {   /* the near range: 0 to 9 D in about 45 presses, not 180 (the state

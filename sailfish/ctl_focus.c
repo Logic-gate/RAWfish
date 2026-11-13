@@ -36,6 +36,7 @@ struct ctl_focus {
     double search_start_ms;
     int hold_pending, manual_pick;
     double max_d;                   /* the closest distance, diopters (ctl_focus_set_max) */
+    double step_pct;                /* volume steps above 1 D: this % of the value (0 = the constant 0.05 D) */
     /* The focus touch "continuous then lock" (ctl_focus_set_touch; the JP2's
      * 18 mm). Its AUTO search only scans from where the lens is towards
      * infinity: from our manual distance (1 m, near infinity on that lens) it
@@ -224,19 +225,22 @@ void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farthe
 {
     if (f->mode != CTL_FOCUS_MANUAL) return;
     f->held = 0;                                                 /* a distance of the user's: the lens is set to it */
-    {   /* The step grows with the value: 0.05 D up to about 1 D, then about
-         * 8 % of it (on the 0.05 grid): the near range, where the diopters
-         * pile up (0.05 D is 1 mm at 10 cm), took 180 presses of 200; now
-         * 0 to 9 D takes about 45. Going farther, the step is the one that
-         * leads back to the value below. */
-        double d = f->diopters, step;
-        if (dir < 0) step = fmax(STEP_D, round(d * 0.08 / STEP_D) * STEP_D);
-        else         step = fmax(STEP_D, round(d / 1.08 * 0.08 / STEP_D) * STEP_D);
+    {   /* A camera whose device profile gives focus_step_percent (the JP2's
+         * 18 mm: 8) steps by that share of the value above about 1 D, on the
+         * 0.05 grid: its near range took 180 presses, now 48 for 0 to 9 D.
+         * Going farther, the step is the one that leads back to the value
+         * below. Other cameras: the constant 0.05 D, fine in macro. */
+        double d = f->diopters, step = STEP_D, p = f->step_pct / 100.0;
+        if (p > 0) {
+            if (dir < 0) step = fmax(STEP_D, round(d * p / STEP_D) * STEP_D);
+            else         step = fmax(STEP_D, round(d / (1.0 + p) * p / STEP_D) * STEP_D);
+        }
         f->diopters = snap(f, d - dir * step);
     }
     publish(f);                                                  /* the display first: no lag */
     send_manual_opt(f, 0);                                       /* the lens, without waiting */
 }
+void ctl_focus_set_step_pct(ctl_focus_t *f, double pct) { f->step_pct = pct > 0 && pct < 50 ? pct : 0; }
 void ctl_focus_set_max(ctl_focus_t *f, double max_diopters)
 {
     /* 0 or less: a fixed-focus camera (nothing to reach) or no caps: kept */

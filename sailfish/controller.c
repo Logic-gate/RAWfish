@@ -270,6 +270,7 @@ static void on_event(const char *line)
                  * else its HAL value, else the old 10 D) */
                 ctl_focus_set_max(c.foc, fieldd(line, "min_focus_real", fieldd(line, "min_focus", 10.0)));
                 ctl_focus_set_touch(c.foc, (int)fieldd(line, "touch_af", 0));   /* the engine's focus touch */
+                ctl_focus_set_step_pct(c.foc, fieldd(line, "focus_step_pct", 0));   /* the profile's step (the 18 mm) */
                 ctl_focus_restart(c.foc);                /* a (re)started engine: the mode again */
             }
         } else if (!strncmp(line, "ae ", 3)) {

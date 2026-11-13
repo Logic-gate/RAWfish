@@ -430,6 +430,7 @@ static const ov_field_t k_ov_fields[] = {
     { "touch_focus_continuous",  0, 1 },                        /* 1: a focus touch searches with the continuous AF, then locks */
     { "touch_focus_off",         0, 1 },                        /* 1: no focus by touch on this camera */
     { "focus_max_diopters",      1, 100 },                      /* the lens' real closest stop (HAL units), below the declared one */
+    { "focus_step_percent",      1, 49 },                       /* manual steps above 1 D as a % of the value */
     { NULL, 0, 0 }
 };
 /* Keys allowed anywhere in a camera block besides the fields above. */
@@ -2619,11 +2620,12 @@ int main(int argc, char **argv)
             }
             {   /* the lens' real closest stop and "no focus by touch" (device profile;
                  * absent: the declared stop, and the touch as usual) */
-                typedef int (*sfp_fn)(float, int, char *, size_t);
+                typedef int (*sfp_fn)(float, int, int, char *, size_t);
                 sfp_fn sf = (sfp_fn)a_dlsym(bridge, "indraw_set_focus_profile");
                 long long fm = ov_ok ? read_override_checked(argv[2], "focus_max_diopters") : 0;
                 long long tf = ov_ok ? read_override_checked(argv[2], "touch_focus_off") : 0;
-                if (sf && (fm > 0 || tf == 1)) { sf((float)fm, tf == 1 ? 0 : 1, out, sizeof out); emit(out); }
+                long long sp = ov_ok ? read_override_checked(argv[2], "focus_step_percent") : 0;
+                if (sf && (fm > 0 || tf == 1 || sp > 0)) { sf((float)fm, tf == 1 ? 0 : 1, (int)sp, out, sizeof out); emit(out); }
             }
             {   /* a longest exposure above the declared range (device profile; absent: the declared one) */
                 typedef int (*set_exp_fn)(int64_t, char *, size_t);
