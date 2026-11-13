@@ -97,6 +97,11 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- Detailed log: a focus trace. For 4 s after a focus touch, every change
+  of the camera's AF state and lens position, with the time since the
+  touch ("af trace +350 ms: state 3 (active scan), lens 1.250"), to see
+  what a camera does with a search (the 18 mm fails where Jolla Camera
+  focuses).
 - Clean-up: a fixed-focus camera (the selfie) no longer receives the kept
   focus point at each start (it stays kept for the next camera with a
   focus); the automatic "aestate" 2.5 s after a sun is removed is gone (its

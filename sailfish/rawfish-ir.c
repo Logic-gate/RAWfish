@@ -2716,6 +2716,7 @@ int main(int argc, char **argv)
             /* "checks on|off" decides the log's detail before it is classed */
             if (!strncmp(line, "checks ", 7)) {
                 __atomic_store_n(&g_log_detail, !strcmp(line + 7, "on"), __ATOMIC_RELAXED);
+                ctl_set_detail(log_detailed());  /* the controller's own detailed diagnostics (the focus trace) */
                 if (log_detailed() && g_templates) { log_line("# templates (at the start): ", g_templates); free(g_templates); g_templates = NULL; }
             }
             log_command("> ", line);             /* written now, or held for an error (log_class) */

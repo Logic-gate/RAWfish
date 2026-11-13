@@ -38,6 +38,9 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
  * the newline. Set before ctl_start. */
 typedef void (*ctl_log_fn)(const char *text);
 void ctl_set_log(ctl_log_fn log);
+/* The detailed log is on (the CLI's "checks on"): the controller then also
+ * writes its diagnostics meant for the detailed log only (the focus trace). */
+void ctl_set_detail(int on);
 
 /* One lock for everything that touches the engine or the controller's
  * state, recursive: the CLI takes it around each stdin command, the

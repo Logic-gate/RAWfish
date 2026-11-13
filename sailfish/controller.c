@@ -39,6 +39,14 @@ static struct {
     int ui_paused, focus_paused; /* the two reasons to leave the exposure alone */
     ctl_caps_t caps;             /* the last caps, for the shoot decisions */
     ctl_log_fn log;              /* diagnostics to the log, or NULL           */
+    int detail;                  /* the detailed log is on (ctl_set_detail)   */
+    /* The focus trace (detailed log): from a focus touch, for 4 s, every
+     * change of the HAL's AF state or lens position, with the time since the
+     * touch. To see what a camera does with a search: whether the lens moves,
+     * how far, and when the HAL gives up (the 18 mm, 14 Nov). */
+    double trace_t0, trace_until;
+    int trace_af;
+    double trace_lens;
     char capture_q[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE];
     int capture_n, capture_i;
 } c = { .rd = -1, .wr = -1,
@@ -127,7 +135,17 @@ static void exp_state(void *ctx, const ctl_exp_state_t *s)
 }
 
 /* --- the focus behaviour's callbacks --- */
-static void foc_cmd(void *ctx, const char *engine_command) { exp_cmd(ctx, engine_command); }
+static void foc_cmd(void *ctx, const char *engine_command)
+{
+    /* a focus search starts ("tap X Y af"; not "afclear"): the trace begins */
+    size_t n = strlen(engine_command);
+    if (c.detail && !strncmp(engine_command, "tap ", 4) && n > 3 && !strcmp(engine_command + n - 3, " af")) {
+        c.trace_t0 = now_ms(); c.trace_until = c.trace_t0 + 4000.0;
+        c.trace_af = -1; c.trace_lens = -1;
+        if (c.log) c.log("af trace: search started");
+    }
+    exp_cmd(ctx, engine_command);
+}
 static void foc_pause(void *ctx, int paused) { (void)ctx; c.focus_paused = !!paused; apply_pause(); }
 static void foc_spot(void *ctx, int on) { (void)ctx; if (c.exp) { if (on) ctl_exp_spot_start(c.exp); else ctl_exp_spot_stop(c.exp); } }
 static void foc_state(void *ctx, const ctl_focus_state_t *s)
@@ -158,6 +176,29 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
 /* (The interface still draws from ae / vfmeter / meter, and its histogram
  * comes from them.) */
 void ctl_set_log(ctl_log_fn log) { c.log = log; }
+void ctl_set_detail(int on) { ctl_lock(); c.detail = !!on; if (!on) c.trace_until = 0; ctl_unlock(); }
+
+/* One "ae" line during a focus trace: written when the AF state or the lens
+ * position (HAL value, 0.02 apart) changed. The states, Camera2's: 0
+ * inactive, 1 passive scan, 2 passive focused, 3 active scan, 4 focused
+ * and locked, 5 not focused and locked (the search failed), 6 passive
+ * unfocused. Called on the reader thread under the controller's lock, as the
+ * touch that starts a trace (foc_cmd) is: the trace fields are never read
+ * and written at once. */
+static void af_trace(const char *line)
+{
+    double now = now_ms(), lens = fieldd(line, "focus", -1);
+    int af = (int)fieldd(line, "af_state", -1);
+    static const char *const names[] = { "inactive", "passive scan", "passive focused", "active scan",
+                                         "focused locked", "not focused locked", "passive unfocused" };
+    char t[160];
+    if (!c.detail || !c.log || now > c.trace_until) return;
+    if (af == c.trace_af && fabs(lens - c.trace_lens) < 0.02) return;
+    c.trace_af = af; c.trace_lens = lens;
+    snprintf(t, sizeof t, "af trace +%4.0f ms: state %d (%s), lens %.3f", now - c.trace_t0, af,
+             af >= 0 && af <= 6 ? names[af] : "?", lens);
+    c.log(t);
+}
 
 /* A diagnostic: to the log (ctl_set_log, "# ..." in rawfish-ir.log) and to
  * stderr (the system journal: the interface forwards the CLI's stderr). */
@@ -227,6 +268,7 @@ static void on_event(const char *line)
             c.live_exp_ns = fieldd(line, "exp_ns", 0);
             ctl_exp_live(c.exp, c.live_iso, c.live_exp_ns, (int)fieldd(line, "ae_state", 0));
             if (c.foc) ctl_focus_live(c.foc, (int)fieldd(line, "af_state", 0), fieldd(line, "focus_real", -1), now_ms());
+            af_trace(line);                              /* detailed log: the focus trace */
             if (c.view) ctl_view_tick(c.view, now_ms());  /* a throttled loupe command, if any */
         } else if (!strncmp(line, "meter ", 6)) {
             ctl_exp_meter_clip(c.exp, fieldd(line, "mclip_lo", 0), fieldd(line, "mclip_hi", 0));
