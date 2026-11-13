@@ -41,6 +41,7 @@ sizeDefaultApplied=0
 jpegQuality=95
 ; White-balance preset: 1 auto, 2 incandescent, 3 fluorescent, 4 warm fluorescent,
 ; 5 daylight, 6 cloudy, 7 twilight, 8 shade (only those the camera lists).
+; Back to 1 (auto) at each start of the app.
 ;                                               range 1..8              default 1
 awbMode=1
 ; Bracketing: off; 0 = three shots at the same exposure (x3); 1, 2, 3 = three

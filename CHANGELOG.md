@@ -99,6 +99,9 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- The menu's White bal. column is back on auto at each start of the app
+  (a preset such as daylight or tungsten no longer carries over). Measured
+  whites and the temperature and tint shifts are unchanged.
 - **The 18 mm: no focus by touch.** Its autofocus searches one way only,
   from the lens' position towards infinity, and passes the sharp position
   without stopping (its sharpness changes little with distance): a touch

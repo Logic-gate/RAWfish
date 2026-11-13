@@ -236,7 +236,11 @@ Item {
         captureSize = sz
         formatSaved = pick("format", "", ["4:3", "16:9"])   /* "" = the RAW's shape (format) */
         jpegQuality = pick("jpegQuality", "95", ["20", "40", "60", "80", "90", "95", "100"]) * 1
-        awbMode = num("awbMode", 1, 1, 8)
+        // The menu's White bal. column starts on auto at each start of the app
+        // (the mode chosen there lasted across starts and could be forgotten
+        // on "daylight" or "tungsten"). Only this column: measured whites,
+        // the temperature and tint shifts keep their behaviour.
+        awbMode = 1; save("awbMode", 1)
         // Set in rawfish-ir.conf only (not in the menu): the processing.
         var ss = String(viewfinder.setting("snapSize", "")).trim()
         snapSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(ss) ? ss : ""
