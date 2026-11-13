@@ -64,12 +64,14 @@ The SPEED and ISO wheels decide the mode:
 | **automatic** | no wheel touched, or the AE button | speed and ISO, by the camera; the EV wheel corrects | the app measures the point and sets the exposure from it (a few quick corrections), then **holds** it until you remove the sun |
 | **ISO priority** | touch the ISO wheel | the speed, by the app; EV corrects | the app measures the point instead of the whole image; the point's light level shows above the sun |
 | **speed priority** | touch the SPEED wheel | the ISO, by the app; EV corrects; past 1/2 s: Σ (stacked, raw) | same |
-| **manual** | touch both | nothing; the EV wheel becomes a "+/−" number: stops brighter or darker than automatic would be | the number tells how **the point** is exposed; the point's light level shows above the sun |
+| **manual** | touch both | nothing; the EV wheel becomes a "+/−" number: stops brighter or darker than automatic would be | the number tells how **the point** is exposed; the same number shows above the sun |
 
 The exposure point is set by a touch **held one second**: a small sun, a spot
 of 5 % of the frame. Without one, the exposure is measured on the whole image.
-The light level above the sun is an absolute EV at ISO 100 ("EV 8.3"), what a
-spot light meter would read. The histogram draws the spot's own tones as
+In a manual or priority exposure the number above the sun says how many stops
+the point sits above (+) or below (−) a neutral grey correctly exposed, with
+the settings in force ("+1.3"): one more ISO stop adds one. "≥ +2.5": the point
+is clipped, at least that much; "≤ −4.0": crushed black, at most that much. The histogram draws the spot's own tones as
 brighter outlines over the whole picture's. A touch on the sun, or the AE
 button, removes it.
 

@@ -127,14 +127,24 @@ The RAW meter (`meter on`) measures only while a stream is attached
 stream the command is accepted but no frame is measured.
 
 `caps` carries `proto=N`, the version of this event/command protocol (1
-since 0.47.15); an interface built against another version can tell.
+since 0.47.15); an interface built against another version can tell. Since
+0.3.8 it also gives `raw_cams=` (for each camera of `cameras=`, 1 if it gives
+RAW), `yuv_stream=WxH/k` (the YUV stream our JPG is averaged from, and by
+how much) and `min_focus_real=` (the closest focus in the diopters manual
+focus works in: the HAL's through the calibration table). The meter lines
+(`meter`, `vfmeter`) carry `mclip_lo=` / `mclip_hi=`, the metered area's
+crushed and clipped shares in percent.
 
 Besides the frames (SF2P), the stream carries one-line events (SF2M): `caps`,
 `ae` (the preview's live values; also `cct=` and `duv=`, the white balance in force as a correlated colour temperature and its Duv, estimated from the colour gains through the sensor's calibration matrix), `meter` (the RAW meter; its histogram covers the displayed window (`viewwin`), and `shist=` is the spot's own while a reference is set -- `vfmeter` likewise), `vfmeter` (the viewfinder meter: the linear
 mean -- centre-weighted, or the tap's spot --, clipping percentages, the
 pair the frame was exposed with when known (`iso=`, `exp_ns=`, else 0) and
 a 64-bin RGB histogram of the frame just sent, at most every 100 ms),
-`captured`, `written`, `stack_start n=` (a stack began), `progress`, `stack_done`, and `fcrop
+`captured`, `written`, `stack_start n=` (a stack began), `progress`, `stack_done`,
+with the detailed log (`checks on`) `halcrop X Y W H` (the viewfinder's crop
+as its capture result reports it) and `vfpace fps= lat_ms= ours_ms=` (every
+2 s: frames per second, a frame's age when received, our time per frame) --
+both written to the log by the controller, not passed on --, and `fcrop
 x= y= w= h=` -- sent right before a frame whose crop differs from the
 previous one: the crop that frame was really taken with (from its capture
 result), normalised in the active array. A HAL applies a new crop a few
@@ -191,13 +201,16 @@ manual distance (diopters), the circle to draw (0 none, 1 searching, 4 sharp,
 5 locked but unsure, 6 failed, 7 sun), whether a search runs, whether a
 reference measures the light.
 
-Event: `xpstate iso= exp_ns= iso_manual= shutter_manual= full_auto= full_manual= fixed= spot= ev= offset= offset_valid= pv_ms= pv_slow= deficit= too_dark= ev100=` --
+Event: `xpstate stops= stops_valid= stops_clip= iso= exp_ns= iso_manual= shutter_manual= full_auto= full_manual= fixed= spot= ev= offset= offset_valid= pv_ms= pv_slow= deficit= too_dark= ev100=` --
 (the `pv_*`, `deficit` and `too_dark` fields describe a Σ preview: its frame
 time, slowed by the ISO limit, how many stops darker than the photo, and
 whether its signal is too low to measure)
 what the wheels and indicators show (`fixed`: a pair the controller holds,
 which photos carry; `offset`: manual stops from automatic; `ev100`: the
-metered light level, `nan` without an aperture). Sent whenever it changes.
+metered light level, `nan` without an aperture; `stops`: in every mode but
+automatic, the metered area's stops from a neutral grey correctly exposed,
+with `stops_clip` +1 when much of it is clipped (a floor), -1 when crushed
+(a ceiling) -- the number the interface shows). Sent whenever it changes.
 
 ## Device profile fields (`override-hal.json`)
 

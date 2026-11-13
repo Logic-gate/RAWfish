@@ -196,7 +196,9 @@ which keep their ambience colour (notch buttons use secondaryHighlightColor).
 - **Spot light meter in manual and semi-automatic exposure**: above the
   circle, the light at the point as EV100 = log2(N^2/t) - log2(ISO/100) +
   log2(measure / target), from each measured frame and the pair it was taken
-  with (N from the caps line's `aperture`), lightly smoothed.
+  with (N from the caps line's `aperture`), lightly smoothed. (Replaced in
+  0.3.8 by the stops from a neutral grey with the settings in force, which
+  move with the ISO and speed as the photo does; EV100 stays in the state.)
 - **No HAL crop changes while a finger moves the loupe.** Each change
   replaces the preview request and drops frames; changed on every move, the
   pan became jerky (ui 116). During a pinch or a pan the HAL frame stays at
@@ -455,7 +457,10 @@ REFUSE (do differently):
   only by the histogram -- not wanted).
 - NO cosmetic digital gain anywhere, in the viewfinder or the file; and
   renderExposure must not reach the JPEG either (RAWfish applied it to the file).
-- NO silent/combined settings: everything atomic and reported.
+- NO silent/combined settings: everything atomic and reported. (One
+  exception, asked for in 0.3.8: the flash makes the exposure and the focus
+  automatic -- the flash needs the camera's metering --, said by a message
+  and the greyed controls, and undone when it goes off.)
 - Manual focus distances are CALIBRATED per device (RAWfish's distances did not
   match reality; ours use a measured focus_calibration table).
 

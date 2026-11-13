@@ -97,6 +97,12 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- Clean-up: a fixed-focus camera (the selfie) no longer receives the kept
+  focus point at each start (it stays kept for the next camera with a
+  focus); the automatic "aestate" 2.5 s after a sun is removed is gone (its
+  check is done; the command stays). Documentation brought in line with
+  0.3.8 (the stops above the sun, the new caps and log fields, the flash's
+  exception to "atomic settings").
 - Each camera keeps its own photo size: a size chosen on one camera was
   forgotten at every camera change (50 MP on camera 0 came back as 12.5
   after a visit to the selfie), and the app started camera 0 with the

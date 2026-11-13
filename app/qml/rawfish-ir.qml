@@ -578,12 +578,11 @@ ApplicationWindow {
                 page.showTouchHint()
                 viewfinder.sendCommand("vw light " + q.u.toFixed(4) + " " + q.v.toFixed(4))
             }
-            // After the sun is removed, the HAL's exposure is logged 2.5 s later
-            // ("aestate"), to compare with the reading before the sun (in the
-            // tap's reply): the check that the automatic exposure came back.
-            Timer { id: aeStateTimer; interval: 2500; onTriggered: viewfinder.sendCommand("aestate") }
+            // (0365-0370 logged the HAL's exposure 2.5 s after the sun was
+            // removed -- "aestate" -- to check that it came back to its reading
+            // before the sun. Checked, 14 Nov: the automatic call is gone; the
+            // engine's "aestate" command stays for a hand check.)
             function clearLight() {
-                aeStateTimer.restart()
                 viewfinder.sendCommand("vw lightclear")
             }
             function clearTap() {
@@ -622,7 +621,12 @@ ApplicationWindow {
                 var other = page.keptCamera !== "" && page.keptCamera !== viewfinder.cameraId
                 if (page.focusMode === "manual" && page.keptDiopters >= 0 && !other)
                     viewfinder.sendCommand("fc distance " + page.keptDiopters.toFixed(3))
-                if (page.keptRef) {
+                // A fixed-focus camera (the selfie) has nothing to aim: the kept
+                // point is neither shown nor replayed there, and stays kept for
+                // the next camera that has a focus (0.3.8: the selfie received
+                // the same "vw tap" at each of its starts, log of 14 Nov).
+                if (page.keptRef && page.fixedFocus) { page.circleShown = false; meterCircle.opacity = 0 }
+                else if (page.keptRef) {
                     if (other && page.keptFocalEq > 0 && c.focalEq > 0) {
                         var r = c.focalEq / page.keptFocalEq          // a longer lens magnifies: the point moves out from the centre
                         page.keptRefU = 0.5 + (page.keptRefU - 0.5) * r
@@ -640,7 +644,7 @@ ApplicationWindow {
                 id: restoreTimer
                 interval: 400
                 onTriggered: {
-                    if (!viewfinder.running) return
+                    if (!viewfinder.running || page.fixedFocus) return   // (a fixed lens: nothing to aim)
                     if (page.keptRef) viewfinder.sendCommand("vw tap " + page.keptRefU.toFixed(4) + " " + page.keptRefV.toFixed(4))
                 }
             }
