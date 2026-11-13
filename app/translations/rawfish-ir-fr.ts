@@ -872,8 +872,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     <name>rawfish-ir</name>
     <message>
         <location filename="../qml/rawfish-ir.qml" line="+286" />
-        <source>selfie</source>
-        <translation>selfie</translation>
+        <source>Selfie</source>
+        <translation>Selfie</translation>
     </message>
     <message>
         <location line="+2" />
@@ -882,8 +882,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+0" />
-        <source>tele</source>
-        <translation>télé</translation>
+        <source>Tele</source>
+        <translation>Télé</translation>
     </message>
     <message>
         <location line="+0" />

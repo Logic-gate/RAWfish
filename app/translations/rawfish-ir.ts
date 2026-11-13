@@ -867,7 +867,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <name>rawfish-ir</name>
     <message>
         <location filename="../qml/rawfish-ir.qml" line="+286"/>
-        <source>selfie</source>
+        <source>Selfie</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -877,7 +877,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+0"/>
-        <source>tele</source>
+        <source>Tele</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

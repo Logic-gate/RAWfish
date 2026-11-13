@@ -277,12 +277,14 @@ void IndrawPreview::start()
         QString ys = QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvStream"), QStringLiteral("jpeg")).toString().trimmed();
         static const QRegularExpression ok(QStringLiteral("^(jpeg|max|[0-9]{3,5}x[0-9]{3,5})$"));
         if (!ok.match(ys).hasMatch()) ys = QStringLiteral("jpeg");
-        /* jpgYuvFromLargestStream=1 (off by default): with "jpeg", and where no
-         * listed stream is a multiple of the photo's size, the camera's largest
-         * stream averaged down (the selfie camera's lagging viewfinder). Only
-         * the exact value "1" turns it on; with max or WxH it means nothing. */
+        /* jpgYuvFromLargestStream (on by default since it was tried on the
+         * phone, 14 Nov 2026): with "jpeg", and where no listed stream is a
+         * multiple of the photo's size, the camera's largest stream averaged
+         * down (the selfie camera's viewfinder lagged without). Only "0" turns
+         * it off (a key absent counts as on, as the example's default); with
+         * max or WxH it means nothing. */
         if (ys == QLatin1String("jpeg") &&
-            QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvFromLargestStream"), QStringLiteral("0")).toString().trimmed() == QLatin1String("1"))
+            QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvFromLargestStream"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0"))
             ys = QStringLiteral("jpeg+largest");
         args << QStringLiteral("yuv=") + ys;
     }

@@ -631,7 +631,7 @@ static struct {
     long meter_last_hist[3][64];                 /* the RAW meter's last histogram (k_hist_edge bins) */
     int yuv_w, yuv_h;                       /* the YUV stream asked for (-1 max, -2 as the JPEG, -3 as the JPEG
                                              * with the largest-stream rule, 0 none) */
-    int yuv_from_largest;                   /* -3 was asked: see yuvsize.h; 0 = the rule off, the engine as before 0.3.8 */
+    int yuv_from_largest;                   /* -3 was asked (the interface's default): see yuvsize.h; 0 = the rule off */
     AImage *raw_image;                      /* latest RAW16 waiting to be saved  */
     ACameraMetadata *r_meta;                /* full copy of the last still result */
     /* "captured kind=..." still owed for the photo in progress (NULL: none).
@@ -3011,9 +3011,10 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     if (g.yuv_w == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &g.yuv_w, &g.yuv_h))
         g.yuv_w = g.yuv_h = 0;
     g.yuv_down = 1;
-    /* -3: "as the JPEG" (-2) plus the largest-stream rule below, which is an
-     * opt-in (rawfish-ir.conf jpgYuvFromLargestStream): left off, nothing
-     * here differs from the engine before 0.3.8. */
+    /* -3: "as the JPEG" (-2) plus the largest-stream rule below. The
+     * interface asks for it by default; rawfish-ir.conf
+     * jpgYuvFromLargestStream=0 turns it off (then -2: nothing here differs
+     * from the engine before 0.3.8). */
     if (g.yuv_w == -3) { g.yuv_w = g.yuv_h = -2; g.yuv_from_largest = 1; }
     if (g.yuv_w == -2) {
         /* "As the JPEG": the photo's size, but through the LARGEST listed YUV

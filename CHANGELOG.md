@@ -105,15 +105,15 @@ repository). Newest first.
 - The selfie camera's viewfinder lags with our JPG: its 3264x2448 photo
   has no YUV stream it can be averaged down from, so a stream of that
   in-between size is opened, which makes the JP2's viewfinder lag (a
-  1280x960 stream, tried with jpgYuvStream, did not). New, OFF until
-  tried: jpgYuvFromLargestStream=1 in rawfish-ir.conf makes the engine open
-  the camera's largest stream and average it by 2: photos of 3280x2464
+  1280x960 stream, tried with jpgYuvStream, did not). The engine now opens
+  the camera's largest stream and averages it by 2 (tried on the phone:
+  the selfie's viewfinder keeps the other cameras' pace): photos of 3280x2464
   instead of 3264x2448, from the next engine start (a camera switch
   restarts it). The rule takes the largest stream only when it is 2 or 4
   times the photo's size within 2 % (the Resolution menu's own rule):
   checked on the phone's own size lists, of every size of the three
-  cameras only the selfie's 3264x2448 changes. With the key at 0 the
-  engine behaves as before. The caps line of
+  cameras only the selfie's 3264x2448 changes. jpgYuvFromLargestStream=0
+  in rawfish-ir.conf brings the old stream back. The caps line of
   the log gives the stream in force (yuv_stream=WxH/k).
 - The flash makes everything automatic: with the flash "on" or "auto"
   (on a camera that has one) the exposure and the focus go automatic,

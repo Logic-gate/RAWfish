@@ -120,9 +120,10 @@ jpgYuvStream=jpeg
 ; LARGEST stream and average it down by 2 or 4, when it is that many times the
 ; photo's size within 2 % (3280x2464 photos from its 6560x4928 stream). On the
 ; JP2 that is the selfie camera's 3264x2448 alone, of every size of the three
-; cameras. A new rule, off until tried: 0 = as before.
-;                                               values: 0, 1            default 0
-jpgYuvFromLargestStream=0
+; cameras. Tried on the phone (14 Nov 2026): the selfie's viewfinder no longer
+; lags. 0 = as before (the in-between stream).
+;                                               values: 0, 1            default 1
+jpgYuvFromLargestStream=1
 ; snap (in TYPE): the camera driver's own JPEG at a small size, for utility
 ; shots (a receipt, a sign), noise reduction and sharpening HQ. Its size, as
 ; WIDTHxHEIGHT among the camera's JPEG sizes ("" = the largest 4:3 size of

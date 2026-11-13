@@ -294,10 +294,10 @@ ApplicationWindow {
             // FOCAL in simple mode: a name for the camera instead of a focal length.
             function cameraRoleName() {
                 var c = viewfinder.caps, i = page.cameraIds.indexOf(viewfinder.cameraId)
-                if (i >= 0 && page.cameraFacing.length > i && page.cameraFacing[i] === "front") return qsTr("selfie")
+                if (i >= 0 && page.cameraFacing.length > i && page.cameraFacing[i] === "front") return qsTr("Selfie")
                 if (!(c.focalEq > 0)) return ""
                 // "Std", not "standard": the word was cut on the camera button
-                return c.focalEq < 22 ? qsTr("Wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("Std")
+                return c.focalEq < 22 ? qsTr("Wide") : c.focalEq > 40 ? qsTr("Tele") : qsTr("Std")   // capitalised alike
             }
             function imageTypeLabel(t) {
                 switch (t) {
