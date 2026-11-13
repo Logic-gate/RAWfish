@@ -66,7 +66,10 @@
         "observed_iso_max": 16000,
         "observed_exposure_max_ns": 500000000,
         "_touch_note": "The 18 mm's AUTO focus search scans only from where the lens is towards infinity (trace of 14 Nov 2026): from a manual distance near infinity it missed closer subjects. Its continuous search finds them: a focus touch searches with it, then locks (rawfish-ir.conf focusTouchContinuous=1 while this is tested).",
-        "touch_focus_continuous": 1
+        "touch_focus_continuous": 1,
+        "_focus_note": "The 18 mm: its autofocus searches one way only (from the lens' position towards infinity) and passes the sharp position without stopping, its sharpness changing little with distance (focal 2.37 mm): a touch cannot focus it (logs of 15 Nov 2026). Its lens stops near 9 while it declares 20.",
+        "touch_focus_off": 1,
+        "focus_max_diopters": 9
       }
     }
   ]

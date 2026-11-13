@@ -548,6 +548,8 @@ static struct {
     char make[64], model[64];               /* ro.product.manufacturer / .model  */
     int64_t override_shutter_max_ns;        /* 0 = none; else the tested ceiling */
     int override_iso_max;                   /* 0 = none; else the highest ISO found to work in manual (above the declared range) */
+    float override_focus_max_d;             /* 0 = none; else the lens' real closest stop, HAL units (below the declared one) */
+    int no_touch_focus;                     /* 1: the device profile says a touch cannot focus this camera */
     int64_t override_exp_max_ns;            /* 0 = none; else the longest exposure found to work (above the declared range) */
     int lim_raw_off;                        /* device profile: no RAW stream      */
     int lim_jw, lim_jh;                     /* device profile: largest JPEG asked (0 = none) */
@@ -4853,6 +4855,22 @@ IR_API int indraw_set_exposure_max(int64_t exp_max_ns, char *out, size_t out_siz
     return IR_OK;
 }
 
+/* Device profile, per camera: focus_max_diopters, the lens' real closest
+ * stop when it is below the declared LENS_INFO_MINIMUM_FOCUS_DISTANCE (the
+ * JP2's 18 mm declares 20 and stops near 9: from 20 the lens is at 9.01 at
+ * once); and touch_focus 0, a camera whose autofocus a touch cannot drive
+ * (the 18 mm: its search goes one way only and misses the sharp position,
+ * logs of 15 Nov). 0 / 1 = nothing changed. Set before the caps. */
+IR_API int indraw_set_focus_profile(float focus_max_d, int touch_focus, char *out, size_t out_size)
+{
+    jw_t w;
+    g.override_focus_max_d = focus_max_d > 0 ? focus_max_d : 0;
+    g.no_touch_focus = touch_focus == 0;
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"focus_max_diopters\":%.2f,\"touch_focus\":%d}", g.override_focus_max_d, !g.no_touch_focus);
+    return IR_OK;
+}
+
 IR_API int indraw_set_iso_max(int iso_max, char *out, size_t out_size)
 {
     jw_t w;
@@ -5940,6 +5958,8 @@ static void emit_caps(void)
     if (!g.chars) return;
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_MINIMUM_FOCUS_DISTANCE, &e) == ACAMERA_OK && e.count)
         min_focus = e.data.f[0];
+    /* the profile's real stop, when the lens stops before the declared one */
+    if (g.override_focus_max_d > 0 && min_focus > g.override_focus_max_d) min_focus = g.override_focus_max_d;
     /* 35 mm-equivalent focal length: f x 36 / sensor width (mm). */
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, &e) == ACAMERA_OK && e.count)
         focal = e.data.f[0];
@@ -6031,7 +6051,7 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_af=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_af=%d touch_focus=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus,
@@ -6040,6 +6060,7 @@ static void emit_caps(void)
               * manual distances there */
              min_focus > 0.0f ? focus_untranslate(min_focus) : 0.0f,
              g.af_touch_prepared,                   /* 0 the usual touch, 1 prepared, 2 continuous then lock */
+             !g.no_touch_focus,                     /* 0: a focus touch is not offered on this camera (device profile) */
              g_screen_notch, cams, facing, rawcams,
              g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */

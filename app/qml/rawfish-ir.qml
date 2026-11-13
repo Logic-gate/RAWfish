@@ -349,8 +349,13 @@ ApplicationWindow {
             }
             readonly property bool focusSearching: !!fcs.searching
             readonly property bool lightRef: !!fcs.light
+            // The manual focus in words: a distance for a camera with a focus
+            // calibration; for one without, the lens value itself in diopters
+            // ("1.50 D"), since a distance computed from it would be a guess
+            // (the FOCUS button used to show that guess in red).
             function focusDistanceLabel() {
                 if (focusDiopters <= 0) return "\u221e"
+                if (!(viewfinder.caps.focusCal > 0)) return focusDiopters.toFixed(2) + " D"
                 var m = 1 / focusDiopters
                 return (m >= 10 ? m.toFixed(1) : m.toFixed(2)) + qsTr(" m")
             }
@@ -434,6 +439,10 @@ ApplicationWindow {
                 // Continuous ("auto"): the camera chooses where to focus, a touch
                 // does not move it (the HAL ignores a region in that mode).
                 if (page.focusMode === "cont") return
+                // A camera whose device profile says a touch cannot focus it (the
+                // JP2's 18 mm): nothing sent; the hint says so (a hold still sets
+                // the exposure).
+                if (viewfinder.caps.touchFocus === 0) return
                 page.circleShown = true
                 meterCircle.opacity = 1.0
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
@@ -1520,7 +1529,8 @@ ApplicationWindow {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge * 2 }
                     visible: page.touchHintShown && viewfinder.running
                     text: page.focusMode === "cont" ? qsTr("Auto: tap to focus disabled. Hold for exposure.")
-                                                    : qsTr("touch: focus · hold: exposure here")
+                        : viewfinder.caps.touchFocus === 0 ? qsTr("Touch focus not available on this camera. Hold for exposure.")
+                        : qsTr("touch: focus · hold: exposure here")
                     color: "white"; font.pixelSize: Theme.fontSizeExtraSmall
                     style: Text.Outline; styleColor: "black"
                 }
@@ -2272,7 +2282,7 @@ ApplicationWindow {
                             // calibration (the HAL's lens value taken as 1:1), white
                             // once a table is in force (caps focus_cal).
                             value: page.fixedFocus ? qsTr("fixed") : page.focusModeLabel(page.focusMode)
-                            textColor: !page.fixedFocus && page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
+                            textColor: "white"           // an uncalibrated lens shows its value in diopters instead of a red distance
                             onCycle: {
                                 // auto <-> manual. Entering manual by this button starts
                                 // one search in the middle of the frame: the distance found

@@ -12,7 +12,7 @@
 <context>
     <name>GalleryView</name>
     <message>
-        <location filename="../qml/GalleryView.qml" line="+232"/>
+        <location filename="../qml/GalleryView.qml" line="+250"/>
         <source>DNG quick preview</source>
         <translation type="unfinished"></translation>
     </message>
@@ -35,7 +35,7 @@
 <context>
     <name>IndrawPreview</name>
     <message>
-        <location filename="../rawfish-ir-preview.cpp" line="+1192"/>
+        <location filename="../rawfish-ir-preview.cpp" line="+1223"/>
         <source>process error</source>
         <translation type="unfinished"></translation>
     </message>
@@ -66,7 +66,7 @@
 <context>
     <name>SettingsMenu</name>
     <message>
-        <location filename="../qml/SettingsMenu.qml" line="+106"/>
+        <location filename="../qml/SettingsMenu.qml" line="+150"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
@@ -160,17 +160,17 @@
         <location line="-4"/>
         <location line="+19"/>
         <location line="+2"/>
-        <location line="+341"/>
-        <location line="+44"/>
+        <location line="+428"/>
+        <location line="+7"/>
+        <location line="+56"/>
+        <location line="+31"/>
         <location line="+7"/>
         <location line="+7"/>
-        <location line="+21"/>
-        <location line="+13"/>
         <source>off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-454"/>
+        <location line="-557"/>
         <source>face</source>
         <translation type="unfinished"></translation>
     </message>
@@ -366,7 +366,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+166"/>
+        <location line="+248"/>
         <source>max</source>
         <translation type="unfinished"></translation>
     </message>
@@ -376,7 +376,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+156"/>
+        <location line="+161"/>
         <source>Flash</source>
         <translation type="unfinished"></translation>
     </message>
@@ -406,7 +406,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-9"/>
+        <location line="-12"/>
         <source>Mode</source>
         <translation type="unfinished"></translation>
     </message>
@@ -431,7 +431,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+15"/>
         <source>Timer</source>
         <translation type="unfinished"></translation>
     </message>
@@ -446,7 +446,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+17"/>
         <location line="+17"/>
         <source>RAW has one size and one format: the sensor&apos;s</source>
         <translation type="unfinished"></translation>
@@ -477,7 +477,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-398"/>
+        <location line="-495"/>
         <source>JPG only: RAWfish-ir&apos;s processing</source>
         <translation type="unfinished"></translation>
     </message>
@@ -492,13 +492,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+379"/>
+        <location line="+476"/>
         <location line="+17"/>
         <source>snap: one light size, for utility shots</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+53"/>
         <source>Frames</source>
         <translation type="unfinished"></translation>
     </message>
@@ -558,7 +558,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="-65"/>
         <source>RAW: no JPEG quality</source>
         <translation type="unfinished"></translation>
     </message>
@@ -578,20 +578,22 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+11"/>
         <source>snap: one shot, no bracketing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="-2"/>
         <source>Σ: one long exposure, no bracketing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+58"/>
         <source>JPG processing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-55"/>
         <source>Bracket</source>
         <translation type="unfinished"></translation>
     </message>
@@ -611,7 +613,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+60"/>
         <source>Level</source>
         <translation type="unfinished"></translation>
     </message>
@@ -641,7 +643,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-120"/>
         <source>Grid</source>
         <translation type="unfinished"></translation>
     </message>
@@ -661,7 +663,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+127"/>
         <source>Focus cal.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -706,6 +708,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="-98"/>
         <source>Flash: no bracketing</source>
         <translation type="unfinished"></translation>
     </message>
@@ -713,7 +716,7 @@
 <context>
     <name>ShadingAssistant</name>
     <message>
-        <location filename="../qml/ShadingAssistant.qml" line="+38"/>
+        <location filename="../qml/ShadingAssistant.qml" line="+48"/>
         <source>Daylight</source>
         <translation type="unfinished"></translation>
     </message>
@@ -733,7 +736,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+30"/>
+        <location line="+51"/>
         <source>Exposure set: 1/%1 s, ISO %2</source>
         <translation type="unfinished"></translation>
     </message>
@@ -752,7 +755,7 @@ The light, the diffuser and the framing must not change during the whole measure
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+37"/>
         <source>What to measure</source>
         <translation type="unfinished"></translation>
     </message>
@@ -782,12 +785,12 @@ The light, the diffuser and the framing must not change during the whole measure
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+6"/>
         <source>Start the measurement</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+18"/>
         <source>Measuring… keep everything still.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -839,26 +842,32 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="-145"/>
         <source>No camera of this phone gives RAW: the map corrects DNG files only, there is nothing to calibrate.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+2"/>
         <source>Camera %1: the only camera of this phone that gives RAW (the map corrects DNG files only).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+1"/>
         <source>Several cameras give RAW: choose the one to calibrate (the map corrects DNG files only).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+3"/>
         <source>Camera</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+6"/>
         <source>Camera %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+43"/>
         <source>Starting camera %1…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -866,12 +875,12 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
 <context>
     <name>rawfish-ir</name>
     <message>
-        <location filename="../qml/rawfish-ir.qml" line="+286"/>
+        <location filename="../qml/rawfish-ir.qml" line="+297"/>
         <source>Selfie</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>Wide</source>
         <translation type="unfinished"></translation>
     </message>
@@ -910,29 +919,29 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+13"/>
         <location line="+3"/>
-        <location line="+153"/>
-        <location line="+1887"/>
-        <location line="+27"/>
+        <location line="+186"/>
+        <location line="+2084"/>
+        <location line="+30"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-2069"/>
+        <location line="-2302"/>
         <source>macro</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+40"/>
         <source> m</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+57"/>
+        <location line="+68"/>
         <source>bracket: taken as the camera&apos;s own JPEG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+77"/>
+        <location line="+83"/>
         <source>reset</source>
         <translation type="unfinished"></translation>
     </message>
@@ -973,7 +982,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+214"/>
+        <location line="+224"/>
         <source>%1s</source>
         <extracomment>seconds on the shutter wheel; keep it short (about 4 characters)</extracomment>
         <translation type="unfinished"></translation>
@@ -991,7 +1000,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+119"/>
+        <location line="+141"/>
         <source>level zeroed here</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1001,46 +1010,52 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+262"/>
-        <location line="+807"/>
+        <location line="+382"/>
+        <location line="+846"/>
         <source>zebra</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-807"/>
-        <location line="+807"/>
+        <location line="-846"/>
+        <location line="+846"/>
         <source>peak</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-779"/>
-        <location line="+779"/>
+        <location line="-818"/>
+        <location line="+818"/>
         <source>level</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-779"/>
-        <location line="+779"/>
+        <location line="-818"/>
+        <location line="+818"/>
         <source>AE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-706"/>
+        <location line="-734"/>
         <source>failed, see the log</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+91"/>
         <source>Probing the camera…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+64"/>
+        <location line="-24"/>
         <source>Starting camera…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+32"/>
         <source>Auto: tap to focus disabled. Hold for exposure.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Touch focus not available on this camera. Hold for exposure.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1129,7 +1144,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+219"/>
+        <location line="+235"/>
         <source>CAM</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1174,19 +1189,22 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+16"/>
         <source>FOCUS</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="-1243"/>
         <source>Flash is activated: full auto.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+22"/>
         <source>Toggling to full auto.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+1230"/>
         <source>fixed</source>
         <translation type="unfinished"></translation>
     </message>

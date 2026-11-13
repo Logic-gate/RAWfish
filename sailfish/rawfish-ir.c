@@ -428,6 +428,8 @@ static const ov_field_t k_ov_fields[] = {
     { "zebra_raw",               1, 1000 },
     { "capture_delay_ms",        1, 3000 },                     /* a pause before each capture */
     { "touch_focus_continuous",  0, 1 },                        /* 1: a focus touch searches with the continuous AF, then locks */
+    { "touch_focus_off",         0, 1 },                        /* 1: no focus by touch on this camera */
+    { "focus_max_diopters",      1, 100 },                      /* the lens' real closest stop (HAL units), below the declared one */
     { NULL, 0, 0 }
 };
 /* Keys allowed anywhere in a camera block besides the fields above. */
@@ -2614,6 +2616,14 @@ int main(int argc, char **argv)
                 set_iso_fn si = (set_iso_fn)a_dlsym(bridge, "indraw_set_iso_max");
                 long long im = ov_ok ? read_override_checked(argv[2], "observed_iso_max") : 0;
                 if (si && im > 0) { si((int)im, out, sizeof out); emit(out); }
+            }
+            {   /* the lens' real closest stop and "no focus by touch" (device profile;
+                 * absent: the declared stop, and the touch as usual) */
+                typedef int (*sfp_fn)(float, int, char *, size_t);
+                sfp_fn sf = (sfp_fn)a_dlsym(bridge, "indraw_set_focus_profile");
+                long long fm = ov_ok ? read_override_checked(argv[2], "focus_max_diopters") : 0;
+                long long tf = ov_ok ? read_override_checked(argv[2], "touch_focus_off") : 0;
+                if (sf && (fm > 0 || tf == 1)) { sf((float)fm, tf == 1 ? 0 : 1, out, sizeof out); emit(out); }
             }
             {   /* a longest exposure above the declared range (device profile; absent: the declared one) */
                 typedef int (*set_exp_fn)(int64_t, char *, size_t);

@@ -224,7 +224,16 @@ void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farthe
 {
     if (f->mode != CTL_FOCUS_MANUAL) return;
     f->held = 0;                                                 /* a distance of the user's: the lens is set to it */
-    f->diopters = snap(f, f->diopters - dir * STEP_D);
+    {   /* The step grows with the value: 0.05 D up to about 1 D, then about
+         * 8 % of it (on the 0.05 grid): the near range, where the diopters
+         * pile up (0.05 D is 1 mm at 10 cm), took 180 presses of 200; now
+         * 0 to 9 D takes about 45. Going farther, the step is the one that
+         * leads back to the value below. */
+        double d = f->diopters, step;
+        if (dir < 0) step = fmax(STEP_D, round(d * 0.08 / STEP_D) * STEP_D);
+        else         step = fmax(STEP_D, round(d / 1.08 * 0.08 / STEP_D) * STEP_D);
+        f->diopters = snap(f, d - dir * step);
+    }
     publish(f);                                                  /* the display first: no lag */
     send_manual_opt(f, 0);                                       /* the lens, without waiting */
 }

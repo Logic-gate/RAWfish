@@ -854,6 +854,7 @@ void IndrawPreview::parseEvent(const QByteArray &line)
             if (!rc.isEmpty()) rawCams.append(rc.toInt());
         m_caps.insert(QStringLiteral("rawCams"), rawCams);
         m_caps.insert(QStringLiteral("focusCal"), f.value("focus_cal", "0").toInt());   /* calibration points in force */
+        m_caps.insert(QStringLiteral("touchFocus"), f.value("touch_focus", "1").toInt());   /* 0: no focus by touch (device profile) */
         {   /* the camera's RAW capability, independent of this session's streams */
             const QList<QByteArray> rc = f.value("raw_cap", "0x0").split('x');
             m_caps.insert(QStringLiteral("rawCapW"), rc.size() == 2 ? rc.at(0).toInt() : 0);

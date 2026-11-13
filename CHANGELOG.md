@@ -99,6 +99,19 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- **The 18 mm: no focus by touch.** Its autofocus searches one way only,
+  from the lens' position towards infinity, and passes the sharp position
+  without stopping (its sharpness changes little with distance): a touch
+  could not focus it, and often reported a success on a blurred image. A
+  touch on it now only says so ("Touch focus not available on this
+  camera"); the hold still sets the exposure; the volume keys still move
+  the lens. Device profile keys `touch_focus_off` and `focus_max_diopters`
+  (its lens stops near 9 while it declares 20: the keys now stop at 9).
+- A camera without a focus calibration shows its lens value in diopters
+  ("1.50 D") instead of a guessed distance in red.
+- The volume keys move the manual focus faster in the near range: steps of
+  0.05 D up to 1 D, then about 8 % of the value; 0 to 9 D takes 48 presses
+  instead of 180.
 - The log gives, at each start, what the camera says of its zones
   ("# regions:"): how many it takes for the exposure, the white balance
   and the focus, the arrays they are measured in (with distortion
