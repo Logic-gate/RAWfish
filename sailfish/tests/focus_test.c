@@ -91,6 +91,23 @@ int main(void)
         CHECK(!st.held && fabs(st.diopters - before) < 1e-9 && strcmp(last(), "focus hold") != 0,
               "manual tap locked but not focused (5): not held, the distance shown and set stays");
     }
+    /* 4b. The closest distance per camera (0.3.8): 10 D until the caps say,
+     *     then the camera's own (20 for the JP2's 18 mm, uncalibrated); a
+     *     fixed-focus camera's 0 keeps it. */
+    ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
+    ctl_focus_set_distance(f, 15.0);
+    CHECK(fabs(st.diopters - 10.0) < 1e-9, "manual: 10 D at most before the caps");
+    ctl_focus_set_max(f, 20.0);
+    ctl_focus_set_distance(f, 15.0);
+    CHECK(fabs(st.diopters - 15.0) < 1e-9, "manual: 15 D once the camera reaches 20");
+    ctl_focus_set_distance(f, 25.0);
+    CHECK(fabs(st.diopters - 20.0) < 1e-9, "manual: never beyond the camera's 20");
+    ctl_focus_set_max(f, 0.0);
+    ctl_focus_set_distance(f, 18.0);
+    CHECK(fabs(st.diopters - 18.0) < 1e-9, "a fixed-focus camera's 0: the closest distance kept");
+    ctl_focus_set_max(f, 12.0);                                  /* another camera, closer limit */
+    ctl_focus_step(f, 1);                                        /* one step farther (> 0 = farther) from the clamped 12 */
+    CHECK(fabs(st.diopters - 11.95) < 1e-9, "another camera's closer limit: the distance clamped to it, then stepped from there");
     /* 5. clear: the reference goes, the mode is restated. */
     ctl_focus_clear(f);
     CHECK(count("tap 0.5 0.5 afclear") >= 1 && st.circle == CTL_CIRCLE_NONE, "clear: the focus region reset, the circle gone");

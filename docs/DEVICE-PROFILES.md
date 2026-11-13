@@ -53,6 +53,10 @@ Corrections wired today (both optional, per camera):
   range (the JP2's 18 mm declares 0.1 s). It raises the declared maximum;
   `observed_shutter_max_ns` still caps the wheel before stacking. Checked
   the same way: the exposure requested against the one applied.
+- `focus_zone_min_pct`: the smallest focus zone of a touch, in % of the
+  sensor's short side (1..50). Without it the zone is 15 % of what is
+  shown, smaller in the loupe. The JP2 profile gives 10 to camera 2 (the
+  18 mm), which failed most touches in a dim room with a small zone.
 - `min_frame_ns`: the minimum frame duration for manual exposure (the floor a
   manual shutter is clamped to). Default is 1/30 s (`33333333`); set this if the
   device accepts shorter or needs longer.

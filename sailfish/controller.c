@@ -216,7 +216,12 @@ static void on_event(const char *line)
                 note("caps without a valid ISO range (iso_min=%d iso_max=%d): exposure control off", caps.iso_min, caps.iso_max);
             ctl_exp_set_caps(c.exp, &caps);
             if (c.view) { ctl_view_set_caps(c.view, fieldd(line, "zoom_max", 1), (int)fieldd(line, "crop_free", 0)); ctl_view_restart(c.view); }
-            if (c.foc) ctl_focus_restart(c.foc);         /* a (re)started engine: the mode again */
+            if (c.foc) {
+                /* the closest distance this camera reaches (min_focus_real,
+                 * else its HAL value, else the old 10 D) */
+                ctl_focus_set_max(c.foc, fieldd(line, "min_focus_real", fieldd(line, "min_focus", 10.0)));
+                ctl_focus_restart(c.foc);                /* a (re)started engine: the mode again */
+            }
         } else if (!strncmp(line, "ae ", 3)) {
             c.live_iso = (int)fieldd(line, "iso", 0);
             c.live_exp_ns = fieldd(line, "exp_ns", 0);

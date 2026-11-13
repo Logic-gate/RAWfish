@@ -427,6 +427,7 @@ static const ov_field_t k_ov_fields[] = {
     { "zebra_jpeg",              1, 255 },
     { "zebra_raw",               1, 1000 },
     { "capture_delay_ms",        1, 3000 },                     /* a pause before each capture */
+    { "focus_zone_min_pct",      1, 50 },                       /* the smallest focus zone of a touch, % of the sensor */
     { NULL, 0, 0 }
 };
 /* Keys allowed anywhere in a camera block besides the fields above. */
@@ -2601,6 +2602,16 @@ int main(int argc, char **argv)
                     sd((int)cd);
                     snprintf(m, sizeof m, "%lld ms (override)", cd);
                     log_line("# capture_delay: ", m);
+                }
+            }
+            {   /* the focus zone's floor (device profile, per camera; absent: none) */
+                typedef int (*set_zone_fn)(int);
+                set_zone_fn sz = (set_zone_fn)a_dlsym(bridge, "indraw_set_focus_zone_min");
+                long long zp = ov_ok ? read_override_checked(argv[2], "focus_zone_min_pct") : 0;
+                if (sz && zp > 0 && !sz((int)zp)) {
+                    char m[64];
+                    snprintf(m, sizeof m, "%lld %% of the sensor at least (profile)", zp);
+                    log_line("# focus zone: ", m);
                 }
             }
             /* Preview-aid thresholds (peaking/zebra), also tunable per device. */

@@ -695,6 +695,10 @@ static struct {
      * From a device profile only ("capture_delay_ms"): for a HAL whose lens
      * is still travelling when the capture is sent (the XA2). */
     int capture_delay_ms;
+    /* From a device profile only ("focus_zone_min_pct", per camera): the
+     * smallest focus zone of a touch, % of the sensor's short side; 0 =
+     * none (the zone is 15 % of what is shown, smaller in the loupe). */
+    int focus_zone_min_pct;
     /* Session parameters a device profile asks for ("session_request"):
      * keys the HAL reads only when the session is configured (the JP2's
      * MediaTek HDR mode 0x80030000, EIS...). Set before indraw_open; the
@@ -4822,6 +4826,15 @@ IR_API int indraw_set_iso_max(int iso_max, char *out, size_t out_size)
     return IR_OK;
 }
 
+/* The focus zone's floor (device profile "focus_zone_min_pct"), set before
+ * or after open; 0 clears it. See indraw_tap. */
+IR_API int indraw_set_focus_zone_min(int pct)
+{
+    if (pct < 0 || pct > 50) return IR_EARG;
+    g.focus_zone_min_pct = pct;
+    return IR_OK;
+}
+
 IR_API int indraw_set_override(int64_t observed_shutter_max_ns, int64_t min_frame_ns,
                                char *out, size_t out_size)
 {
@@ -5705,6 +5718,15 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * (the square turns red), and the loupe is meant to aim precisely. */
         af_side = shown * 15 / 100;
         if (af_side < 32) af_side = 32;
+        /* A floor in sensor pixels, from the device profile, per camera
+         * (focus_zone_min_pct; absent: none, as above). The JP2's 18 mm
+         * (camera 2) failed most touches in a dim room (13 Nov), and in the
+         * loupe its zone came down to 150 pixels of 4208: the profile gives
+         * it 10 % of the sensor's short side at least, loupe or not. */
+        if (g.focus_zone_min_pct > 0) {
+            int floor_px = (aw < ah ? aw : ah) * g.focus_zone_min_pct / 100;
+            if (af_side < floor_px) af_side = floor_px;
+        }
         af_region[0] = cx - af_side / 2; if (af_region[0] < ax) af_region[0] = ax;
         af_region[1] = cy - af_side / 2; if (af_region[1] < ay) af_region[1] = ay;
         af_region[2] = af_region[0] + af_side; if (af_region[2] > ax + aw) af_region[2] = ax + aw;
@@ -5952,10 +5974,14 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
-             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus, g_screen_notch, cams, facing, rawcams,
+             focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus,
+             /* the closest distance in real diopters: the HAL's through the
+              * calibration table (none: the same) -- the controller stops
+              * manual distances there */
+             min_focus > 0.0f ? focus_untranslate(min_focus) : 0.0f, g_screen_notch, cams, facing, rawcams,
              g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);

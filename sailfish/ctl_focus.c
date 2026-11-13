@@ -12,7 +12,7 @@
 #include <string.h>
 
 #define STEP_D 0.05
-#define MAX_D 10.0
+#define MAX_D 10.0                  /* the closest distance until the caps say (10 D = 10 cm) */
 #define SEARCH_LIMIT_MS 3000.0      /* then the exposure resumes, the circle is dashed */
 #define STALE_MS 300.0              /* a "locked" this soon without a seen scan is the old one */
 
@@ -33,6 +33,7 @@ struct ctl_focus {
     int searching, seen_active, search_late;
     double search_start_ms;
     int hold_pending, manual_pick;
+    double max_d;                   /* the closest distance, diopters (ctl_focus_set_max) */
     int held;                   /* manual: lens held at a search's lock (see ctl_focus_state_t) */
     double tap_fx, tap_fy;
 
@@ -51,7 +52,12 @@ static void publish(ctl_focus_t *f)
 }
 static void set_paused(ctl_focus_t *f, int p) { if (f->pause) f->pause(f->ctx, p); }
 
-static double snap(double d) { return fmax(0.0, fmin(MAX_D, round(d / STEP_D) * STEP_D)); }
+/* On the 0.05 D grid, between infinity (0) and the camera's closest
+ * distance (f->max_d: its caps, through its calibration table; 10 D until
+ * the caps come). Until 0.3.8 the closest was 10 D for every camera, while
+ * the JP2's cameras 0 and 2 declare a lens that goes to 20 (HAL units): the
+ * closest half of their range could not be reached by hand. */
+static double snap(const ctl_focus_t *f, double d) { return fmax(0.0, fmin(f->max_d, round(d / STEP_D) * STEP_D)); }
 /* wait = 0 for live stepping: the engine returns without waiting for the
  * lens, so steps never pile up; elsewhere (a mode change, the distance a
  * search found) the lens is waited for, as a photo would. */
@@ -77,6 +83,7 @@ ctl_focus_t *ctl_focus_new(ctl_focus_cmd_fn cmd, ctl_focus_state_fn state,
                            ctl_focus_pause_fn pause, ctl_focus_spot_fn spot, void *ctx)
 {
     ctl_focus_t *f = calloc(1, sizeof *f);
+    if (f) f->max_d = MAX_D;
     if (!f) return NULL;
     f->cmd = cmd; f->state_cb = state; f->pause = pause; f->spot = spot; f->ctx = ctx;
     f->mode = CTL_FOCUS_CONT;
@@ -184,13 +191,19 @@ void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farthe
 {
     if (f->mode != CTL_FOCUS_MANUAL) return;
     f->held = 0;                                                 /* a distance of the user's: the lens is set to it */
-    f->diopters = snap(f->diopters - dir * STEP_D);
+    f->diopters = snap(f, f->diopters - dir * STEP_D);
     publish(f);                                                  /* the display first: no lag */
     send_manual_opt(f, 0);                                       /* the lens, without waiting */
 }
+void ctl_focus_set_max(ctl_focus_t *f, double max_diopters)
+{
+    /* 0 or less: a fixed-focus camera (nothing to reach) or no caps: kept */
+    if (max_diopters > 0.5) f->max_d = max_diopters;
+    if (f->diopters > f->max_d) f->diopters = f->max_d;
+}
 void ctl_focus_set_distance(ctl_focus_t *f, double diopters)
 {
-    f->diopters = snap(diopters);
+    f->diopters = snap(f, diopters);
     f->held = 0;
     if (f->mode == CTL_FOCUS_MANUAL) send_manual(f);
     publish(f);

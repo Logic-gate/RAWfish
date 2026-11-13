@@ -61,6 +61,10 @@ void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double no
 void ctl_focus_set_mode(ctl_focus_t *f, int mode);
 void ctl_focus_step(ctl_focus_t *f, int dir);             /* manual: +1 farther, -1 nearer */
 void ctl_focus_set_distance(ctl_focus_t *f, double diopters);
+/* The camera's closest distance, in the diopters the focus works in (the
+ * caps' min_focus_real: its HAL value through the calibration table, or the
+ * HAL value with no table). Manual distances stop there. <= 0.5: kept. */
+void ctl_focus_set_max(ctl_focus_t *f, double max_diopters);
 /* A long press: the exposure meters a 5 % spot at that point (the focus is
  * untouched); _light_clear: back to the whole image. */
 void ctl_focus_light(ctl_focus_t *f, double fx, double fy);
