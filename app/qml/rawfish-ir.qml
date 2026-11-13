@@ -1116,12 +1116,21 @@ ApplicationWindow {
                                            + " raw=" + viewfinder.caps.rawW + "x" + viewfinder.caps.rawH
                                            + " yuv_stream=" + (viewfinder.caps.yuvStream || "?"))   // e.g. 6560x4928/2: the stream, averaged by 2
                 }
-                // Another camera lists other sizes: forget the chosen one, with
-                // no restart of its own (the camera change restarts the engine
-                // on "max" already); its caps then settle the format's size,
-                // restarting only if "max" was not it. (Up to ui 156 setSize("")
-                // restarted a second time: two engine starts per switch.)
-                onCameraIdChanged: { settingsMenu.captureSize = ""; settingsMenu.save("captureSize", ""); viewfinder.captureSize = Qt.size(0, 0) }
+                // Another camera: its own size, the one last in force on it
+                // (SettingsMenu.captureSizeMap; none: its default), with no
+                // restart of its own -- this handler runs inside the camera
+                // change, before the engine restarts, so the engine starts
+                // with it directly. Its caps then settle the format's size,
+                // restarting only if that size is not offered any more. (Up
+                // to 0.3.7 the size was forgotten here: a 50 MP chosen on
+                // camera 0 was lost on a visit to another camera. Up to ui 156
+                // setSize("") restarted a second time: two starts per switch.)
+                onCameraIdChanged: {
+                    var sz = settingsMenu.sizeForCamera(viewfinder.cameraId)
+                    settingsMenu.captureSize = sz; settingsMenu.save("captureSize", sz)
+                    if (sz === "") viewfinder.captureSize = Qt.size(0, 0)
+                    else { var p = sz.split("x"); viewfinder.captureSize = Qt.size(Number(p[0]), Number(p[1])) }
+                }
             }
             // Zebra clips at a different level for raw and for jpg: the RAW has
             // its own latitude, so "about to clip" is nearer the white level.

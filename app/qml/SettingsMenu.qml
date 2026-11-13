@@ -39,7 +39,31 @@ Item {
 
     // --- values (persisted) ---
     property int timerSec: 0
-    property string captureSize: ""
+    property string captureSize: ""                 // the size in force, for the camera running
+    // ---- The size chosen, per camera (0.3.8) ----
+    //
+    // Until 0.3.8 there was ONE saved size for the whole app, and a camera
+    // change cleared it: a 50 MP chosen on camera 0 was lost on a visit to
+    // the selfie, and at the next start the app opened camera 0 with the
+    // size last saved -- often another camera's (the selfie's 3264x2448) --
+    // then restarted it at its own a second later (log of 14 Nov: 1.4 s).
+    // Now each camera keeps the size last in force on it (captureSizeMap:
+    // camera id -> "WxH", "" = its default), the app starts camera 0 with
+    // camera 0's, and a camera change starts the new camera with its own.
+    // A stored size is still checked against the camera's list by the settle
+    // below: one not offered any more (another format chosen meanwhile)
+    // falls back to the default with one restart, as before.
+    property string captureSizeMap: "{}"
+    function sizeMapParse() { try { var m = JSON.parse(captureSizeMap); return (m && typeof m === "object") ? m : {} } catch (e) { return {} } }
+    // The size kept for camera id ("" if none).
+    function sizeForCamera(id) { var m = sizeMapParse(), v = m[String(id)]; return (v !== undefined && /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(String(v))) ? String(v) : "" }
+    // Keeps sz ("" = the default) for the camera running now.
+    function storeSizeHere(sz) {
+        if (currentCamera === "") return
+        var m = sizeMapParse()
+        if (sz === "") delete m[currentCamera]; else m[currentCamera] = sz
+        captureSizeMap = JSON.stringify(m); save("captureSizeMap", captureSizeMap)
+    }
     // Once per install: the 12.5 MP default of 0.3.1 applied over a size that
     // was only ever the old default. Until 0.3.0 the default was the largest
     // size, and settleSize wrote it into the settings as if chosen; so on an
@@ -195,8 +219,21 @@ Item {
     function load() {
         timerSec = pick("timerSec", "0", ["0", "3", "10"]) * 1
         sizeDefaultApplied = String(viewfinder.setting("sizeDefaultApplied", "0")) === "1"
-        var sz = String(viewfinder.setting("captureSize", ""))
-        captureSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(sz) ? sz : ""
+        captureSizeMap = String(viewfinder.setting("captureSizeMap", "") || "{}")
+        // The camera the app starts on (camera 0, rawfish-ir.qml) takes its own
+        // size. With no map yet (0.3.7 or earlier), the one saved size goes
+        // to camera 0: usually its own; if it was another camera's, the
+        // settle restarts once, as it always did.
+        var start = currentCamera !== "" ? currentCamera : "0"
+        var sz = sizeForCamera(start)
+        if (sz === "" && String(viewfinder.setting("captureSizeMap", "")) === "") {
+            var legacy = String(viewfinder.setting("captureSize", ""))
+            if (/^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(legacy)) {
+                sz = legacy
+                var m0 = {}; m0[start] = legacy; captureSizeMap = JSON.stringify(m0); save("captureSizeMap", captureSizeMap)
+            }
+        }
+        captureSize = sz
         formatSaved = pick("format", "", ["4:3", "16:9"])   /* "" = the RAW's shape (format) */
         jpegQuality = pick("jpegQuality", "95", ["20", "40", "60", "80", "90", "95", "100"]) * 1
         awbMode = num("awbMode", 1, 1, 8)
@@ -453,6 +490,7 @@ Item {
     onImageTypeChanged: settleTimer.restart()
     function setSize(sz) {
         captureSize = sz; save("captureSize", sz)
+        storeSizeHere(sz)                                /* this camera's own from now on */
         if (sz !== "") save(format === "16:9" ? "captureSize169" : "captureSize43", sz)   /* the format's own */
         captureSizeChosen(sz)
     }
@@ -467,7 +505,7 @@ Item {
             viewfinder.sendCommand("# size default (once): stored \"" + captureSize + "\", largest " + largest
                                    + (captureSize !== "" && captureSize === largest ? ": taken for the old default, cleared" : ": kept"))
             if (captureSize !== "" && captureSize === largest) {
-                captureSize = ""; save("captureSize", "")
+                captureSize = ""; save("captureSize", ""); storeSizeHere("")
                 save(format === "16:9" ? "captureSize169" : "captureSize43", "")
             }
         }
@@ -488,7 +526,7 @@ Item {
         if (e !== runningSize) settleTried = e
         viewfinder.sendCommand("# settle: format " + format + " wants " + e + ", engine runs " + runningSize
                                + (e === runningSize ? " (kept)" : " (restart)"))
-        if (e === runningSize) { captureSize = e; save("captureSize", e) }   /* already so: no restart */
+        if (e === runningSize) { captureSize = e; save("captureSize", e); storeSizeHere(e) }   /* already so: no restart */
         else setSize(e)
     }
     // Deferred: inside onJpegSizesChanged the other bindings on the new caps

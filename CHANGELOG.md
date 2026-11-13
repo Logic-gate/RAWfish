@@ -97,6 +97,11 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- Each camera keeps its own photo size: a size chosen on one camera was
+  forgotten at every camera change (50 MP on camera 0 came back as 12.5
+  after a visit to the selfie), and the app started camera 0 with the
+  size last saved, often another camera's, then restarted it at its own
+  (1.4 s, log of 14 Nov). A size kept by 0.3.7 or earlier goes to camera 0.
 - A focus touch in the loupe no longer shows the whole field for one
   frame: the request that starts the search carried the photo's crop, not
   the loupe's. Camera 0 focused anyway; the 18 mm (camera 2) did not even
