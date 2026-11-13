@@ -7865,6 +7865,47 @@ static void report_request(jw_t *w, const char *name, const ACaptureRequest *req
     }
     jw_add(w, "}}");
 }
+/* What the camera says of its metering and focus zones, for the log at each
+ * start (one line): how many zones it takes per routine (AE, AWB, AF: 0 =
+ * our zone is ignored), the array the zones are measured in (the active
+ * array; but with distortion correction OFF, Camera2 takes them in the
+ * PRE-correction array, which can differ), the distortion correction it
+ * offers and the mode the preview carries, its sensor orientation, and how
+ * far its lens distances can be trusted (0 uncalibrated, 1 approximate,
+ * 2 calibrated). Written for the JP2's 18 mm, whose touch focus works in
+ * one band of the screen only; nothing here changes what the camera does. */
+IR_API int indraw_region_report(char *out, size_t out_size)
+{
+    jw_t w;
+    ACameraMetadata_const_entry e;
+    ACameraMetadata_const_entry re;
+    int k;
+    if (!g.chars) return fail(out, out_size, IR_ESTATE, "regions", "camera not open", 0);
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"camera_id\":\"%s\"", g.camera_id);
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_CONTROL_MAX_REGIONS, &e) == ACAMERA_OK && e.count >= 3)
+        jw_add(&w, ",\"max_regions\":{\"ae\":%d,\"awb\":%d,\"af\":%d}", e.data.i32[0], e.data.i32[1], e.data.i32[2]);
+    else jw_add(&w, ",\"max_regions\":null");
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_ACTIVE_ARRAY_SIZE, &e) == ACAMERA_OK && e.count >= 4)
+        jw_add(&w, ",\"active\":[%d,%d,%d,%d]", e.data.i32[0], e.data.i32[1], e.data.i32[2], e.data.i32[3]);
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PRE_CORRECTION_ACTIVE_ARRAY_SIZE, &e) == ACAMERA_OK && e.count >= 4)
+        jw_add(&w, ",\"pre_correction\":[%d,%d,%d,%d]", e.data.i32[0], e.data.i32[1], e.data.i32[2], e.data.i32[3]);
+    else jw_add(&w, ",\"pre_correction\":null");
+    jw_add(&w, ",\"distortion_modes\":[");
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_DISTORTION_CORRECTION_AVAILABLE_MODES, &e) == ACAMERA_OK)
+        for (k = 0; k < (int)e.count; ++k) jw_add(&w, "%s%d", k ? "," : "", e.data.u8[k]);
+    jw_add(&w, "]");
+    if (g.preview_request && ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_DISTORTION_CORRECTION_MODE, &re) == ACAMERA_OK && re.count)
+        jw_add(&w, ",\"distortion_mode\":%d", re.data.u8[0]);
+    else jw_add(&w, ",\"distortion_mode\":null");
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_ORIENTATION, &e) == ACAMERA_OK && e.count)
+        jw_add(&w, ",\"sensor_orientation\":%d", e.data.i32[0]);
+    if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_FOCUS_DISTANCE_CALIBRATION, &e) == ACAMERA_OK && e.count)
+        jw_add(&w, ",\"focus_distance_calibration\":%d", e.data.u8[0]);
+    jw_add(&w, "}");
+    return IR_OK;
+}
+
 IR_API int indraw_template_report(char *out, size_t out_size)
 {
     ACameraMetadata_const_entry keys;

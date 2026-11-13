@@ -2669,6 +2669,11 @@ int main(int argc, char **argv)
                     log_line("# shading: ", out);
                 }
             }
+            {   /* the camera's zones, one line at each start (see indraw_region_report) */
+                typedef int (*rr_fn)(char *, size_t);
+                rr_fn rr = (rr_fn)a_dlsym(bridge, "indraw_region_report");
+                if (rr && rr(out, sizeof out) == 0) log_line("# regions: ", out);
+            }
             {   /* read-only: what the preview / photo / RAW requests carry
                  * (AF mode, intent, vendor keys with type and value) */
                 typedef int (*tpl_rep_fn)(char *, size_t);

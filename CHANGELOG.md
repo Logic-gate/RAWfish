@@ -99,6 +99,13 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- The log gives, at each start, what the camera says of its zones
+  ("# regions:"): how many it takes for the exposure, the white balance
+  and the focus, the arrays they are measured in (with distortion
+  correction off, Camera2 takes them in the pre-correction array), the
+  distortion correction offered and in force, the sensor's orientation
+  and how far its lens distances are calibrated. For the 18 mm's touch
+  focus; nothing changes in what the camera does.
 - Detailed log: the focus zone the camera says it used (its result's AF
   zone), at each change, beside the zone we sent (the touch's reply): the
   18 mm focuses in one part of the viewfinder only, while the zone sent
