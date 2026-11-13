@@ -2208,6 +2208,7 @@ int main(int argc, char **argv)
     char cmdline[512] = "";
     void *bridge;
     int jw, jh, pw = 1280, ph = 960, rw = 0, rh = 0, rc, i, type_raw = 0;  /* viewfinder-grade default */
+    int want_cont_touch = 0;                    /* aftouch=continuous: applied once the profile is found */
 
     /* Options before the command, in any order: --log FILE, --jpgdir DIR,
      * --dngdir DIR ("~/" = HOME). A folder that cannot be used is an error
@@ -2535,12 +2536,10 @@ int main(int argc, char **argv)
                 if (!ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
             } else if (!strcmp(argv[i], "aftouch=continuous")) {
                 /* The continuous search then a lock, for a camera whose
-                 * device profile asks for it (touch_focus_continuous: 1;
-                 * the JP2's 18 mm). Another camera keeps the usual touch. */
-                typedef int (*mode_fn)(int);
-                mode_fn at = (mode_fn)a_dlsym(bridge, "indraw_set_af_touch");
-                long long want = read_override_checked(argv[2], "touch_focus_continuous");
-                if (at && want == 1 && !at(2)) log_line("# ", "focus touch: continuous search, then locked (device profile)");
+                 * device profile asks for it: applied below, once the
+                 * profile is found (0399 read it here, before
+                 * find_shipped_profile: it never found the key). */
+                want_cont_touch = 1;
             } else if (!strcmp(argv[i], "aftouch=prepared")) {
                 /* the experimental focus touch (indraw_set_af_touch) */
                 typedef int (*flag_fn)(int);
@@ -2562,6 +2561,15 @@ int main(int argc, char **argv)
          * checked, BEFORE open: some corrections apply to the session's setup. */
         find_shipped_profile(bridge, argv[2]);
         g_ov_user_ok = check_override(argv[2]);
+        if (want_cont_touch) {
+            /* aftouch=continuous: the camera's profile decides
+             * (touch_focus_continuous: 1, the JP2's 18 mm); another camera
+             * keeps the usual touch. Before open: the caps line says it. */
+            typedef int (*mode_fn)(int);
+            mode_fn at = (mode_fn)a_dlsym(bridge, "indraw_set_af_touch");
+            if (at && read_override_checked(argv[2], "touch_focus_continuous") == 1 && !at(2))
+                log_line("# ", "focus touch: continuous search, then locked (device profile)");
+        }
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
         apply_stream_limits(bridge, argv[2], type_raw);   /* raw_stream / jpeg_max / streams, before open */
         if (have_streams) {                        /* streams=: only what this session needs */

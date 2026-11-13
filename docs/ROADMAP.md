@@ -69,6 +69,19 @@ Each item says why, so it can be picked up later without re-deriving it.
   preview's real field. The same effect should then exist left-right.
   Left as is for now (November 2026).
 
+- **The 18 mm (camera 2) focuses by touch in the bottom third of the
+  screen only** (portrait; log of 14 Nov, 136 touches in manual focus):
+  46 of 92 there, 2 of 44 in the upper two thirds. Checked: the camera's
+  results report using exactly the zone we send, touch after touch (0400).
+  What is not known yet is whether that zone is where the touched subject
+  lies on the sensor -- the same question as the item above. To check:
+  (1) the phone turned 180 degrees: does the working band stay at the
+  bottom of the screen (our screen -> sensor mapping, or a preview field
+  unlike the declared one) or move to the top (the sensor's own, the
+  camera's AF); (2) on a support, a screenshot of the viewfinder and a
+  photo without moving: the same field or not. Camera 0 focuses by touch
+  everywhere.
+
 - **The manual distance shown is not reliable away from the centre.** It
   is the HAL's lens position converted through a focus table measured at
   the centre; with the effect above, and with the steep scale in metres
