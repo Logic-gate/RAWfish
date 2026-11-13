@@ -64,9 +64,7 @@
       "overrides": {
         "_note": "The 18 mm. Tested on a JP2 (November 2026): a manual exposure is taken up to ISO 16000 and 0.5 s, beyond the declared 2400 and 0.1 s; the camera's own automatic exposure goes to ISO 15537.",
         "observed_iso_max": 16000,
-        "observed_exposure_max_ns": 500000000,
-        "_focus_zone_note": "The 18 mm failed most focus touches in a dim room (13 Nov 2026); in the loupe its zone came down to 150 pixels of 4208. 10 % of the sensor's short side at least, loupe or not. The other cameras keep the plain rule (15 % of what is shown).",
-        "focus_zone_min_pct": 10
+        "observed_exposure_max_ns": 500000000
       }
     }
   ]

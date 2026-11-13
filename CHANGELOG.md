@@ -118,10 +118,6 @@ repository). Newest first.
   declare a lens that goes to 20 (HAL units; camera 0 through its
   calibration table: about 7 cm). The caps give the closest distance in
   the focus's own diopters (min_focus_real).
-- The 18 mm (camera 2) has a focus zone of 10 % of the sensor at least,
-  loupe or not (device profile, focus_zone_min_pct, per camera): it failed
-  most touches in a dim room, its zone down to 150 pixels in the loupe.
-  The other cameras keep the plain rule.
 - A camera without focus (the selfie: fixed lens, closest focus 0): the
   FOCUS button says "fixed" and is greyed, the focus stays automatic; a
   manual focus chosen on another camera comes back on a camera that has

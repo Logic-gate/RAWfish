@@ -23,11 +23,6 @@
         // A pause before every capture, in ms (1..3000; absent: none). For a
         // HAL whose lens is still moving when the photo is taken (the XA2).
         // "capture_delay_ms": 500,
-        // The smallest focus zone of a touch, in % of the sensor's short side
-        // (1..50; absent: none, the zone is 15 % of what is shown, smaller in
-        // the loupe). For a camera whose autofocus needs a larger zone to
-        // lock (the JP2's 18 mm, camera 2: 10 in the shipped profile).
-        // "focus_zone_min_pct": 10,
         // Longest REAL single exposure, measured (the HAL may claim more: the
         // JP2 claims 16 s and does 0.5 s). Beyond it the speed wheel offers
         // Σ stacks.
