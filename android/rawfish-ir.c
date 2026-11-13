@@ -3664,6 +3664,20 @@ static int send_trigger(uint8_t af, uint8_t ae)
      * ahead in the pipeline, was sometimes taken while it travelled (0.47.56). */
     copy_preview_focus(g.trigger_request);
     set_exposure(g.trigger_request, g.pv_exposure_ns, g.pv_iso, dummy, sizeof dummy);
+    /* ... and the PREVIEW's crop (0.3.8). The trigger request kept the
+     * photo's crop (the zoom window): in the loupe, where the preview is cut
+     * much smaller, the frame that starts a focus search showed the whole
+     * field -- a visible jump at every touch -- and the HAL got the order to
+     * search on a frame framed unlike all the others around it. Camera 0
+     * focused anyway (11 of 11, 14 Nov); camera 2 did not even move its
+     * lens in the loupe (0 of 5, its lens where it was before). Copied from
+     * the preview request itself, so it is whatever the preview uses now
+     * (zoom, loupe, a gesture keeping the zoom window). */
+    {
+        ACameraMetadata_const_entry ce;
+        if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_SCALER_CROP_REGION, &ce) == ACAMERA_OK && ce.count == 4)
+            ACaptureRequest_setEntry_i32(g.trigger_request, ACAMERA_SCALER_CROP_REGION, 4, ce.data.i32);
+    }
     ACaptureRequest_setEntry_u8(g.trigger_request, ACAMERA_CONTROL_AF_TRIGGER, 1, &af);
     ACaptureRequest_setEntry_u8(g.trigger_request, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER, 1, &ae);
     if (af == ACAMERA_CONTROL_AF_TRIGGER_START || ae == ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START)

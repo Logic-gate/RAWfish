@@ -97,6 +97,11 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- A focus touch in the loupe no longer shows the whole field for one
+  frame: the request that starts the search carried the photo's crop, not
+  the loupe's. Camera 0 focused anyway; the 18 mm (camera 2) did not even
+  move its lens in the loupe (0 of 5, 14 Nov). It now carries the
+  viewfinder's own crop.
 - Manual focus reaches each camera's closest distance: it stopped at 10
   diopters (10 cm) on every camera, while the JP2's cameras 0 and 2
   declare a lens that goes to 20 (HAL units; camera 0 through its
