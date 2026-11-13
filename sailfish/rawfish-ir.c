@@ -1177,7 +1177,7 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
+            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv] [aftouch=prepared]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; jpeg+largest: and, where no stream is a multiple of it, the largest stream averaged down; streams=: only these beside the viewfinder)\n"
             "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
@@ -2525,6 +2525,11 @@ int main(int argc, char **argv)
                 else if (!strcmp(argv[i] + 4, "jpeg+largest")) { yw = yh = -3; }   /* ... and, with no exact multiple, the largest stream averaged down */
                 else if (!parse_size(argv[i] + 4, &yw, &yh)) { usage(); return EXIT_USAGE; }
                 if (!ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
+            } else if (!strcmp(argv[i], "aftouch=prepared")) {
+                /* the experimental focus touch (indraw_set_af_touch) */
+                typedef int (*flag_fn)(int);
+                flag_fn at = (flag_fn)a_dlsym(bridge, "indraw_set_af_touch");
+                if (at && !at(1)) log_line("# ", "focus touch: prepared (the AUTO mode on the viewfinder first, then one start)");
             } else if (!strncmp(argv[i], "type=", 5)) {
                 if (!strcmp(argv[i] + 5, "raw")) type_raw = 1;
                 else if (!strcmp(argv[i] + 5, "jpeg")) type_raw = 0;

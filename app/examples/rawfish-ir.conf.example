@@ -124,6 +124,12 @@ jpgYuvStream=jpeg
 ; lags. 0 = as before (the in-between stream).
 ;                                               values: 0, 1            default 1
 jpgYuvFromLargestStream=1
+; A test key: the focus touch in manual focus done the way the Camera1 API
+; does it (as Jolla Camera), for the 18 mm whose touches fail: the AUTO focus
+; mode first on the viewfinder's frames, then one start of the search, instead
+; of switching the mode and starting at once. 0 = the usual touch.
+;                                               values: 0, 1            default 0
+focusTouchPrepared=0
 ; snap (in TYPE): the camera driver's own JPEG at a small size, for utility
 ; shots (a receipt, a sign), noise reduction and sharpening HQ. Its size, as
 ; WIDTHxHEIGHT among the camera's JPEG sizes ("" = the largest 4:3 size of

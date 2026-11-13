@@ -97,6 +97,11 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- A test key, focusTouchPrepared=1 (off by default): the focus touch in
+  manual focus done the way the Camera1 API does it (Jolla Camera focuses
+  the 18 mm where our touch fails): the AUTO focus mode first on the
+  viewfinder's frames, then one start of the search, instead of switching
+  the mode and cancelling and starting at once.
 - Detailed log: a focus trace. For 4 s after a focus touch, every change
   of the camera's AF state and lens position, with the time since the
   touch ("af trace +350 ms: state 3 (active scan), lens 1.250"), to see

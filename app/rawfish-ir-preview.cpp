@@ -287,6 +287,10 @@ void IndrawPreview::start()
             QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvFromLargestStream"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0"))
             ys = QStringLiteral("jpeg+largest");
         args << QStringLiteral("yuv=") + ys;
+        /* focusTouchPrepared=1 (a test key, off by default): the experimental
+         * focus touch, the AUTO mode on the viewfinder first, then one start */
+        if (QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("focusTouchPrepared"), QStringLiteral("0")).toString().trimmed() == QLatin1String("1"))
+            args << QStringLiteral("aftouch=prepared");
     }
     {   /* only the streams the type and the settings need (yuv dropped after it failed) */
         QStringList want;

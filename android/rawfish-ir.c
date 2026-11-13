@@ -610,6 +610,10 @@ static struct {
     long live_results;                      /* preview results seen since trigger */
     int trigger_seen;                       /* a result echoed our trigger       */
     int live_ae, live_af;                   /* 3A states of the latest result    */
+    int live_af_mode;                       /* the AF mode the latest viewfinder result was run with */
+    /* A focus touch "prepared" (an experiment, off unless asked: aftouch=prepared,
+     * rawfish-ir.conf focusTouchPrepared=1), see indraw_tap. */
+    int af_touch_prepared;
     int live_lens_state;                    /* LENS_STATE: 0 stationary, 1 moving */
     float live_focus;                       /* LENS_FOCUS_DISTANCE in the preview  */
     int device_error;                       /* 0, or the onError code / -1       */
@@ -1986,6 +1990,9 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
         g.live_ae = e.data.u8[0];
     if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_STATE, &e) == ACAMERA_OK && e.count)
         g.live_af = e.data.u8[0];
+    g.live_af_mode = -1;
+    if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_MODE, &e) == ACAMERA_OK && e.count)
+        g.live_af_mode = e.data.u8[0];             /* what the frame was really run with */
     g.live_lens_state = -1;
     if (ACameraMetadata_getConstEntry(res, ACAMERA_LENS_STATE, &e) == ACAMERA_OK && e.count)
         g.live_lens_state = e.data.u8[0];           /* 0 stationary, 1 moving     */
@@ -5800,7 +5807,35 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
     /* A new scan: CANCEL first releases a lock from a previous tap (some HALs
      * ignore a START while FOCUSED_LOCKED), then START. No AE precapture: with
      * AE on, the HAL re-meters its region by itself. */
-    if (do_af == 1 && !continuous) {
+    if (do_af == 1 && !continuous && g.af_touch_prepared) {
+        /* The "prepared" touch (an experiment, 0.3.8). The 18 mm fails our
+         * focus touches where Jolla Camera, through the Camera1 API, focuses
+         * it in the same light. On a Camera2 HAL, Camera1's touch focus is,
+         * as far as we know: the focus mode "auto" already in force on the
+         * viewfinder's frames (set beforehand as a parameter), then one AF
+         * start riding on the next viewfinder frame. Our touch, in manual
+         * focus, switches the mode from OFF (a fixed distance) to AUTO and
+         * sends CANCEL then START in the same instant. Here instead:
+         *  1. the AUTO mode is on the repeating viewfinder request (above);
+         *     we wait until a viewfinder result says the frames run with it
+         *     (live_af_mode), at most 400 ms -- usually 2 or 3 frames;
+         *  2. CANCEL only if a previous search left the AF locked (4, 5),
+         *     to release it; otherwise none;
+         *  3. START. */
+        int waited = 0, mode_now = -1, af_now = -1;
+        struct timespec nap = { 0, 20 * 1000000L };      /* 20 ms between looks */
+        while (waited < 400) {
+            pthread_mutex_lock(&g.lock);
+            mode_now = g.live_af_mode; af_now = g.live_af;
+            pthread_mutex_unlock(&g.lock);
+            if (mode_now == ACAMERA_CONTROL_AF_MODE_AUTO) break;
+            nanosleep(&nap, NULL);
+            waited += 20;
+        }
+        if (af_now == ACAMERA_CONTROL_AF_STATE_FOCUSED_LOCKED || af_now == ACAMERA_CONTROL_AF_STATE_NOT_FOCUSED_LOCKED)
+            send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+        send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+    } else if (do_af == 1 && !continuous) {
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
@@ -7293,6 +7328,14 @@ static int yuv_copy(AImage *img, ir_yuv_t *f)
 
 /* Before indraw_open: a full-resolution YUV stream in the session (w,h; -1,-1
  * the largest; 0,0 none). For a JPEG compressed by the command line. */
+/* The "prepared" focus touch (an experiment; see indraw_tap): 1 on, 0 the
+ * usual touch. Set before or after open. */
+IR_API int indraw_set_af_touch(int prepared)
+{
+    g.af_touch_prepared = prepared ? 1 : 0;
+    return IR_OK;
+}
+
 IR_API int indraw_set_yuv_size(int w, int h)
 {
     /* -1,-1: the largest; -2,-2: the JPEG's size (the one the user chose);
