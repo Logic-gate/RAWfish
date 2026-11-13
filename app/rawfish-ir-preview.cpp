@@ -834,6 +834,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         for (const QByteArray &fc : f.value("facing").split(','))
             if (!fc.isEmpty()) facing.append(QString::fromLatin1(fc));
         m_caps.insert(QStringLiteral("facing"), facing);
+        /* the YUV stream our JPG is taken from, "WxH/k" (k: the averaging), for the log */
+        m_caps.insert(QStringLiteral("yuvStream"), QString::fromLatin1(f.value("yuv_stream")));
         QVariantList rawCams;                      /* each camera gives RAW (1) or not (0), in the order of "cameras" (0.3.8) */
         for (const QByteArray &rc : f.value("raw_cams").split(','))
             if (!rc.isEmpty()) rawCams.append(rc.toInt());

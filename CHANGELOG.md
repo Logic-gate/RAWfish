@@ -97,6 +97,11 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- A camera without focus (the selfie: fixed lens, closest focus 0): the
+  FOCUS button says "fixed" and is greyed, the focus stays automatic; a
+  manual focus chosen on another camera comes back on a camera that has
+  a focus. Simple mode: the wide camera's name is "Wide". The log's caps
+  line gives the YUV stream in force (yuv_stream=WxH/k).
 - The selfie camera's viewfinder lags with our JPG: its 3264x2448 photo
   has no YUV stream it can be averaged down from, so a stream of that
   in-between size is opened, which makes the JP2's viewfinder lag (a

@@ -877,8 +877,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+2" />
-        <source>wide</source>
-        <translation>grand-angle</translation>
+        <source>Wide</source>
+        <translation>Grand-angle</translation>
     </message>
     <message>
         <location line="+0" />
@@ -1192,6 +1192,10 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     <message>
         <source>Toggling to full auto.</source>
         <translation>Passage en tout automatique.</translation>
+    </message>
+    <message>
+        <source>fixed</source>
+        <translation>fixe</translation>
     </message>
 </context>
 </TS>

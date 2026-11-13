@@ -872,7 +872,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+2"/>
-        <source>wide</source>
+        <source>Wide</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1184,6 +1184,10 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <source>Toggling to full auto.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>fixed</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

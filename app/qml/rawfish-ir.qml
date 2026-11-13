@@ -297,7 +297,7 @@ ApplicationWindow {
                 if (i >= 0 && page.cameraFacing.length > i && page.cameraFacing[i] === "front") return qsTr("selfie")
                 if (!(c.focalEq > 0)) return ""
                 // "Std", not "standard": the word was cut on the camera button
-                return c.focalEq < 22 ? qsTr("wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("Std")
+                return c.focalEq < 22 ? qsTr("Wide") : c.focalEq > 40 ? qsTr("tele") : qsTr("Std")
             }
             function imageTypeLabel(t) {
                 switch (t) {
@@ -986,6 +986,29 @@ ApplicationWindow {
             // The state change is applied 250 ms after the flash state settles
             // (flashSettleTimer), so that a camera switch passing through a
             // camera without a flash does not flip back and forth.
+            // ---- A camera without focus (0.3.8) ----
+            //
+            // The JP2's selfie camera has a fixed lens: its closest focus is
+            // 0 diopters (Camera2's LENS_INFO_MINIMUM_FOCUS_DISTANCE: 0 means
+            // "fixed focus") and its only AF mode is "off". A manual focus, a
+            // search or a distance mean nothing there. So on such a camera the
+            // focus is the automatic one, the FOCUS button says "fixed" and is
+            // greyed. A manual focus chosen on another camera is remembered and
+            // comes back when a camera with a focus is in use again.
+            // (Unknown caps -- before the first ones -- count as "has a focus".)
+            readonly property bool fixedFocus: viewfinder.caps.min_focus_diopters !== undefined && viewfinder.caps.min_focus_diopters <= 0
+            property bool fixedSavedManual: false
+            onFixedFocusChanged: {
+                if (fixedFocus) {
+                    if (page.focusMode === "manual") { fixedSavedManual = true; page.focusMode = "cont" }
+                } else if (fixedSavedManual) {
+                    fixedSavedManual = false
+                    // still not the time for a manual focus (scene, flash): it waits with them
+                    if (page.flashAuto) { if (page.flashSaved) page.flashSaved.focusManual = true }
+                    else if (!page.sceneOn) page.focusMode = "manual"
+                }
+            }
+
             readonly property bool flashAuto: settingsMenu.flashAuto
             readonly property bool controlsLocked: sceneOn || flashAuto
             property bool flashApplied: false          // the state the interface is in
@@ -1030,7 +1053,8 @@ ApplicationWindow {
                     exposure.kCamera = s.camera; exposure.kAperture = s.aperture
                     exposure.restore()
                 }
-                if (s.focusManual && !page.sceneOn) {
+                if (s.focusManual && page.fixedFocus) page.fixedSavedManual = true   // back with a camera that has a focus
+                else if (s.focusManual && !page.sceneOn) {
                     page.focusMode = "manual"
                     if (s.diopters >= 0 && s.focusCamera === viewfinder.cameraId)
                         viewfinder.sendCommand("fc distance " + s.diopters.toFixed(3))   // the distance as it was (another camera: its own, afresh)
@@ -1089,7 +1113,8 @@ ApplicationWindow {
                                            + " scene_modes=" + viewfinder.caps.sceneModes
                                            + " peak_edge=" + viewfinder.caps.peakEdge + " peak_width=" + viewfinder.caps.peakWidth
                                            + " focal_mm=" + viewfinder.caps.focalMm + " focal_eq=" + viewfinder.caps.focalEq
-                                           + " raw=" + viewfinder.caps.rawW + "x" + viewfinder.caps.rawH)
+                                           + " raw=" + viewfinder.caps.rawW + "x" + viewfinder.caps.rawH
+                                           + " yuv_stream=" + (viewfinder.caps.yuvStream || "?"))   // e.g. 6560x4928/2: the stream, averaged by 2
                 }
                 // Another camera lists other sizes: forget the chosen one, with
                 // no restart of its own (the camera change restarts the engine
@@ -2227,13 +2252,14 @@ ApplicationWindow {
                             caption: qsTr("FOCUS")
                             visible: !settingsMenu.simpleHides("focus")   // simple mode: auto focus, no button
                             // Scenes: off. The flash: greyed but touchable, to say why.
-                            enabled: !page.sceneOn; opacity: page.controlsLocked ? Theme.opacityLow : 1.0
+                            // A fixed lens (the selfie): "fixed", greyed, nothing to change.
+                            enabled: !page.sceneOn && !page.fixedFocus; opacity: (page.controlsLocked || page.fixedFocus) ? Theme.opacityLow : 1.0
                             // Manual focus shows the distance; the others a short label.
                             // The distance is red while this camera has no focus
                             // calibration (the HAL's lens value taken as 1:1), white
                             // once a table is in force (caps focus_cal).
-                            value: page.focusModeLabel(page.focusMode)
-                            textColor: page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
+                            value: page.fixedFocus ? qsTr("fixed") : page.focusModeLabel(page.focusMode)
+                            textColor: !page.fixedFocus && page.focusMode === "manual" && !(viewfinder.caps.focusCal > 0) ? "#ff6060" : "white"
                             onCycle: {
                                 // auto <-> manual. Entering manual by this button starts
                                 // one search in the middle of the frame: the distance found
