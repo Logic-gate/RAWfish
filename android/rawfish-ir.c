@@ -3026,7 +3026,8 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
             if (has_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, jw * k, jh * k)) { bw = jw * k; bh = jh * k; bk = k; break; }
         /* No exact multiple, and the rule asked for (yuv=jpeg+largest): the
          * largest stream the camera lists, if it can be averaged down to about
-         * the size asked (yuvsize.h). The selfie
+         * the size asked (yuvsize.h: halved or quartered within 2 %, the
+         * Resolution menu's own rule). The selfie
          * camera of the JP2 (photo 3264x2448, largest stream 6560x4928) used
          * to get a 3264x2448 stream here, and its viewfinder lagged. The
          * photo is then the stream's size over k (3280x2464), not exactly the

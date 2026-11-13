@@ -117,9 +117,10 @@ jpgYuvStream=jpeg
 ; JPG, with jpgYuvStream=jpeg: where the camera lists no YUV stream that is a
 ; whole multiple of the photo's size (the JP2's selfie camera: its 3264x2448
 ; photo, and an in-between stream makes its viewfinder lag), take the camera's
-; LARGEST stream and average it down, within 8 % of the size asked (3280x2464
-; photos from its 6560x4928 stream). A new rule, off until tried: 0 = as before.
-; Cameras that already have an exact multiple (camera 0) are not affected.
+; LARGEST stream and average it down by 2 or 4, when it is that many times the
+; photo's size within 2 % (3280x2464 photos from its 6560x4928 stream). On the
+; JP2 that is the selfie camera's 3264x2448 alone, of every size of the three
+; cameras. A new rule, off until tried: 0 = as before.
 ;                                               values: 0, 1            default 0
 jpgYuvFromLargestStream=0
 ; snap (in TYPE): the camera driver's own JPEG at a small size, for utility

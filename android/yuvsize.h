@@ -18,10 +18,10 @@
  * Camera 1 as the example: its largest stream is 6560x4928, the photo asked
  * 3264x2448. Divided by 2 the stream gives 3280x2464: 0.5 % wider and
  * 0.65 % taller than asked, and the same shape (6560/4928 = 3280/2464). That
- * is accepted: the photo is 3280x2464 instead of 3264x2448, and the viewfinder
- * is smooth. A 16:9 photo (3840x2160) from the same stream would have to be
- * cropped, which the averaging does not do, so it is refused (0) and the
- * caller keeps its exact stream.
+ * is accepted: the photo is 3280x2464 instead of 3264x2448 (and, it is hoped,
+ * the viewfinder smooth). A 16:9 photo (3840x2160) from the same stream would
+ * have to be cropped, which the averaging does not do, so it is refused (0)
+ * and the caller keeps its exact stream.
  *
  * Plain C, no camera needed: the host tests (sailfish/tests/yuvsize_test.c)
  * run it on the real sizes of the phone.
@@ -32,25 +32,29 @@
 #include <math.h>
 
 /* jw, jh: the photo's size asked. lw, lh: the largest YUV stream the camera
- * lists. Returns the factor k (2..4) to average that stream down by, or 0
- * when no factor gives a photo within 8 % of the size asked in each
- * direction and of the same shape (within 1 %). Of several factors that
- * qualify, the closest to the size asked. */
+ * lists. Returns the factor k, 2 or 4, when the largest stream is k times the
+ * photo's size within 2 % in each direction, else 0.
+ *
+ * Why exactly that: it is the Resolution menu's own definition of a size it
+ * offers (SettingsMenu.sizesFor: the largest size of the shape divided by 1,
+ * 2 or 4, within 2 %; the engine's default size uses the same rule). So the
+ * rule only ever replaces the stream of a size the menu presents as "the
+ * sensor's half" or "quarter" -- the case of camera 1's 3264x2448, which is
+ * 6560x4928 halved within 0.5 % and 0.7 % -- and never touches an odd size.
+ * A first version (0387) accepted any factor 2..4 within 8 %: checked against
+ * the phone's own lists (generated-hal.json, 13 Nov), it also changed three
+ * odd sizes on cameras 0 and 2 that the menu does not offer; with this one,
+ * of every JPEG size of the three cameras, only camera 1's 3264x2448 changes
+ * (sailfish/tests/yuvsize_test.c checks it on those lists). */
 static inline int yuv_binned_k(int jw, int jh, int lw, int lh)
 {
-    int k, best = 0;
-    double best_dev = 1e9;
+    int k;
     if (jw <= 0 || jh <= 0 || lw <= 0 || lh <= 0) return 0;
-    {   /* the shape: the stream's and the photo's width-to-height ratios */
-        double shape = ((double)lw / lh) / ((double)jw / jh);
-        if (shape < 0.99 || shape > 1.01) return 0;
+    for (k = 2; k <= 4; k += 2) {                       /* 2, then 4: the sensor's own scales */
+        double rw = (double)lw / jw, rh = (double)lh / jh;   /* how many times the photo the stream is */
+        if (fabs(rw - k) <= 0.02 && fabs(rh - k) <= 0.02) return k;
     }
-    for (k = 2; k <= 4; ++k) {
-        double fw = (double)(lw / k) / jw, fh = (double)(lh / k) / jh;      /* the photo's size over the size asked */
-        double dev = fmax(fabs(fw - 1.0), fabs(fh - 1.0));
-        if (dev <= 0.08 && dev < best_dev) { best = k; best_dev = dev; }
-    }
-    return best;
+    return 0;
 }
 
 #endif
