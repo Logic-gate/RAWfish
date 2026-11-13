@@ -126,6 +126,11 @@ The RAW meter (`meter on`) measures only while a stream is attached
 (`indraw_stream_start`): it serves an interface that is looking; with no
 stream the command is accepted but no frame is measured.
 
+`tap X Y afc` (0.3.8): the focus searched by the CONTINUOUS autofocus on
+the zone, no trigger; `aflock` then locks it where it settled (an AF start
+in a continuous mode locks). The controller uses the pair for a camera whose
+profile asks for it (`touch_af=2` in the caps).
+
 `caps` carries `proto=N`, the version of this event/command protocol (1
 since 0.47.15); an interface built against another version can tell. Since
 0.3.8 it also gives `raw_cams=` (for each camera of `cameras=`, 1 if it gives

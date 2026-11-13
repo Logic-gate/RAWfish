@@ -289,7 +289,14 @@ void IndrawPreview::start()
         args << QStringLiteral("yuv=") + ys;
         /* focusTouchPrepared=1 (a test key, off by default): the experimental
          * focus touch, the AUTO mode on the viewfinder first, then one start */
-        if (QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("focusTouchPrepared"), QStringLiteral("0")).toString().trimmed() == QLatin1String("1"))
+        /* focusTouchContinuous=1 (a test key, off by default): on a camera
+         * whose device profile asks for it (touch_focus_continuous, the JP2's
+         * 18 mm), a manual focus touch searches with the continuous AF and
+         * locks; it takes precedence over focusTouchPrepared. */
+        QSettings conf(settingsPath(), QSettings::IniFormat);
+        if (conf.value(QStringLiteral("focusTouchContinuous"), QStringLiteral("0")).toString().trimmed() == QLatin1String("1"))
+            args << QStringLiteral("aftouch=continuous");
+        else if (conf.value(QStringLiteral("focusTouchPrepared"), QStringLiteral("0")).toString().trimmed() == QLatin1String("1"))
             args << QStringLiteral("aftouch=prepared");
     }
     {   /* only the streams the type and the settings need (yuv dropped after it failed) */

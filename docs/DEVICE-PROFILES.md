@@ -53,6 +53,11 @@ Corrections wired today (both optional, per camera):
   range (the JP2's 18 mm declares 0.1 s). It raises the declared maximum;
   `observed_shutter_max_ns` still caps the wheel before stacking. Checked
   the same way: the exposure requested against the one applied.
+- `touch_focus_continuous`: 1 = a focus touch in manual focus searches with
+  the continuous autofocus, then locks where it settled. For a camera whose
+  AUTO search misses (the JP2's 18 mm scans only from the lens' position
+  towards infinity). Applied while rawfish-ir.conf's focusTouchContinuous
+  test key is 1.
 - `min_frame_ns`: the minimum frame duration for manual exposure (the floor a
   manual shutter is clamped to). Default is 1/30 s (`33333333`); set this if the
   device accepts shorter or needs longer.

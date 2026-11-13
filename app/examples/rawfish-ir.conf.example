@@ -130,6 +130,13 @@ jpgYuvFromLargestStream=1
 ; of switching the mode and starting at once. 0 = the usual touch.
 ;                                               values: 0, 1            default 0
 focusTouchPrepared=0
+; A test key: on a camera whose device profile asks for it (the JP2's 18 mm),
+; a focus touch in manual focus searches with the camera's CONTINUOUS
+; autofocus and locks where it settles. Its usual search only scans from
+; where the lens is towards infinity, and missed closer subjects. Takes
+; precedence over focusTouchPrepared. 0 = the usual touch.
+;                                               values: 0, 1            default 0
+focusTouchContinuous=0
 ; snap (in TYPE): the camera driver's own JPEG at a small size, for utility
 ; shots (a receipt, a sign), noise reduction and sharpening HQ. Its size, as
 ; WIDTHxHEIGHT among the camera's JPEG sizes ("" = the largest 4:3 size of

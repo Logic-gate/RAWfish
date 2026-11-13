@@ -139,7 +139,8 @@ static void foc_cmd(void *ctx, const char *engine_command)
 {
     /* a focus search starts ("tap X Y af"; not "afclear"): the trace begins */
     size_t n = strlen(engine_command);
-    if (c.detail && !strncmp(engine_command, "tap ", 4) && n > 3 && !strcmp(engine_command + n - 3, " af")) {
+    if (c.detail && !strncmp(engine_command, "tap ", 4) &&
+        ((n > 3 && !strcmp(engine_command + n - 3, " af")) || (n > 4 && !strcmp(engine_command + n - 4, " afc")))) {
         c.trace_t0 = now_ms(); c.trace_until = c.trace_t0 + 4000.0;
         c.trace_af = -1; c.trace_lens = -1;
         if (c.log) c.log("af trace: search started");
@@ -261,6 +262,7 @@ static void on_event(const char *line)
                 /* the closest distance this camera reaches (min_focus_real,
                  * else its HAL value, else the old 10 D) */
                 ctl_focus_set_max(c.foc, fieldd(line, "min_focus_real", fieldd(line, "min_focus", 10.0)));
+                ctl_focus_set_touch(c.foc, (int)fieldd(line, "touch_af", 0));   /* the engine's focus touch */
                 ctl_focus_restart(c.foc);                /* a (re)started engine: the mode again */
             }
         } else if (!strncmp(line, "ae ", 3)) {

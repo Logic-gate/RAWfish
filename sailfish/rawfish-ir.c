@@ -427,6 +427,7 @@ static const ov_field_t k_ov_fields[] = {
     { "zebra_jpeg",              1, 255 },
     { "zebra_raw",               1, 1000 },
     { "capture_delay_ms",        1, 3000 },                     /* a pause before each capture */
+    { "touch_focus_continuous",  0, 1 },                        /* 1: a focus touch searches with the continuous AF, then locks */
     { NULL, 0, 0 }
 };
 /* Keys allowed anywhere in a camera block besides the fields above. */
@@ -1177,7 +1178,7 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv] [aftouch=prepared]\n"
+            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv] [aftouch=prepared|continuous]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; jpeg+largest: and, where no stream is a multiple of it, the largest stream averaged down; streams=: only these beside the viewfinder)\n"
             "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
@@ -1394,10 +1395,11 @@ static int cmd_tap(indraw_tap_fn tf, char **save, char *out)
     while ((tok = strtok_r(NULL, " \t\r\n", save))) {
         if (!strcmp(tok, "ae")) do_ae = 1;
         else if (!strcmp(tok, "af")) do_af = 1;
+        else if (!strcmp(tok, "afc")) do_af = 3;   /* the continuous search, locked later by "aflock" */
         else if (!strcmp(tok, "clear")) { do_ae = 2; do_af = 2; }
         else if (!strcmp(tok, "aeclear")) do_ae = 2;
         else if (!strcmp(tok, "afclear")) do_af = 2;
-        else { emit("{\"ok\":false,\"error\":\"tap: unknown option (ae|af|clear|aeclear|afclear)\"}"); return 1; }
+        else { emit("{\"ok\":false,\"error\":\"tap: unknown option (ae|af|afc|clear|aeclear|afclear)\"}"); return 1; }
     }
     if (do_ae < 0 && do_af < 0) { do_ae = 1; do_af = 1; }   /* default: both       */
     if (do_ae < 0) do_ae = 0;
@@ -2160,6 +2162,8 @@ static indraw_focus_fn g_focusfn;
 static indraw_zoom_fn g_zf;
 static indraw_loupe_fn g_lf;
 static indraw_view_window_fn g_vwf;
+typedef int (*indraw_af_lock_fn)(char *out, size_t n);
+static indraw_af_lock_fn g_aflock;              /* "aflock": the controller's lock of a continuous search */
 /* The controller's diagnostics (ctl_set_log): a "# " line in the log. */
 static void controller_log(const char *text) { log_line("# ", text); }
 
@@ -2180,6 +2184,10 @@ static void controller_engine_line(const char *text)
     else if (!strcmp(cmd, "zoom")) cmd_zoom(g_zf, &save, out);
     else if (!strcmp(cmd, "loupe")) cmd_loupe(g_lf, &save, out);
     else if (!strcmp(cmd, "viewwin")) cmd_viewwin(g_vwf, &save, out);
+    else if (!strcmp(cmd, "aflock")) {
+        if (g_aflock) { g_aflock(out, OUT_SIZE); emit(out); }
+        else emit("{\"ok\":false,\"error\":\"aflock: not in this engine\"}");
+    }
 }
 
 int main(int argc, char **argv)
@@ -2525,6 +2533,14 @@ int main(int argc, char **argv)
                 else if (!strcmp(argv[i] + 4, "jpeg+largest")) { yw = yh = -3; }   /* ... and, with no exact multiple, the largest stream averaged down */
                 else if (!parse_size(argv[i] + 4, &yw, &yh)) { usage(); return EXIT_USAGE; }
                 if (!ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
+            } else if (!strcmp(argv[i], "aftouch=continuous")) {
+                /* The continuous search then a lock, for a camera whose
+                 * device profile asks for it (touch_focus_continuous: 1;
+                 * the JP2's 18 mm). Another camera keeps the usual touch. */
+                typedef int (*mode_fn)(int);
+                mode_fn at = (mode_fn)a_dlsym(bridge, "indraw_set_af_touch");
+                long long want = read_override_checked(argv[2], "touch_focus_continuous");
+                if (at && want == 1 && !at(2)) log_line("# ", "focus touch: continuous search, then locked (device profile)");
             } else if (!strcmp(argv[i], "aftouch=prepared")) {
                 /* the experimental focus touch (indraw_set_af_touch) */
                 typedef int (*flag_fn)(int);
@@ -2699,6 +2715,7 @@ int main(int argc, char **argv)
              * started before the stream so the first events (caps) go through
              * it too. Without it (older library) the engine streams them itself. */
             g_pe = pe; g_evfn = evfn; g_mt = mt; g_tf = tf; g_focusfn = focusfn; g_zf = zf; g_lf = lf; g_vwf = vwf;
+            g_aflock = (indraw_af_lock_fn)a_dlsym(bridge, "indraw_af_lock");
             g_focus_opt = (indraw_focus_opt_fn)a_dlsym(bridge, "indraw_focus_opt");
             ctl_set_log(controller_log);         /* its diagnostics into our log */
             ctl_start((indraw_emit_fn)a_dlsym(bridge, "indraw_emit"),

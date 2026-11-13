@@ -97,6 +97,13 @@ repository). Newest first.
 - The camera button says "Std" (the word "standard" was cut); in
   continuous focus a tap says "Auto: tap to focus disabled. Hold for
   exposure."
+- The 18 mm's focus touch (test key focusTouchContinuous=1, off by
+  default): its AUTO search scans only from where the lens is towards
+  infinity (trace of 14 Nov: 15 failures of 15 ran down to infinity), so
+  from our manual distance near infinity it missed closer subjects. On
+  that camera (device profile, touch_focus_continuous) a manual focus touch
+  now searches with its continuous autofocus, which finds them, and locks
+  where it settles; the lens is held there as before.
 - A test key, focusTouchPrepared=1 (off by default): the focus touch in
   manual focus done the way the Camera1 API does it (Jolla Camera focuses
   the 18 mm where our touch fails): the AUTO focus mode first on the

@@ -65,6 +65,10 @@ void ctl_focus_set_distance(ctl_focus_t *f, double diopters);
  * caps' min_focus_real: its HAL value through the calibration table, or the
  * HAL value with no table). Manual distances stop there. <= 0.5: kept. */
 void ctl_focus_set_max(ctl_focus_t *f, double max_diopters);
+/* The engine's focus touch (its caps' touch_af): 2 = "continuous then
+ * lock" -- a manual focus touch searches with the continuous AF ("tap X Y
+ * afc") and locks once it settled ("aflock"); else the usual touch. */
+void ctl_focus_set_touch(ctl_focus_t *f, int mode);
 /* A long press: the exposure meters a 5 % spot at that point (the focus is
  * untouched); _light_clear: back to the whole image. */
 void ctl_focus_light(ctl_focus_t *f, double fx, double fy);

@@ -23,6 +23,10 @@
         // A pause before every capture, in ms (1..3000; absent: none). For a
         // HAL whose lens is still moving when the photo is taken (the XA2).
         // "capture_delay_ms": 500,
+        // 1: a focus touch in manual focus searches with the CONTINUOUS
+        // autofocus, then locks (for a camera whose AUTO search misses; the
+        // JP2's 18 mm: 1 in the shipped profile). Absent or 0: the usual touch.
+        // "touch_focus_continuous": 1,
         // Longest REAL single exposure, measured (the HAL may claim more: the
         // JP2 claims 16 s and does 0.5 s). Beyond it the speed wheel offers
         // Σ stacks.
