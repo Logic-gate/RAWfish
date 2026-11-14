@@ -279,89 +279,58 @@ static int mkdir_p(const char *path)
     return 0;
 }
 
-/* Reads one integer sensor-correction field for camera `id` from
- * override-hal.json, if that file exists. This is a deliberately tiny reader,
- * not a JSON parser: override files are small and hand-written, and the bridge
- * stays JSON-free. It looks for a per-camera object {"camera_id":"<id>", ...}
- * and, within the text that follows it, the first "<field>": <integer>.
- * Returns the value, or `fallback` if the file, the camera or the field is
- * absent. Corrections are atomic (one named field), per the device-profiles
- * design. */
 static char *ov_source(int which);
 static char *ov_cam(char *text, const char *id, char **end);
 static char *find_key(char *from, const char *to, const char *kq);
+static char *ov_slurp(const char *file);
+/* One integer field of camera `id`: the first "<field>": <integer> in its
+ * block, the user's override-hal.json first, then the shipped profile (see
+ * ov_source). A deliberately tiny reader, not a JSON parser: the files are
+ * small and hand-written, and the engine stays JSON-free. Returns the value,
+ * or `fallback` if no source has it. */
 static long long read_override_i64(const char *id, const char *field, long long fallback)
 {
     int which;
     char fkey[80];
     snprintf(fkey, sizeof fkey, "\"%s\"", field);
     for (which = 0; which < 2; ++which) {           /* the user's, then the shipped */
-        char *text = ov_source(which), *end = NULL, *cam, *key;
-        int found = 0;
-        long long v = fallback;
+        char *text = ov_source(which), *end = NULL, *cam, *key, *e;
+        long long v;
         if (!text) continue;
         cam = ov_cam(text, id, &end);
         if (cam && (key = find_key(cam, end, fkey)) && (key = strchr(key, ':'))) {
-            char *e;
             v = strtoll(key + 1, &e, 10);
-            found = e != key + 1;
+            if (e != key + 1) return v;
         }
-        free(text);
-        if (found) return v;
     }
     return fallback;
 }
 
-/* Reads the focus_calibration array for camera `id` from override-hal.json into
- * real_d[] / hal_d[] (real focus diopters ascending, and the HAL diopters to
- * send). An entry is {"real_m": <metres> | null, "hal_diopters": <d>}; real_m
- * null or <=0 means infinity (real diopter 0). Tiny hand-written-JSON scanner,
- * like read_override_i64, not a full parser. Returns the point count (0 if none
- * or no file), sorted ascending by real diopter. */
-/* Reads the focus_calibration points of camera `id` from one JSON file
- * (override-hal.json, or the assistant's focus-calibration.json: same
- * shape). Returns the number of points, sorted by real diopter. */
-static int read_focus_calibration_file(const char *file, const char *id, float *real_d, float *hal_d, int max)
+/* The focus_calibration points of camera `id` in one profile text (the
+ * shipped profile, override-hal.json, or the assistant's
+ * focus-calibration.json: the same shape) into real_d[] / hal_d[]: real
+ * focus diopters, and the HAL diopters to send. An entry is {"real_m":
+ * <metres> | null, "hal_diopters": <d>}; real_m null or <= 0 means
+ * infinity (real diopter 0). Returns the number of points (0: none),
+ * sorted by real diopter. */
+static int read_focus_calibration_text(char *text, const char *id, float *real_d, float *hal_d, int max)
 {
-    char *buf, *cam, *arr, *p2;
-    long sz;
+    char *cam, *end = NULL, *arr, *close, *p2;
     int n = 0, i, j;
-    FILE *f;
-    f = fopen(file, "r");
-    if (!f) return 0;
-    fseek(f, 0, SEEK_END); sz = ftell(f); fseek(f, 0, SEEK_SET);
-    if (sz <= 0 || sz > 1 << 20) { fclose(f); return 0; }
-    buf = malloc((size_t)sz + 1);
-    if (!buf) { fclose(f); return 0; }
-    if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) { free(buf); fclose(f); return 0; }
-    buf[sz] = '\0'; fclose(f);
-    /* Find this camera, then its "focus_calibration" array within its section. */
-    cam = buf;
-    while ((cam = strstr(cam, "\"camera_id\"")) != NULL) {
-        char *q = strchr(cam + 11, '"'), *q2 = q ? strchr(q + 1, '"') : NULL;
-        if (q && q2) { size_t l = (size_t)(q2 - q - 1);
-            if (l == strlen(id) && strncmp(q + 1, id, l) == 0) break; }
-        cam = cam + 11;
-    }
-    if (!cam) { free(buf); return 0; }
-    {   char *next = strstr(cam + 11, "\"camera_id\"");
-        arr = strstr(cam, "\"focus_calibration\"");
-        if (!arr || (next && arr > next)) { free(buf); return 0; }
-    }
+    if (!text || !(cam = ov_cam(text, id, &end))) return 0;
+    if (!(arr = find_key(cam, end, "\"focus_calibration\"")) || !(p2 = strchr(arr, '['))) return 0;
+    close = strchr(p2, ']');
     /* Walk the {...} objects in the array, reading real_m and hal_diopters. */
-    p2 = strchr(arr, '[');
-    while (p2 && n < max) {
-        char *obj = strchr(p2, '{');
-        char *end = obj ? strchr(obj, '}') : NULL;
-        char *rk, *hk;
-        if (!obj || !end) break;
+    while (n < max) {
+        char *obj = strchr(p2, '{'), *oend = obj ? strchr(obj, '}') : NULL, *rk, *hk;
+        if (!obj || !oend || (close && obj > close)) break;
         rk = strstr(obj, "\"real_m\"");
         hk = strstr(obj, "\"hal_diopters\"");
-        if (hk && hk < end) {
+        if (hk && hk < oend) {
             float real = 0.0f, hal;
             char *c = strchr(hk, ':');
             hal = c ? (float)atof(c + 1) : 0.0f;
-            if (rk && rk < end) {                  /* real_m: null or a number     */
+            if (rk && rk < oend) {                 /* real_m: null or a number     */
                 char *rc = strchr(rk, ':');
                 while (rc && (*rc == ':' || *rc == ' ')) ++rc;
                 if (rc && strncmp(rc, "null", 4) != 0) {
@@ -371,16 +340,21 @@ static int read_focus_calibration_file(const char *file, const char *id, float *
             }
             real_d[n] = real; hal_d[n] = hal; ++n;
         }
-        p2 = end + 1;
-        if (strchr(p2, '{') == NULL || (strchr(arr, ']') && p2 > strchr(arr, ']'))) break;
+        p2 = oend + 1;
     }
-    free(buf);
-    /* Sort ascending by real diopter (insertion sort, tiny n). */
-    for (i = 1; i < n; ++i)
+    for (i = 1; i < n; ++i)                         /* sorted by real diopter (tiny n) */
         for (j = i; j > 0 && real_d[j] < real_d[j - 1]; --j) {
-            float tr = real_d[j]; real_d[j] = real_d[j - 1]; real_d[j - 1] = tr;
-            { float th = hal_d[j]; hal_d[j] = hal_d[j - 1]; hal_d[j - 1] = th; }
+            float t = real_d[j]; real_d[j] = real_d[j - 1]; real_d[j - 1] = t;
+            t = hal_d[j]; hal_d[j] = hal_d[j - 1]; hal_d[j - 1] = t;
         }
+    return n;
+}
+/* The same, from a file (the assistant's focus-calibration.json). */
+static int read_focus_calibration_file(const char *file, const char *id, float *real_d, float *hal_d, int max)
+{
+    char *text = ov_slurp(file);
+    int n = read_focus_calibration_text(text, id, real_d, hal_d, max);
+    free(text);
     return n;
 }
 
@@ -459,6 +433,11 @@ static void ov_log(const char *msg)
  * write comes from the shipped profile; neither: the built-in default. */
 static char g_ov_shipped[1100];      /* the matched shipped profile ("" none) */
 static int g_ov_user_ok = 1;         /* the user's file is usable              */
+/* The two texts, read once per start: every key read its file again (some
+ * twenty reads of each per start). Read on first use, dropped by
+ * find_shipped_profile at each start; owned here, never freed by a reader. */
+static char *g_ov_text[2];
+static int g_ov_read[2];
 static char *ov_slurp(const char *file)
 {
     char *buf;
@@ -472,15 +451,33 @@ static char *ov_slurp(const char *file)
     fclose(f);
     return buf;
 }
-/* The text of source `which` (0 user, 1 shipped), NULL if absent or not to
- * be used. To free. */
+static void ov_forget(void)
+{
+    int i;
+    for (i = 0; i < 2; ++i) { free(g_ov_text[i]); g_ov_text[i] = NULL; g_ov_read[i] = 0; }
+}
+/* The text of source `which` (0 the user's file, 1 the shipped profile),
+ * usable or not; NULL if absent. Not to be freed. */
+static char *ov_text(int which)
+{
+    if (!g_ov_read[which]) {
+        char dir[1024], file[1100];
+        if (which == 1) g_ov_text[1] = ov_slurp(g_ov_shipped);
+        else if (profile_dir(dir, sizeof dir) == 0) {
+            snprintf(file, sizeof file, "%s/override-hal.json", dir);
+            g_ov_text[0] = ov_slurp(file);
+        }
+        g_ov_read[which] = 1;
+    }
+    return g_ov_text[which];
+}
+/* The text of source `which` to read keys from: NULL if absent, and for the
+ * user's file when its structure is broken (check_override). Not to be
+ * freed. */
 static char *ov_source(int which)
 {
-    char dir[1024], file[1100];
-    if (which == 1) return ov_slurp(g_ov_shipped);
-    if (!g_ov_user_ok || profile_dir(dir, sizeof dir) != 0) return NULL;
-    snprintf(file, sizeof file, "%s/override-hal.json", dir);
-    return ov_slurp(file);
+    if (which == 0 && !g_ov_user_ok) return NULL;
+    return ov_text(which);
 }
 /* The block of camera `id` in a profile text: from its "camera_id" to the
  * next one (or the end). NULL if the camera is not listed. */
@@ -511,7 +508,6 @@ static int ov_string(const char *id, const char *key, char *val, size_t n)
             snprintf(val, n, "%.*s", (int)(q - p - 1), p + 1);
             found = 1;
         }
-        free(text);
     }
     return found;
 }
@@ -534,7 +530,6 @@ static int ov_bool(const char *id, const char *key, int *val)
             if (!strncmp(p, "true", 4)) { *val = 1; found = 1; }
             else if (!strncmp(p, "false", 5)) { *val = 0; found = 1; }
         }
-        free(text);
     }
     return found;
 }
@@ -582,15 +577,6 @@ static void apply_stream_limits(void *bridge, const char *id, int type_raw)
              id, raw_on ? "" : " no RAW stream", jw > 0 ? " JPEG at most" : "");
     if (jw > 0) snprintf(msg + strlen(msg), sizeof msg - strlen(msg), " %dx%d", jw, jh);
     log_line("# ", msg);
-}
-
-/* The user's override file (NULL if absent or too big): ov_slurp on its path. */
-static char *ov_read_file(void)
-{
-    char dir[1024], file[1100];
-    if (profile_dir(dir, sizeof dir) != 0) return NULL;
-    snprintf(file, sizeof file, "%s/override-hal.json", dir);
-    return ov_slurp(file);
 }
 
 /* "key" (quoted) in [from, to), skipping an escaped quote (a key named
@@ -645,6 +631,7 @@ static void find_shipped_profile(void *bridge, const char *id)
     DIR *d;
     struct dirent *de;
     g_ov_shipped[0] = '\0';
+    ov_forget();                             /* a start: both sources read afresh */
     if (!info || info(buf, sizeof buf) != 0) return;
     str_in(buf, NULL, "make", make, sizeof make);
     str_in(buf, NULL, "model", model, sizeof model);
@@ -694,13 +681,12 @@ static void find_shipped_profile(void *bridge, const char *id)
         closedir(d);
     }
     if (g_ov_shipped[0]) {
-        char *text = ov_slurp(g_ov_shipped), *n;
+        char *text = ov_text(1), *n;
         log_line("# device profile: ", msg);
         if (text && setnotch && (n = strstr(text, "\"notch\"")) && (n = strchr(n, ':'))) {
             while (*++n == ' ') {}
             setnotch(!strncmp(n, "true", 4) ? 1 : !strncmp(n, "false", 5) ? 0 : -1);
         }
-        free(text);
     } else {
         snprintf(msg, sizeof msg, "none for %s %s (built-in defaults; your override-hal.json if any)", make, model);
         log_line("# device profile: ", msg);
@@ -711,7 +697,7 @@ static void find_shipped_profile(void *bridge, const char *id)
  * structure), 1 otherwise (findings, if any, are logged). */
 static int check_override(const char *id)
 {
-    char *buf = ov_read_file(), *p, msg[300];
+    char *buf = ov_text(0), *p, msg[300];
     int depth = 0, in_str = 0, problems = 0, found_cam = 0;
     if (!buf) return 1;                             /* no file: defaults, fine     */
     for (p = buf; *p; ++p) {                         /* structure: braces & quotes  */
@@ -722,7 +708,6 @@ static int check_override(const char *id)
     }
     if (in_str || depth != 0) {
         ov_log("override-hal.json: unbalanced braces or quotes -- the whole file is IGNORED, built-in defaults used");
-        free(buf);
         return 0;
     }
     /* Every key ("name" followed by ':') must be known, or start with '_'. */
@@ -757,7 +742,6 @@ static int check_override(const char *id)
         snprintf(msg, sizeof msg, "override-hal.json: checked, camera %s found, no unknown key", id);
         log_line("# ", msg);
     }
-    free(buf);
     return 1;
 }
 
@@ -769,31 +753,27 @@ static int check_override(const char *id)
  * then the list, then each {...} in it. */
 static void apply_vendor_requests(indraw_vendor_set_fn vs, const char *id, char *out)
 {
-    char *buf = NULL, *cam = NULL, *blk, *lst = NULL, *end = NULL, *p;
+    char *buf, *cam, *lst = NULL, *end = NULL, *p;
     char msg[200];
     int n = 0, which;
     if (!vs) return;
     for (which = 0; which < 2 && !lst; ++which) {    /* the user's list, else the shipped */
-        free(buf);
-        buf = ov_source(which);
-        if (!buf) continue;
+        if (!(buf = ov_source(which))) continue;
         cam = ov_cam(buf, id, &end);
-        lst = cam ? strstr(cam, "\"vendor_request\"") : NULL;
-        if (lst && end && lst > end) lst = NULL;
+        lst = cam ? find_key(cam, end, "\"vendor_request\"") : NULL;
     }
-    if (!lst) { free(buf); return; }
-    blk = cam;
+    if (!lst) return;
     p = strchr(lst, '[');
     end = p ? strchr(p, ']') : NULL;
-    if (!p || !end) { free(buf); return; }
-    (void)blk;
+    if (!p || !end) return;
     while ((p = strchr(p, '{')) != NULL && p < end) {
         char *close = strchr(p, '}'), *t, *ty, *va, *on;
         unsigned long tag = 0;
         int type = -1, onv = 0;
         double value = 0;
         if (!close) break;
-        *close = '\0';
+        /* one entry on its own (the cached text is shared: not cut in place) */
+        if (!(p = strndup(p, (size_t)(close - p)))) break;
         if ((t = strstr(p, "\"tag\"")) && (t = strchr(t, ':'))) { while (*++t == ' ' || *t == '"') {} tag = strtoul(t, NULL, 16); }
         if ((ty = strstr(p, "\"type\"")) && (ty = strchr(ty, ':'))) {
             while (*++ty == ' ' || *ty == '"') {}
@@ -804,7 +784,7 @@ static void apply_vendor_requests(indraw_vendor_set_fn vs, const char *id, char 
             while (*++on == ' ' || *on == '"') {}
             onv = !strncmp(on, "photo", 5) ? 1 : !strncmp(on, "all", 3) ? 2 : 0;
         }
-        *close = '}';
+        free(p);
         if (tag >= 0x80000000UL && type >= 0) {
             vs((uint32_t)tag, type, value, onv, out, OUT_SIZE);
             snprintf(msg, sizeof msg, "vendor_request 0x%08lx: %.150s", tag, out);
@@ -816,7 +796,6 @@ static void apply_vendor_requests(indraw_vendor_set_fn vs, const char *id, char 
         }
         p = close + 1;
     }
-    free(buf);
     if (n) {
         indraw_vendor_report_fn vr = (indraw_vendor_report_fn)a_dlsym(g_bridge_for_vendor, "indraw_vendor_report");
         snprintf(msg, sizeof msg, "vendor_request: %d entr%s applied for camera %s", n, n > 1 ? "ies" : "y", id);
@@ -849,18 +828,16 @@ static void apply_session_requests(void *bridge, const char *id)
 {
     typedef int (*set_fn)(uint32_t, int, double);
     set_fn ss = (set_fn)a_dlsym(bridge, "indraw_set_session_request");
-    char *buf = NULL, *cam = NULL, *lst = NULL, *end = NULL, *p;
+    char *buf, *cam, *lst = NULL, *end = NULL, *p;
     char msg[200];
     int n = 0, which;
     if (!ss) return;
     for (which = 0; which < 2 && !lst; ++which) {
-        free(buf);
-        buf = ov_source(which);
-        if (!buf) continue;
+        if (!(buf = ov_source(which))) continue;
         cam = ov_cam(buf, id, &end);
         lst = cam ? find_key(cam, end, "\"session_request\"") : NULL;
     }
-    if (!lst) { free(buf); return; }
+    if (!lst) return;
     {   /* the list ends at its ']': the entries of a vendor_request list that
          * follows are not session parameters (the first version read on to
          * the camera block's end and counted them twice) */
@@ -888,7 +865,6 @@ static void apply_session_requests(void *bridge, const char *id)
         if (ss((uint32_t)tag, type, value) == 0) ++n;
         p = e;
     }
-    free(buf);
     snprintf(msg, sizeof msg, "%d entr%s for the session (applied at open if the HAL supports session parameters)", n, n == 1 ? "y" : "ies");
     log_line("# session_request: ", msg);
 }
@@ -920,24 +896,26 @@ static long long read_override_checked(const char *id, const char *field)
     return v;
 }
 
-/* The two sources of focus calibration, merged: override-hal.json (hand
- * written) first, then focus-calibration.json (the assistant's, see
- * cmd_calib), a point of the latter replacing one at the same distance. */
+/* The focus calibration, merged from three sources: the shipped profile's
+ * table first (the JP2's measured one), then the user's override-hal.json
+ * (unless broken), then the assistant's focus-calibration.json (see
+ * cmd_calib). A later source replaces a distance it also has, and adds the
+ * others. */
 static int read_focus_calibration(const char *id, float *real_d, float *hal_d, int max)
 {
     char dir[1024], file[1100];
     float r2[16], h2[16];
     int n, n2, i, j;
-    /* The shipped profile's table first (the JP2's measured one), then the
-     * user's override-hal.json, then the assistant's focus-calibration.json:
-     * a later source replaces a distance it also has, and adds the others. */
-    n = g_ov_shipped[0] ? read_focus_calibration_file(g_ov_shipped, id, real_d, hal_d, max) : 0;
-    if (profile_dir(dir, sizeof dir) != 0) return n;
+    n = read_focus_calibration_text(ov_source(1), id, real_d, hal_d, max);
     {
         int pass;
         for (pass = 0; pass < 2; ++pass) {
-            snprintf(file, sizeof file, "%s/%s", dir, pass == 0 ? "override-hal.json" : "focus-calibration.json");
-            n2 = read_focus_calibration_file(file, id, r2, h2, 16);
+            if (pass == 0) n2 = read_focus_calibration_text(ov_source(0), id, r2, h2, 16);
+            else if (profile_dir(dir, sizeof dir) != 0) break;
+            else {
+                snprintf(file, sizeof file, "%s/focus-calibration.json", dir);
+                n2 = read_focus_calibration_file(file, id, r2, h2, 16);
+            }
             for (i = 0; i < n2; ++i) {
                 for (j = 0; j < n; ++j) if (fabsf(real_d[j] - r2[i]) < 1e-4f) { hal_d[j] = h2[i]; break; }
                 if (j == n && n < max) { real_d[n] = r2[i]; hal_d[n] = h2[i]; ++n; }
@@ -2575,10 +2553,10 @@ int main(int argc, char **argv)
         {
             indraw_set_override_fn setov =
                 (indraw_set_override_fn)a_dlsym(bridge, "indraw_set_override");
-            /* The override file is checked first; a broken one is not used. */
-            int ov_ok = 1;                         /* each reader consults both sources */
-            long long shutter_max = ov_ok ? read_override_checked(argv[2], "observed_shutter_max_ns") : 0;
-            long long min_frame = ov_ok ? read_override_checked(argv[2], "min_frame_ns") : 0;
+            /* (The user's file was checked before open: a broken one is not
+             * read, the shipped profile still is -- ov_source.) */
+            long long shutter_max = read_override_checked(argv[2], "observed_shutter_max_ns");
+            long long min_frame = read_override_checked(argv[2], "min_frame_ns");
             if (setov && (shutter_max > 0 || min_frame > 0)) {
                 setov((int64_t)shutter_max, (int64_t)min_frame, out, sizeof out);
                 emit(out);                         /* report what was applied      */
@@ -2586,28 +2564,28 @@ int main(int argc, char **argv)
             {   /* a manual ISO ceiling above the declared range (device profile; absent: the declared one) */
                 typedef int (*set_iso_fn)(int, char *, size_t);
                 set_iso_fn si = (set_iso_fn)a_dlsym(bridge, "indraw_set_iso_max");
-                long long im = ov_ok ? read_override_checked(argv[2], "observed_iso_max") : 0;
+                long long im = read_override_checked(argv[2], "observed_iso_max");
                 if (si && im > 0) { si((int)im, out, sizeof out); emit(out); }
             }
             {   /* the lens' real closest stop and "no focus by touch" (device profile;
                  * absent: the declared stop, and the touch as usual) */
                 typedef int (*sfp_fn)(float, int, int, char *, size_t);
                 sfp_fn sf = (sfp_fn)a_dlsym(bridge, "indraw_set_focus_profile");
-                long long fm = ov_ok ? read_override_checked(argv[2], "focus_max_diopters") : 0;
-                long long tf = ov_ok ? read_override_checked(argv[2], "touch_focus_off") : 0;
-                long long sp = ov_ok ? read_override_checked(argv[2], "focus_step_percent") : 0;
+                long long fm = read_override_checked(argv[2], "focus_max_diopters");
+                long long tf = read_override_checked(argv[2], "touch_focus_off");
+                long long sp = read_override_checked(argv[2], "focus_step_percent");
                 if (sf && (fm > 0 || tf == 1 || sp > 0)) { sf((float)fm, tf == 1 ? 0 : 1, (int)sp, out, sizeof out); emit(out); }
             }
             {   /* a longest exposure above the declared range (device profile; absent: the declared one) */
                 typedef int (*set_exp_fn)(int64_t, char *, size_t);
                 set_exp_fn se = (set_exp_fn)a_dlsym(bridge, "indraw_set_exposure_max");
-                long long em = ov_ok ? read_override_checked(argv[2], "observed_exposure_max_ns") : 0;
+                long long em = read_override_checked(argv[2], "observed_exposure_max_ns");
                 if (se && em > 0) { se((int64_t)em, out, sizeof out); emit(out); }
             }
             {   /* a pause before each capture (device profile; absent: none) */
                 typedef int (*set_delay_fn)(int);
                 set_delay_fn sd = (set_delay_fn)a_dlsym(bridge, "indraw_set_capture_delay");
-                long long cd = ov_ok ? read_override_checked(argv[2], "capture_delay_ms") : 0;
+                long long cd = read_override_checked(argv[2], "capture_delay_ms");
                 if (sd && cd > 0) {
                     char m[64];
                     sd((int)cd);
@@ -2619,10 +2597,10 @@ int main(int argc, char **argv)
             {
                 indraw_set_aids_override_fn setaids =
                     (indraw_set_aids_override_fn)a_dlsym(bridge, "indraw_set_aids_override");
-                long long pe = ov_ok ? read_override_checked(argv[2], "peak_edge") : 0;
-                long long zj = ov_ok ? read_override_checked(argv[2], "zebra_jpeg") : 0;
-                long long zr = ov_ok ? read_override_checked(argv[2], "zebra_raw") : 0;
-                long long pw = ov_ok ? read_override_checked(argv[2], "peak_width") : 0;
+                long long pe = read_override_checked(argv[2], "peak_edge");
+                long long zj = read_override_checked(argv[2], "zebra_jpeg");
+                long long zr = read_override_checked(argv[2], "zebra_raw");
+                long long pw = read_override_checked(argv[2], "peak_width");
                 if (setaids && (pe > 0 || zj > 0 || zr > 0 || pw > 0)) {
                     setaids((int64_t)pe, (int64_t)zj, (int64_t)zr, (int64_t)pw, out, sizeof out);
                     emit(out);
@@ -2667,7 +2645,7 @@ int main(int argc, char **argv)
             }
             /* Vendor (chipset) request keys the device profile asks for. */
             g_bridge_for_vendor = bridge;
-            if (ov_ok) apply_vendor_requests((indraw_vendor_set_fn)a_dlsym(bridge, "indraw_vendor_set"), argv[2], out);
+            apply_vendor_requests((indraw_vendor_set_fn)a_dlsym(bridge, "indraw_vendor_set"), argv[2], out);
             /* Focus calibration table (maps real metres -> HAL diopters). */
             {
                 indraw_set_focus_cal_fn setcal =
@@ -2682,7 +2660,7 @@ int main(int argc, char **argv)
                      * left out and the shipped table is used alone, rather
                      * than no table at all; the log says so, with the reason. */
                     if (setcal(real_d, hal_d, ncal, out, sizeof out) != 0) {
-                        int nship = g_ov_shipped[0] ? read_focus_calibration_file(g_ov_shipped, argv[2], real_d, hal_d, 16) : 0;
+                        int nship = read_focus_calibration_text(ov_source(1), argv[2], real_d, hal_d, 16);
                         emit(out);                                   /* the refusal, as the engine words it */
                         log_line("# ", "focus: the calibration in override-hal.json / focus-calibration.json is not usable (see the line above); "
                                        "it is left out. Run the calibration again, or delete focus-calibration.json");

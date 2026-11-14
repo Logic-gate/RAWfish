@@ -15,6 +15,11 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The command line reads the device profile and the user's
+  override-hal.json once per start (each key read both files again, some
+  twenty times), with one way of finding a camera's block for every key,
+  the focus calibration included. A broken override-hal.json is now also
+  left out of the focus calibration, as it already was for every other key.
 - A lighter viewfinder in the engine: each frame's RGB is converted into
   one reused buffer (it was a 3.7 MB allocation and release per frame, 30
   times a second); the white balance's temperature is computed only for the
