@@ -6,7 +6,7 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.3.8)
+## Known issues (as of 0.3.9)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
@@ -14,7 +14,18 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- A version number of its own for the publication: 0.3.0 to 0.3.8 were
+  test builds, never published; their changes, listed below, all reach
+  users with this one. Nothing else changes (version, the "ui" badge
+  208, this file). As at every new version, the app's first start sets
+  the earlier configuration and device-profile files aside
+  (~/.config/com.rawfish/rawfish-ir/backup-...).
+- This file: the 0.3.8 heading now gives all its patches (0352–0429),
+  and a paragraph about the "aestate" log line, left after an unrelated
+  entry, is dropped (the automatic aestate was removed in 0.3.8).
+
+## 0.3.8 (beta, test builds only) — vibrations; the release waits for a focus search; 50 MP processed at its scale; the 18 mm's focus; the RAW zebra (patches 0352–0429)
 - The RAW zebra no longer flickers: it reads the viewfinder's smoothed
   luma (a pixel's own noise crossed the level frame after frame), its
   levels and the measured shares are eased over frames and measures (an
@@ -438,9 +449,6 @@ repository). Newest first.
   it, at each change, and in our JPG's report the crop asked for the
   photo and the one the camera used (asked_crop, hal_crop), to tell a
   photo not zoomed as the viewfinder was.
-  The same error changed the automatic exposure after a mere focus touch.
-  The log gives the camera's exposure before the sun (the touch's reply)
-  and 2.5 s after its removal (aestate), to check it.
 
 ## 0.3.7 (beta) — snap from our own image: TYPE never restarts (patch 0351)
 - **snap is now our own light photo**, no longer the camera's JPEG: the
