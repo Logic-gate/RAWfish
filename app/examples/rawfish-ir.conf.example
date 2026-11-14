@@ -151,10 +151,10 @@ snapSize=
 halJpegNoise=off
 ; The HAL JPEG's sharpening.                    values: default, off, fast, hq            default hq
 halJpegSharpen=hq
-; The viewfinder's noise reduction (the HAL's).  values: default, off, fast, hq, minimal   default fast
-viewfinderNoise=fast
-; The viewfinder's sharpening (the HAL's).      values: default, off, fast, hq            default off
-viewfinderSharpen=off
+; The viewfinder's noise reduction (the HAL's).  values: default, off, fast, hq, minimal   default hq
+viewfinderNoise=hq
+; The viewfinder's sharpening (the HAL's).      values: default, off, fast, hq            default hq
+viewfinderSharpen=hq
 ; Σ stacks: 1 = the stack's own frames; 2 or 4 = that many times more frames,
 ; divided out (less noise, 2x or 4x the time).  values: 1, 2, 4         default 1
 stackDenoise=1

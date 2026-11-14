@@ -83,10 +83,11 @@ Item {
     property int noiseIndex: 1
     property int edgeIndex: 1
     // Preview processing, separate: for judging framing, focus and exposure.
-    // Default: fast noise reduction, no sharpening (a sharpened noisy preview
-    // turns into a maze at high ISO; focus is judged with the peaking).
-    property int previewNoiseIndex: 2
-    property int previewEdgeIndex: 1
+    // Default (0.3.8): the camera's high-quality noise reduction and
+    // sharpening. Until then fast noise reduction and no sharpening, chosen
+    // when a sharpened noisy preview turned into a maze at high ISO.
+    property int previewNoiseIndex: 3      /* hq_noise (rawfish-ir.conf viewfinderNoise) */
+    property int previewEdgeIndex: 3       /* hq_edge (rawfish-ir.conf viewfinderSharpen) */
     // The mode at start (Settings page): "last" = as left, else "simple" or "advanced".
     property string startMode: "last"
     // Bracketing: "off", "0" (three shots in a row at the same exposure, for a
@@ -248,8 +249,8 @@ Item {
         zebraJpegMode = pick("zebraJpegMode", "luma", ["luma", "channel"])
         noiseIndex = Math.max(0, noiseModes.indexOf(pick("halJpegNoise", "off", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
-        previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "fast", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
-        previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "off", ["default", "off", "fast", "hq"]) + "_edge"))
+        previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "hq", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
+        previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         bracket = pick("bracket", "off", ["off", "0", "1", "2", "3"])
         yuvFrames = pick("jpgFrames", "1", ["1", "2", "4"]) * 1
         yuvColour = num("jpgNoiseColourFilter", 2, 0, 5)

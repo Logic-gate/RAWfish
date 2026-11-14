@@ -99,6 +99,11 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- The viewfinder's default processing is the camera's high-quality noise
+  reduction and sharpening (rawfish-ir.conf viewfinderNoise=hq,
+  viewfinderSharpen=hq; they were fast and off). Photos are not concerned
+  (their own keys). A rawfish-ir.conf already on the phone keeps the
+  values written in it: change them there, or reset the file.
 - `check-host.sh` checks the QML: its syntax with Qt 5's qmllint when
   installed, and, always, no JavaScript newer than the phone's Qt 5.6
   (`let`, `const`, `=>`, template strings pass on a PC and fail on the

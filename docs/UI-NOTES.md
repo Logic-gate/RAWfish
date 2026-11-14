@@ -412,8 +412,9 @@ circle's tones sit.
 
 The photo's noise reduction and sharpening travel with each JPEG / burst
 command (the Noise and Sharpen columns); the `preview` command sets the
-viewfinder's only (Vf noise / Vf sharpen, default fast noise reduction and
-no sharpening). Earlier one command set both, and a photo choice (no noise
+viewfinder's only (rawfish-ir.conf viewfinderNoise / viewfinderSharpen;
+default since 0.3.8 the high-quality noise reduction and sharpening, before
+it fast noise reduction and no sharpening). Earlier one command set both, and a photo choice (no noise
 reduction, sharpening on) turned a high-ISO preview into a maze of sharpened
 noise.
 
