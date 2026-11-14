@@ -17,9 +17,11 @@ repository). Newest first.
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
 - The RAW zebra no longer flickers: it reads the viewfinder's smoothed
   luma (a pixel's own noise crossed the level frame after frame), its
-  levels and the measured shares are eased over frames and measures (a
-  new scene followed in about a quarter of a second), and a striped pixel
-  stays striped until its luma (0-255) falls 4 below the level. On noisy
+  levels and the measured shares are eased over frames and measures (an
+  exposure change followed within about a tenth of a second of its
+  measure), and a striped pixel stays striped until its luma (0-255) falls
+  4 below the level. The smoothed luminance is the Rec.601 luma: the green
+  alone met white over wide areas and the light stripes vanished. On noisy
   test frames: 1.4 % of the striped pixels change from one frame to the
   next, against 35 %.
 - The gallery shows a bracket in the order it was shot: captures are

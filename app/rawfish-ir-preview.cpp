@@ -969,10 +969,11 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         /* zclip: the share (%) of what is shown at the RAW zebra level, for
          * the RAW zebra (zebraRawShare); an engine without it leaves -1 */
         /* zlost: the part of it with two channels or more (striped fully).
-         * Both eased over the measures (5 a second): two thirds of the way to
-         * each new one, about a quarter of a second to follow a new scene --
-         * each measure moved the stripes at once, in steps. */
-        auto ease = [](qreal kept, qreal now) { return now < 0 || kept < 0 ? now : kept + (now - kept) * 2 / 3; };
+         * Both eased over the measures (5 a second): eight ninths of the way
+         * to each new one, an exposure change followed within about a tenth
+         * of a second of its measure -- each measure moved the stripes at
+         * once, in steps. */
+        auto ease = [](qreal kept, qreal now) { return now < 0 || kept < 0 ? now : kept + (now - kept) * 8 / 9; };
         m_rawClipShare = ease(m_rawClipShare, f.contains("zclip") ? qBound<qreal>(0, f.value("zclip").toDouble() / 100.0, 1) : -1);
         m_rawLostShare = ease(m_rawLostShare, f.contains("zlost") ? qBound<qreal>(0, f.value("zlost").toDouble() / 100.0, 1) : -1);
         m_meterMean = f.value("mean").toDouble();
@@ -1039,11 +1040,32 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayStat
      * part. Pixels tied at the level are all striped (a viewfinder white
      * at 255 cannot be told apart). A share under 1/10000: nothing. The
      * level of lostShare the same way: from it up, the stripes are full. */
-    /* The RAW zebra reads the smoothed luma (the 2x2 box above, also the
-     * peaking's): a pixel's own noise no longer crosses the level frame
-     * after frame. Its levels are eased from frame to frame, and a pixel
-     * striped stays so down to RAW_HYST levels below (OverlayState). */
+    /* The RAW zebra reads a smoothed luminance: the Rec.601 luma in a 2x2
+     * box, so that a pixel's own noise no longer crosses the level frame
+     * after frame. (Not the peaking's green alone: the green, the
+     * strongest channel, reaches 255 over wide areas, the two levels then
+     * met there and the light stripes vanished.) Its levels are eased from
+     * frame to frame, and a pixel striped stays so down to RAW_HYST levels
+     * below (OverlayState). */
     const bool shareMode = prm.zebra && prm.share >= 0;
+    QVector<uchar> zl;
+    if (shareMode) {
+        QVector<uchar> y601(w * h);
+        for (int y = 0; y < h; ++y) {
+            const uchar *px = frame.constScanLine(y);
+            uchar *o = y601.data() + y * w;
+            for (int x = 0; x < w; ++x) o[x] = uchar((77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8);
+        }
+        zl.resize(w * h);
+        for (int y = 0; y < h; ++y) {
+            const uchar *r0 = y601.constData() + y * w, *r1 = y601.constData() + (y < h - 1 ? y + 1 : y) * w;
+            uchar *o = zl.data() + y * w;
+            for (int x = 0; x < w; ++x) {
+                const int x1 = x < w - 1 ? x + 1 : x;
+                o[x] = uchar((r0[x] + r0[x1] + r1[x] + r1[x1] + 2) >> 2);
+            }
+        }
+    }
     const int RAW_HYST = 4;
     int level = prm.level, lostLevel = -1;            /* -1: every stripe full */
     bool zLuma = prm.zebraLuma;
@@ -1057,7 +1079,7 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayStat
         long cnt[256] = { 0 }, total = 0;
         zLuma = true;
         for (int y = r.top(); y <= r.bottom(); y += 2) {
-            const uchar *lr = luma.constData() + y * w;
+            const uchar *lr = zl.constData() + y * w;
             for (int x = r.left(); x <= r.right(); x += 2) { cnt[lr[x]]++; total++; }
         }
         /* the luminance above which lie `share` of the pixels (256: none) */
@@ -1071,11 +1093,11 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayStat
         level = levelFor(prm.share);
         if (prm.lostShare >= 0) lostLevel = levelFor(qMin(prm.lostShare, prm.share));
         if (st) {
-            /* eased: half way to the new level each frame (about 0.1 s at
-             * 20-30 frames a second); "none" (256) at once */
+            /* eased: three quarters of the way to the new level each frame
+             * (a few frames at 20-30 a second); "none" (256) at once */
             auto ease = [](double &kept, int now) {
                 if (now > 255 || now < 0 || kept < 0) kept = now;
-                else kept += 0.5 * (now - kept);
+                else kept += 0.75 * (now - kept);
                 return now > 255 || now < 0 ? now : int(kept + 0.5);
             };
             level = ease(st->level, level);
@@ -1099,7 +1121,7 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayStat
             if (shareMode) {
                 /* the RAW zebra: 0 none, 1 light, 2 full -- a pixel keeps
                  * its stripes down to RAW_HYST below the level */
-                const int lv = luma[y * w + x], was = zmask ? zmask[y * w + x] : 0;
+                const int lv = zl[y * w + x], was = zmask ? zmask[y * w + x] : 0;
                 int z = 0;
                 if (lv >= level || (was && level <= 255 && lv >= level - RAW_HYST)) {
                     z = 1;
