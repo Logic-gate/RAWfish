@@ -29,3 +29,5 @@ documentation.list
 # compiled translations (made by the build)
 app/*.qm
 app/translations/*.qm
+app/rpm/*.release-orig
+rpm/*.release-orig

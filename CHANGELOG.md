@@ -15,6 +15,10 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- Numbered builds: the build scripts set each RPM's Release to the last
+  patch applied (`0.3.8-424.beta`), so every build has a file name of its
+  own and installs as an update (scripts/with-build-release.sh; the spec is
+  put back after the build).
 - The focus square becomes a circle around the same zone, showing the
   point magnified twice (the viewfinder's frame and its aids, peaking
   included), drawn by the viewfinder item as a textured disc. It stays

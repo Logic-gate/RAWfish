@@ -105,6 +105,13 @@ What the script does, if you prefer the pieces:
 | engine RPM | `./scripts/build-engine-rpm.sh` (runs the step above too) | `RPMS/rawfish-ir-cli-*.rpm` |
 | app RPM | `cd app && sfdk build` | `app/RPMS/rawfish-ir-gui-*.rpm` |
 
+The scripts number each build's Release with the last patch applied (the
+newest commit whose subject starts with four digits: `0424-...` gives
+`0.3.8-424.beta`), so that the RPMs of every build can stay in one folder
+and each installs as an update of the one before
+(`scripts/with-build-release.sh`; `BUILD_NO=<n>` to choose the number).
+A plain `sfdk build` keeps the spec's own Release.
+
 A quick sanity check that needs no SDK at all (syntax and types of the C
 code, with stubbed Android headers): `./scripts/check-host.sh`. With Qt 5's
 tools installed (`qttools5-dev-tools`, `qtdeclarative5-dev-tools` on

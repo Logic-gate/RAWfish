@@ -75,7 +75,8 @@ echo "== engine (library with the NDK, CLI + RPM with sfdk) =="
 if [ -n "$clean" ]; then rm -rf build/android sailfish/rawfish-ir-cli; rm -f RPMS/*."$arch".rpm; fi
 ./scripts/build-engine-rpm.sh
 echo "== app (sfdk) =="
-( cd app && "$sfdk" -c no-fix-version build $clean )      # the app's spec always builds from clean
+# (the Release numbered by the last patch, as the engine's: with-build-release.sh)
+( cd app && ../scripts/with-build-release.sh rpm/rawfish-ir-gui.spec "$sfdk" -c no-fix-version build $clean )      # the app's spec always builds from clean
 
 # The binaries must be of the target's architecture (a package built from a
 # stale binary of the other one cannot be installed). Checked with file(1),

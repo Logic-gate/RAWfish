@@ -4,7 +4,8 @@
 # of the repository, where rpm/rawfish-ir-cli.spec is).
 #   sfdk config target=<SailfishOS-x.y.z-aarch64 or -armv7hl>   # once
 #   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh
-# The RPM lands in RPMS/ at the top of the repository.
+# The RPM lands in RPMS/ at the top of the repository, its Release numbered
+# by the last patch applied (scripts/with-build-release.sh: 0.3.8-424.beta).
 set -eu
 cd "$(dirname -- "$0")/.."
 sfdk=${SFDK:-sfdk}
@@ -25,6 +26,6 @@ case "$target" in
 esac
 ./scripts/build-android.sh                 # build/android/librawfish-ir.so (prebuilt for the RPM)
 "$sfdk" build-init
-"$sfdk" -c no-fix-version build
+./scripts/with-build-release.sh rpm/rawfish-ir-cli.spec "$sfdk" -c no-fix-version build
 echo "rawfish-ir-cli $ver:"
 ls -1 RPMS/rawfish-ir-cli-*.rpm
