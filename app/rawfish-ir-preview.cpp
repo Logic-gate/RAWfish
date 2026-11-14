@@ -4,6 +4,9 @@
 #include "rawfish-ir-preview.h"
 
 #include <QSGSimpleTextureNode>
+#include <QSGGeometryNode>
+#include <QSGTextureMaterial>
+#include <cmath>
 #include <QQuickWindow>
 #include <QtEndian>
 #include <QDateTime>
@@ -1219,6 +1222,59 @@ QRect IndrawPreview::sourceRectIn(const QSize &imageSize) const
     return sourceRectF(imageSize, m_viewWindow, m_frameCrop).toAlignedRect();
 }
 
+void IndrawPreview::setBubbleCentre(const QPointF &p)
+{
+    if (m_bubbleCentre == p) return;
+    m_bubbleCentre = p;
+    emit bubbleChanged();
+    if (m_bubbleRadius > 0) update();
+}
+void IndrawPreview::setBubbleRadius(qreal r)
+{
+    r = qMax<qreal>(0, r);
+    if (qFuzzyCompare(m_bubbleRadius + 1, r + 1)) return;
+    m_bubbleRadius = r;
+    emit bubbleChanged();
+    update();
+}
+
+/* A disc of `texture` (a triangle fan): centred on `centre` with `radius`
+ * (item pixels), showing the texture around the image point `texCentre`
+ * (image pixels of a `texSize` image) at `pxPerImagePx` item pixels per
+ * image pixel. The material refers to the texture; its node owns it. */
+static QSGGeometryNode *discNode(QSGTexture *texture, const QSizeF &texSize, const QPointF &centre, qreal radius,
+                                 const QPointF &texCentre, qreal pxPerImagePx, bool linear)
+{
+    const int n = 64;                                      /* segments: smooth at any size shown */
+    QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), n + 2);
+    geo->setDrawingMode(GL_TRIANGLE_FAN);
+    QSGGeometry::TexturedPoint2D *v = geo->vertexDataAsTexturedPoint2D();
+    const QRectF sub = texture->normalizedTextureSubRect();  /* the texture may sit in an atlas */
+    const qreal tr = radius / pxPerImagePx;                 /* the radius in image pixels */
+    auto put = [&](int k, qreal dx, qreal dy) {
+        const qreal u = (texCentre.x() + dx * tr) / texSize.width(), w = (texCentre.y() + dy * tr) / texSize.height();
+        v[k].set(float(centre.x() + dx * radius), float(centre.y() + dy * radius),
+                 float(sub.x() + u * sub.width()), float(sub.y() + w * sub.height()));
+    };
+    put(0, 0, 0);
+    for (int k = 0; k <= n; ++k) {
+        const qreal a = 2 * M_PI * k / n;
+        put(k + 1, std::cos(a), std::sin(a));
+    }
+    QSGGeometryNode *node = new QSGGeometryNode;
+    node->setGeometry(geo);
+    node->setFlag(QSGNode::OwnsGeometry);
+    QSGTextureMaterial *mat = new QSGTextureMaterial;
+    mat->setTexture(texture);
+    mat->setFlag(QSGMaterial::Blending, texture->hasAlphaChannel());   /* the overlay is transparent, the frame not */
+    mat->setFiltering(linear ? QSGTexture::Linear : QSGTexture::Nearest);
+    mat->setHorizontalWrapMode(QSGTexture::ClampToEdge);
+    mat->setVerticalWrapMode(QSGTexture::ClampToEdge);
+    node->setMaterial(mat);
+    node->setFlag(QSGNode::OwnsMaterial);
+    return node;
+}
+
 QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     delete oldNode;                /* simplest correct approach: rebuild         */
@@ -1264,6 +1320,7 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     /* The aids overlay, if any, drawn over the frame with the same mapping
      * (its pixels are the frame's at half resolution). */
+    QSGTexture *ovTexShown = nullptr;                    /* for the magnifier below */
     if (!m_overlay.isNull()) {
         QSGTexture *ovTex = window()->createTextureFromImage(m_overlay);
         if (ovTex) {
@@ -1274,7 +1331,20 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             ov->setRect(drawRect);
             ov->setSourceRect(sourceRect);                /* same resolution as the frame */
             node->appendChildNode(ov);
+            ovTexShown = ovTex;
         }
+    }
+    /* The focus point's magnifier (bubbleRadius > 0): over everything, a disc
+     * of the frame -- and of the aids, peaking included -- around the point,
+     * at twice the scale it is shown at. The frame's own pixels: past the
+     * view (a loupe's edge) it shows what the frame holds there. */
+    if (m_bubbleRadius > 0) {
+        const qreal mag = 2.0;
+        const QPointF tc(sourceRect.x() + (m_bubbleCentre.x() - drawRect.x()) / scale,
+                         sourceRect.y() + (m_bubbleCentre.y() - drawRect.y()) / scale);
+        node->appendChildNode(discNode(texture, m_frame.size(), m_bubbleCentre, m_bubbleRadius, tc, scale * mag, true));
+        if (ovTexShown)                                    /* the aids, at the same scale */
+            node->appendChildNode(discNode(ovTexShown, m_overlay.size(), m_bubbleCentre, m_bubbleRadius, tc, scale * mag, false));
     }
     return node;
 }

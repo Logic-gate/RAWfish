@@ -184,6 +184,12 @@ class IndrawPreview : public QQuickItem
     /* The RAW zebra's share times this (rawfish-ir.conf zebraTweak: +30 %
      * = 0.7, a third less striped; -30 % = 1.3). */
     Q_PROPERTY(qreal zebraShareScale READ zebraShareScale WRITE setZebraShareScale NOTIFY aidsChanged)
+    /* The focus point's magnifier: a disc of bubbleRadius (item pixels, 0 =
+     * none) centred on bubbleCentre (item coordinates, the item's rotation
+     * undone: QML maps the point with mapFromItem), showing the frame and
+     * the aids around that point at twice the view's scale. */
+    Q_PROPERTY(QPointF bubbleCentre READ bubbleCentre WRITE setBubbleCentre NOTIFY bubbleChanged)
+    Q_PROPERTY(qreal bubbleRadius READ bubbleRadius WRITE setBubbleRadius NOTIFY bubbleChanged)
     Q_PROPERTY(int peakEdge READ peakEdge WRITE setPeakEdge NOTIFY aidsChanged)
     Q_PROPERTY(int peakWidth READ peakWidth WRITE setPeakWidth NOTIFY aidsChanged)
 
@@ -263,6 +269,10 @@ public:
     void setZebraLuma(bool on);
     bool zebraRawShare() const { return m_zebraRawShare; }
     void setZebraRawShare(bool on);
+    QPointF bubbleCentre() const { return m_bubbleCentre; }
+    void setBubbleCentre(const QPointF &p);
+    qreal bubbleRadius() const { return m_bubbleRadius; }
+    void setBubbleRadius(qreal r);
     qreal zebraShareScale() const { return m_zebraShareScale; }
     void setZebraShareScale(qreal s);
     void setZebraLevel(int level);
@@ -323,6 +333,7 @@ public:
     Q_INVOKABLE void installExamples();
 
 signals:
+    void bubbleChanged();
     void rawSessionChanged();
     void yuvFellBackChanged();
     void sessionStreamsChanged();
@@ -459,6 +470,8 @@ private:
     int m_zebraLevel = 250;
     bool m_zebraLuma = false;
     bool m_zebraRawShare = false;
+    QPointF m_bubbleCentre;
+    qreal m_bubbleRadius = 0;
     qreal m_rawClipShare = -1;     /* the RAW meter's zclip, 0..1; -1 not measured yet */
     qreal m_rawLostShare = -1;     /* its zlost (two channels or more), 0..1; -1 not given */
     qreal m_zebraShareScale = 1;

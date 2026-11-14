@@ -15,6 +15,10 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The focus square becomes a circle around the same zone, showing the
+  point magnified twice (the viewfinder's frame and its aids, peaking
+  included), drawn by the viewfinder item as a textured disc. It stays
+  while the point stands; a touch on it removes it.
 - One focus mode. Auto is the camera's continuous focus until a touch or a
   volume key takes it over -- from where the lens is, without a jump to the
   last manual distance (`fc mode manual here`): a touch searches there and

@@ -342,7 +342,7 @@ ApplicationWindow {
             readonly property int  circleAf: fcs.circle !== undefined ? fcs.circle : 0   // 1 searching, 4 sharp, 5 unsure, 6 failed, 7 sun
             // Manual focus: the last touch's search failed (5 locked but not
             // focused, 6 failed): the lens went back to the distance in force
-            // (the FOCUS button shows it), and the SQUARE is red until a search
+            // (the FOCUS button shows it), and the CIRCLE is red until a search
             // locks (4), a volume step sets a distance by hand, or the mode
             // changes.
             property bool focusUnlocked: false
@@ -1490,6 +1490,14 @@ ApplicationWindow {
                     histogramSource: page.imageType === "raw" ? "raw" : "vf"
                     rotation: page.viewRotation()
                     displayRotation: page.viewRotation()   // so fill fits the rotated frame
+                    // The focus point's 2x magnifier, inside the focus circle while
+                    // the point stands (not for a light-only reference, the sun);
+                    // the centre mapped into this item (its rotation undone).
+                    bubbleRadius: page.circleShown && meterCircle.visible && !meterCircle.sun ? meterCircle.innerRadius : 0
+                    bubbleCentre: {
+                        var p = mapFromItem(meterCircle.parent, meterCircle.x + meterCircle.width / 2, meterCircle.y + meterCircle.height / 2)
+                        return Qt.point(p.x, p.y)
+                    }
                     // Running whenever the app is in front: also under the
                     // gallery, so coming back is instant.
                     active: Qt.application.active
@@ -2031,7 +2039,9 @@ ApplicationWindow {
                     afState: page.circleAf
                     // The focus region on the screen: 15 % of the viewfinder's short
                     // side, as the engine sizes it on what is shown (in the loupe the
-                    // zone on the subject shrinks, the square on the screen does not).
+                    // zone on the subject shrinks, the marker on the screen does not).
+                    // The marker is the circle around that square, and inside it
+                    // the viewfinder shows the point at 2x (bubble*, below).
                     regionSide: 0.15 * Math.min(viewfinderZone.width, viewfinderZone.height)
                     // Red, and it stays so, after a manual search that did not lock
                     // (until a lock, a volume step or a mode change).
@@ -2043,7 +2053,7 @@ ApplicationWindow {
                     readonly property bool settled: afState === 2 || afState === 4 || afState === 5 || afState === 6
                     onSettledChanged: if (page.circleShown) opacity = settled ? 0.6 : 1.0
                     MouseArea { anchors.fill: parent; onClicked: page.clearTap() }
-                    // Manual focus: the distance found, under the square; nothing when
+                    // Manual focus: the distance found, under the circle; nothing when
                     // the search failed (5 locked but not focused, 6 failed): the lens
                     // is back at the distance in force, which the FOCUS button shows.
                     Label {

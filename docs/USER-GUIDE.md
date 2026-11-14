@@ -103,12 +103,14 @@ the volume keys take it.
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
 
-**The square** marks the focus point, at the exact size of the zone the
-camera focuses on (15 % of the viewfinder's short side). In the loupe the
-zone covers as much less of the subject as the loupe magnifies: use it to
-aim the focus, or the light (5 %), at a precise detail. Red: the search did
-not lock, the lens went back to the distance before. Touch a part of the subject that fills the square: what
-lies behind it inside the square counts too. It stays on screen -- it never
+**The circle** marks the focus point: it surrounds the square zone the
+camera focuses on (15 % of the viewfinder's short side), and shows inside
+it the point magnified twice (with the peaking, if on), to judge the
+focus. In the loupe the zone covers as much less of the subject as the
+loupe magnifies: use it to aim the focus, or the light (5 %), at a precise
+detail. Red: the search did not lock, the lens went back to the distance
+before. Touch a part of the subject that fills the zone: what lies behind
+it inside the zone counts too. It stays on screen -- it never
 disappears by itself: dotted while searching, solid when sharp, dashed when
 it could not focus. Remove it with a touch on it or by handing the focus
 back to auto.
