@@ -666,6 +666,7 @@ static struct {
     int pv_iso;                             /* manual ISO (with pv_exposure_ns)  */
     int ev_steps;                           /* AE compensation, in HAL steps     */
     long ae_results;                        /* preview results seen (for throttling) */
+    int ae_sent_ae, ae_sent_af;             /* the 3A states of the last "ae" line sent (-2: none yet) */
 
     /* Exposure meter: periodic RAW16 frames measured in place (never written),
      * so the UI can run its own AE loop on linear sensor data. */
@@ -874,8 +875,8 @@ static int write_sf2m(int fd, const char *text, int len)
 /* Events go to the controller's pipe from the CAMERA threads (preview
  * results, images, capture completions), under out_lock. The pipe's write
  * end is non-blocking (the controller sets it so): the reader thread may
- * be busy for a second or more (a focus command waiting for the lens) while
- * 'ae' lines (30/s) and 'vfmeter' lines (2.5 KB, 10/s) keep coming, and a
+ * be held up a while (an engine command it sent) while 'ae' lines (10/s,
+ * more on 3A changes) and 'vfmeter' lines (2.5 KB, 10/s) keep coming, and a
  * blocking write here would stall the preview and every writer behind
  * out_lock. When the pipe is full: a STATE line (ae, vfmeter, meter -- the
  * next one supersedes it) is dropped; a one-off EVENT (captured, written,
@@ -2021,7 +2022,7 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
                               ACaptureRequest *req, const ACameraMetadata *res)
 {
     ACameraMetadata_const_entry e;
-    int started = 0;
+    int started = 0, send_ae;
     (void)ctx; (void)s; (void)req;
     pthread_mutex_lock(&g.lock);
     if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_TRIGGER, &e) == ACAMERA_OK &&
@@ -2120,15 +2121,21 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
             colour_temperature(ge.data.f, &g.live_cct, &g.live_duv);
     }
     g.ae_results++;
+    /* Live exposure for the UI (SF2M "ae" line), every 3rd result (~10 Hz at
+     * 30 fps), and at once on any change of the AF or AE state: a focus
+     * search's lock or failure used to wait up to two frames (66 ms) for the
+     * next line, and a state that lasted one or two frames (the INACTIVE of
+     * a touch's CANCEL) could be missed by the controller. */
+    send_ae = g.ae_results % 3 == 0 || g.live_af != g.ae_sent_af || g.live_ae != g.ae_sent_ae;
+    if (send_ae) { g.ae_sent_af = g.live_af; g.ae_sent_ae = g.live_ae; }
     pthread_cond_broadcast(&g.cond);
     pthread_mutex_unlock(&g.lock);
 
-    /* Live exposure for the UI (SF2M "ae" line), every 3rd result (~10 Hz at
-     * 30 fps): the ISO/exposure the preview really used (the HAL's choice in
-     * auto, ours in manual), the 3A states and the lens position. Emitted
+    /* The line: the ISO/exposure the preview really used (the HAL's choice
+     * in auto, ours in manual), the 3A states and the lens position. Emitted
      * outside g.lock: emit_event takes out_lock, which the preview image
      * thread holds while writing a frame. */
-    if (g.ae_results % 3 == 0) {
+    if (send_ae) {
         char line[256];
         long long iso = -1, exp_ns = -1;
         int ae_mode = -1, ae_state = -1, af_state = -1, ev = 0;
@@ -3411,6 +3418,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Live exposure starts automatic; the meter thread exists but is off until
      * the UI asks for it (indraw_meter). */
     g.pv_exposure_ns = 0; g.pv_iso = 0; g.ev_steps = 0; g.ae_results = 0;
+    g.ae_sent_ae = g.ae_sent_af = -2;
     g.meter_on = 0; g.meter_stop = 0; g.meter_inflight = 0; g.capture_busy = 0;
     g.meter_interval_ms = 200;
     if (g.meter_request && !g.meter_thread_up) {

@@ -43,6 +43,12 @@ static struct {
      * when the capture is over: the last of each kind, in order. */
     char held_q[CTL_HELD_MAX][CTL_HELD_LINE];
     int held_n;
+    /* The display window last sent to the engine ("viewwin"), as sent:
+     * every view publish (a loupe move, a ref, the light point) re-sent it,
+     * and the engine re-set its meter zones each time. Forgotten at a caps
+     * line (a new session: the engine's own default again). */
+    double viewwin_sent[4];
+    int viewwin_known;
     int ui_paused, focus_paused; /* the two reasons to leave the exposure alone */
     ctl_caps_t caps;             /* the last caps, for the shoot decisions */
     ctl_log_fn log;              /* diagnostics to the log, or NULL           */
@@ -225,8 +231,14 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
     char line[200];
     (void)ctx;
     /* the engine's meters cover what is shown: tell it the display window */
-    snprintf(line, sizeof line, "viewwin %.5f %.5f %.5f %.5f", s->view.x, s->view.y, s->view.w, s->view.h);
-    held_cmd(line);
+    if (!c.viewwin_known || c.viewwin_sent[0] != s->view.x || c.viewwin_sent[1] != s->view.y ||
+        c.viewwin_sent[2] != s->view.w || c.viewwin_sent[3] != s->view.h) {   /* only a changed window */
+        c.viewwin_sent[0] = s->view.x; c.viewwin_sent[1] = s->view.y;
+        c.viewwin_sent[2] = s->view.w; c.viewwin_sent[3] = s->view.h;
+        c.viewwin_known = 1;
+        snprintf(line, sizeof line, "viewwin %.5f %.5f %.5f %.5f", s->view.x, s->view.y, s->view.w, s->view.h);
+        held_cmd(line);
+    }
     snprintf(line, sizeof line, "vwstate zoom=%.3f loupe=%.3f view=%.5f,%.5f,%.5f,%.5f ref=%d,%.5f,%.5f light=%d,%.5f,%.5f\n",
              s->zoom, s->loupe, s->view.x, s->view.y, s->view.w, s->view.h, s->has_ref, s->ref_u, s->ref_v,
              s->has_light, s->light_u, s->light_v);
@@ -323,6 +335,7 @@ static void on_event(const char *line)
             if (caps.iso_min <= 0 || caps.iso_max < caps.iso_min)
                 note("caps without a valid ISO range (iso_min=%d iso_max=%d): exposure control off", caps.iso_min, caps.iso_max);
             ctl_exp_set_caps(c.exp, &caps);
+            c.viewwin_known = 0;                        /* a new session: the window sent again */
             if (c.view) { ctl_view_set_caps(c.view, fieldd(line, "zoom_max", 1), (int)fieldd(line, "crop_free", 0)); ctl_view_restart(c.view); }
             if (c.foc) {
                 /* the closest distance this camera reaches (min_focus_real,
@@ -542,14 +555,14 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
     /* The engine writes events from its camera threads: the write end is
      * non-blocking (a full pipe drops a state line rather than stalling the
      * preview, see emit_event), and the pipe is enlarged to 1 MB where Linux
-     * allows (F_SETPIPE_SZ; best effort) so that a reader busy for a second
-     * -- a focus command waiting for the lens -- does not fill it. */
+     * allows (F_SETPIPE_SZ; best effort) so that a reader held up a while
+     * (a long engine command on the reader's own line) does not fill it. */
     fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL) | O_NONBLOCK);
 #ifdef F_SETPIPE_SZ
     fcntl(fds[1], F_SETPIPE_SZ, 1 << 20);
 #endif
     c.rd = fds[0]; c.wr = fds[1];
-    c.busy = 0; c.deferred = 0; c.held_n = 0;
+    c.busy = 0; c.deferred = 0; c.held_n = 0; c.viewwin_known = 0;
     c.emit = emit; c.set_event_fd = set_event_fd; c.engine_line = engine_line;
     c.exp = ctl_exp_new(exp_cmd, exp_state, NULL);
     c.foc = ctl_focus_new(foc_cmd, foc_state, foc_pause, foc_spot, NULL);

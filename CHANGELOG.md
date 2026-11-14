@@ -15,6 +15,15 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- Faster reactions in the controller. A manual distance (a mode change,
+  the return after a failed search, a new session) no longer waits for the
+  lens on the controller's thread: up to 1.2 s (about 400 ms seen) during
+  which it read no focus state and no command. A photo still waits for its
+  own lens. The engine's `ae` line now also comes at once on any change of
+  the AF or AE state (a search's lock no longer waits up to two frames,
+  and a state lasting one frame is no longer missed). The display window
+  (`viewwin`) is sent to the engine only when it changes, not at every
+  loupe move.
 - The 18 mm's touch experiments are removed from every layer (about 250
   lines): the "continuous then lock" touch (`tap X Y afc`, `aflock`, the
   caps' `touch_af`, the profile key `touch_focus_continuous`, the test key

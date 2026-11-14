@@ -68,17 +68,18 @@ static void set_paused(ctl_focus_t *f, int p) { if (f->pause) f->pause(f->ctx, p
  * the JP2's cameras 0 and 2 declare a lens that goes to 20 (HAL units): the
  * closest half of their range could not be reached by hand. */
 static double snap(const ctl_focus_t *f, double d) { return fmax(0.0, fmin(f->max_d, round(d / STEP_D) * STEP_D)); }
-/* wait = 0 for live stepping: the engine returns without waiting for the
- * lens, so steps never pile up; elsewhere (a mode change, the distance a
- * search found) the lens is waited for, as a photo would. */
-static void send_manual_opt(ctl_focus_t *f, int wait)
+/* The manual distance, to the lens. Never waited for ("nowait"): the
+ * engine's wait for the lens (up to 1.2 s, about 400 ms seen) ran on the
+ * controller's reader thread, which then read no AF state, no meter and no
+ * command meanwhile -- after a search that failed, a mode change, each
+ * volume step. A photo waits for its own lens (its focus= option). */
+static void send_manual(ctl_focus_t *f)
 {
     char c[48];
-    if (f->diopters <= 0) snprintf(c, sizeof c, "focus inf%s", wait ? "" : " nowait");
-    else snprintf(c, sizeof c, "focus %.3fm%s", 1.0 / f->diopters, wait ? "" : " nowait");
+    if (f->diopters <= 0) snprintf(c, sizeof c, "focus inf nowait");
+    else snprintf(c, sizeof c, "focus %.3fm nowait", 1.0 / f->diopters);
     send(f, c);
 }
-static void send_manual(ctl_focus_t *f) { send_manual_opt(f, 1); }
 /* The mode, to the live preview (no photo). */
 static void apply_mode(ctl_focus_t *f)
 {
@@ -245,7 +246,7 @@ void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farthe
      * closest stop in the log of 14 Nov). A lens held where a search left
      * it is set to the distance even when the number is the same. */
     if (!was_held && f->diopters == before) return;
-    send_manual_opt(f, 0);                                       /* the lens, without waiting */
+    send_manual(f);
 }
 void ctl_focus_set_step_pct(ctl_focus_t *f, double pct) { f->step_pct = pct > 0 && pct < 50 ? pct : 0; }
 void ctl_focus_set_max(ctl_focus_t *f, double max_diopters)

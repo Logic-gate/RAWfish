@@ -110,6 +110,17 @@ int main(void)
     CHECK(a >= 0 && find(a + 1, "loupe ") < 0, "loupe: the pending loupe (x3) sent after the capture, once");
     ctl_stop();
 
+    /* 3. The display window goes to the engine when it changes, not at each
+     *    view publish (0.3.8: every loupe move and state re-sent it). */
+    if (!start()) { puts("controller busy: start failed"); return 1; }
+    a = find(0, "viewwin ");
+    cmd("vw state");
+    cmd("vw state");
+    CHECK(a >= 0 && find(a + 1, "viewwin ") < 0, "viewwin: sent once at the caps, not again for an unchanged window");
+    cmd("vw zoom 2");
+    CHECK(find(a + 1, "viewwin ") >= 0, "viewwin: sent again when the window changes (zoom x2)");
+    ctl_stop();
+
     printf(fails ? "controller busy: FAILED (%d)\n" : "controller busy: OK (held focus and view commands sent after the capture)\n", fails);
     return fails ? 1 : 0;
 }
