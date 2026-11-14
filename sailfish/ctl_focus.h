@@ -76,10 +76,6 @@ void ctl_focus_set_max(ctl_focus_t *f, double max_diopters);
 /* Volume steps above about 1 D as a share of the value (device profile
  * focus_step_percent; 0 = the constant 0.05 D). */
 void ctl_focus_set_step_pct(ctl_focus_t *f, double pct);
-/* The engine's focus touch (its caps' touch_af): 2 = "continuous then
- * lock" -- a manual focus touch searches with the continuous AF ("tap X Y
- * afc") and locks once it settled ("aflock"); else the usual touch. */
-void ctl_focus_set_touch(ctl_focus_t *f, int mode);
 /* The caps' touch_focus: 0 = a camera our searches cannot focus (device
  * profile touch_focus_off; the JP2's 18 mm). No search is ever started on
  * it -- not a touch, not the FOCUS button entering manual: its automatic

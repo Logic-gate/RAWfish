@@ -115,7 +115,7 @@ static void exp_cmd(void *ctx, const char *engine_command)
     if (c.engine_line) c.engine_line(engine_command);
 }
 
-/* The command's kind: its first word, and for "tap" its last (af, afc,
+/* The command's kind: its first word, and for "tap" its last (af,
  * afclear, ae, aeclear: a focus search and a light point are not the same
  * order). A later command of a kind replaces the earlier one. */
 static size_t kind_len(const char *cmd, const char **tail)
@@ -135,9 +135,8 @@ static int same_kind(const char *a, const char *b)
 /* A focus or view command while a capture runs. Until 0.3.8 it went the
  * exposure's way, dropped and "re-applied after" -- but only the exposure
  * was re-applied: the focus's "focus hold" (a touch's search ending during
- * the photo), its "aflock" (the 18 mm's continuous-then-lock touch), its
- * return to the manual distance, a throttled loupe were lost, and the
- * controller went on as if the engine had them (review, 14 Nov 2026). They
+ * the photo), its return to the manual distance, a throttled loupe were
+ * lost, and the controller went on as if the engine had them (review, 14 Nov 2026). They
  * are decisions taken on the HAL's own reports, not re-derivable from a
  * state, so they are held and sent once the capture is over: the last of
  * each kind, in the order decided. */
@@ -199,7 +198,7 @@ static void foc_cmd(void *ctx, const char *engine_command)
     /* a focus search starts ("tap X Y af"; not "afclear"): the trace begins */
     size_t n = strlen(engine_command);
     if (c.detail && !strncmp(engine_command, "tap ", 4) &&
-        ((n > 3 && !strcmp(engine_command + n - 3, " af")) || (n > 4 && !strcmp(engine_command + n - 4, " afc")))) {
+        n > 3 && !strcmp(engine_command + n - 3, " af")) {
         c.trace_t0 = now_ms(); c.trace_until = c.trace_t0 + 4000.0;
         c.trace_af = -1; c.trace_lens = -1;
         if (c.log) c.log("af trace: search started");
@@ -329,7 +328,6 @@ static void on_event(const char *line)
                 /* the closest distance this camera reaches (min_focus_real,
                  * else its HAL value, else the old 10 D) */
                 ctl_focus_set_max(c.foc, fieldd(line, "min_focus_real", fieldd(line, "min_focus", 10.0)));
-                ctl_focus_set_touch(c.foc, (int)fieldd(line, "touch_af", 0));   /* the engine's focus touch */
                 ctl_focus_set_search(c.foc, (int)fieldd(line, "touch_focus", 1) != 0);   /* 0: no search at all (the 18 mm) */
                 ctl_focus_set_step_pct(c.foc, fieldd(line, "focus_step_pct", 0));   /* the profile's step (the 18 mm) */
                 ctl_focus_restart(c.foc);                /* a (re)started engine: the mode again */

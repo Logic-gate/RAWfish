@@ -116,39 +116,13 @@ int main(void)
     ctl_focus_set_max(f, 12.0);                                  /* another camera, closer limit */
     ctl_focus_step(f, 1);                                        /* one step farther (> 0 = farther) from the clamped 12 */
     CHECK(fabs(st.diopters - 11.95) < 1e-9, "another camera's closer limit: the distance clamped to it, then stepped from there");
-    /* 4c. "Continuous then lock" (the 18 mm, 0.3.8): a manual touch searches
-     *     with the continuous AF, locks once it settled, holds on 4. */
+    /* the state the next rules start from: manual, the closest at 20 D, the
+     * lens held at a touch's lock (1.0 D) */
     ctl_focus_set_max(f, 20.0);
-    ctl_focus_set_touch(f, 2);
     ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
-    ctl_focus_ref(f, 0.3, 0.6, t += 1000);
-    CHECK(!strcmp(last(), "tap 0.3000 0.6000 afc"), "continuous touch: 'tap afc' (no AUTO search)");
-    ctl_focus_live(f, 0, -1, t += 50);                           /* the mode taking effect */
-    ctl_focus_live(f, 1, -1, t += 100);                          /* the continuous search */
-    ctl_focus_live(f, 1, -1, t += 100);
-    CHECK(count("aflock") == 0 && st.searching, "continuous touch: no lock while it scans");
-    ctl_focus_live(f, 2, 1.8, t += 100);                         /* settled, focused */
-    CHECK(!strcmp(last(), "aflock") && st.searching, "continuous touch: settled -> 'aflock'");
-    ctl_focus_live(f, 2, 1.8, t += 50);                          /* the lock not in effect yet */
-    ctl_focus_live(f, 6, 1.8, t += 50);                          /* (a stray unfocused state) */
-    CHECK(st.searching && !strcmp(last(), "aflock"), "continuous touch: 2 / 6 before the lock is no outcome (nothing sent)");
-    ctl_focus_live(f, 4, 1.8, t += 50);
-    CHECK(!strcmp(last(), "focus hold") && st.circle == CTL_CIRCLE_SHARP && !st.searching && fabs(st.diopters - 1.8) < 1e-9,
-          "continuous touch: locked focused -> held at the lens' 1.8 D");
-    /* a search that never settles: locked at 1.5 s anyway; a 5 goes back */
     ctl_focus_ref(f, 0.5, 0.5, t += 1000);
-    ctl_focus_live(f, 1, -1, t += 700);
-    CHECK(!strcmp(last(), "tap 0.5000 0.5000 afc"), "continuous touch: still scanning at 0.7 s, no lock");
-    ctl_focus_live(f, 1, -1, t += 900);
-    CHECK(!strcmp(last(), "aflock"), "continuous touch: locked at 1.5 s whatever its state");
-    ctl_focus_live(f, 5, 0.2, t += 100);
-    CHECK(!st.searching && st.circle == CTL_CIRCLE_UNSURE && strncmp(last(), "focus ", 6) == 0 && strcmp(last(), "focus hold") != 0,
-          "continuous touch: locked unfocused -> back to the distance in force");
-    ctl_focus_set_touch(f, 0);
-    ctl_focus_ref(f, 0.5, 0.5, t += 1000);
-    CHECK(!strcmp(last(), "tap 0.5000 0.5000 af"), "the usual touch again with touch_af 0");
     ctl_focus_live(f, 0, -1, t += 50); ctl_focus_live(f, 3, -1, t += 100); ctl_focus_live(f, 4, 1.0, t += 100);
-    /* 4d. A camera our searches cannot focus (caps touch_focus=0, the 18 mm):
+    /* 4c. A camera our searches cannot focus (caps touch_focus=0, the 18 mm):
      *     no search at all, whoever asks (a touch, the FOCUS button entering
      *     manual), nothing changed; the light point still meters. */
     {
@@ -162,7 +136,7 @@ int main(void)
         ctl_focus_light_clear(f);
         ctl_focus_set_search(f, 1);
     }
-    /* 4e. The FOCUS button entering manual (fc mode manual search): AF off
+    /* 4d. The FOCUS button entering manual (fc mode manual search): AF off
      *     where the lens is, then the search -- no trip to the manual
      *     distance first; a camera without searches gets the distance. */
     {
@@ -186,7 +160,7 @@ int main(void)
         ctl_focus_set_search(f, 1);
         ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
     }
-    /* 4f. A touch while a search still runs (log of 14 Nov, 08:35:17): the
+    /* 4e. A touch while a search still runs (log of 14 Nov, 08:35:17): the
      *     previous search's scan and lock, reported before the CANCEL shows
      *     (state 0), are not this touch's outcome; after the INACTIVE, the
      *     new scan's lock is. A HAL that never shows INACTIVE: the old rule
@@ -222,7 +196,6 @@ int main(void)
     /* 6. a camera with focus_step_percent 8 (the 18 mm): the near range in
      *    about 45 presses, not 180 (last: it leaves the lens at 9 D) */
     ctl_focus_set_step_pct(f, 8);
-    ctl_focus_set_touch(f, 0);
     ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
     {   /* the near range: 0 to 9 D in about 45 presses, not 180 (the state
          * put back afterwards: the tests below start from it) */

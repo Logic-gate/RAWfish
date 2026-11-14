@@ -427,7 +427,6 @@ static const ov_field_t k_ov_fields[] = {
     { "zebra_jpeg",              1, 255 },
     { "zebra_raw",               1, 1000 },
     { "capture_delay_ms",        1, 3000 },                     /* a pause before each capture */
-    { "touch_focus_continuous",  0, 1 },                        /* 1: a focus touch searches with the continuous AF, then locks */
     { "touch_focus_off",         0, 1 },                        /* 1: no focus by touch on this camera */
     { "focus_max_diopters",      1, 100 },                      /* the lens' real closest stop (HAL units), below the declared one */
     { "focus_step_percent",      1, 49 },                       /* manual steps above 1 D as a % of the value */
@@ -1181,7 +1180,7 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv] [aftouch=prepared|continuous]\n"
+            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; jpeg+largest: and, where no stream is a multiple of it, the largest stream averaged down; streams=: only these beside the viewfinder)\n"
             "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
@@ -1398,11 +1397,10 @@ static int cmd_tap(indraw_tap_fn tf, char **save, char *out)
     while ((tok = strtok_r(NULL, " \t\r\n", save))) {
         if (!strcmp(tok, "ae")) do_ae = 1;
         else if (!strcmp(tok, "af")) do_af = 1;
-        else if (!strcmp(tok, "afc")) do_af = 3;   /* the continuous search, locked later by "aflock" */
         else if (!strcmp(tok, "clear")) { do_ae = 2; do_af = 2; }
         else if (!strcmp(tok, "aeclear")) do_ae = 2;
         else if (!strcmp(tok, "afclear")) do_af = 2;
-        else { emit("{\"ok\":false,\"error\":\"tap: unknown option (ae|af|afc|clear|aeclear|afclear)\"}"); return 1; }
+        else { emit("{\"ok\":false,\"error\":\"tap: unknown option (ae|af|clear|aeclear|afclear)\"}"); return 1; }
     }
     if (do_ae < 0 && do_af < 0) { do_ae = 1; do_af = 1; }   /* default: both       */
     if (do_ae < 0) do_ae = 0;
@@ -2165,8 +2163,6 @@ static indraw_focus_fn g_focusfn;
 static indraw_zoom_fn g_zf;
 static indraw_loupe_fn g_lf;
 static indraw_view_window_fn g_vwf;
-typedef int (*indraw_af_lock_fn)(char *out, size_t n);
-static indraw_af_lock_fn g_aflock;              /* "aflock": the controller's lock of a continuous search */
 /* The controller's diagnostics (ctl_set_log): a "# " line in the log. */
 static void controller_log(const char *text) { log_line("# ", text); }
 
@@ -2187,10 +2183,6 @@ static void controller_engine_line(const char *text)
     else if (!strcmp(cmd, "zoom")) cmd_zoom(g_zf, &save, out);
     else if (!strcmp(cmd, "loupe")) cmd_loupe(g_lf, &save, out);
     else if (!strcmp(cmd, "viewwin")) cmd_viewwin(g_vwf, &save, out);
-    else if (!strcmp(cmd, "aflock")) {
-        if (g_aflock) { g_aflock(out, OUT_SIZE); emit(out); }
-        else emit("{\"ok\":false,\"error\":\"aflock: not in this engine\"}");
-    }
 }
 
 int main(int argc, char **argv)
@@ -2211,7 +2203,6 @@ int main(int argc, char **argv)
     char cmdline[512] = "";
     void *bridge;
     int jw, jh, pw = 1280, ph = 960, rw = 0, rh = 0, rc, i, type_raw = 0;  /* viewfinder-grade default */
-    int want_cont_touch = 0;                    /* aftouch=continuous: applied once the profile is found */
 
     /* Options before the command, in any order: --log FILE, --jpgdir DIR,
      * --dngdir DIR ("~/" = HOME). A folder that cannot be used is an error
@@ -2537,17 +2528,6 @@ int main(int argc, char **argv)
                 else if (!strcmp(argv[i] + 4, "jpeg+largest")) { yw = yh = -3; }   /* ... and, with no exact multiple, the largest stream averaged down */
                 else if (!parse_size(argv[i] + 4, &yw, &yh)) { usage(); return EXIT_USAGE; }
                 if (!ys || ys(yw, yh)) { usage(); return EXIT_USAGE; }
-            } else if (!strcmp(argv[i], "aftouch=continuous")) {
-                /* The continuous search then a lock, for a camera whose
-                 * device profile asks for it: applied below, once the
-                 * profile is found (0399 read it here, before
-                 * find_shipped_profile: it never found the key). */
-                want_cont_touch = 1;
-            } else if (!strcmp(argv[i], "aftouch=prepared")) {
-                /* the experimental focus touch (indraw_set_af_touch) */
-                typedef int (*flag_fn)(int);
-                flag_fn at = (flag_fn)a_dlsym(bridge, "indraw_set_af_touch");
-                if (at && !at(1)) log_line("# ", "focus touch: prepared (the AUTO mode on the viewfinder first, then one start)");
             } else if (!strncmp(argv[i], "type=", 5)) {
                 if (!strcmp(argv[i] + 5, "raw")) type_raw = 1;
                 else if (!strcmp(argv[i] + 5, "jpeg")) type_raw = 0;
@@ -2564,15 +2544,6 @@ int main(int argc, char **argv)
          * checked, BEFORE open: some corrections apply to the session's setup. */
         find_shipped_profile(bridge, argv[2]);
         g_ov_user_ok = check_override(argv[2]);
-        if (want_cont_touch) {
-            /* aftouch=continuous: the camera's profile decides
-             * (touch_focus_continuous: 1, the JP2's 18 mm); another camera
-             * keeps the usual touch. Before open: the caps line says it. */
-            typedef int (*mode_fn)(int);
-            mode_fn at = (mode_fn)a_dlsym(bridge, "indraw_set_af_touch");
-            if (at && read_override_checked(argv[2], "touch_focus_continuous") == 1 && !at(2))
-                log_line("# ", "focus touch: continuous search, then locked (device profile)");
-        }
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
         apply_stream_limits(bridge, argv[2], type_raw);   /* raw_stream / jpeg_max / streams, before open */
         if (have_streams) {                        /* streams=: only what this session needs */
@@ -2740,7 +2711,6 @@ int main(int argc, char **argv)
              * started before the stream so the first events (caps) go through
              * it too. Without it (older library) the engine streams them itself. */
             g_pe = pe; g_evfn = evfn; g_mt = mt; g_tf = tf; g_focusfn = focusfn; g_zf = zf; g_lf = lf; g_vwf = vwf;
-            g_aflock = (indraw_af_lock_fn)a_dlsym(bridge, "indraw_af_lock");
             g_focus_opt = (indraw_focus_opt_fn)a_dlsym(bridge, "indraw_focus_opt");
             ctl_set_log(controller_log);         /* its diagnostics into our log */
             ctl_start((indraw_emit_fn)a_dlsym(bridge, "indraw_emit"),

@@ -53,11 +53,6 @@ Corrections wired today (both optional, per camera):
   range (the JP2's 18 mm declares 0.1 s). It raises the declared maximum;
   `observed_shutter_max_ns` still caps the wheel before stacking. Checked
   the same way: the exposure requested against the one applied.
-- `touch_focus_continuous`: 1 = a focus touch in manual focus searches with
-  the continuous autofocus, then locks where it settled. For a camera whose
-  AUTO search misses. Applied while rawfish-ir.conf's focusTouchContinuous
-  test key is 1. (Tried on the JP2's 18 mm, then dropped there for
-  `touch_focus_off`: no camera uses it today.)
 - `touch_focus_off`: 1 for a camera whose autofocus our searches cannot
   drive (the JP2's 18 mm: one-way search that passes the sharp position).
   No search is started on it, whoever asks: a touch focuses nothing and

@@ -614,13 +614,6 @@ static struct {
     long live_results;                      /* preview results seen since trigger */
     int trigger_seen;                       /* a result echoed our trigger       */
     int live_ae, live_af;                   /* 3A states of the latest result    */
-    int live_af_mode;                       /* the AF mode the latest viewfinder result was run with */
-    /* The focus touch in manual focus: 0 the usual (AUTO, one scan); 1
-     * "prepared" (an experiment: aftouch=prepared), see indraw_tap; 2 the
-     * continuous search then a lock, driven by the controller ("afc" and
-     * "aflock"; aftouch=continuous, for a camera whose profile asks for it).
-     * The caps line says which (touch_af=). */
-    int af_touch_prepared;
     int live_lens_state;                    /* LENS_STATE: 0 stationary, 1 moving */
     float live_focus;                       /* LENS_FOCUS_DISTANCE in the preview  */
     int device_error;                       /* 0, or the onError code / -1       */
@@ -2044,9 +2037,6 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
         g.live_ae = e.data.u8[0];
     if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_STATE, &e) == ACAMERA_OK && e.count)
         g.live_af = e.data.u8[0];
-    g.live_af_mode = -1;
-    if (ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_MODE, &e) == ACAMERA_OK && e.count)
-        g.live_af_mode = e.data.u8[0];             /* what the frame was really run with */
     g.live_lens_state = -1;
     if (ACameraMetadata_getConstEntry(res, ACAMERA_LENS_STATE, &e) == ACAMERA_OK && e.count)
         g.live_lens_state = e.data.u8[0];           /* 0 stationary, 1 moving     */
@@ -5748,17 +5738,9 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
     int32_t weight = 1000;                        /* MeteringRectangle weight     */
     uint8_t af_mode;
     int continuous = 0;
-    /* do_af 3 ("tap X Y afc", 0.3.8): a focus search done by the camera's
-     * CONTINUOUS autofocus on the touched zone, locked later by "aflock"
-     * (indraw_af_lock) once the controller sees that search settle. For a
-     * camera whose AUTO search only scans from where the lens is towards
-     * infinity (the JP2's 18 mm), see ctl_focus.c. Otherwise a focus touch
-     * like 1 (the zone, the circle). */
-    int cont_lock = do_af == 3;
     camera_status_t st;
     jw_t w;
     if (!out || !out_size) return IR_EARG;
-    if (cont_lock) do_af = 1;
     if (!g.session || !g.preview_request)
         return fail(out, out_size, IR_ESTATE, "tap", "camera not open", 0);
     /* The RAW meter follows the light reference: a tap with ae measures there
@@ -5872,9 +5854,6 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
                 m = cur.data.u8[0];
             continuous = (m == ACAMERA_CONTROL_AF_MODE_CONTINUOUS_PICTURE || m == ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO);
             af_mode = continuous ? m : ACAMERA_CONTROL_AF_MODE_AUTO;
-            /* afc: the continuous search on the zone, whatever the button
-             * (manual): no trigger here, the lock comes with "aflock" */
-            if (cont_lock) { continuous = 1; af_mode = ACAMERA_CONTROL_AF_MODE_CONTINUOUS_PICTURE; }
         }
         for (i = 0; i < n; ++i) {
             uint8_t lk = g.ae_lock ? ACAMERA_CONTROL_AE_LOCK_ON : ACAMERA_CONTROL_AE_LOCK_OFF;
@@ -5924,35 +5903,7 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
     /* A new scan: CANCEL first releases a lock from a previous tap (some HALs
      * ignore a START while FOCUSED_LOCKED), then START. No AE precapture: with
      * AE on, the HAL re-meters its region by itself. */
-    if (do_af == 1 && !continuous && g.af_touch_prepared) {
-        /* The "prepared" touch (an experiment, 0.3.8). The 18 mm fails our
-         * focus touches where Jolla Camera, through the Camera1 API, focuses
-         * it in the same light. On a Camera2 HAL, Camera1's touch focus is,
-         * as far as we know: the focus mode "auto" already in force on the
-         * viewfinder's frames (set beforehand as a parameter), then one AF
-         * start riding on the next viewfinder frame. Our touch, in manual
-         * focus, switches the mode from OFF (a fixed distance) to AUTO and
-         * sends CANCEL then START in the same instant. Here instead:
-         *  1. the AUTO mode is on the repeating viewfinder request (above);
-         *     we wait until a viewfinder result says the frames run with it
-         *     (live_af_mode), at most 400 ms -- usually 2 or 3 frames;
-         *  2. CANCEL only if a previous search left the AF locked (4, 5),
-         *     to release it; otherwise none;
-         *  3. START. */
-        int waited = 0, mode_now = -1, af_now = -1;
-        struct timespec nap = { 0, 20 * 1000000L };      /* 20 ms between looks */
-        while (waited < 400) {
-            pthread_mutex_lock(&g.lock);
-            mode_now = g.live_af_mode; af_now = g.live_af;
-            pthread_mutex_unlock(&g.lock);
-            if (mode_now == ACAMERA_CONTROL_AF_MODE_AUTO) break;
-            nanosleep(&nap, NULL);
-            waited += 20;
-        }
-        if (af_now == ACAMERA_CONTROL_AF_STATE_FOCUSED_LOCKED || af_now == ACAMERA_CONTROL_AF_STATE_NOT_FOCUSED_LOCKED)
-            send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
-        send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
-    } else if (do_af == 1 && !continuous) {
+    if (do_af == 1 && !continuous) {
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
@@ -6120,7 +6071,7 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_af=%d touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus,
@@ -6128,7 +6079,6 @@ static void emit_caps(void)
               * calibration table (none: the same) -- the controller stops
               * manual distances there */
              min_focus > 0.0f ? focus_untranslate(min_focus) : 0.0f,
-             g.af_touch_prepared,                   /* 0 the usual touch, 1 prepared, 2 continuous then lock */
              !g.no_touch_focus,                     /* 0: a focus touch is not offered on this camera (device profile) */
              g.focus_step_pct,                      /* the manual steps above 1 D, % of the value (0: constant 0.05 D) */
              g_screen_notch, cams, facing, rawcams,
@@ -7460,30 +7410,6 @@ static int yuv_copy(AImage *img, ir_yuv_t *f)
 
 /* Before indraw_open: a full-resolution YUV stream in the session (w,h; -1,-1
  * the largest; 0,0 none). For a JPEG compressed by the command line. */
-/* The focus touch (see g.af_touch_prepared): 0 the usual, 1 prepared, 2
- * continuous then lock. Set before open (the caps line says it). */
-IR_API int indraw_set_af_touch(int mode)
-{
-    if (mode < 0 || mode > 2) return IR_EARG;
-    g.af_touch_prepared = mode;
-    return IR_OK;
-}
-
-/* "aflock": locks the focus where the CONTINUOUS autofocus put it (an AF
- * start in a continuous mode locks: FOCUSED_LOCKED, or NOT_FOCUSED_LOCKED
- * if the camera judged it not sharp). Sent by the controller after a
- * "tap X Y afc" once that search settled. The trigger request carries the
- * viewfinder's settings (send_trigger). */
-IR_API int indraw_af_lock(char *out, size_t out_size)
-{
-    if (!out || !out_size) return IR_EARG;
-    if (!g.session || !g.preview_request) return fail(out, out_size, IR_ESTATE, "aflock", "camera not open", 0);
-    if (send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE))
-        return fail(out, out_size, IR_ECAPTURE, "aflock", "trigger failed", 0);
-    snprintf(out, out_size, "{\"ok\":true,\"aflock\":true}");
-    return IR_OK;
-}
-
 IR_API int indraw_set_yuv_size(int w, int h)
 {
     /* -1,-1: the largest; -2,-2: the JPEG's size (the one the user chose);

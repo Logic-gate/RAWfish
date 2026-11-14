@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The 18 mm's touch experiments are removed from every layer (about 250
+  lines): the "continuous then lock" touch (`tap X Y afc`, `aflock`, the
+  caps' `touch_af`, the profile key `touch_focus_continuous`, the test key
+  focusTouchContinuous) and the "prepared" touch (focusTouchPrepared,
+  `aftouch=`). Since `touch_focus_off` that camera takes no search of ours;
+  nothing used them. The two test keys are dropped from rawfish-ir.conf.
 - A short vibration at the release (the press, or the end of the timer),
   and a very short one at each press of TYPE. The white flash keeps its
   meaning: it comes when the photo is taken and the phone may move. Their

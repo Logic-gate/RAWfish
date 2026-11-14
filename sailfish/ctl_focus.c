@@ -15,8 +15,6 @@
 #define MAX_D 10.0                  /* the closest distance until the caps say (10 D = 10 cm) */
 #define SEARCH_LIMIT_MS 3000.0      /* then the exposure resumes, the circle is dashed */
 #define STALE_MS 300.0              /* a "locked" this soon without a seen scan is the old one */
-#define CONT_SETTLE_MIN_MS 400.0    /* continuous search: a settled state this soon may be the old one */
-#define CONT_SETTLE_MAX_MS 1500.0   /* continuous search: locked by then whatever its state */
 
 struct ctl_focus {
     ctl_focus_cmd_fn cmd;
@@ -45,18 +43,6 @@ struct ctl_focus {
     int hold_pending, manual_pick;
     double max_d;                   /* the closest distance, diopters (ctl_focus_set_max) */
     double step_pct;                /* volume steps above 1 D: this % of the value (0 = the constant 0.05 D) */
-    /* The focus touch "continuous then lock" (ctl_focus_set_touch; the JP2's
-     * 18 mm). Its AUTO search only scans from where the lens is towards
-     * infinity: from our manual distance (1 m, near infinity on that lens) it
-     * missed every closer subject (1 touch of 10, trace of 14 Nov), while its
-     * CONTINUOUS search finds them. So, in manual focus, a touch on such a
-     * camera: "tap X Y afc" (the continuous search on the zone), then, once
-     * that search settled (state 2 focused or 6 unfocused, after a scan seen
-     * or 400 ms), "aflock" (a start in a continuous mode locks the lens
-     * where it is); the lock's outcome (4 or 5) is the touch's, as usual.
-     * cont_phase: 0 none, 1 waiting for the search to settle, 2 locked,
-     * waiting for 4 or 5. */
-    int touch_cont, cont_phase, cont_seen_scan;
     int held;                   /* manual: lens held at a search's lock (see ctl_focus_state_t) */
     int no_search;              /* the camera takes no search of ours (ctl_focus_set_search) */
     double tap_fx, tap_fy;
@@ -120,7 +106,6 @@ void ctl_focus_restart(ctl_focus_t *f)
 {
     /* a new session: no reference, no search in flight */
     f->searching = 0; f->search_late = 0; f->hold_pending = 0; f->manual_pick = 0;
-    f->cont_phase = 0;
     f->light_ref = 0; f->circle = CTL_CIRCLE_NONE;
     /* A new session cannot be held where the old one's search was: manual
      * goes to the distance shown, through the calibration (as any manual
@@ -142,7 +127,7 @@ static void outcome(ctl_focus_t *f, int st, double focus_real_d)
 {
     int was_late = f->search_late;
     f->circle = (st == 4) ? CTL_CIRCLE_SHARP : (st == 5) ? CTL_CIRCLE_UNSURE : CTL_CIRCLE_FAILED;
-    f->searching = 0; f->search_late = 0; f->cont_phase = 0;
+    f->searching = 0; f->search_late = 0;
     set_paused(f, 0);
     if (f->hold_pending) {
         f->hold_pending = 0;
@@ -197,29 +182,11 @@ void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double no
          * free again, the circle dashed, but the search goes on in the HAL
          * and a late outcome is still taken. Manual focus goes back to its
          * distance now. */
-        f->searching = 0; f->search_late = 1;
-        f->cont_phase = 0;                                       /* (a late lock still counts, below) */
+        f->searching = 0; f->search_late = 1;                    /* (a late lock still counts, above) */
         f->circle = CTL_CIRCLE_UNSURE;
         set_paused(f, 0);
         if (f->manual_pick) { f->manual_pick = 0; send_manual(f); }
         publish(f);
-        return;
-    }
-    /* "Continuous then lock" (see touch_cont): first the continuous search
-     * settles, then the lock is asked; until the lock answers (4 or 5), a
-     * settled state (2, 6) is not an outcome. */
-    if (f->cont_phase == 1) {
-        double since = now_ms - f->search_start_ms;
-        if (af_state == 1) f->cont_seen_scan = 1;
-        if (((af_state == 2 || af_state == 6) && (f->cont_seen_scan || since > CONT_SETTLE_MIN_MS)) || since > CONT_SETTLE_MAX_MS) {
-            f->cont_phase = 2;
-            f->seen_active = 1;                                  /* a lock now is this search's own */
-            send(f, "aflock");
-        }
-        return;
-    }
-    if (f->cont_phase == 2) {
-        if (af_state == 4 || af_state == 5) outcome(f, af_state, focus_real_d);
         return;
     }
     /* Continuous focus has no lock: settled on the point (PASSIVE_FOCUSED)
@@ -315,21 +282,16 @@ int ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
     f->searching = 1;
     f->search_start_ms = now_ms;
     f->circle = CTL_CIRCLE_SEARCHING;
-    f->cont_phase = 0;
     /* the engine's AUTO search (once, manual) starts with a CANCEL; the
-     * continuous ones (the mode's, or "afc") have no trigger */
-    f->wants_cancel = f->mode != CTL_FOCUS_CONT && !(f->mode == CTL_FOCUS_MANUAL && f->touch_cont);
+     * continuous mode's has no trigger */
+    f->wants_cancel = f->mode != CTL_FOCUS_CONT;
     f->seen_cancel = 0;
-    if (f->mode == CTL_FOCUS_MANUAL && f->touch_cont) {         /* continuous search, then lock */
-        f->cont_phase = 1; f->cont_seen_scan = 0;
-        snprintf(c, sizeof c, "tap %.4f %.4f afc", fx, fy);
-    } else snprintf(c, sizeof c, "tap %.4f %.4f af", fx, fy);
+    snprintf(c, sizeof c, "tap %.4f %.4f af", fx, fy);
     send(f, c);
     publish(f);
     return 1;
 }
 
-void ctl_focus_set_touch(ctl_focus_t *f, int mode) { f->touch_cont = mode == 2; }
 void ctl_focus_set_search(ctl_focus_t *f, int allowed) { f->no_search = !allowed; }
 
 /* A long press: the LIGHT at that point (a 5 % spot): the HAL's exposure
@@ -364,7 +326,6 @@ static int drop_ref(ctl_focus_t *f)
     int had = f->searching || f->search_late || f->circle != CTL_CIRCLE_NONE;
     f->searching = 0; f->search_late = 0;
     f->hold_pending = 0; f->manual_pick = 0;
-    f->cont_phase = 0;                                           /* no lock to come */
     f->circle = CTL_CIRCLE_NONE;
     set_paused(f, 0);
     return had;

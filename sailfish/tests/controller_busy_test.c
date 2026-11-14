@@ -2,9 +2,7 @@
  * focus and view commands decided meanwhile, on the HAL's reports, reach the
  * engine once the capture is over, in order -- none while it runs. Until
  * 0.3.8 they were dropped (only the exposure was re-applied): a touch's
- * "focus hold", the "aflock" of a continuous-then-lock touch, a throttled
- * loupe. Run by
- * scripts/check-host.sh. */
+ * "focus hold", a throttled loupe. Run by scripts/check-host.sh. */
 #define _POSIX_C_SOURCE 200809L
 #include "../controller.h"
 #include <pthread.h>
@@ -67,24 +65,24 @@ static int find(int from, const char *p)
 static int fails;
 #define CHECK(cond, msg) do { if (!(cond)) { fails++; printf("  FAIL: %s\n", msg); } else printf("  ok: %s\n", msg); } while (0)
 
-static int start(int touch_af)
+static int start(void)
 {
     char caps[256];
     nsent = 0; sent_busy = 0;
     if (ctl_start(fake_emit, fake_set_event_fd, fake_engine) != 0 || engine_fd < 0) return 0;
     snprintf(caps, sizeof caps, "caps iso_min=100 iso_max=3200 exp_min_ns=100000 shutter_max_ns=500000000 "
-             "aperture=1.9 zoom_max=8 crop_free=1 touch_af=%d\n", touch_af);
+             "aperture=1.9 zoom_max=8 crop_free=1\n");
     if (write(engine_fd, caps, strlen(caps)) < 0) return 0;
     return ae(0, 1.0);                  /* the caps were read before it */
 }
 
 int main(void)
 {
-    int mark, a, h;
+    int mark, a;
 
     /* 1. Manual focus, a touch, the shutter pressed during the search: the
      *    search locks while the photo is taken. */
-    if (!start(0)) { puts("controller busy: start failed"); return 1; }
+    if (!start()) { puts("controller busy: start failed"); return 1; }
     cmd("fc mode manual");
     cmd("fc ref 0.4 0.4");
     ae(0, 1.0);                                         /* the CANCEL shows (inactive) */
@@ -97,26 +95,9 @@ int main(void)
     CHECK(find(mark, "focus hold") >= 0, "touch: 'focus hold' sent once the capture is over (it was lost)");
     ctl_stop();
 
-    /* 2. A continuous-then-lock touch (caps touch_af=2): the lock and the hold
-     *    decided during the capture, sent after it in that order. */
-    if (!start(2)) { puts("controller busy: start failed"); return 1; }
-    cmd("fc mode manual");
-    cmd("fc ref 0.5 0.5");
-    CHECK(find(0, "tap 0.5000 0.5000 afc") >= 0, "touch_af 2: the continuous search on the zone");
-    busy(1);
-    mark = nsent;
-    ae(1, 1.0);                                         /* passive scan */
-    ae(2, 1.5);                                         /* settled: the lock is asked */
-    ae(4, 1.5);                                         /* locked */
-    CHECK(sent_busy == 0, "touch_af 2: nothing sent while the capture runs");
-    busy(0);
-    a = find(mark, "aflock"); h = find(mark, "focus hold");
-    CHECK(a >= 0 && h > a, "touch_af 2: 'aflock' then 'focus hold' after the capture, in that order");
-    ctl_stop();
-
-    /* 3. A loupe move throttled just before the press (the 80 ms limit),
+    /* 2. A loupe move throttled just before the press (the 80 ms limit),
      *    released by a tick during the capture: sent after it, the last one. */
-    if (!start(0)) { puts("controller busy: start failed"); return 1; }
+    if (!start()) { puts("controller busy: start failed"); return 1; }
     cmd("vw loupe 2");
     cmd("vw loupe 3");                                  /* within 80 ms: pending */
     busy(1);
