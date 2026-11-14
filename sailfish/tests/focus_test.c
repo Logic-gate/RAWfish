@@ -72,6 +72,7 @@ int main(void)
     for (i = 0; i < 40; ++i) ctl_focus_step(f, +1);
     CHECK(st.diopters == 0 && !strcmp(last(), "focus inf nowait"), "stepping farther stops at infinity");
     ctl_focus_ref(f, 0.5, 0.5, t += 100);
+    ctl_focus_live(f, 0, 2.0, t += 50);                      /* the CANCEL shows: inactive */
     ctl_focus_live(f, 3, 2.0, t += 100);
     ctl_focus_live(f, 4, 2.02, t += 100);                     /* found 2.02 D */
     CHECK(!strcmp(last(), "focus hold") && st.held && fabs(st.diopters - 2.02) < 1e-9,
@@ -79,6 +80,7 @@ int main(void)
     ctl_focus_step(f, -1);
     CHECK(!st.held && !strncmp(last(), "focus ", 6) && strstr(last(), "m nowait"), "a volume step after it: the user's distance, set through the calibration");
     ctl_focus_ref(f, 0.5, 0.5, t += 100);
+    ctl_focus_live(f, 0, 2.0, t += 50);                      /* the CANCEL shows: inactive */
     ctl_focus_live(f, 3, 2.0, t += 100);
     ctl_focus_live(f, 6, -1.0, t += 100);                     /* nothing found */
     CHECK(!st.held && !strncmp(last(), "focus ", 6), "manual tap that finds nothing: back to the distance in force");
@@ -86,6 +88,7 @@ int main(void)
          * (here: infinity): not held, the distance in force stays */
         double before = st.diopters;
         ctl_focus_ref(f, 0.5, 0.5, t += 100);
+        ctl_focus_live(f, 0, 1.0, t += 50);
         ctl_focus_live(f, 3, 1.0, t += 100);
         ctl_focus_live(f, 5, 0.0, t += 100);
         CHECK(!st.held && fabs(st.diopters - before) < 1e-9 && strcmp(last(), "focus hold") != 0,
@@ -139,7 +142,7 @@ int main(void)
     ctl_focus_set_touch(f, 0);
     ctl_focus_ref(f, 0.5, 0.5, t += 1000);
     CHECK(!strcmp(last(), "tap 0.5000 0.5000 af"), "the usual touch again with touch_af 0");
-    ctl_focus_live(f, 3, -1, t += 100); ctl_focus_live(f, 4, 1.0, t += 100);
+    ctl_focus_live(f, 0, -1, t += 50); ctl_focus_live(f, 3, -1, t += 100); ctl_focus_live(f, 4, 1.0, t += 100);
     /* 4d. A camera our searches cannot focus (caps touch_focus=0, the 18 mm):
      *     no search at all, whoever asks (a touch, the FOCUS button entering
      *     manual), nothing changed; the light point still meters. */
@@ -165,6 +168,7 @@ int main(void)
         CHECK(ncmds - before == 2 && !strcmp(cmds[before], "focus hold") && !strcmp(cmds[before + 1], "tap 0.5000 0.5000 af")
               && st.mode == CTL_FOCUS_MANUAL && st.searching,
               "manual search: 'focus hold' then the search, no distance sent first");
+        ctl_focus_live(f, 0, -1, t += 50);
         ctl_focus_live(f, 3, -1, t += 100);
         ctl_focus_live(f, 4, 2.5, t += 100);
         CHECK(st.held && fabs(st.diopters - 2.5) < 1e-9 && !strcmp(last(), "focus hold"), "manual search: locked -> held at the distance found");
@@ -176,6 +180,36 @@ int main(void)
               "manual search, camera without searches: the distance shown, no search");
         ctl_focus_set_search(f, 1);
         ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
+    }
+    /* 4f. A touch while a search still runs (log of 14 Nov, 08:35:17): the
+     *     previous search's scan and lock, reported before the CANCEL shows
+     *     (state 0), are not this touch's outcome; after the INACTIVE, the
+     *     new scan's lock is. A HAL that never shows INACTIVE: the old rule
+     *     after 300 ms. */
+    {
+        int holds;
+        ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
+        ctl_focus_ref(f, 0.5, 0.5, t += 1000);                   /* the first search */
+        ctl_focus_live(f, 0, 10.25, t += 30);
+        ctl_focus_live(f, 3, 10.25, t += 360);                   /* it scans... */
+        ctl_focus_ref(f, 0.80, 0.44, t += 470);                  /* ...and a touch elsewhere */
+        holds = count("focus hold");
+        ctl_focus_live(f, 3, 10.80, t += 55);                    /* still the first scan */
+        ctl_focus_live(f, 4, 10.425, t += 120);                  /* the first search's lock */
+        CHECK(count("focus hold") == holds && st.searching, "a touch during a search: the previous lock is not its outcome");
+        ctl_focus_live(f, 0, 10.425, t += 80);                   /* the CANCEL shows */
+        ctl_focus_live(f, 3, 10.425, t += 120);                  /* the new scan */
+        ctl_focus_live(f, 4, 7.5, t += 150);                     /* its lock */
+        CHECK(count("focus hold") == holds + 1 && st.held && fabs(st.diopters - 7.5) < 1e-9,
+              "...the new scan's lock, after the INACTIVE, is: held at 7.5");
+        /* a HAL that never shows INACTIVE */
+        ctl_focus_ref(f, 0.5, 0.5, t += 1000);
+        holds = count("focus hold");
+        ctl_focus_live(f, 3, 7.5, t += 100);
+        ctl_focus_live(f, 4, 6.0, t += 100);                     /* 200 ms: may be the old one */
+        CHECK(count("focus hold") == holds && st.searching, "no INACTIVE seen: a lock within 300 ms waits");
+        ctl_focus_live(f, 4, 6.0, t += 150);                     /* 350 ms: the old rule */
+        CHECK(count("focus hold") == holds + 1 && fabs(st.diopters - 6.0) < 1e-9, "no INACTIVE seen: after 300 ms, the lock counts");
     }
     /* 5. clear: the reference goes, the mode is restated. */
     ctl_focus_clear(f);
@@ -196,6 +230,6 @@ int main(void)
     }
     ctl_focus_free(f);
 
-    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (8 rules)\n", fails);
+    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (9 rules)\n", fails);
     return fails ? 1 : 0;
 }

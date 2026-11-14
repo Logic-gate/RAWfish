@@ -33,6 +33,14 @@ struct ctl_focus {
     int scene_on;
 
     int searching, seen_active, search_late;
+    /* A touch's AUTO search starts with a CANCEL (the engine's trigger),
+     * which the HAL shows as INACTIVE (0) before its new scan: until then
+     * the states reported are the PREVIOUS search's. A touch made while a
+     * search still ran took that search's lock as its own (log of 14 Nov,
+     * 08:35:17: a lock 175 ms after the touch, from frames still carrying
+     * the old zone; our "focus hold" then cut the new scan). wants_cancel:
+     * this search starts with one; seen_cancel: its INACTIVE was seen. */
+    int wants_cancel, seen_cancel;
     double search_start_ms;
     int hold_pending, manual_pick;
     double max_d;                   /* the closest distance, diopters (ctl_focus_set_max) */
@@ -175,6 +183,15 @@ void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double no
         return;
     }
     if (!f->searching) return;
+    if (f->wants_cancel && !f->seen_cancel && now_ms - f->search_start_ms <= SEARCH_LIMIT_MS) {
+        /* Before the CANCEL shows (state 0), the states are the previous
+         * search's: none of them counts. A HAL that never shows INACTIVE
+         * falls back to the old rule after STALE_MS (a lock that old is the
+         * new search's, or still there after it). */
+        if (af_state == 0) { f->seen_cancel = 1; return; }
+        if (now_ms - f->search_start_ms <= STALE_MS) return;
+        f->seen_cancel = 1;
+    }
     if (now_ms - f->search_start_ms > SEARCH_LIMIT_MS) {
         /* No answer in time (a dark or featureless point): the exposure is
          * free again, the circle dashed, but the search goes on in the HAL
@@ -291,6 +308,10 @@ int ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
     f->search_start_ms = now_ms;
     f->circle = CTL_CIRCLE_SEARCHING;
     f->cont_phase = 0;
+    /* the engine's AUTO search (once, manual) starts with a CANCEL; the
+     * continuous ones (the mode's, or "afc") have no trigger */
+    f->wants_cancel = f->mode != CTL_FOCUS_CONT && !(f->mode == CTL_FOCUS_MANUAL && f->touch_cont);
+    f->seen_cancel = 0;
     if (f->mode == CTL_FOCUS_MANUAL && f->touch_cont) {         /* continuous search, then lock */
         f->cont_phase = 1; f->cont_seen_scan = 0;
         snprintf(c, sizeof c, "tap %.4f %.4f afc", fx, fy);

@@ -87,6 +87,7 @@ int main(void)
     if (!start(0)) { puts("controller busy: start failed"); return 1; }
     cmd("fc mode manual");
     cmd("fc ref 0.4 0.4");
+    ae(0, 1.0);                                         /* the CANCEL shows (inactive) */
     ae(3, 1.0);                                         /* the scan is seen */
     busy(1);
     mark = nsent;

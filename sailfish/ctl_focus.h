@@ -15,8 +15,10 @@
  * pause callback), then the light phase (the spot callback) once the
  * search has ended or hit its 3 s limit; a lock reported later still
  * counts. The search's outcome is the first final AF state after the search
- * was seen to start (a stale "locked" from the previous tap is ignored; a HAL
- * that never shows the scan is accepted after 300 ms).
+ * was seen to start: an AUTO search (once, manual) counts nothing before the
+ * HAL shows its CANCEL (INACTIVE), so the previous search's scan and lock --
+ * a touch made while it ran -- are not taken (0.3.8); a HAL that never shows
+ * INACTIVE, or the scan, is accepted after 300 ms.
  */
 #ifndef INDRAW_CTL_FOCUS_H
 #define INDRAW_CTL_FOCUS_H

@@ -99,6 +99,13 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- **A touch made while a search still runs gets its own focus.** The
+  previous search's lock, reported just after the touch, was taken as the
+  new one's: the lens was held there and the new search cut short (log
+  of 14 Nov, 08:35:17: a lock 175 ms after the touch, from frames still
+  carrying the old zone). A touch's search now counts nothing until the
+  camera shows it has restarted (its AF "inactive" state, which follows
+  our cancel); a camera that never shows it keeps the old rule (300 ms).
 - **16:9: a touch focuses where the finger is.** A 16:9 viewfinder on
   the 4:3 sensor shows only its middle band (camera 0: lines 384 to 2688
   of 3072), but the engine placed the zones as if the frame showed the
