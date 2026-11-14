@@ -826,10 +826,11 @@ Nov: 2.5 % of the frame white while no channel had clipped), and the
 thumbnail burnt sooner than the camera's JPG. Now the clipping is read on
 the sensor values: a clipped channel takes the highest balanced bound of
 the clipped ones, and at least the mean of the unclipped (all three: white,
-as before). Then a tone curve: gain 1.4 and a straight line to 0.6, a
-shoulder above it (calibrated on a JPG and a DNG of the same scene at the
-same exposure: a green at 15 % / 50 % of the range gives 125 / 215, the
-JPG 131 / 207), so the highlights keep a gradation up to white.
+as before). Then a tone curve: gain 1.2 and a straight line to 0.45, a
+long shoulder above it (set on a JPG and a DNG of the same scene at the
+same exposure: a green at 15 / 50 / 85 % of the range gives 117 / 199 /
+231, the JPG 131 / 207 / 254), so the highlights keep a gradation where
+the JPG is white.
 
 ## Screens with no notch, a compact deck, the white-balance readouts (ui 159)
 

@@ -2262,14 +2262,16 @@ static void preview_highlights(double *c, int clip)
 /* The tone curve of the thumbnail, on one linear sRGB value (unbounded,
  * the rebuilt highlights go past 1) to 0..1 before the gamma: an exposure
  * gain, then a straight line up to the knee and a shoulder that rolls off
- * towards white (C1 at the knee, 1 never quite reached: 0.998 for a
- * balanced 2, a blue at its white). Calibrated on a JPG and a DNG of the same
- * scene at the same exposure (cam 0, 14 Nov): the camera's JPG puts a
- * green at 15 % of the RAW's range at 131 and at 50 % at 207; the gain
- * 1.4 and the 1/2.2 gamma give 125 and 215. The shoulder keeps a gradation
- * where the JPG is already at 255 (85 %: 244 here). */
-#define PREVIEW_GAIN 1.4
-#define PREVIEW_KNEE 0.6
+ * towards white (C1 at the knee, 1 never quite reached: 0.98 for a
+ * balanced 2, a blue at its white). Set on a JPG and a DNG of the same
+ * scene at the same exposure (cam 0, 14 Nov), then lowered to keep the
+ * highlights: the camera's JPG puts a green at 15 / 50 / 85 % of the RAW's
+ * range at 131 / 207 / 254; here 117 / 199 / 231, a little darker in the
+ * mid-tones, with a long shoulder that leaves a gradation (clouds) where
+ * the JPG is white. (1.4 and 0.6 matched the JPG's mid-tones but burnt
+ * the highlights as it does: 31 % of that frame white, 12 % now.) */
+#define PREVIEW_GAIN 1.2
+#define PREVIEW_KNEE 0.45
 static double preview_tone(double v)
 {
     v *= PREVIEW_GAIN;

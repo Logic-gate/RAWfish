@@ -15,6 +15,9 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The DNG quick preview's tone curve keeps more of the highlights: a
+  longer shoulder (gain 1.2, knee 0.45), the mid-tones a little darker than
+  the camera's JPG; on the test frame 12 % white instead of 31 %.
 - The DNG quick preview burns less early: the clipping is read on the
   sensor's values, not after the white balance (which whitened red and blue
   the sensor still held: 2.5 % of a frame on 14 Nov), the clipped channels
