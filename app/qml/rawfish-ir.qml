@@ -312,8 +312,12 @@ ApplicationWindow {
             readonly property bool dngWithJpg: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
             onDngWithJpgChanged: if (dngWithJpg && imageType === "raw") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
-            //   "auto"   = continuous focus by the HAL; a touch does nothing
-            //   distance = manual: a touch searches there, the volume keys adjust
+            //   "auto"   = continuous focus by the HAL, until a touch or a volume
+            //              key takes it over from where the lens is
+            //   distance = manual: a touch searches there, the volume keys adjust;
+            //              the FOCUS button hands it back to the HAL
+            // One mode for the user (0.3.8): the two used to be chosen with the
+            // FOCUS button, and auto ignored touches and the keys.
             function focusModeLabel(f) {
                 switch (f) {
                 case "cont":   return qsTr("auto")
@@ -436,13 +440,17 @@ ApplicationWindow {
             function tapAt(px, py) {
                 if (page.flashAuto) { page.flashLockedNotice(); return }   // the flash: full auto, no focus point
                 page.showTouchHint()
-                // Continuous ("auto"): the camera chooses where to focus, a touch
-                // does not move it (the HAL ignores a region in that mode).
-                if (page.focusMode === "cont") return
                 // A camera whose device profile says a touch cannot focus it (the
                 // JP2's 18 mm): nothing sent; the hint says so (a hold still sets
                 // the exposure).
                 if (viewfinder.caps.touchFocus === 0) return
+                // In auto, a touch takes the focus over: manual from where the
+                // continuous focus left the lens (no jump), then the search
+                // there. (The HAL ignores a region in its continuous mode.)
+                if (page.focusMode === "cont") {
+                    if (!page.manualAllowed) return
+                    page.takeFocusHere()
+                }
                 page.circleShown = true
                 meterCircle.opacity = 1.0
                 var q = unrotate(px / viewfinderZone.width, py / viewfinderZone.height)
@@ -606,12 +614,21 @@ ApplicationWindow {
             // ("fc mode manual search"), so that the search starts from where the
             // lens is, without a trip to the manual distance first (~350 ms).
             property bool searchOnManual: false
+            // manualHere: a touch or a volume key in auto -- manual from where
+            // the lens is ("fc mode manual here"), not from the last manual
+            // distance.
+            property bool manualHere: false
             function applyFocus() {
-                var search = page.searchOnManual
-                page.searchOnManual = false
+                var search = page.searchOnManual, here = page.manualHere
+                page.searchOnManual = false; page.manualHere = false
                 if (!viewfinder.running) return
-                viewfinder.sendCommand("fc mode " + (page.focusMode === "manual" ? (search ? "manual search" : "manual") : "cont"))
+                viewfinder.sendCommand("fc mode " + (page.focusMode === "manual" ? (here ? "manual here" : search ? "manual search" : "manual") : "cont"))
             }
+            // Whether a touch or a key may take the focus from the camera:
+            // advanced mode, a lens that focuses, no scene, no automatic flash
+            // (the camera's own focus then), no stack running.
+            readonly property bool manualAllowed: settingsMenu.advanced && !page.fixedFocus && !page.sceneOn && !page.flashAuto && !page.stacking
+            function takeFocusHere() { page.manualHere = true; page.focusMode = "manual" }
             // A mode change: the controller drops the focus point and the light
             // point with their markers ("fc mode"); the circle fades here.
             onFocusModeChanged: { applyFocus(); page.circleShown = false; meterCircle.opacity = 0; page.focusUnlocked = false }
@@ -706,7 +723,12 @@ ApplicationWindow {
             Timer {
                 id: volumeTimer
                 interval: 120                   // shorter: the keys may be spammed
-                onTriggered: { if (page.pendingStep !== 0 && page.focusMode === "manual") page.stepFocus(page.pendingStep); page.pendingStep = 0 }
+                onTriggered: {
+                    // in auto, a key takes the focus over from where the lens is
+                    if (page.pendingStep !== 0 && page.focusMode === "cont" && page.manualAllowed) page.takeFocusHere()
+                    if (page.pendingStep !== 0 && page.focusMode === "manual") page.stepFocus(page.pendingStep)
+                    page.pendingStep = 0
+                }
             }
             function volumePress(dir) {
                 if (page.stacking) return              // locked during a stack
@@ -1542,7 +1564,9 @@ ApplicationWindow {
                 Label {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.paddingLarge * 2 }
                     visible: page.touchHintShown && viewfinder.running
-                    text: page.focusMode === "cont" ? qsTr("Auto: tap to focus disabled. Hold for exposure.")
+                    // (auto where a touch may not take the focus: simple mode, a
+                    // scene, the automatic flash)
+                    text: page.focusMode === "cont" && !page.manualAllowed ? qsTr("Auto: tap to focus disabled. Hold for exposure.")
                         : viewfinder.caps.touchFocus === 0 ? qsTr("Touch focus not available on this camera. Hold for exposure.")
                         : qsTr("touch: focus · hold: exposure here")
                     color: "white"; font.pixelSize: Theme.fontSizeExtraSmall

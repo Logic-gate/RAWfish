@@ -160,7 +160,40 @@ int main(void)
         ctl_focus_set_search(f, 1);
         ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
     }
-    /* 4e. A touch while a search still runs (log of 14 Nov, 08:35:17): the
+    /* 4e. One focus mode (0.3.8): in auto, a touch or a volume key takes
+     *     the focus from where the continuous focus left the lens -- held
+     *     there, its reading shown, no distance sent; a key then steps from
+     *     that reading; a touch searches from there. */
+    {
+        int before;
+        ctl_focus_set_mode(f, CTL_FOCUS_CONT);
+        ctl_focus_set_distance(f, 1.0);                          /* the last manual distance: 1 m */
+        ctl_focus_live(f, 2, 3.37, t += 1000);                   /* the continuous focus at 0.30 m */
+        before = ncmds;
+        ctl_focus_manual_here(f);
+        CHECK(ncmds - before == 1 && !strcmp(cmds[before], "focus hold") && st.mode == CTL_FOCUS_MANUAL && st.held
+              && fabs(st.diopters - 3.37) < 1e-9,
+              "manual here: held where the lens is, its reading shown, no distance sent");
+        ctl_focus_step(f, 1);
+        CHECK(!strcmp(last(), "focus 0.303m nowait") && fabs(st.diopters - 3.30) < 1e-9 && !st.held,
+              "manual here, then a key: one step from the reading (3.37 -> 3.30 D)");
+        ctl_focus_set_mode(f, CTL_FOCUS_CONT);
+        ctl_focus_live(f, 2, 0.5, t += 1000);
+        ctl_focus_manual_here(f);
+        ctl_focus_ref(f, 0.3, 0.6, t += 10);
+        CHECK(!strcmp(last(), "tap 0.3000 0.6000 af") && st.searching && st.mode == CTL_FOCUS_MANUAL,
+              "manual here, then a touch: the search from there");
+        ctl_focus_live(f, 0, 0.5, t += 50); ctl_focus_live(f, 3, 0.5, t += 100); ctl_focus_live(f, 4, 1.25, t += 100);
+        CHECK(st.held && fabs(st.diopters - 1.25) < 1e-9, "manual here, then a touch: held at the distance found");
+        ctl_focus_restart(f);                                    /* a new session: no reading yet */
+        ctl_focus_set_mode(f, CTL_FOCUS_CONT);
+        before = ncmds;
+        ctl_focus_manual_here(f);
+        CHECK(ncmds - before >= 1 && !strncmp(last(), "focus ", 6) && strcmp(last(), "focus hold") && !st.held,
+              "manual here without a reading: the distance in force, as 'fc mode manual'");
+        ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
+    }
+    /* 4f. A touch while a search still runs (log of 14 Nov, 08:35:17): the
      *     previous search's scan and lock, reported before the CANCEL shows
      *     (state 0), are not this touch's outcome; after the INACTIVE, the
      *     new scan's lock is. A HAL that never shows INACTIVE: the old rule
@@ -208,6 +241,6 @@ int main(void)
     }
     ctl_focus_free(f);
 
-    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (10 rules)\n", fails);
+    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (11 rules)\n", fails);
     return fails ? 1 : 0;
 }

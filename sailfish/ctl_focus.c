@@ -46,6 +46,7 @@ struct ctl_focus {
     int held;                   /* manual: lens held at a search's lock (see ctl_focus_state_t) */
     int no_search;              /* the camera takes no search of ours (ctl_focus_set_search) */
     double tap_fx, tap_fy;
+    double live_d;              /* the lens's last reading, real diopters (-1 unknown) */
 
     ctl_focus_state_t last;
     int have_last;
@@ -98,6 +99,7 @@ ctl_focus_t *ctl_focus_new(ctl_focus_cmd_fn cmd, ctl_focus_state_fn state,
     f->cmd = cmd; f->state_cb = state; f->pause = pause; f->spot = spot; f->ctx = ctx;
     f->mode = CTL_FOCUS_CONT;
     f->diopters = 1.0;
+    f->live_d = -1;
     return f;
 }
 void ctl_focus_free(ctl_focus_t *f) { free(f); }
@@ -111,6 +113,7 @@ void ctl_focus_restart(ctl_focus_t *f)
      * goes to the distance shown, through the calibration (as any manual
      * distance does); a new touch holds the lens again. */
     f->held = 0;
+    f->live_d = -1;                                              /* another lens, maybe */
     set_paused(f, 0);
     apply_mode(f);
     publish(f);
@@ -163,6 +166,7 @@ static void outcome(ctl_focus_t *f, int st, double focus_real_d)
 void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double now_ms)
 {
     int done = af_state == 4 || af_state == 5 || af_state == 6;
+    if (focus_real_d >= 0) f->live_d = focus_real_d;            /* where the lens is (ctl_focus_manual_here) */
     if (f->search_late) {                                        /* after the limit: a late lock counts */
         if (done) outcome(f, af_state, focus_real_d);
         return;
@@ -219,6 +223,23 @@ void ctl_focus_manual_search(ctl_focus_t *f, double now_ms)
      * no trigger and no lock to come.) */
     send(f, "focus hold");
     ctl_focus_ref(f, 0.5, 0.5, now_ms);
+}
+/* Manual from where the lens is, without moving it: the continuous focus
+ * stops there ("focus hold") and the lens's reading becomes the manual
+ * distance (shown, not sent; the lens is held). For the single focus mode:
+ * a touch or a volume key in auto takes the focus from wherever the
+ * camera's continuous search had put it -- entering manual sent the last
+ * manual distance first, a jump of the lens. Without a reading yet: the
+ * distance in force, as "fc mode manual". */
+void ctl_focus_manual_here(ctl_focus_t *f)
+{
+    if (f->live_d < 0) { ctl_focus_set_mode(f, CTL_FOCUS_MANUAL); return; }
+    f->mode = CTL_FOCUS_MANUAL;
+    drop_ref(f);
+    f->diopters = fmin(f->max_d, f->live_d);
+    f->held = 1;
+    send(f, "focus hold");
+    publish(f);
 }
 void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farther (fewer diopters) */
 {

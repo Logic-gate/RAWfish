@@ -15,6 +15,14 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- One focus mode. Auto is the camera's continuous focus until a touch or a
+  volume key takes it over -- from where the lens is, without a jump to the
+  last manual distance (`fc mode manual here`): a touch searches there and
+  holds, a key steps from the lens's reading. The FOCUS button shows the
+  distance held, and a touch on it hands the focus back to auto. The
+  distance stays after a photo. Simple mode, a scene, the automatic flash
+  and a fixed-focus camera keep auto as before; the 18 mm takes the keys
+  only.
 - The DNG quick preview's tone curve keeps more of the highlights: a
   longer shoulder (gain 1.2, knee 0.45), the mid-tones a little darker than
   the camera's JPG; on the test frame 12 % white instead of 31 %.

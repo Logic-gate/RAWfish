@@ -67,6 +67,9 @@ void ctl_focus_set_mode(ctl_focus_t *f, int mode);
  * search started from there anyway). A camera that takes no search
  * (ctl_focus_set_search 0) gets the plain mode change: the distance shown. */
 void ctl_focus_manual_search(ctl_focus_t *f, double now_ms);
+/* Manual from where the lens is, without moving it: held there, its
+ * reading becomes the manual distance ("fc mode manual here"). */
+void ctl_focus_manual_here(ctl_focus_t *f);
 void ctl_focus_step(ctl_focus_t *f, int dir);             /* manual: +1 farther, -1 nearer */
 void ctl_focus_set_distance(ctl_focus_t *f, double diopters);
 /* The camera's closest distance, in the diopters the focus works in (the

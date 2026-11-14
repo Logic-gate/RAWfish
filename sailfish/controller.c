@@ -349,7 +349,8 @@ static void on_event(const char *line)
  *   xp auto | xp touch iso|speed | xp iso N | xp speed NS | xp ev N |
  *   xp spot on|off | xp pause on|off | xp source raw|vf */
 /* The interface's commands for the focus behaviour:
- *   fc mode cont|once|manual | fc mode manual search | fc search | fc step N | fc distance D |
+ *   fc mode cont|once|manual | fc mode manual search | fc mode manual here |
+ *   fc search | fc step N | fc distance D |
  *   fc ref FX FY | fc clear | fc scene on|off | fc state
  * (the interface offers cont and manual; "once" stays for the command line) */
 static int focus_command(const char *line)
@@ -371,6 +372,13 @@ static int focus_command(const char *line)
          * command: the search starts from where the lens is (see
          * ctl_focus_manual_search), not after a trip to the mode's distance */
         ctl_focus_manual_search(c.foc, now_ms());
+        if (c.view) ctl_view_clear_ref(c.view);
+    }
+    else if (!strcmp(a, "mode") && !strcmp(b, "manual") && !strcmp(d, "here")) {
+        /* "fc mode manual here": a touch or a volume key in auto -- manual
+         * from where the continuous focus left the lens, which does not
+         * move (a touch then searches from there: "vw tap" follows) */
+        ctl_focus_manual_here(c.foc);
         if (c.view) ctl_view_clear_ref(c.view);
     }
     else if (!strcmp(a, "mode")) {

@@ -25,7 +25,7 @@ is the exposure you get.
 
 | Gesture | Effect |
 |---|---|
-| touch | **the focus** at that point (see "Focus"); the exposure is not touched. In **auto** focus the camera chooses the point itself and a touch does nothing |
+| touch | **the focus** at that point (see "Focus"); the exposure is not touched. In **auto** focus the touch takes the focus from the camera |
 | touch held 1 s | **the exposure** at that point: a small sun marks a spot of 5 % of the frame, measured from then on (see "Exposure") |
 | touch on the circle / on the sun | removes it: the focus back to the mode's own, or the exposure back to the whole image |
 | two fingers apart / together | focus loupe, up to 12x, for the viewfinder only (the photo is not zoomed): up to the camera's limit (about 4x on the JP2) the sensor's real detail, beyond that an enlargement; a red frame and diagonal say it is on |
@@ -46,7 +46,7 @@ exposure here".
 | **FOCAL** | the camera, shown by its 35 mm-equivalent focal length; tap to switch camera |
 | **TYPE** | **DNG (RAW)**; **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +RAW" when Settings saves a DNG with each JPG); **snap**, a light photo for utility shots such as a receipt or a sign: our own processing at its defaults, the image averaged down to about 2048 px wide (2048 × 1536, 3 MP, on the JP2), marked SNAP on the viewfinder. TYPE never restarts the camera between these three |
 
-| **FOCUS** | auto, or a distance: manual (see "Focus") |
+| **FOCUS** | auto, or the distance held; a touch on a distance gives the focus back to auto (see "Focus") |
 | histogram | the tones of **what the viewfinder shows** (zoomed or in the loupe: that area), per colour, with clipping bars at each end. In **jpg** it is measured on the processed image; in **raw** on the sensor data itself, so it sits further left and narrower (no tone curve lifting the shadows), and its left bar is bigger: it counts photosites at or below black, where noise puts about half of the truly dark ones -- shadows with no information, as the DNG will hold them. With a reference circle, the circle's own tones are drawn as bright outlines over it |
 | **EV** wheel | brightness correction, in the camera's steps |
 | shutter | takes the picture |
@@ -86,12 +86,19 @@ Under a scene, the camera drives the exposure.
 
 ## Focus
 
-The FOCUS button cycles through three modes; the camera starts in **auto**:
+One mode: the camera starts in **auto**, and you take the focus over
+whenever you like.
 
-| Mode | Without a touch | With a touch |
-|---|---|---|
-| **auto** | the camera keeps focusing by itself, following the scene, where it chooses | nothing: the camera does not take a point in this mode |
-| **a distance** (e.g. "1.50 m"), manual | on entering the mode, one search in the middle of the frame; then the lens stays at the distance shown. Volume up / down moves it by small steps (up = farther), hold a key to move faster | one search on the point; the distance found becomes the manual distance, shown under the circle and held however you reframe; the volume keys continue from there |
+| FOCUS shows | Without a touch | A touch | The volume keys |
+|---|---|---|---|
+| **auto** | the camera keeps focusing by itself, following the scene, where it chooses | takes the focus: one search on the point, from where the lens is; the distance found is shown and held | take the focus from where the lens is (no jump), then move it by small steps (up = farther; hold a key to move faster) |
+| **a distance** (e.g. "1.50 m") | the lens stays there, however you reframe | one search on the point; the distance found replaces it | small steps from there |
+
+A touch on FOCUS showing a distance hands the focus back to the camera
+(auto); showing auto, it takes the focus with one search in the middle of
+the frame. The distance stays after a photo, until you hand it back. On a
+camera whose profile says a touch cannot focus it (the JP2's 18 mm), only
+the volume keys take it.
 
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
@@ -103,11 +110,14 @@ aim the focus, or the light (5 %), at a precise detail. Red: the search did
 not lock, the lens went back to the distance before. Touch a part of the subject that fills the square: what
 lies behind it inside the square counts too. It stays on screen -- it never
 disappears by itself: dotted while searching, solid when sharp, dashed when
-it could not focus. Remove it with a touch on it or a change of focus mode.
+it could not focus. Remove it with a touch on it or by handing the focus
+back to auto.
 In the loupe, the point is as small as the loupe shows. The circle (focus)
 and the sun (exposure) are independent and can stand together.
 
-Simple mode has no FOCUS button: it stays in auto. (Until 0.3.2 a third
+Simple mode has no FOCUS button: it stays in auto, and a touch does not
+take the focus. (Until 0.3.8 auto ignored touches and the keys, and the
+FOCUS button switched between auto and manual. Until 0.3.2 a third
 mode, "once", searched at a touch and held: manual now does that, and lets
 the distance be adjusted.)
 
