@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The RAW zebra on two levels: full stripes where the RAW lost two or three
+  of red, green and blue, light ones (white only, half opaque) where it
+  lost one alone -- mostly the green, the strongest channel, which the
+  camera's JPG and a RAW developer rebuild from the two others (photos of
+  14 Nov: green alone on 4 % of the frame, near white in the JPG). The
+  engine's RAW meter gives that share (`zlost=`) next to `zclip=`.
 - A device profile's `session_request` entries are sent with their own
   type (u8, float, i64, double): every one went as i32, the reader taking
   the quotes of the word "type" for its value's (a 0.25 then became 0). No

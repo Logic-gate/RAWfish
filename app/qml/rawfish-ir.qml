@@ -1155,7 +1155,8 @@ ApplicationWindow {
             // hold). In raw (0.3.8), the RAW's own clipping: the engine's RAW
             // meter measures the share of what is shown at the RAW zebra level
             // (zebra_raw), and the item stripes that share of the viewfinder's
-            // brightest pixels. Until then a viewfinder level stood for the
+            // brightest pixels: fully where two channels or three are lost,
+            // lightly where one alone (mostly the green). Until then a viewfinder level stood for the
             // RAW (253, any channel), which the RAW's latitude does not
             // follow: a white wall the RAW held was striped (14 Nov). Peaking
             // uses the device's edge threshold.

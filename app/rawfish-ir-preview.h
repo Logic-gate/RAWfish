@@ -33,8 +33,12 @@ struct OverlayParams {
     /* The RAW zebra (0.3.8): share >= 0 stripes that fraction (0..1) of the
      * brightest pixels (luminance) of `region` (frame pixels: the part the
      * interface shows) instead of a fixed level -- the share of the RAW that
-     * reaches its own zebra level, measured by the engine ("zclip"). */
-    double share = -1;
+     * reaches its own zebra level, measured by the engine ("zclip").
+     * lostShare (<= share): the brightest part of it, where two channels or
+     * three reach that level ("zlost"), striped fully; the rest of `share`
+     * (one channel alone, which a developer rebuilds from the two others)
+     * lightly. -1: everything striped fully. */
+    double share = -1, lostShare = -1;
     QRect region;
 };
 class OverlayWorker : public QObject
@@ -456,6 +460,7 @@ private:
     bool m_zebraLuma = false;
     bool m_zebraRawShare = false;
     qreal m_rawClipShare = -1;     /* the RAW meter's zclip, 0..1; -1 not measured yet */
+    qreal m_rawLostShare = -1;     /* its zlost (two channels or more), 0..1; -1 not given */
     qreal m_zebraShareScale = 1;
     QRect sourceRectIn(const QSize &imageSize) const;   /* the part of a frame shown */
     int m_peakEdge = 40;

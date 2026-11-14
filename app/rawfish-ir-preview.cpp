@@ -966,6 +966,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         /* zclip: the share (%) of what is shown at the RAW zebra level, for
          * the RAW zebra (zebraRawShare); an engine without it leaves -1 */
         m_rawClipShare = f.contains("zclip") ? qBound<qreal>(0, f.value("zclip").toDouble() / 100.0, 1) : -1;
+        /* zlost: the part of it with two channels or more (striped fully) */
+        m_rawLostShare = f.contains("zlost") ? qBound<qreal>(0, f.value("zlost").toDouble() / 100.0, 1) : -1;
         m_meterMean = f.value("mean").toDouble();
         m_meterIso = f.value("iso").toInt();
         m_meterExposureNs = f.value("exp_ns").toDouble();
@@ -977,7 +979,9 @@ void IndrawPreview::parseEvent(const QByteArray &line)
 /* Zebra + peaking overlay, full resolution.
  * Zebra: diagonal black/white stripes where the luminance (zebraLuma) or
  * any channel is at or above zebraLevel -- or, for the RAW zebra (share),
- * on the brightest pixels of the shown region, as many as the RAW clips.
+ * on the brightest pixels of the shown region, as many as the RAW clips:
+ * fully where it lost two channels or three, lightly (white stripes only,
+ * half opaque) where it lost one.
  * Peaking: focus is high-frequency content, so the criterion is the 3x3
  * Laplacian (a high-pass) of the luma, not the gradient: a soft, blurred
  * edge has a large gradient spread over many pixels but a small second
@@ -996,6 +1000,7 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
     QImage overlay(w, h, QImage::Format_ARGB32_Premultiplied);
     const int edge = prm.edge * 3;                         /* Laplacian scale: 8x luma span */
     const QRgb zebraA = qRgba(255, 255, 255, 220), zebraB = qRgba(0, 0, 0, 220);
+    const QRgb zebraLight = qRgba(128, 128, 128, 128);    /* premultiplied: white at half opacity */
     const QRgb peak = qRgba(255, 40, 40, 255);
 
     /* Smoothed luma (2x2 box of the green channel), one byte per pixel. */
@@ -1025,8 +1030,9 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
      * shown region's pixels (by luminance), so that as much of the
      * viewfinder is striped as the RAW has clipped -- in its brightest
      * part. Pixels tied at the level are all striped (a viewfinder white
-     * at 255 cannot be told apart). A share under 1/10000: nothing. */
-    int level = prm.level;
+     * at 255 cannot be told apart). A share under 1/10000: nothing. The
+     * level of lostShare the same way: from it up, the stripes are full. */
+    int level = prm.level, lostLevel = -1;            /* -1: every stripe full */
     bool zLuma = prm.zebraLuma;
     if (prm.zebra && prm.share >= 0) {
         const QRect r = prm.region.isValid() ? prm.region.intersected(QRect(0, 0, w, h)) : QRect(0, 0, w, h);
@@ -1039,12 +1045,16 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
                 total++;
             }
         }
-        level = 256;                                   /* nothing striped */
-        if (total > 0 && prm.share >= 0.0001) {
-            const double target = prm.share * total;
+        /* the luminance above which lie `share` of the pixels (256: none) */
+        auto levelFor = [&](double share) {
+            if (total <= 0 || share < 0.0001) return 256;
+            const double target = share * total;
             long cum = 0;
-            for (int v = 255; v >= 0; --v) { cum += cnt[v]; if (cum >= target) { level = v; break; } }
-        }
+            for (int v = 255; v >= 0; --v) { cum += cnt[v]; if (cum >= target) return v; }
+            return 0;
+        };
+        level = levelFor(prm.share);
+        if (prm.lostShare >= 0) lostLevel = levelFor(qMin(prm.lostShare, prm.share));
     }
     for (int y = 0; y < h; ++y) {
         const uchar *px = frame.constScanLine(y);
@@ -1062,7 +1072,12 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
                 const bool hit = zLuma
                     ? ((77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8) >= level   /* Rec.601 luma */
                     : (px[3 * x] >= level || px[3 * x + 1] >= level || px[3 * x + 2] >= level);
-                if (hit) v = (((x + y) >> 3) & 1) ? zebraA : zebraB;
+                if (hit) {
+                    const bool stripe = ((x + y) >> 3) & 1;
+                    if (lostLevel < 0 || ((77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8) >= lostLevel)
+                        v = stripe ? zebraA : zebraB;                    /* lost: full stripes */
+                    else if (stripe && v == 0) v = zebraLight;          /* one channel: light, peaking kept */
+                }
             }
             out[x] = v;
         }
@@ -1099,6 +1114,7 @@ void IndrawPreview::buildOverlay()
     OverlayParams p; p.zebra = m_zebra; p.peaking = m_peaking; p.zebraLuma = m_zebraLuma; p.level = m_zebraLevel; p.edge = m_peakEdge; p.width = m_peakWidth;
     if (m_zebraRawShare) {                               /* the RAW zebra: the measured share, over what is shown */
         p.share = m_rawClipShare >= 0 ? qMin<qreal>(1, m_rawClipShare * m_zebraShareScale) : 0;
+        if (m_rawLostShare >= 0) p.lostShare = qMin<qreal>(1, m_rawLostShare * m_zebraShareScale);
         p.region = sourceRectIn(m_frame.size());
     }
     m_overlayBusy = true;
@@ -1130,7 +1146,7 @@ void IndrawPreview::setZebraRawShare(bool on)
 {
     if (m_zebraRawShare == on) return;
     m_zebraRawShare = on;
-    m_rawClipShare = -1;                                 /* a measure from before is not this one's */
+    m_rawClipShare = m_rawLostShare = -1;                /* a measure from before is not this one's */
     emit aidsChanged(); buildOverlay(); update();
 }
 void IndrawPreview::setZebraLevel(int level) { level = qBound(1, level, 255); if (m_zebraLevel == level) return; m_zebraLevel = level; emit aidsChanged(); buildOverlay(); update(); }

@@ -1581,7 +1581,7 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     long hist[3][64], peak = 1, n = 0, lo = 0, hi = 0;
     long shist[3][64] = {{0}}, speak = 1;              /* the spot's own histogram */
     long m_n = 0, m_hi = 0, m_lo = 0;                  /* the metered area's clipped / crushed share (0.3.8) */
-    long z_n = 0, z_hi = 0;                            /* the displayed area's quads at the zebra level (zclip) */
+    long z_n = 0, z_hi = 0, z_lost = 0;                /* the displayed area's quads at the zebra level: any channel (zclip), two or more (zlost) */
     int zthr;
     int vx0 = 0, vy0 = 0, vx1 = 0, vy1 = 0;            /* the DISPLAYED area, for the histogram */
     char line[2400], *p = line, *end = line + sizeof line;
@@ -1734,7 +1734,12 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
      * from black to white; default 992) in ANY of a quad's four values --
      * the RAW's own clipping, which the 8-bit viewfinder cannot show (its
      * tone curve puts 255 well below the RAW's white). The interface stripes
-     * that share of the viewfinder's brightest pixels. */
+     * that share of the viewfinder's brightest pixels. And zlost, the share
+     * where two or three of red, green, blue reach it: one channel alone
+     * (mostly the green, the strongest) leaves the other two to rebuild it
+     * from -- the camera's own JPG does (photos of 14 Nov: green alone 4 %
+     * of the frame, near white in the JPG) and a RAW developer can; two lost
+     * leave the hue to guesswork. Striped fully, the rest lightly. */
     zthr = black + (int)lround((g.override_zebra_raw > 0 ? g.override_zebra_raw : 992) / 1000.0 * range);
 
     for (y = vy0; y + 1 < vy1; y += step) {
@@ -1757,7 +1762,10 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
             default: bv = q[0]; g1 = q[1]; g2 = q[2]; rv = q[3]; break;
             }
             v[0] = rv; v[1] = (g1 + g2) / 2; v[2] = bv;
-            z_n++; z_hi += rv >= zthr || g1 >= zthr || g2 >= zthr || bv >= zthr;
+            {
+                int zc = (rv >= zthr) + (g1 >= zthr || g2 >= zthr) + (bv >= zthr);
+                z_n++; z_hi += zc > 0; z_lost += zc > 1;
+            }
             sum_g += weight * (v[1] - black);
             wsum += weight;
             if (!spot_on) {                           /* metered here: count its clipping */
@@ -1780,11 +1788,11 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     memcpy(g.meter_last_hist, hist, sizeof g.meter_last_hist);   /* for a DNG's report: meter vs photo */
 
     p += snprintf(p, (size_t)(end - p),
-                  "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f zclip=%.3f hist=",
+                  "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f zclip=%.3f zlost=%.3f hist=",
                   (long long)ts, iso, (long long)exposure_ns,
                   sum_g / wsum / range, 100.0 * lo / n, 100.0 * hi / n,
                   m_n ? 100.0 * m_lo / m_n : 0.0, m_n ? 100.0 * m_hi / m_n : 0.0,
-                  z_n ? 100.0 * z_hi / z_n : 0.0);
+                  z_n ? 100.0 * z_hi / z_n : 0.0, z_n ? 100.0 * z_lost / z_n : 0.0);
     for (c = 0; c < 3 && p < end; ++c) {
         for (x = 0; x < 64 && p < end; ++x)
             p += snprintf(p, (size_t)(end - p), "%s%ld", x ? "," : "", hist[c][x] * 1000 / peak);

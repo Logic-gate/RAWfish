@@ -100,7 +100,9 @@ jpgSharpen=3
 ; (a blue sky or a red folder then stripe long before they look burnt). In
 ; RAW this key is not used: the zebra stripes what the RAW meter finds
 ; clipped in the sensor data (its share, on the viewfinder's brightest
-; pixels; zebraTweak shifts it).
+; pixels; zebraTweak shifts it): full stripes where two or three colour
+; channels are lost, light (white only) where one alone is -- mostly the
+; green, which a RAW developer rebuilds from the two others.
 ;                                               values: luma, channel   default luma
 zebraJpegMode=luma
 ; Checks in the log: each photo's report then carries the histogram the app

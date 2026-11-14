@@ -136,7 +136,9 @@ focus works in: the HAL's through the calibration table). The meter lines
 crushed and clipped shares in percent. `meter` also carries `zclip=`: the
 share (percent) of the displayed window whose RAW photosites reach the RAW
 zebra level (`zebra_raw`) in any of a quad's four values -- the interface
-stripes that share of the viewfinder's brightest pixels (the RAW zebra).
+stripes that share of the viewfinder's brightest pixels (the RAW zebra) --
+and `zlost=`: the share where two or three of red, green and blue reach it
+(striped fully; the rest of `zclip`, one channel alone, lightly).
 
 Besides the frames (SF2P), the stream carries one-line events (SF2M): `caps`,
 `ae` (the preview's live values; also `cct=` and `duv=`, the white balance in force as a correlated colour temperature and its Duv, estimated from the colour gains through the sensor's calibration matrix), `meter` (the RAW meter; its histogram covers the displayed window (`viewwin`), and `shist=` is the spot's own while a reference is set -- `vfmeter` likewise), `vfmeter` (the viewfinder meter: the linear
