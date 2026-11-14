@@ -41,6 +41,17 @@ struct OverlayParams {
     double share = -1, lostShare = -1;
     QRect region;
 };
+/* What the RAW zebra keeps from one frame to the next, so that it does not
+ * flicker: its two levels, eased, and which pixels were striped (0 none, 1
+ * light, 2 full) -- a pixel striped stays so until it falls a few levels
+ * below (the viewfinder's noise played across the level frame after frame,
+ * and the level itself jumped with each measure). Reset when the share
+ * mode is off or the frame's size changes. */
+struct OverlayState {
+    double level = -1, lostLevel = -1;
+    QVector<uchar> mask;
+    QSize size;
+};
 class OverlayWorker : public QObject
 {
     Q_OBJECT
@@ -48,9 +59,12 @@ public slots:
     void compute(const QImage &frame, const OverlayParams &p);
 signals:
     void done(const QImage &overlay);
+private:
+    OverlayState m_state;          /* the worker's thread only */
 };
-/* The pure computation (no shared state: safe on any thread). */
-QImage computeOverlay(const QImage &frame, const OverlayParams &p);
+/* The computation; `st` (may be null) carries the RAW zebra from frame to
+ * frame. Safe on any thread with its own state. */
+QImage computeOverlay(const QImage &frame, const OverlayParams &p, OverlayState *st = nullptr);
 
 class IndrawPreview : public QQuickItem
 {

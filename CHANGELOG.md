@@ -15,6 +15,13 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The RAW zebra no longer flickers: it reads the viewfinder's smoothed
+  luma (a pixel's own noise crossed the level frame after frame), its
+  levels and the measured shares are eased over frames and measures (a
+  new scene followed in about a quarter of a second), and a striped pixel
+  stays striped until its luma (0-255) falls 4 below the level. On noisy
+  test frames: 1.4 % of the striped pixels change from one frame to the
+  next, against 35 %.
 - The gallery shows a bracket in the order it was shot: captures are
   sorted by the time in their name (the shutter's, to the millisecond)
   rather than the file's, which the JPEG writer thread did not keep in
