@@ -83,6 +83,7 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "shading.h"             /* the measured lens-shading calibration     */
 #include "shading_build.h"       /* building one from flat-field captures     */
 #include "yuv.h"                 /* the preview's YUV -> RGB conversion       */
+#include "viewfield.h"           /* what a viewfinder frame shows of its crop (16:9 on 4:3) */
 
 static int g_screen_notch = -1;   /* the screen's top cutout, from the device profile (-1 unknown) */
 
@@ -1022,6 +1023,25 @@ static int photo_orientation_deg(void);     /* with indraw_orient, below */
 static int apply_session_request(ACaptureRequest *req);   /* session parameters, below */
 static int photo_orientation_tiff(void);
 static int active_array(int32_t *ax, int32_t *ay, int32_t *aw, int32_t *ah, float *max_zoom);
+/* What a viewfinder frame of w x h pixels shows of the crop region it was
+ * taken with (viewfield.h: Camera2 crops each stream to its own shape),
+ * in active-array pixels. */
+static void frame_field(const int32_t crop[4], int w, int h, int32_t out[4])
+{
+    vf_rect_t r = { crop[0], crop[1], crop[2], crop[3] }, f = vf_field(r, w, h);
+    out[0] = (int32_t)lround(f.x); out[1] = (int32_t)lround(f.y);
+    out[2] = (int32_t)lround(f.w); out[3] = (int32_t)lround(f.h);
+}
+/* The band (viewfield.h) of a viewfinder of w x h pixels: the fractions of
+ * the sensor the controller's and the interface's "sensor fractions" are
+ * taken in. The whole sensor when the shapes agree or the size is unknown. */
+static vf_rect_t view_band(int w, int h)
+{
+    int32_t ax, ay, aw, ah;
+    vf_rect_t whole = { 0, 0, 1, 1 };
+    if (active_array(&ax, &ay, &aw, &ah, NULL)) return whole;
+    return vf_band(aw, ah, w, h);
+}
 
 /* The viewfinder meter (step 2 of docs/ARCHITECTURE.md): what the app's C++
  * item used to measure on the RGB frame it received, now measured here on
@@ -1052,9 +1072,13 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
     double sx, sy, shw, shh;
     char line[2600], *p, *end;
     int32_t ax, ay, aw, ah;
+    int32_t fld[4];
     if (now - last_ms < 100) return;
     last_ms = now;
     if (!lut_ready) { for (i = 0; i < 256; ++i) lut[i] = pow(i / 255.0, 2.2); lut_ready = 1; }
+    /* the part of the crop this frame shows (a 16:9 frame of a 4:3 crop:
+     * its middle band, viewfield.h); the boxes below map through it */
+    if (crop) { frame_field(crop, w, h, fld); crop = fld; }
     pthread_mutex_lock(&g.lock);
     spot_on = g.spot_on; sx = g.spot_x; sy = g.spot_y;
     shw = g.spot_hw > 0 ? g.spot_hw : 0.06; shh = g.spot_hh > 0 ? g.spot_hh : 0.06;
@@ -1222,7 +1246,10 @@ static void wbpick_from_view(const uint8_t *rgb, int w, int h, const int32_t cro
     }
     pthread_mutex_unlock(&g.lock);
     /* That box is in sensor coordinates (0..1 of the active array); this
-     * frame shows only the crop: map the box into the frame's pixels. */
+     * frame shows only the crop -- its part of the frame's shape
+     * (viewfield.h): map the box into the frame's pixels. */
+    int32_t fld[4];
+    if (crop) { frame_field(crop, w, h, fld); crop = fld; }
     if (crop && crop[2] > 0 && crop[3] > 0 && !active_array(&ax, &ay, &aw, &ah, NULL)) {
         x0 = (int)(((cx - hw) * aw + ax - crop[0]) / crop[2] * w); x1 = (int)(((cx + hw) * aw + ax - crop[0]) / crop[2] * w);
         y0 = (int)(((cy - hh) * ah + ay - crop[1]) / crop[3] * h); y1 = (int)(((cy + hh) * ah + ay - crop[1]) / crop[3] * h);
@@ -1417,10 +1444,19 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                 if (found && memcmp(crop, g.sent_crop, sizeof crop)) {
                     int32_t ax, ay, aw, ah;
                     memcpy(g.sent_crop, crop, sizeof crop);
-                    if (!active_array(&ax, &ay, &aw, &ah, NULL) && aw > 0 && ah > 0)
-                        snprintf(line, sizeof line, "fcrop x=%.5f y=%.5f w=%.5f h=%.5f\n",
-                                 (double)(crop[0] - ax) / aw, (double)(crop[1] - ay) / ah,
-                                 (double)crop[2] / aw, (double)crop[3] / ah);
+                    /* What this frame shows (its part of the crop, of the
+                     * frame's shape), in fractions of the band: the
+                     * interface's and the controller's sensor fractions
+                     * (viewfield.h). With the sensor's own shape, the crop. */
+                    if (!active_array(&ax, &ay, &aw, &ah, NULL) && aw > 0 && ah > 0) {
+                        int32_t fld[4];
+                        vf_rect_t f, b = view_band(w, h);
+                        frame_field(crop, w, h, fld);
+                        f.x = (double)(fld[0] - ax) / aw; f.y = (double)(fld[1] - ay) / ah;
+                        f.w = (double)fld[2] / aw;        f.h = (double)fld[3] / ah;
+                        f = vf_to_band(b, f);
+                        snprintf(line, sizeof line, "fcrop x=%.5f y=%.5f w=%.5f h=%.5f\n", f.x, f.y, f.w, f.h);
+                    }
                     /* Detailed log only (g.checks, Settings "Detailed log"): the
                      * crop the camera says it used for the viewfinder, at each
                      * change -- the controller writes it to the log. A state
@@ -3395,6 +3431,15 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     g.jpeg_w = jw;
     g.preview_w = pw;
     g.preview_h = ph;
+    {   /* What is shown before the controller says (or without one): the
+         * band, the part of the sensor the viewfinder's shape shows
+         * (viewfield.h); the whole sensor with the sensor's own shape. */
+        vf_rect_t b = view_band(pw, ph);
+        pthread_mutex_lock(&g.lock);
+        g.view_win[0] = b.x; g.view_win[1] = b.y; g.view_win[2] = b.w; g.view_win[3] = b.h;
+        g.have_view_win = !(b.x <= 0.0001 && b.y <= 0.0001 && b.w >= 0.9999 && b.h >= 0.9999);
+        pthread_mutex_unlock(&g.lock);
+    }
     g.jpeg_h = jh;
     g.raw_w = rw;
     g.raw_h = rh;
@@ -5730,6 +5775,10 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         int32_t pc[4], cx, cy, shown;
         double vw[4] = { 0, 0, 1, 1 };                   /* what is shown: fractions of the ACTIVE ARRAY */
         preview_crop(ax, ay, aw, ah, pc);
+        /* the frame shows only its shape's part of the crop (a 16:9 frame:
+         * the middle band of a 4:3 crop, viewfield.h): (nx, ny) is a point of
+         * THAT, not of the crop (0.3.8: up to 12.5 % of the height off) */
+        frame_field(pc, g.preview_w, g.preview_h, pc);
         cx = pc[0] + (int32_t)(nx * pc[2]);
         cy = pc[1] + (int32_t)(ny * pc[3]);
         /* The zones are sized on what the viewfinder SHOWS (the frame, cut
@@ -6323,8 +6372,12 @@ IR_API int indraw_loupe(float factor, float cx, float cy, char *out, size_t out_
     if (factor < 1.0f) factor = 1.0f;
     pthread_mutex_lock(&g.lock);                    /* preview_crop reads these on the callbacks */
     g.loupe = factor;
-    g.loupe_cx = cx < 0 ? 0 : cx > 1 ? 1 : cx;
-    g.loupe_cy = cy < 0 ? 0 : cy > 1 ? 1 : cy;
+    {   /* the centre comes in band fractions (viewfield.h): to the sensor */
+        vf_rect_t b = view_band(g.preview_w, g.preview_h), p = { cx < 0 ? 0 : cx > 1 ? 1 : cx, cy < 0 ? 0 : cy > 1 ? 1 : cy, 0, 0 };
+        p = vf_to_sensor(b, p);
+        g.loupe_cx = (float)p.x;
+        g.loupe_cy = (float)p.y;
+    }
     {   /* A CENTER_ONLY HAL re-centres the crop anyway: say so, by using it.
          * (The app then keeps the HAL crop wide enough to contain the panned
          * view and pans in the display.) */
@@ -6837,10 +6890,15 @@ IR_API int indraw_view_window(double x, double y, double w, double h, char *out,
     if (!out || !out_size) return IR_EARG;
     if (!(w > 0) || !(h > 0) || x < 0 || y < 0 || x + w > 1.0001 || y + h > 1.0001)
         return fail(out, out_size, IR_EARG, "viewwin", "x y w h in 0..1", 0);
-    pthread_mutex_lock(&g.lock);
-    g.view_win[0] = x; g.view_win[1] = y; g.view_win[2] = w; g.view_win[3] = h;
-    g.have_view_win = !(x <= 0 && y <= 0 && w >= 0.9999 && h >= 0.9999);
-    pthread_mutex_unlock(&g.lock);
+    {   /* sent in band fractions (viewfield.h), kept in sensor fractions:
+         * a 16:9 viewfinder shows only the middle of a 4:3 sensor, and that
+         * is what the histograms and the zones must cover */
+        vf_rect_t v = { x, y, w, h }, b = view_band(g.preview_w, g.preview_h), sv = vf_to_sensor(b, v);
+        pthread_mutex_lock(&g.lock);
+        g.view_win[0] = sv.x; g.view_win[1] = sv.y; g.view_win[2] = sv.w; g.view_win[3] = sv.h;
+        g.have_view_win = !(sv.x <= 0.0001 && sv.y <= 0.0001 && sv.w >= 0.9999 && sv.h >= 0.9999);
+        pthread_mutex_unlock(&g.lock);
+    }
     /* Only recorded (the tap zones are sized on it): no request goes to the
      * camera here. 0366 re-sent the repeating request at every change, up to
      * 76 times a second while a finger moved the loupe. */

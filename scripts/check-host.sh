@@ -208,6 +208,10 @@ fi
 
 # The white balance in kelvin (android/colortemp.h, pure C): the JP2's own
 # matrices and five measured whites.
+# What a viewfinder frame shows of its crop (a 16:9 frame of a 4:3 sensor:
+# the middle band), on the phone's real sizes.
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-vf-test "$root/android/tests/viewfield_test.c" -lm
+run_test /tmp/indraw-vf-test
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ct-test "$root/android/tests/colortemp_test.c" -lm
 run_test /tmp/indraw-ct-test
 

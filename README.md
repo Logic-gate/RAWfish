@@ -311,7 +311,8 @@ printf 'exposure exp=0.008 iso=400\nev 2\nmeter on rate=5\nexposure auto\nmeter 
   only that spot until `clear`.
 - `loupe FACTOR [CX CY]` crops the preview only (the focus loupe): real sensor detail, photos untouched.
   Before each viewfinder frame whose crop changed, the stream carries `fcrop x= y= w= h=` (the crop
-  that frame was really taken with, normalised in the active array), so a display can map it exactly. Default is both; `clear` removes the regions (full-frame AE, the focus
+  that frame was really taken with -- the part of it the frame's shape shows --, normalised in the
+  viewfinder's band of the sensor, `docs/ENGINE.md`), so a display can map it exactly. Default is both; `clear` removes the regions (full-frame AE, the focus
   button's mode). The app maps a touch through its display rotation and loupe before calling, and
   sends `af` only in full manual exposure.
 - `wb auto|incandescent|fluorescent|warm_fluorescent|daylight|cloudy|twilight|shade` sets the

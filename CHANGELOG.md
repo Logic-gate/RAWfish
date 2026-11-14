@@ -99,6 +99,18 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- **16:9: a touch focuses where the finger is.** A 16:9 viewfinder on
+  the 4:3 sensor shows only its middle band (camera 0: lines 384 to 2688
+  of 3072), but the engine placed the zones as if the frame showed the
+  whole sensor: near the long edges of the frame the focus zone fell up to
+  12.5 % of the sensor's height off the finger, partly outside the picture
+  (log of 14 Nov: a touch at 0.11 of the frame, zone over lines 118-578,
+  the point touched at line ~645). The square sat under the finger and the
+  camera locked on what was beside it, so it looked right. Now the
+  touch, the exposure point, the histograms, the loupe's centre and the
+  frame's crop all take the band into account (`android/viewfield.h`,
+  host test viewfield_test.c). In 4:3 nothing changes; camera 2's 4:3
+  stream differs from its sensor by 24 columns each side, now counted too.
 - **A focus decided during a photo is no longer lost.** While a photo, a
   burst or a stack runs, the controller's commands wait; only the
   exposure was sent again afterwards. A touch's search that ended during

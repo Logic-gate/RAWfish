@@ -106,7 +106,7 @@ closes, and writes the frames added so far with the exposure really reached.
 | `shading balance=B strength=S maxgain=M` | the measured map's dosing (pivot, strength, maximum gain) |
 | `wb fixed R,GE,GO,B` / `wb fixed off` | keep a white measured before (restored by the interface after a restart) / back to the AWB as the base |
 | `wb offset R,B` / `wb offset off` | a white measured on another camera, carried as red and blue factors on this camera's automatic white (the AWB's gains, red x R, blue x B); a `wb fixed` of this camera takes precedence |
-| `viewwin X Y W H` | the window the interface shows, normalised in the active array (the controller sends it with every view change): the histograms and the viewfinder's centre-weighted mean cover it, whatever the HAL's own frame |
+| `viewwin X Y W H` | the window the interface shows, normalised in the band (see below; the whole active array when the viewfinder has the sensor's shape) (the controller sends it with every view change): the histograms and the viewfinder's centre-weighted mean cover it, whatever the HAL's own frame |
 | `aelock on` / `aelock off` | holds / frees the automatic exposure (a new `tap` with ae, `tap ... clear` and `exposure auto` free it too) |
 | `ev STEPS` | the HAL's compensation steps (`caps` ev_min..ev_max, step ev_step) |
 | `preview NOISE EDGE` | the noise / edge mode names above, for the **viewfinder only**: a photo uses the modes given with its own command, or the camera's still-capture defaults |
@@ -154,9 +154,17 @@ at each change) --
 both written to the log by the controller, not passed on --, and `fcrop
 x= y= w= h=` -- sent right before a frame whose crop differs from the
 previous one: the crop that frame was really taken with (from its capture
-result), normalised in the active array. A HAL applies a new crop a few
-frames after it is asked to; a display that maps frames with `fcrop` never
-jumps.
+result) -- the part of it the frame shows, of the frame's own shape --,
+normalised in the band. A HAL applies a new crop a few frames after it is
+asked to; a display that maps frames with `fcrop` never jumps.
+
+The band (0.3.8, `android/viewfield.h`): Camera2 crops each stream to its
+own shape, so a 16:9 viewfinder on a 4:3 sensor shows only the sensor's
+middle band (camera 0: lines 384 to 2688 of 3072). The sensor fractions
+the interface and the controller use -- `fcrop`, `viewwin`, the loupe's
+centre -- are fractions of that band; a touch (`tap NX NY`) is a point of
+the frame. The engine converts to the sensor itself. With a viewfinder of
+the sensor's shape the band is the whole active array.
 
 Internals: with a controller attached (`indraw_set_event_fd`, done by the
 `rawfish-ir-cli` process at stream start), these events go to the controller through
