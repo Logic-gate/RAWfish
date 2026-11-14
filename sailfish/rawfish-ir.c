@@ -131,6 +131,21 @@ static void log_stamp(char stamp[16])
     snprintf(stamp, 16, "%.8s.%03d", hms, (int)(ts.tv_nsec / 1000000L) % 1000);   /* "HH:MM:SS.mmm", 12 chars */
 }
 
+/* The end's watchdog (see the end of the stream mode): the close of the
+ * camera did not return in time -- the process exits anyway, with a line in
+ * the log written by write() alone (async-signal-safe). A process left
+ * hanging there kept the app from starting again: the launcher took the
+ * app as still running, its sandbox not empty (log of 14 Nov, 15:32). The
+ * camera is released by the system with the process. */
+#define CLOSE_WATCHDOG_S 5
+static void close_watchdog(int sig)
+{
+    static const char msg[] = "# the camera's close did not return in 5 s: the engine exits anyway (the system releases the camera)\n";
+    (void)sig;
+    if (g_log) { ssize_t r = write(fileno(g_log), msg, sizeof msg - 1); (void)r; }
+    _exit(EXIT_FAILED);
+}
+
 /* Appends "<stamp> <prefix><text>" to the log (no-op without --log). */
 static void log_line_at(const char *stamp, const char *prefix, const char *text)
 {
@@ -2822,9 +2837,23 @@ int main(int argc, char **argv)
             ctl_unlock();
         }
         free(line);
-        cl(out, sizeof out);                    /* always release the camera     */
+        /* Always release the camera -- under the controller's lock, and
+         * within CLOSE_WATCHDOG_S. The controller's reader thread sends the
+         * engine commands of its own (the caps' view and focus: zoom, loupe,
+         * focus) under that lock; the close ran beside them: a "quit" 1.2 s
+         * after the start met the caps' commands, the zoom failed on the
+         * closing session (-10007) and the close never returned, the process
+         * left alive (log of 14 Nov, 15:32:25). Held, the lock lets the
+         * reader finish its line first; after the close its commands find
+         * the camera closed and fail harmlessly. */
+        signal(SIGALRM, close_watchdog);
+        alarm(CLOSE_WATCHDOG_S);
+        ctl_lock();
+        cl(out, sizeof out);
+        ctl_unlock();
         emit(out);
         ctl_stop();                             /* after close: the last events are through */
+        alarm(0);
         return failures ? EXIT_FAILED : 0;
     }
 

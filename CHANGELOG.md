@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The engine can no longer outlive the app: at the end, the camera is
+  closed under the controller's lock (a "quit" right after the start met
+  the controller's own start-up commands; the close never returned and the
+  process stayed, so the launcher took the app as still running and would
+  not start it: log of 14 Nov, 15:32), and if the close does not return in
+  5 s the engine exits anyway (the system releases the camera).
 - Numbered builds: the build scripts set each RPM's Release to the last
   patch applied (`0.3.8-424.beta`), so every build has a file name of its
   own and installs as an update (scripts/with-build-release.sh; the spec is
