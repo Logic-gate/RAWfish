@@ -15,6 +15,10 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The gallery shows a bracket in the order it was shot: captures are
+  sorted by the time in their name (the shutter's, to the millisecond)
+  rather than the file's, which the JPEG writer thread did not keep in
+  order (log of 14 Nov, 16:42:46).
 - The engine can no longer outlive the app: at the end, the camera is
   closed under the controller's lock (a "quit" right after the start met
   the controller's own start-up commands; the close never returned and the

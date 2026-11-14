@@ -62,11 +62,22 @@ Item {
     // A file whose details are not read yet (the folder still loading) is
     // skipped this time, not allowed to abort the whole list; the list is
     // then brought up to date once more a moment later.
+    // The capture's time: the one in its name (NAME_YYYYMMDD_HHMMSS_mmm.EXT,
+    // the shutter's moment, to the millisecond), else the file's. Sorting by
+    // the file's time put a bracket out of order: its three JPEGs are
+    // written by another thread, and their times did not follow the shots
+    // (log of 14 Nov, 16:42:46).
+    function nameTime(n) {
+        var r = /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_(\d{3})\.[A-Za-z]+$/.exec(n)
+        if (!r) return -1
+        return new Date(+r[1], +r[2] - 1, +r[3], +r[4], +r[5], +r[6], +r[7]).getTime()
+    }
     function entry(model, i, dng) {
         var m = model.get(i, "fileModified"), n = model.get(i, "fileName")
         if (!n || !m || typeof m.getTime !== "function") return null
+        var t = nameTime(n)
         return { fileName: n, filePath: model.get(i, "filePath"), fileURL: String(model.get(i, "fileURL")),
-                 isDng: dng, t: m.getTime() }
+                 isDng: dng, t: t >= 0 ? t : m.getTime() }
     }
     Timer { id: retryRebuild; interval: 500; onTriggered: gallery.rebuild() }
     // Brings `captures` up to date with the folders, ROW BY ROW, as Jolla
