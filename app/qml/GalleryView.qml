@@ -182,7 +182,11 @@ Item {
                 // screen in both directions, it is zoomed out for good, which
                 // unlocks the strip at once. contentWidth / contentHeight are
                 // the viewer's (a Flickable's) scaled picture; if a viewer did
-                // not give them, nothing happens (the tap still works).
+                // not give them, nothing happens (the tap still works). A timer
+                // and not a handler on the content's size: a pinch starting from
+                // the fitted size passes through that 8 % at once, and a handler
+                // would zoom it out before it got anywhere; 0.3 s lets the
+                // fingers go on. It runs only while zoomed, on the picture shown.
                 Timer {
                     interval: 300; repeat: true
                     running: viewer.zoomed && viewer.active

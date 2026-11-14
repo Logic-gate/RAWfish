@@ -65,10 +65,8 @@ static struct {
 } c = { .rd = -1, .wr = -1,
 };
 /* The lock is recursive from its first use and initialised exactly once
- * (pthread_once). Until 0.1.1 it was statically a plain mutex, then
- * re-initialised as recursive in every ctl_start and never destroyed: UB on
- * a stop/start cycle, and not recursive before the first start (October
- * 2026 audit). */
+ * (pthread_once): re-initialising it in every ctl_start would be undefined
+ * on a stop/start cycle. */
 static pthread_once_t lock_once = PTHREAD_ONCE_INIT;
 static void lock_init(void)
 {
@@ -138,14 +136,13 @@ static int same_kind(const char *a, const char *b)
     return na == nb && !strncmp(a, b, na) && !strcmp(ta, tb);
 }
 
-/* A focus or view command while a capture runs. Until 0.3.8 it went the
- * exposure's way, dropped and "re-applied after" -- but only the exposure
- * was re-applied: the focus's "focus hold" (a touch's search ending during
- * the photo), its return to the manual distance, a throttled loupe were
- * lost, and the controller went on as if the engine had them (review, 14 Nov 2026). They
- * are decisions taken on the HAL's own reports, not re-derivable from a
- * state, so they are held and sent once the capture is over: the last of
- * each kind, in the order decided. */
+/* A focus or view command while a capture runs: held, and sent once the
+ * capture is over -- the last of each kind, in the order decided. Unlike
+ * the exposure (re-derived from its state afterwards), these are decisions
+ * taken on the HAL's own reports (a touch's "focus hold" when its search
+ * ends during the photo, the return to the manual distance, a throttled
+ * loupe): dropped, they were lost while the controller went on as if the
+ * engine had them. */
 static void held_cmd(const char *engine_command)
 {
     int i;
@@ -182,19 +179,15 @@ void ctl_engine_busy(int busy)
 }
 static void exp_state(void *ctx, const ctl_exp_state_t *s)
 {
-    char line[420];
+    char line[420], ev100[16] = "nan";            /* "nan": no measure yet */
     (void)ctx;
+    if (!isnan(s->ev100)) snprintf(ev100, sizeof ev100, "%.2f", s->ev100);
     snprintf(line, sizeof line,
              "xpstate stops=%.2f stops_valid=%d stops_clip=%d iso=%d exp_ns=%.0f iso_manual=%d shutter_manual=%d full_auto=%d full_manual=%d "
              "fixed=%d spot=%d ev=%d offset=%.3f offset_valid=%d pv_ms=%.0f pv_slow=%d deficit=%.2f too_dark=%d ev100=%s\n",
              s->stops, s->stops_valid, s->stops_clip, s->iso, s->shutter_ns, s->iso_manual, s->shutter_manual, s->full_auto, s->full_manual,
              s->fixed_pair, s->spot_hold, s->ev_steps, s->offset_stops, s->offset_valid,
-             s->pv_ms, s->pv_slow, s->deficit_stops, s->too_dark,
-             isnan(s->ev100) ? "nan" : "");
-    if (!isnan(s->ev100)) {
-        char *p = strstr(line, "ev100=");
-        if (p) snprintf(p, (size_t)(line + sizeof line - p), "ev100=%.2f\n", s->ev100);
-    }
+             s->pv_ms, s->pv_slow, s->deficit_stops, s->too_dark, ev100);
     if (c.emit) c.emit(line);
 }
 
@@ -314,9 +307,8 @@ static void on_event(const char *line)
             caps.aperture = fieldd(line, "aperture", 0);
             c.caps = caps;
             /* Without an ISO range the exposure behaviour stays off (not
-             * ready) and sends nothing: said once per caps line, otherwise a
-             * cut or malformed caps line left the exposure silently dead
-             * (audit, November 2026). */
+             * ready) and sends nothing: said once per caps line, so that a
+             * cut or malformed caps line does not leave it silently dead. */
             if (caps.iso_min <= 0 || caps.iso_max < caps.iso_min)
                 note("caps without a valid ISO range (iso_min=%d iso_max=%d): exposure control off", caps.iso_min, caps.iso_max);
             ctl_exp_set_caps(c.exp, &caps);
@@ -514,13 +506,11 @@ static void *reader(void *arg)
             else overlong = 1;
             if (buf[i] == '\n') {
                 line[have] = '\0';
-                /* A line longer than the buffer was cut, and a cut line was
-                 * still read (a field missing, a number cut short) and passed
-                 * on (audit, November 2026). Now it is dropped and said in
-                 * the log (note). No line of
-                 * today's engine comes near (check-host.sh: the longest,
-                 * vfmeter, is 2600 bytes), and the interface drops SF2M
-                 * packets over 4096 bytes anyway. */
+                /* A line longer than the buffer is dropped and said in the
+                 * log, never read cut (a field missing, a number cut short).
+                 * No line of today's engine comes near (check-host.sh: the
+                 * longest, vfmeter, is 2600 bytes), and the interface drops
+                 * SF2M packets over 4096 bytes anyway. */
                 if (overlong) note("an event line over %zu bytes dropped", sizeof line - 1);
                 else on_event(line);
                 have = 0;
@@ -552,9 +542,7 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
     c.exp = ctl_exp_new(exp_cmd, exp_state, NULL);
     c.foc = ctl_focus_new(foc_cmd, foc_state, foc_pause, foc_spot, NULL);
     c.view = ctl_view_new(view_cmd, view_state, view_ref, NULL);
-    /* A failed allocation, or no thread: everything made here is undone (the
-     * three behaviours were left allocated until 0.3.8, audit November 2026;
-     * the process stopped soon after, so it never mattered in practice). */
+    /* A failed allocation, or no thread: everything made here is undone. */
     if (!c.exp || !c.foc || !c.view || pthread_create(&c.thread, NULL, reader, NULL) != 0) {
         if (!c.exp || !c.foc || !c.view) fprintf(stderr, "rawfish-ir-cli: controller: out of memory\n");
         else perror("rawfish-ir-cli: controller: thread");

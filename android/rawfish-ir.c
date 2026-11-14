@@ -1349,6 +1349,11 @@ static void vf_pace(int64_t sensor_ts, double ours_ms)
     }
 }
 
+/* The viewfinder reader's listener (a Camera2 thread), one call per frame:
+ * the latest frame only (older ones dropped). A diagnostic save pending
+ * (indraw_preview_frame) writes it as a PPM; streaming on, it goes out as
+ * SF2P, with its fcrop, the viewfinder meter and a white pick on the way.
+ * Then the frame count, which indraw_open waits on. */
 static void on_preview_image(void *ctx, AImageReader *reader)
 {
     AImage *img = NULL;
@@ -1480,7 +1485,9 @@ static void on_preview_image(void *ctx, AImageReader *reader)
     pthread_mutex_unlock(&g.lock);
 }
 
-/* JPEG available: keep it for indraw_jpeg(), which writes it from its own thread. */
+/* A full-resolution YUV frame (the photo stream our JPG is made from): kept
+ * for indraw_yuv() (the latest one; every one, in order, during a burst),
+ * which encodes it from its own thread. */
 static void on_yuv_image(void *ctx, AImageReader *reader)
 {
     AImage *img = NULL;
@@ -2010,6 +2017,12 @@ static void record_result_crop(const ACameraMetadata *res)
     }
 }
 
+/* The viewfinder request's result (a Camera2 thread), one per frame: the
+ * live 3A states, the lens, the crop of that frame (for its fcrop), the
+ * AWB's neutral (the base of a manual white), the watched vendor keys,
+ * under g.lock; then, outside it, the "ae" line (every 3rd result, and at
+ * once on a 3A state change). Wakes everything waiting on g.cond for a
+ * state (a trigger's outcome, the lens reaching a distance). */
 static void on_preview_result(void *ctx, ACameraCaptureSession *s,
                               ACaptureRequest *req, const ACameraMetadata *res)
 {
@@ -3577,6 +3590,10 @@ static void copy_preview_focus(ACaptureRequest *req)
         ACaptureRequest_setEntry_float(req, ACAMERA_LENS_FOCUS_DISTANCE, 1, e.data.f);
 }
 
+/* The focus of one request (IR_FOCUS_*): an AF mode, or the AF off and a
+ * lens distance -- MANUAL through the calibration table, RAW as the HAL's
+ * own value, HOLD where the lens is now -- or KEEP, the preview's. Returns
+ * 1 when the mode needs one scan triggered by the caller (AUTO, MACRO). */
 static int set_focus(ACaptureRequest *req, int mode, float diopters)
 {
     uint8_t af;
@@ -3638,12 +3655,18 @@ static void flash_arm(ACaptureRequest *req, int manual)
                : g.flash_mode == 3 ? ACAMERA_FLASH_MODE_TORCH : ACAMERA_FLASH_MODE_OFF;
     if (req) ACaptureRequest_setEntry_u8(req, ACAMERA_FLASH_MODE, 1, &fm);
 }
+/* After the shot: the request back to no flash (or the torch, if on). */
 static void flash_disarm(ACaptureRequest *req)
 {
     uint8_t fm = g.flash_mode == 3 ? ACAMERA_FLASH_MODE_TORCH : ACAMERA_FLASH_MODE_OFF;
     if (req) ACaptureRequest_setEntry_u8(req, ACAMERA_FLASH_MODE, 1, &fm);
 }
 
+/* The exposure of one request: exposure_ns <= 0 is automatic (the AE, its
+ * flash mode, the lock of a reference point, the EV wheel); else a manual
+ * pair, checked against the sensor's ranges as raised by the device
+ * profile, with a frame duration never shorter than the exposure. Writes
+ * the error to out and returns it when the pair is refused. */
 static int set_exposure(ACaptureRequest *req, int64_t exposure_ns, int iso,
                         char *out, size_t out_size)
 {
@@ -8087,6 +8110,9 @@ IR_API int indraw_preview_frame(const char *path, char *out, size_t out_size)
     return IR_OK;
 }
 
+/* Closes the camera: the session, the requests, the readers, the device
+ * and the manager, whatever was open (close_all); reports how long it
+ * took. IR_ESTATE if nothing is open. */
 IR_API int indraw_close(char *out, size_t out_size)
 {
     double t0 = now_ms();

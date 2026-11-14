@@ -58,10 +58,6 @@ Page {
     property string resultPath: ""
     property string failWhy: ""
     property string exposureText: ""
-    // the flat field used for the before/after look: a DNG the user takes
-    // from the camera page later; here we only show the thumbnail the engine
-    // writes for the LAST capture of the calibration when it is kept
-    property string previewPath: ""
 
     // --- which camera: those that give RAW ---------------------------------
     // caps.cameras: every camera id; caps.rawCams: 1 / 0 for each, same order.

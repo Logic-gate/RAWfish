@@ -67,20 +67,20 @@ Each item says why, so it can be picked up later without re-deriving it.
   photo without moving; compare the edges. Same edges: drop this lead.
   The viewfinder shows less: measure the factor and size the zones on the
   preview's real field. The same effect should then exist left-right.
-  Left as is for now (November 2026).
+  Left as is for now (November 2026). Since then (0407): in 16:9 the zones
+  WERE misplaced -- that frame shows only the sensor's middle band, which
+  the mapping ignored -- and the fix made the touch focus work there. In
+  4:3 the frame and the sensor have the same shape, so that cause does
+  not apply; the "undeclared crop" lead is weaker but not ruled out: the
+  support test above still decides it.
 
-- **The 18 mm (camera 2) focuses by touch in the bottom third of the
-  screen only** (portrait; log of 14 Nov, 136 touches in manual focus):
-  46 of 92 there, 2 of 44 in the upper two thirds. Checked: the camera's
-  results report using exactly the zone we send, touch after touch (0400).
-  What is not known yet is whether that zone is where the touched subject
-  lies on the sensor -- the same question as the item above. To check:
-  (1) the phone turned 180 degrees: does the working band stay at the
-  bottom of the screen (our screen -> sensor mapping, or a preview field
-  unlike the declared one) or move to the top (the sensor's own, the
-  camera's AF); (2) on a support, a screenshot of the viewfinder and a
-  photo without moving: the same field or not. Camera 0 focuses by touch
-  everywhere.
+- **The 18 mm (camera 2): closed for now.** Its autofocus searches one
+  way and passes the sharp position; our touches could not focus it
+  (bottom third of the screen only, log of 14 Nov), nor could Jolla
+  Camera's. Since 0403 it takes no focus search of ours: automatic is the
+  camera's own, manual the volume keys; the experiments were removed in
+  0414. Open idea, for a branch of its own: our own contrast autofocus
+  (lens steps measured on the viewfinder) for that camera.
 
 - **The manual distance shown is not reliable away from the centre.** It
   is the HAL's lens position converted through a focus table measured at

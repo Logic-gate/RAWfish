@@ -171,14 +171,6 @@ Item {
     // is clamped (zsl_noise -> minimal, zsl_edge -> hq). docs/ROADMAP: ZSL.
     readonly property var noiseModes: ["default_noise","off_noise","fast_noise","hq_noise","minimal_noise"]
     readonly property var edgeModes:  ["default_edge","off_edge","fast_edge","hq_edge"]
-    // The modes as shown: the full name in the header, a short form (four
-    // characters at most) under the button. The keys stay the engine's.
-    readonly property var modeNames: { "default": qsTr("default"), "off": qsTr("off"), "fast": qsTr("fast"),
-                                       "hq": qsTr("high quality"), "minimal": qsTr("minimal") }
-    readonly property var modeShort: { "default": qsTr("def"), "off": qsTr("off"), "fast": qsTr("fast"),
-                                       "hq": qsTr("hq"), "minimal": qsTr("min") }
-    function modeName(m) { var k = shortName(m); return modeNames[k] || k }
-    function modeShortName(m) { var k = shortName(m); return modeShort[k] || k.substr(0, 4) }
     readonly property var awbNames: { 1: qsTr("Automatic"), 2: qsTr("Incandescent"), 3: qsTr("Fluorescent"),
                                       4: qsTr("Warm fluorescent"), 5: qsTr("Daylight"), 6: qsTr("Cloudy"),
                                       7: qsTr("Twilight"), 8: qsTr("Shade") }
@@ -435,7 +427,6 @@ Item {
     onAdvancedChanged: applyLive()
     Connections { target: viewfinder; onRunningChanged: if (viewfinder.running) menu.applyLive() }
 
-    function shortName(m) { return m.replace("_noise","").replace("_edge","") }
     function mp(sz) { if (sz === "") return qsTr("max"); var p = sz.split("x"); return qsTr("%1 MP").arg(Math.round(p[0] * p[1] / 1e5) / 10) }
     // Listed JPEG sizes of a ratio, largest first.
     // Listed JPEG sizes of a ratio that are clean binnings (1/1, 1/2, 1/4)

@@ -249,42 +249,6 @@
         <translation>c.barr</translation>
     </message>
     <message>
-        <location line="+15" />
-        <source>default</source>
-        <translation>défaut</translation>
-    </message>
-    <message>
-        <location line="+0" />
-        <location line="+2" />
-        <source>fast</source>
-        <translation>rapide</translation>
-    </message>
-    <message>
-        <location line="-1" />
-        <source>high quality</source>
-        <translation>haute qualité</translation>
-    </message>
-    <message>
-        <location line="+0" />
-        <source>minimal</source>
-        <translation>minimal</translation>
-    </message>
-    <message>
-        <location line="+1" />
-        <source>def</source>
-        <translation>déf</translation>
-    </message>
-    <message>
-        <location line="+1" />
-        <source>hq</source>
-        <translation>hq</translation>
-    </message>
-    <message>
-        <location line="+0" />
-        <source>min</source>
-        <translation>min</translation>
-    </message>
-    <message>
         <location line="+3" />
         <source>Automatic</source>
         <translation>Automatique</translation>

@@ -25,7 +25,7 @@ typedef struct { double x, y, w, h; } ctl_rect_t;
 
 typedef struct {
     double zoom, loupe;
-    ctl_rect_t view;            /* what the interface shows, array-normalised */
+    ctl_rect_t view;            /* what the interface shows, in fractions of the band (android/viewfield.h) */
     int has_ref;
     double ref_u, ref_v;        /* the reference point in display-window coordinates */
     int has_light;
@@ -57,7 +57,8 @@ void ctl_view_clear_light(ctl_view_t *v);
 void ctl_view_tick(ctl_view_t *v, double now_ms);                    /* flushes a throttled loupe command */
 
 void ctl_view_state(const ctl_view_t *v, ctl_view_state_t *out);
-/* The current viewfinder frame window (the preview crop), array-normalised. */
+/* The current viewfinder frame window (the preview crop), in fractions of
+ * the band (android/viewfield.h: the sensor itself when the shapes agree). */
 ctl_rect_t ctl_view_frame(const ctl_view_t *v);
 
 #endif

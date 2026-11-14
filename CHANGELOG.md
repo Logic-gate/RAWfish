@@ -6,7 +6,7 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.1.14)
+## Known issues (as of 0.3.8)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
@@ -15,6 +15,14 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- Comments and documents brought up to date: the RAW zebra in
+  rawfish-ir.conf (its JPG mode key does not apply to RAW), the view's
+  band fractions, the ROADMAP's focus items (the 18 mm closed; the 16:9
+  zones fixed by 0407), the known issues' version; header comments for
+  the engine's main per-frame and per-request functions; history
+  narratives trimmed to the reason they explain. Unused interface code
+  removed (the noise and sharpening mode names, a preview path) with its
+  seven texts in the translations.
 - The command line reads the device profile and the user's
   override-hal.json once per start (each key read both files again, some
   twenty times), with one way of finding a camera's block for every key,

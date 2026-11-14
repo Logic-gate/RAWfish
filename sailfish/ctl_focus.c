@@ -64,9 +64,8 @@ static void set_paused(ctl_focus_t *f, int p) { if (f->pause) f->pause(f->ctx, p
 
 /* On the 0.05 D grid, between infinity (0) and the camera's closest
  * distance (f->max_d: its caps, through its calibration table; 10 D until
- * the caps come). Until 0.3.8 the closest was 10 D for every camera, while
- * the JP2's cameras 0 and 2 declare a lens that goes to 20 (HAL units): the
- * closest half of their range could not be reached by hand. */
+ * the caps come: a fixed 10 D left the closest half of the JP2's range out
+ * of reach, its lenses going to 20). */
 static double snap(const ctl_focus_t *f, double d) { return fmax(0.0, fmin(f->max_d, round(d / STEP_D) * STEP_D)); }
 /* The manual distance, to the lens. Never waited for ("nowait"): the
  * engine's wait for the lens (up to 1.2 s, about 400 ms seen) ran on the
@@ -270,11 +269,10 @@ void ctl_focus_set_distance(ctl_focus_t *f, double diopters)
 int ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
 {
     char c[64];
-    /* The 18 mm (0.3.8): its one-way search passes the sharp position and
-     * often reports a success on a blurred image. The interface stopped
-     * sending its touches (0403), but the FOCUS button entering manual still
-     * started a search in the middle (review, 14 Nov 2026): refused here,
-     * whoever asks, so that manual starts from the distance shown. */
+    /* A camera our searches cannot focus (the 18 mm: its one-way search
+     * passes the sharp position and reports a success on a blurred image):
+     * refused here, whoever asks -- a touch, the FOCUS button entering
+     * manual -- so that manual starts from the distance shown. */
     if (f->no_search) return 0;
     f->tap_fx = fx; f->tap_fy = fy;
     f->search_late = 0; f->seen_active = 0;
