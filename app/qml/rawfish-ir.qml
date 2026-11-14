@@ -602,9 +602,15 @@ ApplicationWindow {
 
             // The focus button's mode, to the controller (which applies it to the
             // preview and drops the reference).
+            // searchOnManual: the FOCUS button entering manual -- one command
+            // ("fc mode manual search"), so that the search starts from where the
+            // lens is, without a trip to the manual distance first (~350 ms).
+            property bool searchOnManual: false
             function applyFocus() {
+                var search = page.searchOnManual
+                page.searchOnManual = false
                 if (!viewfinder.running) return
-                viewfinder.sendCommand("fc mode " + (page.focusMode === "manual" ? "manual" : "cont"))
+                viewfinder.sendCommand("fc mode " + (page.focusMode === "manual" ? (search ? "manual search" : "manual") : "cont"))
             }
             // A mode change: the controller drops the focus point and the light
             // point with their markers ("fc mode"); the circle fades here.
@@ -2290,8 +2296,8 @@ ApplicationWindow {
                                 // manual distance does not search: it keeps that distance).
                                 if (page.flashAuto) { page.flashLockedNotice(); return }   // the flash: the camera's own focus
                                 if (page.focusMode === "manual") { page.focusMode = "cont"; return }
-                                page.focusMode = "manual"                 // "fc mode manual" goes first (onFocusModeChanged)
-                                viewfinder.sendCommand("fc search")
+                                page.searchOnManual = true                // "fc mode manual search" (onFocusModeChanged)
+                                page.focusMode = "manual"
                             }
                         }
                     }

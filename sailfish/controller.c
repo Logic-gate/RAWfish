@@ -21,6 +21,9 @@
 #include <unistd.h>
 #include <fcntl.h>    /* O_NONBLOCK, F_SETPIPE_SZ on the event pipe */
 
+#define CTL_HELD_MAX 8
+#define CTL_HELD_LINE 96
+
 static struct {
     int rd, wr;                 /* the pipe: the engine writes, we read       */
     pthread_t thread;
@@ -35,7 +38,11 @@ static struct {
     int live_iso;               /* the last "ae" values, for vfmeter samples  */
     double live_exp_ns;
     int busy;                   /* a long engine command runs on the CLI thread */
-    int deferred;               /* a controller command was dropped meanwhile  */
+    int deferred;               /* an exposure command was dropped meanwhile   */
+    /* The focus and view commands decided while busy (see held_cmd), sent
+     * when the capture is over: the last of each kind, in order. */
+    char held_q[CTL_HELD_MAX][CTL_HELD_LINE];
+    int held_n;
     int ui_paused, focus_paused; /* the two reasons to leave the exposure alone */
     ctl_caps_t caps;             /* the last caps, for the shoot decisions */
     ctl_log_fn log;              /* diagnostics to the log, or NULL           */
@@ -98,6 +105,8 @@ static double fieldd(const char *line, const char *key, double dflt)
     return v ? atof(v) : dflt;
 }
 
+static void note(const char *fmt, ...);
+
 /* --- the exposure behaviour's two callbacks --- */
 static void exp_cmd(void *ctx, const char *engine_command)
 {
@@ -106,13 +115,63 @@ static void exp_cmd(void *ctx, const char *engine_command)
     if (c.engine_line) c.engine_line(engine_command);
 }
 
+/* The command's kind: its first word, and for "tap" its last (af, afc,
+ * afclear, ae, aeclear: a focus search and a light point are not the same
+ * order). A later command of a kind replaces the earlier one. */
+static size_t kind_len(const char *cmd, const char **tail)
+{
+    size_t n = strcspn(cmd, " ");
+    *tail = "";
+    if (n == 3 && !strncmp(cmd, "tap", 3)) { const char *sp = strrchr(cmd, ' '); if (sp) *tail = sp + 1; }
+    return n;
+}
+static int same_kind(const char *a, const char *b)
+{
+    const char *ta, *tb;
+    size_t na = kind_len(a, &ta), nb = kind_len(b, &tb);
+    return na == nb && !strncmp(a, b, na) && !strcmp(ta, tb);
+}
+
+/* A focus or view command while a capture runs. Until 0.3.8 it went the
+ * exposure's way, dropped and "re-applied after" -- but only the exposure
+ * was re-applied: the focus's "focus hold" (a touch's search ending during
+ * the photo), its "aflock" (the 18 mm's continuous-then-lock touch), its
+ * return to the manual distance, a throttled loupe were lost, and the
+ * controller went on as if the engine had them (review, 14 Nov 2026). They
+ * are decisions taken on the HAL's own reports, not re-derivable from a
+ * state, so they are held and sent once the capture is over: the last of
+ * each kind, in the order decided. */
+static void held_cmd(const char *engine_command)
+{
+    int i;
+    if (!c.busy) { if (c.engine_line) c.engine_line(engine_command); return; }
+    for (i = 0; i < c.held_n; ++i)
+        if (same_kind(c.held_q[i], engine_command)) {        /* superseded: out, the new one last */
+            memmove(c.held_q[i], c.held_q[i + 1], (size_t)(c.held_n - i - 1) * sizeof c.held_q[0]);
+            c.held_n--;
+            break;
+        }
+    if (c.held_n == CTL_HELD_MAX) {                            /* more kinds than one capture ever sees */
+        note("busy: a held command dropped (%.40s)", c.held_q[0]);
+        memmove(c.held_q[0], c.held_q[1], (size_t)(CTL_HELD_MAX - 1) * sizeof c.held_q[0]);
+        c.held_n--;
+    }
+    if (strlen(engine_command) >= CTL_HELD_LINE) { note("busy: a command too long to hold (%.40s)", engine_command); return; }
+    snprintf(c.held_q[c.held_n++], CTL_HELD_LINE, "%s", engine_command);
+}
+
 void ctl_engine_busy(int busy)
 {
     ctl_lock();
     c.busy = !!busy;
-    if (!busy && c.deferred) {
-        c.deferred = 0;
-        if (c.exp) ctl_exp_restart(c.exp);          /* meter + the current pair, now */
+    if (!busy) {
+        int i, n = c.held_n;
+        if (c.deferred) {
+            c.deferred = 0;
+            if (c.exp) ctl_exp_restart(c.exp);      /* meter + the current pair, now */
+        }
+        c.held_n = 0;
+        for (i = 0; i < n; ++i) if (c.engine_line) c.engine_line(c.held_q[i]);
     }
     ctl_unlock();
 }
@@ -145,7 +204,8 @@ static void foc_cmd(void *ctx, const char *engine_command)
         c.trace_af = -1; c.trace_lens = -1;
         if (c.log) c.log("af trace: search started");
     }
-    exp_cmd(ctx, engine_command);
+    (void)ctx;
+    held_cmd(engine_command);
 }
 static void foc_pause(void *ctx, int paused) { (void)ctx; c.focus_paused = !!paused; apply_pause(); }
 static void foc_spot(void *ctx, int on) { (void)ctx; if (c.exp) { if (on) ctl_exp_spot_start(c.exp); else ctl_exp_spot_stop(c.exp); } }
@@ -159,7 +219,7 @@ static void foc_state(void *ctx, const ctl_focus_state_t *s)
 }
 
 /* --- the view geometry's callbacks --- */
-static void view_cmd(void *ctx, const char *engine_command) { exp_cmd(ctx, engine_command); }
+static void view_cmd(void *ctx, const char *engine_command) { (void)ctx; held_cmd(engine_command); }
 static void view_ref(void *ctx, double fx, double fy) { (void)ctx; if (c.foc) ctl_focus_ref(c.foc, fx, fy, now_ms()); }
 static void view_state(void *ctx, const ctl_view_state_t *s)
 {
@@ -167,7 +227,7 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
     (void)ctx;
     /* the engine's meters cover what is shown: tell it the display window */
     snprintf(line, sizeof line, "viewwin %.5f %.5f %.5f %.5f", s->view.x, s->view.y, s->view.w, s->view.h);
-    exp_cmd(NULL, line);
+    held_cmd(line);
     snprintf(line, sizeof line, "vwstate zoom=%.3f loupe=%.3f view=%.5f,%.5f,%.5f,%.5f ref=%d,%.5f,%.5f light=%d,%.5f,%.5f\n",
              s->zoom, s->loupe, s->view.x, s->view.y, s->view.w, s->view.h, s->has_ref, s->ref_u, s->ref_v,
              s->has_light, s->light_u, s->light_v);
@@ -270,6 +330,7 @@ static void on_event(const char *line)
                  * else its HAL value, else the old 10 D) */
                 ctl_focus_set_max(c.foc, fieldd(line, "min_focus_real", fieldd(line, "min_focus", 10.0)));
                 ctl_focus_set_touch(c.foc, (int)fieldd(line, "touch_af", 0));   /* the engine's focus touch */
+                ctl_focus_set_search(c.foc, (int)fieldd(line, "touch_focus", 1) != 0);   /* 0: no search at all (the 18 mm) */
                 ctl_focus_set_step_pct(c.foc, fieldd(line, "focus_step_pct", 0));   /* the profile's step (the 18 mm) */
                 ctl_focus_restart(c.foc);                /* a (re)started engine: the mode again */
             }
@@ -300,7 +361,7 @@ static void on_event(const char *line)
  *   xp auto | xp touch iso|speed | xp iso N | xp speed NS | xp ev N |
  *   xp spot on|off | xp pause on|off | xp source raw|vf */
 /* The interface's commands for the focus behaviour:
- *   fc mode cont|once|manual | fc search | fc step N | fc distance D |
+ *   fc mode cont|once|manual | fc mode manual search | fc search | fc step N | fc distance D |
  *   fc ref FX FY | fc clear | fc scene on|off | fc state
  * (the interface offers cont and manual; "once" stays for the command line) */
 static int focus_command(const char *line)
@@ -314,7 +375,15 @@ static int focus_command(const char *line)
         /* The focus button entering manual: one search in the middle of the
          * frame; the distance found becomes the manual one (as a touch does,
          * without a circle: the view keeps no reference for it). */
-        ctl_focus_ref(c.foc, 0.5, 0.5, now_ms());
+        if (!ctl_focus_ref(c.foc, 0.5, 0.5, now_ms()))
+            note("fc search: this camera takes no focus search (device profile): manual from the distance shown");
+    }
+    else if (!strcmp(a, "mode") && !strcmp(b, "manual") && !strcmp(d, "search")) {
+        /* "fc mode manual search": the FOCUS button entering manual, in one
+         * command: the search starts from where the lens is (see
+         * ctl_focus_manual_search), not after a trip to the mode's distance */
+        ctl_focus_manual_search(c.foc, now_ms());
+        if (c.view) ctl_view_clear_ref(c.view);
     }
     else if (!strcmp(a, "mode")) {
         /* A focus mode change drops the focus point and its marker; the light
@@ -482,6 +551,7 @@ int ctl_start(ctl_emit_fn emit, ctl_set_event_fd_fn set_event_fd, ctl_engine_lin
     fcntl(fds[1], F_SETPIPE_SZ, 1 << 20);
 #endif
     c.rd = fds[0]; c.wr = fds[1];
+    c.busy = 0; c.deferred = 0; c.held_n = 0;
     c.emit = emit; c.set_event_fd = set_event_fd; c.engine_line = engine_line;
     c.exp = ctl_exp_new(exp_cmd, exp_state, NULL);
     c.foc = ctl_focus_new(foc_cmd, foc_state, foc_pause, foc_spot, NULL);

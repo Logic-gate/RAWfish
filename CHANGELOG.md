@@ -99,6 +99,34 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- **A focus decided during a photo is no longer lost.** While a photo, a
+  burst or a stack runs, the controller's commands wait; only the
+  exposure was sent again afterwards. A touch's search that ended during
+  the photo (the shutter pressed while it searched) lost its "hold": the
+  distance shown was the one found, the lens elsewhere. A search that
+  failed lost its return to the manual distance, and a loupe move just
+  before the press was lost too. They are now kept and sent when the photo
+  is over, in order (host test controller_busy_test.c).
+- **The 18 mm: no focus search at all, as meant.** Its touch was turned
+  off (0403), but the FOCUS button entering manual still started a search
+  in the middle of the frame, with the same unreliable autofocus. The
+  controller now starts none on a camera whose profile says
+  `touch_focus_off`: the button goes to manual from the distance shown,
+  the volume keys move the lens, automatic is the camera's own focus, the
+  hold still sets the exposure. Its profile's `touch_focus_continuous`
+  (tried before 0403) is gone. The 26 mm is unchanged.
+- The FOCUS button entering manual starts its search about 0.35 s
+  sooner: the lens used to go first to the manual distance in memory
+  (and the search was waited for until it got there, 345 ms in the log of
+  14 Nov), then searched from there. It now searches from where the
+  automatic focus left it ("fc mode manual search").
+- A camera that declares a longest frame shorter than its longest
+  exposure (against Camera2's rule) no longer gets a frame shorter than
+  the exposure asked: the frame stays the exposure's.
+- A cut or malformed caps line (no ISO maximum) now really turns the
+  exposure control off, as the log says; it used to stay on and send ISO
+  0. The viewfinder's EV100 keeps the measured frame's own light in a Σ
+  preview, on purpose (comment and test added).
 - The menu's White bal. column is back on auto at each start of the app
   (a preset such as daylight or tungsten no longer carries over). Measured
   whites and the temperature and tint shifts are unchanged.

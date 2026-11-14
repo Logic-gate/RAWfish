@@ -55,12 +55,15 @@ Corrections wired today (both optional, per camera):
   the same way: the exposure requested against the one applied.
 - `touch_focus_continuous`: 1 = a focus touch in manual focus searches with
   the continuous autofocus, then locks where it settled. For a camera whose
-  AUTO search misses (the JP2's 18 mm scans only from the lens' position
-  towards infinity). Applied while rawfish-ir.conf's focusTouchContinuous
-  test key is 1.
-- `touch_focus_off`: 1 for a camera whose autofocus a touch cannot drive
-  (the JP2's 18 mm: one-way search that passes the sharp position). A touch
-  then focuses nothing and says so; the hold still meters.
+  AUTO search misses. Applied while rawfish-ir.conf's focusTouchContinuous
+  test key is 1. (Tried on the JP2's 18 mm, then dropped there for
+  `touch_focus_off`: no camera uses it today.)
+- `touch_focus_off`: 1 for a camera whose autofocus our searches cannot
+  drive (the JP2's 18 mm: one-way search that passes the sharp position).
+  No search is started on it, whoever asks: a touch focuses nothing and
+  says so, the FOCUS button goes to manual from the distance shown, the
+  volume keys move the lens; automatic is the camera's own focus. The hold
+  still meters.
 - `focus_max_diopters`: the lens' real closest stop in HAL units, when it
   stops before the declared one (the JP2's 18 mm declares 20, stops near 9).
   The manual range ends there.

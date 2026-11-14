@@ -184,6 +184,8 @@ as events.
 | `xp state` | the state once |
 
 | `fc mode cont\|once\|manual` | the focus mode (applied to the preview; drops the reference) |
+| `fc mode manual search` | the FOCUS button entering manual: AF off where the lens is (`focus hold`), then one search in the middle, whose distance becomes the manual one (no trip to the manual distance first); a camera without focus searches (`touch_focus_off`) gets the plain `fc mode manual` |
+| `fc search` | one search in the middle (as `fc ref 0.5 0.5`), in the mode in force |
 | `fc step N` | manual focus: N steps of 0.05 D (+ farther, - nearer) |
 | `fc distance D` | manual focus set to D diopters (0 = infinity) |
 | `fc ref FX FY` | a tap at a point of the viewfinder frame: the reference (search with the HAL's AE on, then hold / adopt the distance, then the spot measure); light only in continuous mode |

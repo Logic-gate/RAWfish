@@ -83,6 +83,10 @@ gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/
 # The controller runs without Android or Qt: its host test (sailfish/tests).
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ctl-test "$root/sailfish/tests/controller_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
 /tmp/indraw-ctl-test
+# The controller during a capture: the focus and view commands decided
+# meanwhile are held and sent after it, in order (they were lost until 0.3.8).
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ctl-busy-test "$root/sailfish/tests/controller_busy_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
+run_test /tmp/indraw-ctl-busy-test
 # The controller under two threads (the event reader and the CLI's commands),
 # with ThreadSanitizer, and with Helgrind when valgrind is installed: the one
 # part of the code these tools can run (the engine needs the Camera2 HAL).

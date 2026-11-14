@@ -50,6 +50,7 @@ struct ctl_focus {
      * waiting for 4 or 5. */
     int touch_cont, cont_phase, cont_seen_scan;
     int held;                   /* manual: lens held at a search's lock (see ctl_focus_state_t) */
+    int no_search;              /* the camera takes no search of ours (ctl_focus_set_search) */
     double tap_fx, tap_fy;
 
     ctl_focus_state_t last;
@@ -221,6 +222,20 @@ void ctl_focus_set_mode(ctl_focus_t *f, int mode)
     apply_mode(f);
     publish(f);
 }
+static int drop_ref(ctl_focus_t *f);
+void ctl_focus_manual_search(ctl_focus_t *f, double now_ms)
+{
+    if (f->no_search) { ctl_focus_set_mode(f, CTL_FOCUS_MANUAL); return; }
+    f->mode = CTL_FOCUS_MANUAL;
+    f->held = 0;
+    drop_ref(f);              /* the old point goes; the search's zone replaces its region */
+    /* AF off where the lens is: the touch then goes from OFF to one AUTO
+     * search with its trigger, as from a manual distance. (Straight from the
+     * continuous mode the engine would make the zone a continuous one, with
+     * no trigger and no lock to come.) */
+    send(f, "focus hold");
+    ctl_focus_ref(f, 0.5, 0.5, now_ms);
+}
 void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farther (fewer diopters) */
 {
     if (f->mode != CTL_FOCUS_MANUAL) return;
@@ -259,9 +274,15 @@ void ctl_focus_set_distance(ctl_focus_t *f, double diopters)
  * point; once: one scan, then held; manual: one scan, the distance found
  * becomes the manual one, to adjust by hand). The exposure is not touched:
  * it stays the whole image's, or the held light point's (ctl_focus_light). */
-void ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
+int ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
 {
     char c[64];
+    /* The 18 mm (0.3.8): its one-way search passes the sharp position and
+     * often reports a success on a blurred image. The interface stopped
+     * sending its touches (0403), but the FOCUS button entering manual still
+     * started a search in the middle (review, 14 Nov 2026): refused here,
+     * whoever asks, so that manual starts from the distance shown. */
+    if (f->no_search) return 0;
     f->tap_fx = fx; f->tap_fy = fy;
     f->search_late = 0; f->seen_active = 0;
     f->manual_pick = f->mode == CTL_FOCUS_MANUAL;
@@ -276,9 +297,11 @@ void ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms)
     } else snprintf(c, sizeof c, "tap %.4f %.4f af", fx, fy);
     send(f, c);
     publish(f);
+    return 1;
 }
 
 void ctl_focus_set_touch(ctl_focus_t *f, int mode) { f->touch_cont = mode == 2; }
+void ctl_focus_set_search(ctl_focus_t *f, int allowed) { f->no_search = !allowed; }
 
 /* A long press: the LIGHT at that point (a 5 % spot): the HAL's exposure
  * meters there, and in a manual or priority exposure the spot meter reads
@@ -306,7 +329,8 @@ void ctl_focus_light_clear(ctl_focus_t *f)
 /* The focus circle cleared: the focus back to the mode's (the light point,
  * if any, stays; ctl_focus_light_clear removes it). A mode change clears
  * both. */
-void ctl_focus_clear(ctl_focus_t *f)
+/* The focus point dropped (fields only); returns whether there was one. */
+static int drop_ref(ctl_focus_t *f)
 {
     int had = f->searching || f->search_late || f->circle != CTL_CIRCLE_NONE;
     f->searching = 0; f->search_late = 0;
@@ -314,7 +338,11 @@ void ctl_focus_clear(ctl_focus_t *f)
     f->cont_phase = 0;                                           /* no lock to come */
     f->circle = CTL_CIRCLE_NONE;
     set_paused(f, 0);
-    if (had) {
+    return had;
+}
+void ctl_focus_clear(ctl_focus_t *f)
+{
+    if (drop_ref(f)) {
         send(f, "tap 0.5 0.5 afclear");
         /* the mode again; but a manual lens held at a search stays where it is
          * (removing the circle does not move the lens) */

@@ -140,6 +140,43 @@ int main(void)
     ctl_focus_ref(f, 0.5, 0.5, t += 1000);
     CHECK(!strcmp(last(), "tap 0.5000 0.5000 af"), "the usual touch again with touch_af 0");
     ctl_focus_live(f, 3, -1, t += 100); ctl_focus_live(f, 4, 1.0, t += 100);
+    /* 4d. A camera our searches cannot focus (caps touch_focus=0, the 18 mm):
+     *     no search at all, whoever asks (a touch, the FOCUS button entering
+     *     manual), nothing changed; the light point still meters. */
+    {
+        int before = ncmds;
+        double d = st.diopters;
+        ctl_focus_set_search(f, 0);
+        CHECK(ctl_focus_ref(f, 0.5, 0.5, t += 1000) == 0 && ncmds == before && !st.searching && fabs(st.diopters - d) < 1e-9,
+              "touch_focus 0: a search refused, nothing sent, the distance kept");
+        ctl_focus_light(f, 0.3, 0.3);
+        CHECK(count("tap 0.3000 0.3000 ae") == 1, "touch_focus 0: the hold still sets the light point");
+        ctl_focus_light_clear(f);
+        ctl_focus_set_search(f, 1);
+    }
+    /* 4e. The FOCUS button entering manual (fc mode manual search): AF off
+     *     where the lens is, then the search -- no trip to the manual
+     *     distance first; a camera without searches gets the distance. */
+    {
+        int before;
+        ctl_focus_set_mode(f, CTL_FOCUS_CONT);
+        before = ncmds;
+        ctl_focus_manual_search(f, t += 1000);
+        CHECK(ncmds - before == 2 && !strcmp(cmds[before], "focus hold") && !strcmp(cmds[before + 1], "tap 0.5000 0.5000 af")
+              && st.mode == CTL_FOCUS_MANUAL && st.searching,
+              "manual search: 'focus hold' then the search, no distance sent first");
+        ctl_focus_live(f, 3, -1, t += 100);
+        ctl_focus_live(f, 4, 2.5, t += 100);
+        CHECK(st.held && fabs(st.diopters - 2.5) < 1e-9 && !strcmp(last(), "focus hold"), "manual search: locked -> held at the distance found");
+        ctl_focus_set_mode(f, CTL_FOCUS_CONT);
+        ctl_focus_set_search(f, 0);
+        before = ncmds;
+        ctl_focus_manual_search(f, t += 1000);
+        CHECK(ncmds - before == 1 && !strncmp(cmds[before], "focus ", 6) && strcmp(cmds[before], "focus hold") && !st.searching,
+              "manual search, camera without searches: the distance shown, no search");
+        ctl_focus_set_search(f, 1);
+        ctl_focus_set_mode(f, CTL_FOCUS_MANUAL);
+    }
     /* 5. clear: the reference goes, the mode is restated. */
     ctl_focus_clear(f);
     CHECK(count("tap 0.5 0.5 afclear") >= 1 && st.circle == CTL_CIRCLE_NONE, "clear: the focus region reset, the circle gone");
@@ -159,6 +196,6 @@ int main(void)
     }
     ctl_focus_free(f);
 
-    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (6 rules)\n", fails);
+    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (8 rules)\n", fails);
     return fails ? 1 : 0;
 }

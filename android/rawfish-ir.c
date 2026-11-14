@@ -3663,8 +3663,14 @@ static int set_exposure(ACaptureRequest *req, int64_t exposure_ns, int iso,
         frame = exposure_ns > floor ? exposure_ns : floor;
     }
     /* The declared longest frame, unless the profile vouches for a longer
-     * exposure: a frame shorter than its exposure would cut it. */
-    if (max_frame && frame > max_frame && !(g.override_exp_max_ns >= exposure_ns)) frame = max_frame;
+     * exposure: a frame shorter than its exposure would cut it. And never
+     * below the exposure itself: Camera2 promises MAX_FRAME_DURATION >= the
+     * longest exposure, but a HAL that declares less would have got a frame
+     * shorter than the exposure asked (review, 14 Nov 2026). The frame then
+     * stays the exposure's; the photo's "applied" frame_ns says what the HAL
+     * made of it. */
+    if (max_frame && frame > max_frame && !(g.override_exp_max_ns >= exposure_ns))
+        frame = max_frame > exposure_ns ? max_frame : exposure_ns;
     ae = ACAMERA_CONTROL_AE_MODE_OFF;
     iso32 = iso;
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &ae);

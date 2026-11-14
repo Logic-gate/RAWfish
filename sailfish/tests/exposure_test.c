@@ -195,6 +195,42 @@ int main(void)
     CHECK(ncmds == before, "paused: the loop sends nothing");
     ctl_exp_free(e);
 
-    printf(fails ? "exposure: FAILED (%d)\n" : "exposure: OK (10 rules)\n", fails);
+    /* 8. EV100 is the scene's light: the same for a plain manual pair and for
+     *    a Σ preview frame 3 stops darker than its photo (the frame's own
+     *    mean and pair; the deficit is the photo's, not the scene's). */
+    e = ctl_exp_new(on_cmd, on_state, NULL);
+    ctl_exp_set_caps(e, &caps);
+    for (i = 0; i < 4; ++i) halq[i].iso = 0;
+    hal_auto = 1; scene_L = 1e-4;
+    ctl_exp_set_iso(e, 100);
+    ctl_exp_set_shutter(e, 16666667);                            /* 1/60 s ISO 100: no deficit */
+    hal_apply_cmd();
+    for (i = 0; i < 40; ++i) frame(e, t += 100);
+    {
+        double ev_plain = last_state.ev100;
+        ctl_exp_set_iso(e, 400);
+        ctl_exp_set_shutter(e, 8e9);                             /* Σ8s ISO 400: preview 0.5 s ISO 3200, 1 stop short */
+        hal_apply_cmd();
+        for (i = 0; i < 40; ++i) frame(e, t += 100);
+        CHECK(last_state.deficit_stops > 0.9 && !isnan(ev_plain) && fabs(last_state.ev100 - ev_plain) < 0.05,
+              "EV100: the same in a Σ deficit as with a plain pair (the deficit is not the scene's)");
+    }
+    ctl_exp_free(e);
+
+    /* 9. Caps without a usable ISO range (a cut line: iso_max missing): the
+     *    behaviour stays off and sends nothing, as the controller's log says. */
+    {
+        ctl_caps_t bad = caps;
+        bad.iso_max = 0;
+        e = ctl_exp_new(on_cmd, on_state, NULL);
+        before = ncmds;
+        ctl_exp_set_caps(e, &bad);
+        ctl_exp_set_iso(e, 400);
+        ctl_exp_set_shutter(e, 1e7);
+        CHECK(ncmds == before, "caps with iso_max < iso_min: exposure off, nothing sent");
+        ctl_exp_free(e);
+    }
+
+    printf(fails ? "exposure: FAILED (%d)\n" : "exposure: OK (12 rules)\n", fails);
     return fails ? 1 : 0;
 }

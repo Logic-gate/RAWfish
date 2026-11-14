@@ -59,6 +59,12 @@ void ctl_focus_live(ctl_focus_t *f, int af_state, double focus_real_d, double no
 
 /* Commands from the interface. */
 void ctl_focus_set_mode(ctl_focus_t *f, int mode);
+/* The FOCUS button entering manual: manual focus, and one search in the
+ * middle at once, from where the lens is ("focus hold", then the search),
+ * instead of the mode's distance first (a lens trip of ~350 ms, then the
+ * search started from there anyway). A camera that takes no search
+ * (ctl_focus_set_search 0) gets the plain mode change: the distance shown. */
+void ctl_focus_manual_search(ctl_focus_t *f, double now_ms);
 void ctl_focus_step(ctl_focus_t *f, int dir);             /* manual: +1 farther, -1 nearer */
 void ctl_focus_set_distance(ctl_focus_t *f, double diopters);
 /* The camera's closest distance, in the diopters the focus works in (the
@@ -72,11 +78,18 @@ void ctl_focus_set_step_pct(ctl_focus_t *f, double pct);
  * lock" -- a manual focus touch searches with the continuous AF ("tap X Y
  * afc") and locks once it settled ("aflock"); else the usual touch. */
 void ctl_focus_set_touch(ctl_focus_t *f, int mode);
+/* The caps' touch_focus: 0 = a camera our searches cannot focus (device
+ * profile touch_focus_off; the JP2's 18 mm). No search is ever started on
+ * it -- not a touch, not the FOCUS button entering manual: its automatic
+ * mode is the HAL's own, its manual one the volume keys. 1 = the usual. */
+void ctl_focus_set_search(ctl_focus_t *f, int allowed);
 /* A long press: the exposure meters a 5 % spot at that point (the focus is
  * untouched); _light_clear: back to the whole image. */
 void ctl_focus_light(ctl_focus_t *f, double fx, double fy);
 void ctl_focus_light_clear(ctl_focus_t *f);
-void ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms); /* a tap, frame coords */
+/* A tap, frame coords: one search. Returns 0 when this camera takes none
+ * (ctl_focus_set_search 0): nothing sent, nothing changed. */
+int ctl_focus_ref(ctl_focus_t *f, double fx, double fy, double now_ms);
 void ctl_focus_clear(ctl_focus_t *f);                     /* the reference removed */
 void ctl_focus_set_scene(ctl_focus_t *f, int scene_on);   /* a scene drives the exposure: no spot */
 

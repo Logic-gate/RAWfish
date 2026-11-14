@@ -65,9 +65,7 @@
         "_note": "The 18 mm. Tested on a JP2 (November 2026): a manual exposure is taken up to ISO 16000 and 0.5 s, beyond the declared 2400 and 0.1 s; the camera's own automatic exposure goes to ISO 15537.",
         "observed_iso_max": 16000,
         "observed_exposure_max_ns": 500000000,
-        "_touch_note": "The 18 mm's AUTO focus search scans only from where the lens is towards infinity (trace of 14 Nov 2026): from a manual distance near infinity it missed closer subjects. Its continuous search finds them: a focus touch searches with it, then locks (rawfish-ir.conf focusTouchContinuous=1 while this is tested).",
-        "touch_focus_continuous": 1,
-        "_focus_note": "The 18 mm: its autofocus searches one way only (from the lens' position towards infinity) and passes the sharp position without stopping, its sharpness changing little with distance (focal 2.37 mm): a touch cannot focus it (logs of 15 Nov 2026). Its lens stops near 9 while it declares 20.",
+        "_focus_note": "The 18 mm: its autofocus searches one way only (from the lens' position towards infinity) and passes the sharp position without stopping, its sharpness changing little with distance (focal 2.37 mm): a touch cannot focus it (logs of 15 Nov 2026). So no search of ours at all: automatic is the camera's own focus, manual the volume keys (no touch, no search from the FOCUS button); the hold still sets the exposure. Its lens stops near 9 while it declares 20.",
         "touch_focus_off": 1,
         "focus_max_diopters": 9,
         "focus_step_percent": 8

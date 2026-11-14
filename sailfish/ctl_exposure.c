@@ -211,7 +211,11 @@ void ctl_exp_free(ctl_exposure_t *e) { free(e); }
 void ctl_exp_set_caps(ctl_exposure_t *e, const ctl_caps_t *caps)
 {
     e->caps = *caps;
-    e->ready = caps->iso_min > 0;
+    /* A usable ISO range, the same test as the controller's diagnostic
+     * ("exposure control off"): until 0.3.8 only iso_min was checked, so a
+     * caps line cut before its iso_max left the behaviour on, clamping every
+     * ISO to 0, while the log said it was off (review, 14 Nov 2026). */
+    e->ready = caps->iso_min > 0 && caps->iso_max >= caps->iso_min;
     e->last_pair[0] = '\0';
     e->auto_sent = 0;
     send_meter(e);
@@ -245,7 +249,15 @@ void ctl_exp_live(ctl_exposure_t *e, int iso, double exp_ns, int ae_state)
 /* The absolute light level of what is metered (the spot when a circle is
  * set), as EV at ISO 100: from the measured frame's pair, EV100 =
  * log2(N^2/t) - log2(ISO/100), plus how much brighter than the target the
- * measure is. Lightly smoothed for a steady display. */
+ * measure is. Lightly smoothed for a steady display.
+ * The measured frame's OWN mean and pair, on purpose: a Σ preview frame
+ * darker than the photo by pv_deficit has its mean AND its exposure lower by
+ * that same factor, which cancel out; the scene's light does not depend on
+ * how it is exposed. So it is called before ctl_exp_sample multiplies the
+ * mean by the deficit (that product is what the PHOTO would read, for the
+ * stops and the loop). Applying the deficit here would make EV100 too bright
+ * by log2(deficit) -- a "fix" a review proposed on 14 Nov 2026 (checked by
+ * exposure_test: EV100 the same with and without a deficit). */
 static void update_metered_ev(ctl_exposure_t *e, double mean, int frame_iso, double frame_exp_ns)
 {
     double n = e->caps.aperture, t = target(e) / (full_auto(e) ? 1.0 : pow(2.0, ev_stops(e)));
