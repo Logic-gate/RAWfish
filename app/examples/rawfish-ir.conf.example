@@ -162,7 +162,8 @@ stackDenoise=1
 ; --- Focus peaking and zebra (no longer in the menu) -----------------------
 ; A change in % applied to the device's own thresholds (override-hal.json:
 ; peak_edge, zebra_jpeg, zebra_raw). Negative = more peaking / zebra appears
-; earlier; positive = less / later.             values: -30, 0, 30      default 0
+; earlier; positive = less / later. In raw the zebra is the RAW's measured
+; clipping: the tweak scales the striped share.  values: -30, 0, 30      default 0
 peakTweak=0
 zebraTweak=0
 

@@ -377,7 +377,8 @@ other user directories, no network, no location). The sandbox only shows
 
 The caps line also carries `peak_edge`, `peak_width`, `zebra_jpeg` and `zebra_raw` (the focus
 peaking's sensitivity and line width, the zebra clipping level for jpg, 0..255, and raw, per-mille
-of the white level, since the RAW has its own latitude), all tunable per device in
+of the white level, measured on the RAW itself, since the RAW has its own latitude: the `meter`
+line's `zclip=`), all tunable per device in
 `override-hal.json`, `flash` (1 when the camera has a flash unit), `crop_free` (1 when the HAL
 crops anywhere, 0 when it only crops around the centre -- the loupe adapts) and `aperture` (the
 lens's f-number).

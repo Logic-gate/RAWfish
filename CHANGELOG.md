@@ -99,6 +99,17 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- **The RAW zebra follows the RAW.** It was computed on the 8-bit
+  viewfinder like the JPG's, with a level of 253 in any channel standing
+  for the RAW: it striped MORE than the JPG's, and places the RAW had not
+  clipped (14 Nov: a white wall behind the left pane, its blue at 254 in
+  the viewfinder, striped over a third; the DNG held it; only the sky had
+  clipped, 5.3 % of the frame). The engine's RAW meter now measures the
+  share of what is shown that reaches the RAW zebra level (zebra_raw),
+  and the viewfinder's brightest pixels are striped up to that share. On
+  the photo of that scene: 5.4 % striped, 86 % of it really clipped in
+  the RAW (the old way: 76 %). The jpg zebra is unchanged; zebraTweak
+  scales the RAW's striped share.
 - The viewfinder's default processing is the camera's high-quality noise
   reduction and sharpening (rawfish-ir.conf viewfinderNoise=hq,
   viewfinderSharpen=hq; they were fast and off). Photos are not concerned

@@ -28,7 +28,15 @@
  * lives in its own QThread, takes the latest frame and the aids' settings,
  * and hands the ARGB overlay back (ui 167). While it works, newer frames
  * only replace the one waiting: it never falls behind, it skips. */
-struct OverlayParams { bool zebra = false, peaking = false, zebraLuma = false; int level = 250, edge = 40, width = 2; };
+struct OverlayParams {
+    bool zebra = false, peaking = false, zebraLuma = false; int level = 250, edge = 40, width = 2;
+    /* The RAW zebra (0.3.8): share >= 0 stripes that fraction (0..1) of the
+     * brightest pixels (luminance) of `region` (frame pixels: the part the
+     * interface shows) instead of a fixed level -- the share of the RAW that
+     * reaches its own zebra level, measured by the engine ("zclip"). */
+    double share = -1;
+    QRect region;
+};
 class OverlayWorker : public QObject
 {
     Q_OBJECT
@@ -162,6 +170,16 @@ class IndrawPreview : public QQuickItem
      * one channel long before it looks overexposed. For RAW the channel test
      * stays: one channel lost is data lost. */
     Q_PROPERTY(bool zebraLuma READ zebraLuma WRITE setZebraLuma NOTIFY aidsChanged)
+    /* zebraRawShare (type raw, 0.3.8): the stripes follow the RAW's own
+     * clipping, not a level of the 8-bit viewfinder (whose tone curve puts
+     * 255 well below the RAW's white): the engine's RAW meter says which
+     * share of what is shown reaches the RAW zebra level ("zclip"), and that
+     * share of the viewfinder's brightest pixels is striped. zebraLevel and
+     * zebraLuma then do not apply. Nothing is striped until a first measure. */
+    Q_PROPERTY(bool zebraRawShare READ zebraRawShare WRITE setZebraRawShare NOTIFY aidsChanged)
+    /* The RAW zebra's share times this (rawfish-ir.conf zebraTweak: +30 %
+     * = 0.7, a third less striped; -30 % = 1.3). */
+    Q_PROPERTY(qreal zebraShareScale READ zebraShareScale WRITE setZebraShareScale NOTIFY aidsChanged)
     Q_PROPERTY(int peakEdge READ peakEdge WRITE setPeakEdge NOTIFY aidsChanged)
     Q_PROPERTY(int peakWidth READ peakWidth WRITE setPeakWidth NOTIFY aidsChanged)
 
@@ -239,6 +257,10 @@ public:
     int zebraLevel() const;
     bool zebraLuma() const { return m_zebraLuma; }
     void setZebraLuma(bool on);
+    bool zebraRawShare() const { return m_zebraRawShare; }
+    void setZebraRawShare(bool on);
+    qreal zebraShareScale() const { return m_zebraShareScale; }
+    void setZebraShareScale(qreal s);
     void setZebraLevel(int level);
     int peakEdge() const;
     void setPeakEdge(int edge);
@@ -432,6 +454,10 @@ private:
     bool m_zebra = false, m_peaking = false;
     int m_zebraLevel = 250;
     bool m_zebraLuma = false;
+    bool m_zebraRawShare = false;
+    qreal m_rawClipShare = -1;     /* the RAW meter's zclip, 0..1; -1 not measured yet */
+    qreal m_zebraShareScale = 1;
+    QRect sourceRectIn(const QSize &imageSize) const;   /* the part of a frame shown */
     int m_peakEdge = 40;
     int m_peakWidth = 2;
     QImage m_overlay;              /* half-resolution ARGB aids, or null         */

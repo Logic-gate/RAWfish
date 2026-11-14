@@ -1151,22 +1151,29 @@ ApplicationWindow {
                     else { var p = sz.split("x"); viewfinder.captureSize = Qt.size(Number(p[0]), Number(p[1])) }
                 }
             }
-            // Zebra clips at a different level for raw and for jpg: the RAW has
-            // its own latitude, so "about to clip" is nearer the white level.
-            // The viewfinder is 8-bit, so the raw threshold (per-mille of white)
-            // is mapped onto 0..255. Peaking uses the device's edge threshold.
+            // Zebra: in jpg, a level of the viewfinder (what the JPEG will
+            // hold). In raw (0.3.8), the RAW's own clipping: the engine's RAW
+            // meter measures the share of what is shown at the RAW zebra level
+            // (zebra_raw), and the item stripes that share of the viewfinder's
+            // brightest pixels. Until then a viewfinder level stood for the
+            // RAW (253, any channel), which the RAW's latitude does not
+            // follow: a white wall the RAW held was striped (14 Nov). Peaking
+            // uses the device's edge threshold.
             function applyAidThresholds() {
                 var c = viewfinder.caps
                 var pk = (1 + settingsMenu.peakTweak / 100), zb = (1 + settingsMenu.zebraTweak / 100)
                 viewfinder.peakEdge = Math.round((c.peakEdge > 0 ? c.peakEdge : 40) * pk)
                 viewfinder.peakWidth = c.peakWidth > 0 ? c.peakWidth : 2
-                // Zebra: the tweak moves the headroom (255 - level), not the level.
-                var level = page.imageType === "raw" ? (c.zebraRaw > 0 ? c.zebraRaw : 992) / 1000 * 255
-                                                     : (c.zebraJpeg > 0 ? c.zebraJpeg : 250)
+                // jpg: the tweak moves the headroom (255 - level), not the level.
+                var level = c.zebraJpeg > 0 ? c.zebraJpeg : 250
                 viewfinder.zebraLevel = Math.round(255 - (255 - level) * zb)
                 // JPEG: a pixel is striped when it comes out white (luminance),
-                // unless rawfish-ir.conf asks for the channel test; RAW: any channel.
-                viewfinder.zebraLuma = page.imageType !== "raw" && settingsMenu.zebraJpegMode !== "channel"
+                // unless rawfish-ir.conf asks for the channel test.
+                viewfinder.zebraLuma = settingsMenu.zebraJpegMode !== "channel"
+                // raw: the RAW's measured share; the tweak scales it (+30 %:
+                // a third less striped, as "later" means for the jpg level)
+                viewfinder.zebraRawShare = page.imageType === "raw"
+                viewfinder.zebraShareScale = 1 - settingsMenu.zebraTweak / 100
             }
             onImageTypeChanged: {
                 viewfinder.sendCommand("# type: " + imageType)   // logged: a type that changes by itself is a bug to see

@@ -973,6 +973,9 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         emit vfMeterChanged();
         if (m_histogramSource == QLatin1String("vf")) takeHistogram(f);
     } else if (name == "meter") {
+        /* zclip: the share (%) of what is shown at the RAW zebra level, for
+         * the RAW zebra (zebraRawShare); an engine without it leaves -1 */
+        m_rawClipShare = f.contains("zclip") ? qBound<qreal>(0, f.value("zclip").toDouble() / 100.0, 1) : -1;
         m_meterMean = f.value("mean").toDouble();
         m_meterIso = f.value("iso").toInt();
         m_meterExposureNs = f.value("exp_ns").toDouble();
@@ -982,8 +985,9 @@ void IndrawPreview::parseEvent(const QByteArray &line)
 }
 
 /* Zebra + peaking overlay, full resolution.
- * Zebra: diagonal black/white stripes where any channel is at or above
- * zebraLevel.
+ * Zebra: diagonal black/white stripes where the luminance (zebraLuma) or
+ * any channel is at or above zebraLevel -- or, for the RAW zebra (share),
+ * on the brightest pixels of the shown region, as many as the RAW clips.
  * Peaking: focus is high-frequency content, so the criterion is the 3x3
  * Laplacian (a high-pass) of the luma, not the gradient: a soft, blurred
  * edge has a large gradient spread over many pixels but a small second
@@ -1000,7 +1004,6 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
     const int w = frame.width(), h = frame.height();
     if (w < 4 || h < 4) return QImage();
     QImage overlay(w, h, QImage::Format_ARGB32_Premultiplied);
-    const int level = prm.level;
     const int edge = prm.edge * 3;                         /* Laplacian scale: 8x luma span */
     const QRgb zebraA = qRgba(255, 255, 255, 220), zebraB = qRgba(0, 0, 0, 220);
     const QRgb peak = qRgba(255, 40, 40, 255);
@@ -1028,6 +1031,31 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
             }
         }
     }
+    /* The RAW zebra: the level is the one above which lie `share` of the
+     * shown region's pixels (by luminance), so that as much of the
+     * viewfinder is striped as the RAW has clipped -- in its brightest
+     * part. Pixels tied at the level are all striped (a viewfinder white
+     * at 255 cannot be told apart). A share under 1/10000: nothing. */
+    int level = prm.level;
+    bool zLuma = prm.zebraLuma;
+    if (prm.zebra && prm.share >= 0) {
+        const QRect r = prm.region.isValid() ? prm.region.intersected(QRect(0, 0, w, h)) : QRect(0, 0, w, h);
+        long cnt[256] = { 0 }, total = 0;
+        zLuma = true;
+        for (int y = r.top(); y <= r.bottom(); y += 2) {
+            const uchar *px = frame.constScanLine(y);
+            for (int x = r.left(); x <= r.right(); x += 2) {
+                cnt[(77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8]++;
+                total++;
+            }
+        }
+        level = 256;                                   /* nothing striped */
+        if (total > 0 && prm.share >= 0.0001) {
+            const double target = prm.share * total;
+            long cum = 0;
+            for (int v = 255; v >= 0; --v) { cum += cnt[v]; if (cum >= target) { level = v; break; } }
+        }
+    }
     for (int y = 0; y < h; ++y) {
         const uchar *px = frame.constScanLine(y);
         QRgb *out = reinterpret_cast<QRgb *>(overlay.scanLine(y));
@@ -1041,8 +1069,8 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm)
                 if (a > edge && a >= l[x - 1] && a >= l[x + 1] && a >= lu[x] && a >= ld[x]) v = peak;
             }
             if (prm.zebra) {
-                const bool hit = prm.zebraLuma
-                    ? (77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >= level * 256   /* Rec.601 luma */
+                const bool hit = zLuma
+                    ? ((77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8) >= level   /* Rec.601 luma */
                     : (px[3 * x] >= level || px[3 * x + 1] >= level || px[3 * x + 2] >= level);
                 if (hit) v = (((x + y) >> 3) & 1) ? zebraA : zebraB;
             }
@@ -1079,6 +1107,10 @@ void IndrawPreview::buildOverlay()
     if ((!m_zebra && !m_peaking) || m_frame.isNull()) { m_overlay = QImage(); m_overlayPending = false; return; }
     if (m_overlayBusy) { m_overlayPending = true; return; }
     OverlayParams p; p.zebra = m_zebra; p.peaking = m_peaking; p.zebraLuma = m_zebraLuma; p.level = m_zebraLevel; p.edge = m_peakEdge; p.width = m_peakWidth;
+    if (m_zebraRawShare) {                               /* the RAW zebra: the measured share, over what is shown */
+        p.share = m_rawClipShare >= 0 ? qMin<qreal>(1, m_rawClipShare * m_zebraShareScale) : 0;
+        p.region = sourceRectIn(m_frame.size());
+    }
     m_overlayBusy = true;
     QMetaObject::invokeMethod(m_overlayWorker, "compute", Qt::QueuedConnection, Q_ARG(QImage, m_frame), Q_ARG(OverlayParams, p));
 }
@@ -1097,6 +1129,20 @@ bool IndrawPreview::peaking() const { return m_peaking; }
 void IndrawPreview::setPeaking(bool on) { if (m_peaking == on) return; m_peaking = on; emit aidsChanged(); buildOverlay(); update(); }
 int IndrawPreview::zebraLevel() const { return m_zebraLevel; }
 void IndrawPreview::setZebraLuma(bool on) { if (m_zebraLuma == on) return; m_zebraLuma = on; emit aidsChanged(); buildOverlay(); update(); }
+void IndrawPreview::setZebraShareScale(qreal s)
+{
+    s = qBound<qreal>(0.1, s, 3);
+    if (qFuzzyCompare(m_zebraShareScale, s)) return;
+    m_zebraShareScale = s;
+    emit aidsChanged(); buildOverlay(); update();
+}
+void IndrawPreview::setZebraRawShare(bool on)
+{
+    if (m_zebraRawShare == on) return;
+    m_zebraRawShare = on;
+    m_rawClipShare = -1;                                 /* a measure from before is not this one's */
+    emit aidsChanged(); buildOverlay(); update();
+}
 void IndrawPreview::setZebraLevel(int level) { level = qBound(1, level, 255); if (m_zebraLevel == level) return; m_zebraLevel = level; emit aidsChanged(); buildOverlay(); update(); }
 int IndrawPreview::peakEdge() const { return m_peakEdge; }
 void IndrawPreview::setPeakEdge(int edge) { edge = qBound(1, edge, 255); if (m_peakEdge == edge) return; m_peakEdge = edge; emit aidsChanged(); buildOverlay(); update(); }
@@ -1149,6 +1195,24 @@ qreal IndrawPreview::histClipHigh() const { return m_histClipHigh; }
 
 /* --- Rendering (render thread) --- */
 
+/* The part of a frame the interface shows: the view window (fractions of
+ * the band, as the controller sends it) mapped into the frame through the
+ * crop it was really taken with ("fcrop"), kept inside the frame. */
+static QRectF sourceRectF(const QSize &size, const QRectF &view, const QRectF &frameCrop)
+{
+    const QSizeF imageSize = size;
+    const QRectF fc = frameCrop.width() > 0 ? frameCrop : QRectF(0, 0, 1, 1);
+    const qreal sw = qMin<qreal>(1.0, view.width() / fc.width()) * imageSize.width();
+    const qreal sh = qMin<qreal>(1.0, view.height() / fc.height()) * imageSize.height();
+    const qreal sx = qBound<qreal>(0, (view.x() - fc.x()) / fc.width() * imageSize.width(), imageSize.width() - sw);
+    const qreal sy = qBound<qreal>(0, (view.y() - fc.y()) / fc.height() * imageSize.height(), imageSize.height() - sh);
+    return QRectF(sx, sy, sw, sh);
+}
+QRect IndrawPreview::sourceRectIn(const QSize &imageSize) const
+{
+    return sourceRectF(imageSize, m_viewWindow, m_frameCrop).toAlignedRect();
+}
+
 QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     delete oldNode;                /* simplest correct approach: rebuild         */
@@ -1170,13 +1234,7 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
      * Whatever the HAL's latency in applying a new crop, the part of the
      * scene shown is the one asked for: the display magnification is derived
      * from the frame, never predicted. */
-    const QSizeF imageSize = m_frame.size();
-    const QRectF fc = m_frameCrop.width() > 0 ? m_frameCrop : QRectF(0, 0, 1, 1);
-    const qreal sw = qMin<qreal>(1.0, m_viewWindow.width() / fc.width()) * imageSize.width();
-    const qreal sh = qMin<qreal>(1.0, m_viewWindow.height() / fc.height()) * imageSize.height();
-    const qreal sx = qBound<qreal>(0, (m_viewWindow.x() - fc.x()) / fc.width() * imageSize.width(), imageSize.width() - sw);
-    const qreal sy = qBound<qreal>(0, (m_viewWindow.y() - fc.y()) / fc.height() * imageSize.height(), imageSize.height() - sh);
-    const QRectF sourceRect(sx, sy, sw, sh);
+    const QRectF sourceRect = sourceRectF(m_frame.size(), m_viewWindow, m_frameCrop);
     const QSizeF sourceSize = sourceRect.size();
 
     /* Fit the source into the item: 'fill' covers the item (cropping overflow),

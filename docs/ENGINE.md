@@ -138,7 +138,10 @@ RAW), `yuv_stream=WxH/k` (the YUV stream our JPG is averaged from, and by
 how much) and `min_focus_real=` (the closest focus in the diopters manual
 focus works in: the HAL's through the calibration table). The meter lines
 (`meter`, `vfmeter`) carry `mclip_lo=` / `mclip_hi=`, the metered area's
-crushed and clipped shares in percent.
+crushed and clipped shares in percent. `meter` also carries `zclip=`: the
+share (percent) of the displayed window whose RAW photosites reach the RAW
+zebra level (`zebra_raw`) in any of a quad's four values -- the interface
+stripes that share of the viewfinder's brightest pixels (the RAW zebra).
 
 Besides the frames (SF2P), the stream carries one-line events (SF2M): `caps`,
 `ae` (the preview's live values; also `cct=` and `duv=`, the white balance in force as a correlated colour temperature and its Duv, estimated from the colour gains through the sensor's calibration matrix), `meter` (the RAW meter; its histogram covers the displayed window (`viewwin`), and `shist=` is the spot's own while a reference is set -- `vfmeter` likewise), `vfmeter` (the viewfinder meter: the linear
@@ -240,7 +243,7 @@ Checked at every open; out-of-range values are ignored with a log line.
 | `peak_edge` | 1 .. 255 | 40 |
 | `peak_width` | 1 .. 6 | 2 |
 | `zebra_jpeg` | 1 .. 255 | 250 |
-| `zebra_raw` | 1 .. 1000 (per mille of white) | 992 |
+| `zebra_raw` | 1 .. 1000 (per mille of the range black..white, measured on the RAW: `meter zclip=`) | 992 |
 | `focus_calibration` | up to 16 `{ "real_m", "hal_diopters" }` | none (1:1) |
 
 ## Exit codes
