@@ -738,9 +738,14 @@ Item {
             // focus-calibration.json and applies the table at once. Repeat for
             // a few distances; the manual focus wheel is calibrated from then
             // on. The last entry forgets the assistant's points.
+            // 0.08 m: below the autofocus' own limit on the JP2's camera 0
+            // (~9 cm), within the manual focus' reach (~7 cm): without a point
+            // there the distances under 10 cm were extrapolated (the stop
+            // shown, 6.8 cm, too). Its focus is set by hand (volume keys),
+            // not by a touch.
             MenuColumn { visible: menu.advanced && menu.focusCalibrationMenu; width: band.colW; header: header
                 confirm: true                    // two taps: a calibration is not erased by mistake
-                caption: qsTr("Focus cal."); values: [0.1, 0.25, 0.5, 1, 2, 5, "inf", "clear"]; current: null
+                caption: qsTr("Focus cal."); values: [0.08, 0.1, 0.25, 0.5, 1, 2, 5, "inf", "clear"]; current: null
                 labelFor: function(v) { return v === "clear" ? qsTr("Forget the recorded points")
                                               : v === "inf" ? qsTr("Record: lens now = infinity")
                                               : qsTr("Record: lens now = %1 m (focus on it first)").arg(v) }

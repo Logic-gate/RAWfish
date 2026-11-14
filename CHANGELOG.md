@@ -99,6 +99,11 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- The focus calibration column has a closer point, **0.08m**. The JP2's
+  camera 0 focuses by hand closer than 10 cm, but its table stopped
+  there: below, the distances shown (and the 6.8 cm stop) were
+  extrapolated. The autofocus itself stops at about 9 cm (the camera's own
+  limit): for this point the focus is set by hand, then recorded.
 - **A touch made while a search still runs gets its own focus.** The
   previous search's lock, reported just after the touch, was taken as the
   new one's: the lens was held there and the new search cut short (log

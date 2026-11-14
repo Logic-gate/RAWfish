@@ -277,7 +277,8 @@ Changes take effect the next time the camera starts.
    point already corrects the whole scale by a constant shift; with two or
    more the engine draws straight lines between them and extends the end
    ones, so every distance is covered; three or four points across the range
-   are plenty.
+   are plenty. For **0.08m** (the closest), the autofocus cannot get there:
+   focus by hand with the volume keys until the target is sharp, then record.
 6. Turn the switch off again.
 
 ## Files

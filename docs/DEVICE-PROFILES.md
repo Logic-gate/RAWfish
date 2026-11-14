@@ -145,7 +145,10 @@ position as "this is what D metres means on this lens".
    focus wheel then interpolates between them. One point alone already
    shifts the whole scale by a constant; with two or more, straight lines in
    diopters between the points, extended past the end ones, so every
-   distance is covered.
+   distance is covered. The closest entry, **0.08m**, is below what the
+   autofocus reaches on the JP2's camera 0 (about 9 cm): there, focus by
+   hand (manual focus, volume keys) until the target is sharp, then record.
+   Without it, the distances under 10 cm are extrapolated.
 5. A wrong point is replaced by recording the same distance again; **clear**
    forgets the assistant's points (those in `override-hal.json` stay).
 
