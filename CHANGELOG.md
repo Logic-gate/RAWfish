@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- A device profile's `session_request` entries are sent with their own
+  type (u8, float, i64, double): every one went as i32, the reader taking
+  the quotes of the word "type" for its value's (a 0.25 then became 0). No
+  shipped profile uses them. A host test now covers the profile readers
+  (integer keys, focus calibration, vendor_request, session_request, a
+  broken override-hal.json).
 - Comments and documents brought up to date: the RAW zebra in
   rawfish-ir.conf (its JPG mode key does not apply to RAW), the view's
   band fractions, the ROADMAP's focus items (the 18 mm closed; the 16:9

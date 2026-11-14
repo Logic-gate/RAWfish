@@ -854,11 +854,15 @@ static void apply_session_requests(void *bridge, const char *id)
         if (!q) break;
         tag = strtoul(q + 1, &e, 0);
         if (e == q + 1) { char *qq = strchr(q, '"'); if (!qq) break; tag = strtoul(qq + 1, &e, 0); }
+        /* the type's value, after the key and its colon (until 0.3.8 the
+         * quotes of the word "type" itself were taken for the value's: every
+         * entry went as i32) */
         t = strstr(p, "\"type\"");
-        if (t && (!end || t < end) && (t = strchr(t, '"')) && (t = strchr(t + 1, '"'))) {
-            if (!strncmp(t + 1, "u8", 2)) type = 0; else if (!strncmp(t + 1, "i32", 3)) type = 1;
-            else if (!strncmp(t + 1, "float", 5)) type = 2; else if (!strncmp(t + 1, "i64", 3)) type = 3;
-            else if (!strncmp(t + 1, "double", 6)) type = 4;
+        if (t && (!end || t < end) && (t = strchr(t + 6, ':'))) {
+            while (*++t == ' ' || *t == '\t' || *t == '"') {}
+            if (!strncmp(t, "u8", 2)) type = 0; else if (!strncmp(t, "i32", 3)) type = 1;
+            else if (!strncmp(t, "float", 5)) type = 2; else if (!strncmp(t, "i64", 3)) type = 3;
+            else if (!strncmp(t, "double", 6)) type = 4;
         }
         v = strstr(p, "\"value\"");
         if (v && (!end || v < end) && (v = strchr(v, ':'))) value = strtod(v + 1, NULL);

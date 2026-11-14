@@ -78,6 +78,10 @@ fi
 # what it needs itself, as on the build engine), warnings as errors.
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/rawfish-ir.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
 echo "sailfish/rawfish-ir.c + controller: OK"
+# The device-profile readers (override-hal.json over the shipped profile):
+# integer keys, the focus calibration, vendor_request and session_request.
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-profile-test "$root/sailfish/tests/profile_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
+run_test /tmp/indraw-profile-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/rawfish-ir.c" -o /dev/null
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/null
 # The controller runs without Android or Qt: its host test (sailfish/tests).
