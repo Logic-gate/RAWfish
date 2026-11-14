@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- A lighter viewfinder in the engine: each frame's RGB is converted into
+  one reused buffer (it was a 3.7 MB allocation and release per frame, 30
+  times a second); the white balance's temperature is computed only for the
+  `ae` lines sent, not for every result. The detailed log's 18 mm
+  diagnostics (`halcrop`, `afreg`: the crop and the focus zone the camera
+  reported) are removed; their question is answered.
 - Faster reactions in the controller. A manual distance (a mode change,
   the return after a failed search, a new session) no longer waits for the
   lens on the controller's thread: up to 1.2 s (about 400 ms seen) during

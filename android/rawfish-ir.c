@@ -536,6 +536,12 @@ static struct {
     ACaptureRequest *trigger_request;       /* one-shot AF/AE triggers (preview) */
     ACaptureRequest *raw_request;           /* RAW16 + preview, reused per RAW   */
     AImageReader *preview_reader, *jpeg_reader, *raw_reader, *yuv_reader;
+    /* The viewfinder frame in RGB (yuv_to_rgb): one buffer, grown when a
+     * frame is larger, reused for every frame -- it was a fresh 3.7 MB
+     * malloc and free per frame (1280x960), 30 times a second. Touched by
+     * the preview listener only; freed at close, after its reader. */
+    uint8_t *pv_rgb;
+    size_t pv_rgb_cap;
     ANativeWindow *preview_window, *jpeg_window, *raw_window, *yuv_window; /* owned by readers */
     int af_continuous;                      /* CONTINUOUS_PICTURE is available  */
     int tpl_nr, tpl_edge;                   /* STILL_CAPTURE template values    */
@@ -749,8 +755,6 @@ static struct {
     double ct_m1[9], ct_m2[9];              /* the sensor's two XYZ->camera calibration matrices */
     double ct_t1, ct_t2;                    /* their illuminants' temperatures (K); t2 0 = one only */
     int have_ct;                            /* (colortemp.h: the white balance in kelvin) */
-    int live_cct;                           /* the white balance in force: correlated colour temperature */
-    double live_duv;                        /* and its distance from the Planckian locus (tint, + green) */
     ACameraMetadata_rational awb_transform[9]; /* and its colour transform; for manual WB */
     int awb_seen;                           /* 1 once gains/transform were captured  */
     /* A white balance measured on a neutral object ("wb pick"): fixed gains
@@ -885,9 +889,7 @@ static int write_sf2m(int fd, const char *text, int len)
 static int event_is_state(const char *text)
 {
     return !strncmp(text, "ae ", 3) || !strncmp(text, "vfmeter ", 8) || !strncmp(text, "meter ", 6)
-        || !strncmp(text, "halcrop ", 8)            /* diagnostics: never worth a wait */
-        || !strncmp(text, "vfpace ", 7)
-        || !strncmp(text, "afreg ", 6);
+        || !strncmp(text, "vfpace ", 7);            /* diagnostics: never worth a wait */
 }
 static void emit_event(const char *text)
 {
@@ -980,12 +982,13 @@ static void emit_written(const char *kind, const char *path)
     emit_event(line);
 }
 
-/* Converts one Camera2 YUV_420_888 image to a freshly malloc'd RGB888 buffer
- * (width by height by 3 bytes, row-major): the planes are read here, the
+/* Converts one viewfinder YUV_420_888 image to RGB888 (width by height by
+ * 3 bytes, row-major) in g.pv_rgb: the planes are read here, the
  * arithmetic is yuv420_to_rgb in yuv.h (bounds once per row, chroma terms
  * once per pair of pixels, pixel-exact with the former per-pixel loop and
  * tested against it on the host). Returns the buffer and fills out_w and
- * out_h, or NULL on any error (caller frees). */
+ * out_h, or NULL on any error. The buffer is the listener's own, valid
+ * until its next call: never freed by the caller. Preview listener only. */
 static uint8_t *yuv_to_rgb(AImage *img, int *out_w, int *out_h)
 {
     uint8_t *py = NULL, *pu = NULL, *pv = NULL;
@@ -1005,8 +1008,12 @@ static uint8_t *yuv_to_rgb(AImage *img, int *out_w, int *out_h)
         AImage_getPlanePixelStride(img, 1, &xu) != AMEDIA_OK ||
         AImage_getPlanePixelStride(img, 2, &xv) != AMEDIA_OK || w <= 0 || h <= 0)
         return NULL;
-    rgb = malloc((size_t)w * h * 3);
-    if (!rgb) return NULL;
+    if ((size_t)w * h * 3 > g.pv_rgb_cap) {
+        uint8_t *grown = realloc(g.pv_rgb, (size_t)w * h * 3);
+        if (!grown) return NULL;
+        g.pv_rgb = grown; g.pv_rgb_cap = (size_t)w * h * 3;
+    }
+    rgb = g.pv_rgb;
     yuv420_to_rgb(py, ly, ry, xy, pu, lu, ru, xu, pv, lv, rv, xv, w, h, rgb);
     *out_w = w;
     *out_h = h;
@@ -1376,7 +1383,6 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                 if (fwrite(rgb, 1, (size_t)w * h * 3, f) != (size_t)w * h * 3) err = 1;
                 if (fclose(f) != 0) err = 1;
             }
-            free(rgb);
         }
         pthread_mutex_lock(&g.lock);
         g.pf_path = NULL;                /* request consumed                 */
@@ -1386,20 +1392,17 @@ static void on_preview_image(void *ctx, AImageReader *reader)
         pthread_mutex_unlock(&g.lock);
     }
 
-    /* If streaming is on, send this frame as SF2P -- but only once the preview
-     * has settled (first frames are mid-convergence). The gate is latched once
-     * so later frames always go. A broken pipe (reader gone) stops streaming. */
+    /* Streaming on: this frame goes out as SF2P, from the very first one
+     * (early frames are mid-convergence, but an image at once reads better
+     * than a blank viewfinder; it settles within about 1 s). Before it: its
+     * fcrop when the crop changed, the viewfinder meter, a white pick
+     * waiting. A broken pipe (reader gone) stops streaming. */
     {
-        /* Stream every frame immediately, from the very first one. Early frames
-         * are mid-convergence (off exposure, high-ISO watercolour) but showing
-         * an image at once reads far better than a blank, "stuck" viewfinder; it
-         * settles within ~1 s on its own. No gate, no delay. */
-        int fd, ready;
+        int fd;
         pthread_mutex_lock(&g.out_lock);        /* stream_fd lives under out_lock */
         fd = g.stream_fd;
-        ready = (fd >= 0);
         pthread_mutex_unlock(&g.out_lock);
-        if (fd >= 0 && ready) {
+        if (fd >= 0) {
             int w = 0, h = 0;
             double t_ours = now_ms();                   /* our share of the frame's time (vf_pace) */
             uint8_t *rgb = yuv_to_rgb(img, &w, &h);
@@ -1451,16 +1454,6 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                         f = vf_to_band(b, f);
                         snprintf(line, sizeof line, "fcrop x=%.5f y=%.5f w=%.5f h=%.5f\n", f.x, f.y, f.w, f.h);
                     }
-                    /* Detailed log only (g.checks, Settings "Detailed log"): the
-                     * crop the camera says it used for the viewfinder, at each
-                     * change -- the controller writes it to the log. A state
-                     * line: dropped, never waited for, if the pipe is full.
-                     * Sent before out_lock is taken below (emit_event takes it). */
-                    if (g.checks) {
-                        char hl[96];
-                        snprintf(hl, sizeof hl, "halcrop %d %d %d %d\n", crop[0], crop[1], crop[2], crop[3]);
-                        emit_event(hl);
-                    }
                 }
                 vf_meter(rgb, w, h, found ? crop : g.sent_crop, f_iso, f_exp);   /* the viewfinder meter */
                 /* Only a frame whose result was found: its white balance must
@@ -1475,7 +1468,6 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                     if (broke) g.stream_fd = -1;        /* pipe broke: stop        */
                 }
                 pthread_mutex_unlock(&g.out_lock);
-                free(rgb);
                 vf_pace(ts, now_ms() - t_ours);         /* detailed log only */
             }
         }
@@ -2046,21 +2038,6 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
     if (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count)
         g.live_exp_ns = e.data.i64[0];          /* for a burst in auto: freeze this */
     record_result_crop(res);                   /* for "fcrop" with this frame      */
-    /* Detailed log only: the focus zone the camera says it USED (its result's
-     * AF_REGIONS), at each change. On the 18 mm a focus touch works in one
-     * part of the viewfinder only (14 Nov) while the zone we send matches the
-     * touch exactly; whether the camera uses that zone, another, or clips it,
-     * this tells. A state event: dropped, never waited for (we hold g.lock). */
-    if (g.checks && ACameraMetadata_getConstEntry(res, ACAMERA_CONTROL_AF_REGIONS, &e) == ACAMERA_OK && e.count >= 5) {
-        static int32_t last_afr[5] = { -1, -1, -1, -1, -1 };
-        if (memcmp(last_afr, e.data.i32, sizeof last_afr)) {
-            char hl[128];
-            memcpy(last_afr, e.data.i32, sizeof last_afr);
-            snprintf(hl, sizeof hl, "afreg %d %d %d %d %d n=%d\n", e.data.i32[0], e.data.i32[1], e.data.i32[2], e.data.i32[3],
-                     e.data.i32[4], (int)(e.count / 5));
-            emit_event(hl);
-        }
-    }
     if (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_SENSITIVITY, &e) == ACAMERA_OK && e.count)
         g.live_iso_v = e.data.i32[0];
     /* Remember the AWB's own gains and transform while it runs: manual white
@@ -2115,10 +2092,6 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
                 }
             }
         }
-        /* the white balance in force (automatic or shifted), as a temperature
-         * (g.lock is already held here: this whole block is under it) */
-        if (ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_GAINS, &ge) == ACAMERA_OK && ge.count == 4)
-            colour_temperature(ge.data.f, &g.live_cct, &g.live_duv);
     }
     g.ae_results++;
     /* Live exposure for the UI (SF2M "ae" line), every 3rd result (~10 Hz at
@@ -2156,13 +2129,17 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
             isfinite(e.data.f[0]))
             focus = e.data.f[0];
         {   /* the lens value as a real distance (calibration inverted), and
-             * the white balance in force, read under the lock */
+             * the white balance in force (automatic or shifted) as a
+             * temperature and tint -- computed here, for the lines sent only
+             * (it ran on every result), under the lock as the matrices and
+             * the calibration are the session's */
             float focus_real = -1.0f;
-            int cct;
-            double duv;
+            int cct = 0;
+            double duv = 0;
+            int have_gains = ACameraMetadata_getConstEntry(res, ACAMERA_COLOR_CORRECTION_GAINS, &e) == ACAMERA_OK && e.count == 4;
             pthread_mutex_lock(&g.lock);
             if (focus >= 0.0f) focus_real = focus_untranslate(focus);
-            cct = g.live_cct; duv = g.live_duv;
+            if (have_gains) colour_temperature(e.data.f, &cct, &duv);
             pthread_mutex_unlock(&g.lock);
             snprintf(line, sizeof line,
                      "ae iso=%lld exp_ns=%lld ae_mode=%d ae_state=%d af_state=%d ev=%d focus=%.3f focus_real=%.3f cct=%d duv=%.4f\n",
@@ -2605,6 +2582,7 @@ static void close_all(void)
     if (g.r_meta) { ACameraMetadata_free(g.r_meta); g.r_meta = NULL; }
     pthread_mutex_unlock(&g.lock);
     if (g.preview_reader) { AImageReader_delete(g.preview_reader); g.preview_reader = NULL; }
+    free(g.pv_rgb); g.pv_rgb = NULL; g.pv_rgb_cap = 0;  /* the listener is gone with its reader */
     if (g.jpeg_reader) { AImageReader_delete(g.jpeg_reader); g.jpeg_reader = NULL; }
     if (g.raw_reader) { AImageReader_delete(g.raw_reader); g.raw_reader = NULL; }
     if (g.yuv_reader) { AImageReader_delete(g.yuv_reader); g.yuv_reader = NULL; }
@@ -7906,8 +7884,8 @@ static void report_request(jw_t *w, const char *name, const ACaptureRequest *req
  * PRE-correction array, which can differ), the distortion correction it
  * offers and the mode the preview carries, its sensor orientation, and how
  * far its lens distances can be trusted (0 uncalibrated, 1 approximate,
- * 2 calibrated). Written for the JP2's 18 mm, whose touch focus works in
- * one band of the screen only; nothing here changes what the camera does. */
+ * 2 calibrated). For a new camera's zones (a touch that misses, a meter
+ * that reads elsewhere); nothing here changes what the camera does. */
 IR_API int indraw_region_report(char *out, size_t out_size)
 {
     jw_t w;
