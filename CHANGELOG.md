@@ -99,6 +99,10 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- A volume key held at an end of the manual focus (infinity, or the
+  closest) no longer sends the same distance over and over: the lens is
+  already there. Each send re-sent the camera's repeating request (162
+  times at the closest stop in the log of 14 Nov). Harmless, but useless.
 - The focus calibration column has a closer point, **0.08m**. The JP2's
   camera 0 focuses by hand closer than 10 cm, but its table stopped
   there: below, the distances shown (and the 6.8 cm stop) were

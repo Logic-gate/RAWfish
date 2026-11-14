@@ -255,6 +255,8 @@ void ctl_focus_manual_search(ctl_focus_t *f, double now_ms)
 }
 void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farther (fewer diopters) */
 {
+    int was_held = f->held;
+    double before = f->diopters;
     if (f->mode != CTL_FOCUS_MANUAL) return;
     f->held = 0;                                                 /* a distance of the user's: the lens is set to it */
     {   /* A camera whose device profile gives focus_step_percent (the JP2's
@@ -270,6 +272,12 @@ void ctl_focus_step(ctl_focus_t *f, int dir)                     /* > 0 = farthe
         f->diopters = snap(f, d - dir * step);
     }
     publish(f);                                                  /* the display first: no lag */
+    /* At an end (infinity, or the closest), a key held down repeats the
+     * same distance: nothing to send -- the lens is there already. Each
+     * send re-sent the camera's repeating request (162 times at the
+     * closest stop in the log of 14 Nov). A lens held where a search left
+     * it is set to the distance even when the number is the same. */
+    if (!was_held && f->diopters == before) return;
     send_manual_opt(f, 0);                                       /* the lens, without waiting */
 }
 void ctl_focus_set_step_pct(ctl_focus_t *f, double pct) { f->step_pct = pct > 0 && pct < 50 ? pct : 0; }

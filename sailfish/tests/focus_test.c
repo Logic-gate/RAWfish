@@ -69,8 +69,13 @@ int main(void)
     CHECK(!strncmp(last(), "focus 1.000m", 12), "manual: 'focus 1.000m' (1 D)");
     ctl_focus_step(f, -1); ctl_focus_step(f, -1);
     CHECK(fabs(st.diopters - 1.10) < 1e-9 && !strcmp(last(), "focus 0.909m nowait"), "two steps nearer: 1.10 D (constant 0.05 D steps), sent without the lens wait");
-    for (i = 0; i < 40; ++i) ctl_focus_step(f, +1);
-    CHECK(st.diopters == 0 && !strcmp(last(), "focus inf nowait"), "stepping farther stops at infinity");
+    {
+        int before = count("focus inf nowait"), sends = ncmds;
+        for (i = 0; i < 40; ++i) ctl_focus_step(f, +1);
+        CHECK(st.diopters == 0 && !strcmp(last(), "focus inf nowait"), "stepping farther stops at infinity");
+        CHECK(count("focus inf nowait") - before == 1 && ncmds - sends == 22,
+              "a key held at the end: infinity sent once, nothing more (22 steps from 1.10 D, 18 repeats unsent)");
+    }
     ctl_focus_ref(f, 0.5, 0.5, t += 100);
     ctl_focus_live(f, 0, 2.0, t += 50);                      /* the CANCEL shows: inactive */
     ctl_focus_live(f, 3, 2.0, t += 100);
@@ -230,6 +235,6 @@ int main(void)
     }
     ctl_focus_free(f);
 
-    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (9 rules)\n", fails);
+    printf(fails ? "focus: FAILED (%d)\n" : "focus: OK (10 rules)\n", fails);
     return fails ? 1 : 0;
 }
