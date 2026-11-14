@@ -175,6 +175,27 @@ PYEOF
 else
     echo "translations: lupdate not installed, not checked"
 fi
+# QML: the syntax, with Qt 5's qmllint when installed (it checks syntax
+# only: Silica's components and the names used are not known off the SDK),
+# and, always, no JavaScript newer than the phone's Qt 5.6 (ES5): let,
+# const, arrow functions and template strings pass on a PC and fail on the
+# phone (scripts/qmlcheck.py, comments and strings skipped).
+qml_files=$(ls "$root"/app/qml/*.qml "$root"/app/settings/*.qml)
+qlint=$(ls /usr/lib/qt5/bin/qmllint 2>/dev/null || command -v qmllint-qt5 || true)
+if [ -z "$qlint" ] && command -v qmllint >/dev/null 2>&1 && qmllint --version 2>&1 | grep -q '^qmllint 1\.'; then
+    qlint=$(command -v qmllint)                    # Qt 5's (Qt 6's checks more and knows no Silica)
+fi
+if [ -n "$qlint" ]; then
+    printf 'import QtQuick 2.0\nItem { property int a: = 1 }\n' > /tmp/indraw-qmllint-bad.qml
+    if "$qlint" /tmp/indraw-qmllint-bad.qml >/dev/null 2>&1; then echo "qmllint: its self-test passed a broken file" >&2; exit 1; fi
+    for f in $qml_files; do "$qlint" "$f" || { echo "qml: syntax error in $f" >&2; exit 1; }; done
+    echo "qml: $(echo "$qml_files" | wc -l) files, syntax OK (qmllint)"
+else
+    echo "qml: qmllint (Qt 5) not installed, syntax not checked"
+fi
+python3 -I "$root/scripts/qmlcheck.py" --self-test || exit 1
+python3 -I "$root/scripts/qmlcheck.py" $qml_files || { echo "qml: JavaScript newer than Qt 5.6 (see above)" >&2; exit 1; }
+echo "qml: no let / const / => / template strings (Qt 5.6: ES5) (OK)"
 # One version number for the two packages and the library (RAWfish-ir 0.1.0+).
 v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/rawfish-ir-version.h")
 v_cli=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir-cli.spec")

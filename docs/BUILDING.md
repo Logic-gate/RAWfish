@@ -106,7 +106,12 @@ What the script does, if you prefer the pieces:
 | app RPM | `cd app && sfdk build` | `app/RPMS/rawfish-ir-gui-*.rpm` |
 
 A quick sanity check that needs no SDK at all (syntax and types of the C
-code, with stubbed Android headers): `./scripts/check-host.sh`.
+code, with stubbed Android headers): `./scripts/check-host.sh`. With Qt 5's
+tools installed (`qttools5-dev-tools`, `qtdeclarative5-dev-tools` on
+Debian/Ubuntu) it also checks the translations (`lupdate`) and the QML's
+syntax (`qmllint`); without them those two steps are skipped and say so. The
+QML is always checked for JavaScript newer than the phone's Qt 5.6 (`let`,
+`const`, `=>`, template strings: `scripts/qmlcheck.py`).
 
 ## 6. Install on the phone
 
@@ -255,7 +260,7 @@ Ubuntu runners at every push and pull request: both halves compiled with
 -Werror by gcc and clang, the Android side against pinned NDK headers, every
 host test (several under AddressSanitizer / UndefinedBehaviorSanitizer), the
 controller under ThreadSanitizer and Helgrind, the lock checker, the specs
-and device profiles. It needs no phone and builds no package. On a private
+and device profiles, the translations and the QML. It needs no phone and builds no package. On a private
 repository it uses the account's free monthly Actions minutes (a run takes a
 minute or two); on a public one it is free. The result shows on the commit
 in GitHub (a tick or a cross) and in the repository's Actions tab.

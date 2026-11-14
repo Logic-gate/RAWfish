@@ -99,6 +99,12 @@ repository). Newest first.
   exposure."
 - The 18 mm's "continuous then lock" touch is applied: the CLI read its
   profile key before the profile was found, and never found it (0399).
+- `check-host.sh` checks the QML: its syntax with Qt 5's qmllint when
+  installed, and, always, no JavaScript newer than the phone's Qt 5.6
+  (`let`, `const`, `=>`, template strings pass on a PC and fail on the
+  phone; `scripts/qmlcheck.py`, comments and strings skipped). The
+  GitHub check installs Qt 5's tools, so the translations check runs
+  there too.
 - A volume key held at an end of the manual focus (infinity, or the
   closest) no longer sends the same distance over and over: the lens is
   already there. Each send re-sent the camera's repeating request (162

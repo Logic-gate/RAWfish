@@ -2,7 +2,9 @@
 # with -Werror (gcc and clang), the Android side type-checked against pinned,
 # checksummed NDK headers, every host test (several under ASan/UBSan), the
 # controller under ThreadSanitizer and Helgrind, the lock checker, the specs
-# and device profiles. Nothing here needs a phone. (October 2026 audit.)
+# and device profiles, the translations and the QML (syntax, and no
+# JavaScript newer than the phone's Qt 5.6). Nothing here needs a phone.
+# (October 2026 audit.)
 name: check-host
 
 on:
@@ -23,5 +25,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q clang valgrind python3 libjpeg-dev   # libjpeg: the YUV-to-JPEG host test (0.2.0)
+          # Qt 5's lupdate and qmllint: the translations check and the QML syntax (0.3.8)
+          sudo apt-get install -y -q qttools5-dev-tools qtdeclarative5-dev-tools
       - name: scripts/check-host.sh
         run: sh scripts/check-host.sh
