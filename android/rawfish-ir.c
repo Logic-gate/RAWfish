@@ -2223,14 +2223,60 @@ static ACameraCaptureSession_captureCallbacks g_still_cbs = {
  * DNG's own pixels (one RGB pixel per 2x2 Bayer quad: R, mean of the two
  * greens, B), black-subtracted, corrected for vignetting with the same gain
  * map as the DNG (undosed, so the thumbnail is not darkened for darktable),
- * white-balanced with the as-shot neutral and CLIPPED at 1 (so a saturated
- * pixel is white, not pink), taken to sRGB through the colour matrix
- * (normalised so the balanced neutral is white), and gamma-encoded (1/2.2
- * through a table). Without a matrix: the white balance and the clip alone. The app turns it into the
+ * white-balanced with the as-shot neutral, its highlights rebuilt where the
+ * sensor clipped (preview_highlights), taken to sRGB through the colour
+ * matrix (normalised so the balanced neutral is white), through a tone
+ * curve with a shoulder (preview_tone) and gamma-encoded (1/2.2 through a
+ * table). Without a matrix: the same, minus the matrix. The app turns it into the
  * NAME_vf.jpg the galleries show, rotated by the DNG's orientation, and
  * deletes the .ppm. Unlike the viewfinder-frame preview it replaces, it shows
  * what the DNG holds -- a stack's real exposure included. Binary PPM: the
  * simplest format Qt reads natively; ~9 MB for a 4096x3072 sensor, briefly. */
+/* The highlights of one white-balanced pixel c[] (R, G, B, vignetting
+ * included), whose sensor values reached the white in the channels flagged
+ * in clip (bit 0 R, 1 G, 2 B). A clipped value is a lower bound of the
+ * light, and it differs per channel once balanced (the green's white stays
+ * 1, the red's and the blue's become their gains, ~2): left as is, a pixel
+ * clipped in green and blue came out blue, and clipping everything at 1
+ * (until 0.3.8) whitened what the sensor still held -- the red and blue
+ * reach 1 at half their range once balanced (photo of 14 Nov: 2.5 % of the
+ * frame white while no channel had clipped). So: the clipped channels all
+ * take the highest of their bounds, and at least the mean of the channels
+ * that did not clip (a neutral guess, as the camera's JPG and RAW
+ * developers do); all three clipped: white. */
+static void preview_highlights(double *c, int clip)
+{
+    double bound = 0, kept = 0;
+    int k, nkept = 0;
+    if (!clip) return;
+    for (k = 0; k < 3; ++k) {
+        if (clip & (1 << k)) { if (c[k] > bound) bound = c[k]; }
+        else { kept += c[k]; nkept++; }
+    }
+    if (nkept == 0) { c[0] = c[1] = c[2] = bound; return; }
+    if (kept / nkept > bound) bound = kept / nkept;
+    for (k = 0; k < 3; ++k)
+        if (clip & (1 << k)) c[k] = bound;
+}
+
+/* The tone curve of the thumbnail, on one linear sRGB value (unbounded,
+ * the rebuilt highlights go past 1) to 0..1 before the gamma: an exposure
+ * gain, then a straight line up to the knee and a shoulder that rolls off
+ * towards white (C1 at the knee, 1 never quite reached: 0.998 for a
+ * balanced 2, a blue at its white). Calibrated on a JPG and a DNG of the same
+ * scene at the same exposure (cam 0, 14 Nov): the camera's JPG puts a
+ * green at 15 % of the RAW's range at 131 and at 50 % at 207; the gain
+ * 1.4 and the 1/2.2 gamma give 125 and 215. The shoulder keeps a gradation
+ * where the JPG is already at 255 (85 %: 244 here). */
+#define PREVIEW_GAIN 1.4
+#define PREVIEW_KNEE 0.6
+static double preview_tone(double v)
+{
+    v *= PREVIEW_GAIN;
+    if (v <= PREVIEW_KNEE) return v < 0 ? 0 : v;
+    return PREVIEW_KNEE + (1.0 - PREVIEW_KNEE) * (1.0 - exp(-(v - PREVIEW_KNEE) / (1.0 - PREVIEW_KNEE)));
+}
+
 static const uint8_t k_gamma[1024] = {
     0, 11, 15, 18, 21, 23, 25, 26, 28, 30, 31, 32, 34, 35, 36, 37, 39, 40, 41, 42, 43, 44, 45, 45,
     46, 47, 48, 49, 50, 50, 51, 52, 53, 54, 54, 55, 56, 56, 57, 58, 58, 59, 60, 60, 61, 62, 62, 63,
@@ -2285,6 +2331,9 @@ static int write_dng_preview(const char *dng_path, const dng_params_t *p)
     size_t blen = strlen(base);
     int w2 = p->width / 2, h2 = p->height / 2, x, y, mr = 0, mc = 0;
     double gr = 1.0, gb = 1.0, range = (double)(p->white - p->black);
+    /* a sensor value at or above this has clipped (99.2 % of the range, as
+     * the RAW zebra's default level) */
+    int wclip = p->black + (int)lround(0.992 * (p->white - p->black));
     FILE *f;
     uint8_t *row;
     float *smap = NULL;                     /* an UNDOSED shading map for the thumbnail */
@@ -2423,7 +2472,7 @@ static int write_dng_preview(const char *dng_path, const dng_params_t *p)
     for (y = 0; y < h2; ++y) {
         const uint16_t *r0 = p->pixels + (size_t)(2 * y) * p->width, *r1 = r0 + p->width;
         for (x = 0; x < w2; ++x) {
-            int q[4] = { r0[2 * x], r0[2 * x + 1], r1[2 * x], r1[2 * x + 1] }, rv, g1, g2, bv, k;
+            int q[4] = { r0[2 * x], r0[2 * x + 1], r1[2 * x], r1[2 * x + 1] }, rv, g1, g2, bv, k, clip;
             double c[3];
             switch (p->cfa) {                      /* 0 RGGB 1 GRBG 2 GBRG 3 BGGR */
             case 0:  rv = q[0]; g1 = q[1]; g2 = q[2]; bv = q[3]; break;
@@ -2431,6 +2480,8 @@ static int write_dng_preview(const char *dng_path, const dng_params_t *p)
             case 2:  g1 = q[0]; bv = q[1]; rv = q[2]; g2 = q[3]; break;
             default: bv = q[0]; g1 = q[1]; g2 = q[2]; rv = q[3]; break;
             }
+            /* the channels the sensor clipped (a green: either of the two) */
+            clip = (rv >= wclip) | ((g1 >= wclip || g2 >= wclip) << 1) | ((bv >= wclip) << 2);
             c[0] = (rv - p->black) / range * gr;   /* white balance first ... */
             c[1] = ((g1 + g2) / 2.0 - p->black) / range;
             c[2] = (bv - p->black) / range * gb;
@@ -2449,8 +2500,7 @@ static int write_dng_preview(const char *dng_path, const dng_params_t *p)
                     c[k] *= g;
                 }
             }
-            for (k = 0; k < 3; ++k)            /* ... then clip the highlights: a */
-                if (c[k] > 1.0) c[k] = 1.0;    /* saturated pixel is white, not pink */
+            preview_highlights(c, clip);       /* ... then the clipped channels */
             if (have_c2s) {                    /* white-balanced camera RGB -> sRGB */
                 double o[3];
                 int r;
@@ -2458,7 +2508,7 @@ static int write_dng_preview(const char *dng_path, const dng_params_t *p)
                 c[0] = o[0]; c[1] = o[1]; c[2] = o[2];
             }
             for (k = 0; k < 3; ++k) {
-                double v = c[k] < 0 ? 0 : c[k] > 1 ? 1 : c[k];
+                double v = preview_tone(c[k]);
                 int idx = (int)(v * 1023.0 + 0.5);
                 if (idx < 0) idx = 0;
                 if (idx > 1023) idx = 1023;

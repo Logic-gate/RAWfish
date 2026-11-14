@@ -15,6 +15,11 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.8 (beta) — vibrations; the release waits for a focus search; 50 MP processed at its scale (patches 0352–0363)
+- The DNG quick preview burns less early: the clipping is read on the
+  sensor's values, not after the white balance (which whitened red and blue
+  the sensor still held: 2.5 % of a frame on 14 Nov), the clipped channels
+  are rebuilt from the others, and a tone curve with a shoulder replaces the
+  plain gamma, its mid-tones set on the camera's JPG of the same scene.
 - The RAW zebra on two levels: full stripes where the RAW lost two or three
   of red, green and blue, light ones (white only, half opaque) where it
   lost one alone -- mostly the green, the strongest channel, which the
