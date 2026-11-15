@@ -433,6 +433,7 @@ ApplicationWindow {
             property string noticeText: ""                 // a line in the viewfinder for a few seconds
             property bool probing: false                   // the device profile being written (Settings asked)
             Timer { id: noticeTimer; interval: 3500; onTriggered: page.noticeText = "" }
+            Timer { id: menuPeekTimer; interval: 800; onTriggered: settingsMenu.peek() }   // the start's peek, once the image is there
             // The touch rule, said each time: a two-second line in the viewfinder.
             property bool touchHintShown: false
             Timer { id: touchHintTimer; interval: 2000; onTriggered: page.touchHintShown = false }
@@ -1147,6 +1148,7 @@ ApplicationWindow {
                         page.cameraFacing = viewfinder.caps.facing ? viewfinder.caps.facing : []
                     }
                     page.applyAidThresholds()
+                    if (viewfinder.running) menuPeekTimer.restart()
                     if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()
                     // The caps line is on stdout, not in the engine's log: echo
                     // the parts worth having there (sizes, scenes, thresholds).
@@ -2151,7 +2153,25 @@ ApplicationWindow {
                 // Setting `open` alone did nothing when it did not change (a
                 // cancelled drag on a closed menu left it half-way, stuck).
                 function settle(want) { open = want; y = want ? viewfinderZone.y : viewfinderZone.y - height }
-                onOpenChanged: y = open ? viewfinderZone.y : viewfinderZone.y - height
+                onOpenChanged: {
+                    y = open ? viewfinderZone.y : viewfinderZone.y - height
+                    if (open && !menuDiscovered) { menuDiscovered = true; save("menuDiscovered", 1) }   // found: no more peeks
+                }
+                // The start's peek (a user did not know there was a menu): until
+                // the menu has been opened once, it comes down a quarter of the
+                // image and goes back up, with a line saying how to open it.
+                // Once per start of the app, at the first caps with the image on;
+                // never over a stack, the loupe or a menu already open.
+                // rawfish-ir.conf menuDiscovered=0 brings it back.
+                property bool peeked: false
+                function peek() {
+                    if (peeked || menuDiscovered || open || page.stacking || page.loupe > 1.01) return
+                    peeked = true
+                    y = viewfinderZone.y - height * 0.75
+                    page.noticeText = qsTr("Swipe down on the image: settings"); noticeTimer.restart()
+                    menuPeekBack.restart()
+                }
+                Timer { id: menuPeekBack; interval: 1200; onTriggered: if (!settingsMenu.open) settingsMenu.settle(false) }
                 z: 6
                 visible: y > viewfinderZone.y - height
                 Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }

@@ -111,6 +111,7 @@ Item {
     readonly property bool flashAuto: (flash === "on" || flash === "auto") && !!(viewfinder && viewfinder.caps && viewfinder.caps.flash)
     readonly property string effBracket: (stackSelected || flashAuto) ? "off" : bracket
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
+    property bool menuDiscovered: false            // the menu opened once: no peek at the start any more
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
     // JPG: RAWfish-ir's own processing of the ISP's image (rawfish-ir.conf only).
     property string snapSize: ""                   // snap's JPEG size (WxH listed by the camera); "" = the largest 4:3 <= 5 Mpx
@@ -249,6 +250,7 @@ Item {
         yuvMedian = num("jpgMoireFilter", 0, 0, 4)
         yuvSharpen = num("jpgSharpen", 3, 0, 5)
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
+        menuDiscovered = num("menuDiscovered", 0, 0, 1) === 1
         gridOn = num("gridOn", 0, 0, 1) === 1
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)

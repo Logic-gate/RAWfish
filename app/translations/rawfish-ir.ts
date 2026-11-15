@@ -1168,6 +1168,10 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Swipe down on the image: settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+1230"/>
         <source>fixed</source>
         <translation type="unfinished"></translation>

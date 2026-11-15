@@ -1175,6 +1175,10 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>Passage en tout automatique.</translation>
     </message>
     <message>
+        <source>Swipe down on the image: settings</source>
+        <translation>Glisser vers le bas sur l&apos;image : réglages</translation>
+    </message>
+    <message>
         <location line="+1230" />
         <source>fixed</source>
         <translation>fixe</translation>

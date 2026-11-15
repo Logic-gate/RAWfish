@@ -15,6 +15,14 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-448 (patch 0448): the menu shows itself at the start
+  (a user did not know there was one). Until it has been opened once, it
+  comes down a quarter of the image a moment after the image appears and
+  goes back up, with "Swipe down on the image: settings" on the
+  viewfinder. Opening it records `menuDiscovered=1` in rawfish-ir.conf (0
+  brings the peek back). The same version, a new build: the settings,
+  the focus calibration and the measured shading maps are kept (a new
+  version would set them aside).
 - A version number of its own for the publication: 0.3.0 to 0.3.8 were
   test builds, never published; their changes, listed below, all reach
   users with this one. Nothing else changes (version, the "ui" badge

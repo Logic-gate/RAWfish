@@ -105,6 +105,10 @@ jpgSharpen=3
 ; green, which a RAW developer rebuilds from the two others.
 ;                                               values: luma, channel   default luma
 zebraJpegMode=luma
+; The start's peek: the menu comes down a little and goes back up at the
+; start, until it has been opened once (then 1). 0 shows the peek again.
+;                                               values: 0, 1            default 0
+menuDiscovered=0
 ; Checks in the log: each photo's report then carries the histogram the app
 ; showed (viewfinder, or RAW meter) and the photo's own, for histo-check.py.
 ; About 2 KB of log per photo; off for everyday use. The same switch is in
