@@ -15,6 +15,10 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-452 (patch 0452): the start's menu peek came at last.
+  0448 started it from the engine's caps, which arrive before the first
+  frame, when the viewfinder is not running yet -- so it never came. It
+  now starts 0.8 s after the first frame.
 - The build 0.3.9-450 (patch 0450): the menu in landscape. A column
   taller than the band was cut off at the bottom -- JPEG quality 100,
   white balance twilight, bracket ±3, and Shade not seen at all. A column

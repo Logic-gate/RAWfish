@@ -433,7 +433,11 @@ ApplicationWindow {
             property string noticeText: ""                 // a line in the viewfinder for a few seconds
             property bool probing: false                   // the device profile being written (Settings asked)
             Timer { id: noticeTimer; interval: 3500; onTriggered: page.noticeText = "" }
-            Timer { id: menuPeekTimer; interval: 800; onTriggered: settingsMenu.peek() }   // the start's peek, once the image is there
+            // The start's peek, once the image is there: at the first frame
+            // (the caps come before it, when the viewfinder is not running yet:
+            // started from the caps, the peek never came -- 0447/0448).
+            Timer { id: menuPeekTimer; interval: 800; onTriggered: settingsMenu.peek() }
+            Connections { target: viewfinder; onRunningChanged: if (viewfinder.running) menuPeekTimer.restart() }
             // The touch rule, said each time: a two-second line in the viewfinder.
             property bool touchHintShown: false
             Timer { id: touchHintTimer; interval: 2000; onTriggered: page.touchHintShown = false }
@@ -1148,7 +1152,6 @@ ApplicationWindow {
                         page.cameraFacing = viewfinder.caps.facing ? viewfinder.caps.facing : []
                     }
                     page.applyAidThresholds()
-                    if (viewfinder.running) menuPeekTimer.restart()
                     if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()
                     // The caps line is on stdout, not in the engine's log: echo
                     // the parts worth having there (sizes, scenes, thresholds).
