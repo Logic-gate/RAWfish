@@ -576,11 +576,16 @@ Item {
         contentHeight: height + 1
         onContentYChanged: if (draggingVertically && contentY > Theme.itemSizeSmall / 3) { cancelFlick(); contentY = 0; menu.closeRequested() }
         readonly property real colW: Theme.iconSizeMedium + 2 * Theme.paddingMedium
+        // The values one column can stack in the band's height: below it (a
+        // landscape screen), a column spreads over two or more (MenuColumn).
+        // The room left for the caption, and the JPG group's name below it.
+        readonly property int maxRows: Math.max(3, Math.floor((height - 2 * (Theme.fontSizeTiny + Theme.paddingSmall) - Theme.paddingSmall)
+                                                              / (Theme.iconSizeMedium + Theme.paddingMedium)))
         Row {
             id: row
             x: Theme.horizontalPageMargin
             spacing: Theme.paddingMedium
-            MenuColumn { width: band.colW; header: header
+            MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("Mode"); values: [false, true]; current: menu.advanced
                 labelFor: function(v) { return v ? qsTr("Advanced: wheels, raw, every control") : qsTr("Simple: JPEG, automatic") }
                 shortFor: function(v) { return v ? qsTr("adv") : qsTr("simp") }
@@ -589,7 +594,7 @@ Item {
             // meters with a pre-flash first, ~0.5-1 s more) / torch (continuous).
             // Right after Mode, in simple mode too.
             MenuColumn { visible: !!(menu.viewfinder && menu.viewfinder.caps.flash)
-                width: band.colW; header: header
+                colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("Flash"); values: ["off", "auto", "on", "torch"]; current: menu.flash
                 labelFor: function(v) { return v === "off" ? qsTr("Flash off") : v === "auto" ? qsTr("Flash when dark")
                                               : v === "on" ? qsTr("Flash always") : qsTr("Torch (continuous light)") }
@@ -597,14 +602,14 @@ Item {
                 iconFor: function(v) { return v === "off" ? "icon-camera-flash-off" : v === "auto" ? "icon-camera-flash-automatic"
                                               : v === "on" ? "icon-camera-flash-on" : "" }
                 onPicked: { menu.flash = value; menu.save("flash", value); if (viewfinder.running && viewfinder.caps.flash) viewfinder.sendCommand("flash " + value) } }
-            MenuColumn { visible: menu.simpleMenuHas("timer"); width: band.colW; header: header
+            MenuColumn { visible: menu.simpleMenuHas("timer"); colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("Timer"); values: [0, 3, 10]; current: menu.timerSec
                 labelFor: function(v) { return v === 0 ? qsTr("No timer") : qsTr("%1 second timer").arg(v) }
                 shortFor: function(v) { return v === 0 ? qsTr("off") : v + "s" }
                 iconFor: function(v) { return v === 0 ? "icon-camera-timer" : "icon-camera-timer-" + v + "s" }
                 onPicked: { menu.timerSec = value; menu.save("timerSec", value) } }
             // Rule-of-thirds grid (its notch button became the level).
-            MenuColumn { width: band.colW; header: header
+            MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("Grid"); values: [false, true]; current: menu.gridOn
                 labelFor: function(v) { return v ? qsTr("Grid on") : qsTr("Grid off") }
                 shortFor: function(v) { return v ? qsTr("on") : qsTr("off") }
@@ -615,7 +620,7 @@ Item {
                 onPicked: { menu.gridOn = value; menu.save("gridOn", value ? 1 : 0) } }
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).
-            MenuColumn { visible: menu.simpleMenuHas("format"); width: band.colW; header: header
+            MenuColumn { visible: menu.simpleMenuHas("format"); colW: band.colW; maxRows: band.maxRows; header: header
                 dimmed: menu.imageType === "raw" || menu.imageType === "snap"; dimmedHint: menu.imageType === "snap" ? qsTr("snap: one light size, for utility shots") : qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Format"); values: ["4:3", "16:9"]; current: menu.format
                 // "as the RAW" is whichever format has the RAW stream's shape
@@ -632,7 +637,7 @@ Item {
                     if (list.indexOf(remembered) >= 0) sz = remembered
                     if (sz === "") { header.show(qsTr("No %1 size listed").arg(value)); return }
                     menu.formatSaved = value; menu.save("format", value); menu.setSize(sz) } }
-            MenuColumn { visible: menu.advanced; width: band.colW; header: header
+            MenuColumn { visible: menu.advanced; colW: band.colW; maxRows: band.maxRows; header: header
                 dimmed: menu.imageType === "raw" || menu.imageType === "snap"; dimmedHint: menu.imageType === "snap" ? qsTr("snap: one light size, for utility shots") : qsTr("RAW has one size and one format: the sensor's")
                 caption: qsTr("Resolution")
                 // snap shows its own size (greyed), not the JPG's last one
@@ -641,12 +646,12 @@ Item {
                 labelFor: function(v) { return v }
                 shortFor: function(v) { return menu.mp(v) }
                 onPicked: menu.setSize(value) }
-            MenuColumn { visible: menu.advanced; width: band.colW; header: header
+            MenuColumn { visible: menu.advanced; colW: band.colW; maxRows: band.maxRows; header: header
                 dimmed: menu.imageType === "raw"; dimmedHint: qsTr("RAW: no JPEG quality")
                 caption: qsTr("Quality"); values: [20, 40, 60, 80, 90, 95, 100]; current: menu.jpegQuality
                 labelFor: function(v) { return qsTr("JPEG quality %1").arg(v) }
                 onPicked: { menu.jpegQuality = value; menu.save("jpegQuality", value) } }
-            MenuColumn { visible: menu.simpleMenuHas("wb"); width: band.colW; header: header
+            MenuColumn { visible: menu.simpleMenuHas("wb"); colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("White bal."); values: menu.awbAvailable.slice(0, 8); current: menu.awbMode
                 labelFor: function(v) { return menu.awbNames[v] || String(v) }
                 shortFor: function(v) { return menu.awbShort[v] || String(v) }
@@ -654,7 +659,7 @@ Item {
                 // A preset also clears the manual shift and tint.
                 onPicked: { menu.awbMode = value; menu.wbShift = 0; menu.tint = 0
                             menu.save("awbMode", value); menu.save("wbShift", 0); menu.save("tint", 0); menu.applyLive() } }
-            MenuColumn { visible: menu.advanced; width: band.colW; header: header
+            MenuColumn { visible: menu.advanced; colW: band.colW; maxRows: band.maxRows; header: header
                 dimmed: menu.imageType === "snap" || menu.stackSelected || menu.flashAuto
                 dimmedHint: menu.stackSelected ? qsTr("Σ: one long exposure, no bracketing")
                           : menu.flashAuto ? qsTr("Flash: no bracketing")
@@ -683,27 +688,27 @@ Item {
                 Row {
                     id: jpgRow
                     spacing: Theme.paddingMedium
-                MenuColumn { width: band.colW; header: header
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: 1
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
                     labelFor: function(v) { return v === 1 ? qsTr("One frame") : qsTr("%1 frames merged (less grain)").arg(v) }
                     onPicked: { menu.yuvFrames = value; menu.save("jpgFrames", value) } }
-                MenuColumn { width: band.colW; header: header
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: 2
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Colour NR"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
                     labelFor: function(v) { return v === 0 ? qsTr("Colour noise filter off") : qsTr("Colour noise filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
                     onPicked: { menu.yuvColour = value; menu.save("jpgNoiseColourFilter", value) } }
-                MenuColumn { width: band.colW; header: header
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: 0
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
                     labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
                     onPicked: { menu.yuvMedian = value; menu.save("jpgMoireFilter", value) } }
-                MenuColumn { width: band.colW; header: header
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: 3
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
@@ -721,7 +726,7 @@ Item {
             }
             // The level's zero: "zeroed" once recorded (a long press on "level"
             // with the phone upright), "factory" clears it.
-            MenuColumn { width: band.colW; header: header
+            MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("Level"); values: ["factory", "zeroed"]; current: menu.levelZeroed ? "zeroed" : "factory"
                 labelFor: function(v) { return v === "zeroed" ? qsTr("Level zero: as recorded (hold \"level\" with the phone upright)") : qsTr("Level zero: the sensor's own") }
                 shortFor: function(v) { return v === "zeroed" ? qsTr("zeroed") : qsTr("factory") }
@@ -737,7 +742,7 @@ Item {
             // there the distances under 10 cm were extrapolated (the stop
             // shown, 6.8 cm, too). Its focus is set by hand (volume keys),
             // not by a touch.
-            MenuColumn { visible: menu.advanced && menu.focusCalibrationMenu; width: band.colW; header: header
+            MenuColumn { visible: menu.advanced && menu.focusCalibrationMenu; colW: band.colW; maxRows: band.maxRows; header: header
                 confirm: true                    // two taps: a calibration is not erased by mistake
                 caption: qsTr("Focus cal."); values: [0.08, 0.1, 0.25, 0.5, 1, 2, 5, "inf", "clear"]; current: null
                 labelFor: function(v) { return v === "clear" ? qsTr("Forget the recorded points")
@@ -757,7 +762,7 @@ Item {
             // simple mode as in the advanced one.
             Repeater {
                 model: menu.showScenes ? Math.ceil(menu.sceneList.length / 5) : 0
-                MenuColumn { width: band.colW * 1.25; header: header
+                MenuColumn { colW: band.colW * 1.25; maxRows: band.maxRows; header: header
                     caption: index === 0 ? qsTr("Scene") : " "
                     values: menu.sceneChunk(index); current: menu.sceneMode
                     labelFor: function(v) { return menu.sceneNames[v] || qsTr("Scene %1").arg(v) }

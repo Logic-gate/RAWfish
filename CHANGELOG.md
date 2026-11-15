@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-450 (patch 0450): the menu in landscape. A column
+  taller than the band was cut off at the bottom -- JPEG quality 100,
+  white balance twilight, bracket ±3, and Shade not seen at all. A column
+  that does not fit now spreads over two (or more) side by side, top to
+  bottom then left to right; in portrait nothing changes where everything
+  fitted.
 - The build 0.3.9-448 (patch 0448): the menu shows itself at the start
   (a user did not know there was one). Until it has been opened once, it
   comes down a quarter of the image a moment after the image appears and
