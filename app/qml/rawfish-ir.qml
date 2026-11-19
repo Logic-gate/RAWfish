@@ -2335,7 +2335,7 @@ ApplicationWindow {
                                 id: busyDots
                                 anchors.fill: parent
                                 visible: viewfinder.processing
-                                readonly property real dot: Math.max(4, Math.round(1.2 * page.deckMm))
+                                readonly property real dot: Math.max(2, Math.round(0.6 * page.deckMm))
                                 readonly property real r: Math.min(width, height) / 2 - dot
                                 property real t: 0
                                 NumberAnimation on t { from: 0; to: 1; duration: 1400; loops: Animation.Infinite; running: busyDots.visible }

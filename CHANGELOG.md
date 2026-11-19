@@ -15,6 +15,8 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-457 (patch 0457): the busy dots round the TYPE button
+  half as big, and starting at the flash rather than at the press.
 - The build 0.3.9-455 (patch 0455): a photo still being computed is no
   longer lost when the engine is restarted, and dots turn round the TYPE
   button while a photo is taken or computed. Switching the type, the

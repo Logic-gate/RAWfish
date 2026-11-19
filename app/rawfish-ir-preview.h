@@ -129,9 +129,10 @@ class IndrawPreview : public QQuickItem
     /* True between the stack command and its stack_done: the engine is kept
      * running through inactivity (screen off) until the stack ends. */
     Q_PROPERTY(bool stacking READ stacking NOTIFY stackingChanged)
-    /* A photo is being taken or computed: from the "sh" sent until its file
-     * is written (or the engine that took it has ended, after a restart), at
-     * most 45 s. The UI turns dots round the TYPE button meanwhile. */
+    /* A photo is being computed: from its flash (the engine's "captured")
+     * until its file is written (or the engine that took it has ended, after
+     * a restart), at most 45 s after the shot. The UI turns dots round the
+     * TYPE button meanwhile. */
     Q_PROPERTY(bool processing READ processing NOTIFY processingChanged)
 
     /* caps: the sensor limits from the engine's SF2M "caps" line (isoMin,
@@ -466,6 +467,7 @@ private:
                                     * does not list stops the engine at open)    */
     bool m_stacking = false;       /* a stack is running in the engine          */
     bool m_processing = false;     /* a photo in progress (see "processing")    */
+    bool m_shotPending = false;    /* "sh" sent, its file not written yet       */
     bool m_retiringBusy = false;   /* the old engine is finishing a photo       */
     QTimer *m_procTimer = nullptr; /* ends "processing": quiet after the file, or the 45 s cap */
     void setProcessing(bool on) { if (on != m_processing) { m_processing = on; emit processingChanged(); } }

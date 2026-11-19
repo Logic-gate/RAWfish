@@ -51,7 +51,7 @@ IndrawPreview::IndrawPreview(QQuickItem *parent)
      * not while an old engine is still finishing its photo. */
     m_procTimer = new QTimer(this);
     m_procTimer->setSingleShot(true);
-    connect(m_procTimer, &QTimer::timeout, this, [this]() { if (!m_retiringBusy) setProcessing(false); });
+    connect(m_procTimer, &QTimer::timeout, this, [this]() { if (!m_retiringBusy) { m_shotPending = false; setProcessing(false); } });
 }
 
 IndrawPreview::~IndrawPreview()
@@ -337,7 +337,7 @@ void IndrawPreview::stop(bool wait)
      * kill) used to be taken for the NEW engine dying: "engine stopped" on a
      * camera switch while the new engine was streaming. */
     QProcess *old = m_process;
-    const bool busy = m_processing;   /* a photo still in this engine: see it out */
+    const bool busy = m_shotPending;  /* a photo still in this engine: see it out */
     m_process = nullptr;
     old->disconnect(this);
     m_retiring = old;              /* start() waits for its end              */
@@ -369,7 +369,8 @@ void IndrawPreview::stop(bool wait)
             if (busy) {
                 m_retiringBusy = true;
                 connect(old, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
-                        this, [this]() { m_retiringBusy = false; setProcessing(false); });
+                        this, [this]() { m_retiringBusy = false; m_shotPending = false; setProcessing(false); });
+                setProcessing(true);       /* the photo goes on in the old engine */
             }
             QTimer::singleShot(30000, old, [old]() { if (old->state() != QProcess::NotRunning) old->kill(); });
         }
@@ -385,7 +386,7 @@ void IndrawPreview::sendCommand(const QString &command)
         return;
     m_process->write(command.toUtf8());
     m_process->write("\n");        /* the engine reads one command per line     */
-    if (command.startsWith(QLatin1String("sh "))) { setProcessing(true); m_procTimer->start(45000); }
+    if (command.startsWith(QLatin1String("sh "))) { m_shotPending = true; m_procTimer->start(45000); }   /* the dots: at the flash */
 }
 
 /* Settings: a plain INI file in the app's config directory (whitelisted by
@@ -812,6 +813,7 @@ void IndrawPreview::parseEvent(const QByteArray &line)
     const QHash<QByteArray, QByteArray> f = kv(line, &name);
     if (name == "captured") {
         emit captureFinished();
+        if (m_shotPending) setProcessing(true);   /* the dots start with the flash */
     } else if (name == "fcrop") {
         /* The crop the next frames were taken with (sent right before them). */
         const QRectF c(f.value("x").toDouble(), f.value("y").toDouble(),
@@ -846,7 +848,7 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         if (kind == QLatin1String("preview"))   /* the engine's DNG render: make the jpg */
             convertDngPreview(path, f.value("orientation").toInt());
         emit fileWritten(kind, path);
-        if (m_processing && kind != QLatin1String("preview")) m_procTimer->start(600);
+        if (m_shotPending && kind != QLatin1String("preview")) m_procTimer->start(600);
     } else if (name == "caps") {
         /* The engine gives n/d for the EV step; the UI wants EV per step. */
         const QList<QByteArray> step = f.value("ev_step", "0/1").split('/');
