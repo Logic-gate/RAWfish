@@ -2328,6 +2328,29 @@ ApplicationWindow {
                             width: parent.width; height: (parent.height - parent.topPadding) / page.leftButtons
                             compact: page.compactDeck
                             caption: qsTr("TYPE"); value: page.imageTypeLabel(page.imageType)
+                            // A photo being taken or computed (viewfinder.processing):
+                            // three dots turn round the button, each a little behind
+                            // and fainter than the one before.
+                            Item {
+                                id: busyDots
+                                anchors.fill: parent
+                                visible: viewfinder.processing
+                                readonly property real dot: Math.max(4, Math.round(1.2 * page.deckMm))
+                                readonly property real r: Math.min(width, height) / 2 - dot
+                                property real t: 0
+                                NumberAnimation on t { from: 0; to: 1; duration: 1400; loops: Animation.Infinite; running: busyDots.visible }
+                                Repeater {
+                                    model: 3
+                                    Rectangle {
+                                        readonly property real a: 2 * Math.PI * (busyDots.t - index * 0.06) - Math.PI / 2
+                                        width: busyDots.dot; height: width; radius: width / 2
+                                        x: busyDots.width / 2 + busyDots.r * Math.cos(a) - width / 2
+                                        y: busyDots.height / 2 + busyDots.r * Math.sin(a) - height / 2
+                                        color: Theme.highlightColor
+                                        opacity: 1.0 - 0.3 * index
+                                    }
+                                }
+                            }
                             visible: !settingsMenu.simpleHides("type")   // simple mode: jpg and snap
                             // Greyed on a Σ speed (stacking writes a DNG only).
                             enabled: !page.stackSelected

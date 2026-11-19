@@ -15,6 +15,7 @@
 
 #include <QImage>
 #include <QProcess>
+#include <QPointer>
 #include <QQuickItem>
 #include <QSize>
 #include <QString>
@@ -128,6 +129,10 @@ class IndrawPreview : public QQuickItem
     /* True between the stack command and its stack_done: the engine is kept
      * running through inactivity (screen off) until the stack ends. */
     Q_PROPERTY(bool stacking READ stacking NOTIFY stackingChanged)
+    /* A photo is being taken or computed: from the "sh" sent until its file
+     * is written (or the engine that took it has ended, after a restart), at
+     * most 45 s. The UI turns dots round the TYPE button meanwhile. */
+    Q_PROPERTY(bool processing READ processing NOTIFY processingChanged)
 
     /* caps: the sensor limits from the engine's SF2M "caps" line (isoMin,
      * isoMax, isoAnalogMax, expMinNs, expMaxNs, shutterMaxNs, evMin, evMax,
@@ -247,6 +252,7 @@ public:
     QString errorString() const;
     QString configDir() const;
     bool stacking() const;
+    bool processing() const { return m_processing; }
     QString jpgDir() const;
     QString dngDir() const;
     QString capturePrefix() const;
@@ -387,6 +393,7 @@ signals:
     /* A stack ended: frames added of n, aborted, total ms (SF2M "stack_done"). */
     void stackDone(int frames, int n, bool aborted, int ms);
     void stackingChanged();
+    void processingChanged();
     void outputChanged();
     void capsChanged();
     void liveChanged();
@@ -444,6 +451,8 @@ private:
     QSize m_jpegOverride;          /* snap: the JPEG size of this session          */
     QSize m_startedOverride;       /* the override the running engine was started with */
     bool m_restartQueued = false;  /* a restart check waits for the end of this event-loop turn */
+    QPointer<QProcess> m_retiring; /* the engine told to quit, until it has ended */
+    bool m_startPending = false;   /* start() waits for m_retiring to end      */
     bool sessionOutdated() const;  /* what is asked differs from what the engine was started with */
     void restartIfOutdated();
     int m_yuvFails = 0;            /* such deaths in a row, before any caps         */
@@ -456,6 +465,10 @@ private:
                                     * next one opens at "max" (a size this camera
                                     * does not list stops the engine at open)    */
     bool m_stacking = false;       /* a stack is running in the engine          */
+    bool m_processing = false;     /* a photo in progress (see "processing")    */
+    bool m_retiringBusy = false;   /* the old engine is finishing a photo       */
+    QTimer *m_procTimer = nullptr; /* ends "processing": quiet after the file, or the 45 s cap */
+    void setProcessing(bool on) { if (on != m_processing) { m_processing = on; emit processingChanged(); } }
     QString m_jpgDir, m_dngDir, m_prefix;   /* output settings in force         */
     bool m_stopWanted = false;     /* setActive(false) arrived during a stack   */
     qint64 m_lastRestartMs = 0;

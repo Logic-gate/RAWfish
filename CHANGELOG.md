@@ -15,6 +15,16 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-455 (patch 0455): a photo still being computed is no
+  longer lost when the engine is restarted, and dots turn round the TYPE
+  button while a photo is taken or computed. Switching the type, the
+  resolution or the camera asks the old engine to quit; it was killed
+  after 3 s, while 4 frames of 50 MP take about 5 s (8 frames, on the
+  development branch, about 13 s): the photo was lost. It now has 30 s,
+  and the new engine waits for it to close the camera (from 0.3.10's
+  patch 0433: started together, the new one took the camera from the old
+  one). The dots run from the shot until its file is written, or until
+  the old engine has ended after a switch (45 s at most).
 - The build 0.3.9-452 (patch 0452): the start's menu peek came at last.
   0448 started it from the engine's caps, which arrive before the first
   frame, when the viewfinder is not running yet -- so it never came. It

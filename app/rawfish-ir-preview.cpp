@@ -46,6 +46,12 @@ IndrawPreview::IndrawPreview(QQuickItem *parent)
     connect(m_overlayThread, &QThread::finished, m_overlayWorker, &QObject::deleteLater);
     connect(m_overlayWorker, &OverlayWorker::done, this, &IndrawPreview::onOverlayDone, Qt::QueuedConnection);
     m_overlayThread->start();
+    /* "processing" ends 0.6 s after a file is written (a bracket writes
+     * several in a row), or at the 45 s cap if no file comes (a failure) --
+     * not while an old engine is still finishing its photo. */
+    m_procTimer = new QTimer(this);
+    m_procTimer->setSingleShot(true);
+    connect(m_procTimer, &QTimer::timeout, this, [this]() { if (!m_retiringBusy) setProcessing(false); });
 }
 
 IndrawPreview::~IndrawPreview()
@@ -198,6 +204,18 @@ void IndrawPreview::start()
 {
     if (m_process)
         return;                    /* already running                          */
+    /* The engine before is still finishing (a bracket, a burst, a DNG being
+     * written: "quit" waits behind them): the new one opens the camera only
+     * once it has ended. Started together, the new engine took the camera
+     * while the old one's bracket ran and its last frame was refused (log of
+     * 15 Nov 2026, 08:59:53: a change of type during a RAW bracket of 3).
+     * A camera closing between two engines takes ~150 ms; that is the wait
+     * on a plain camera or type change. */
+    if (m_retiring && m_retiring->state() != QProcess::NotRunning) {
+        m_startPending = true;
+        return;
+    }
+    m_startPending = false;
 
     setError(QString());               /* a fresh start clears an old failure */
     m_process = new QProcess(this);
@@ -319,14 +337,21 @@ void IndrawPreview::stop(bool wait)
      * kill) used to be taken for the NEW engine dying: "engine stopped" on a
      * camera switch while the new engine was streaming. */
     QProcess *old = m_process;
+    const bool busy = m_processing;   /* a photo still in this engine: see it out */
     m_process = nullptr;
     old->disconnect(this);
+    m_retiring = old;              /* start() waits for its end              */
     if (m_stacking) { m_stacking = false; emit stackingChanged(); }
     /* Ask the engine to quit cleanly (closes the camera), then tear down.
      * Not waited for on the UI thread (ui 168): a stack sub-frame of 0.5 s
      * plus a DNG write could hold the engine for seconds, and the camera
      * switch or the sleep froze that long. The old process is deleted when
-     * it ends, and killed if it has not ended in 3 s. The destructor
+     * it ends, and killed if it has not ended in 30 s (3 s up to 0.3.9: a
+     * bracket of RAWs or a burst finishing behind "quit" was cut, and 8
+     * frames of 50 MP take about 13 s to merge -- a switch to RAW during it
+     * lost the photo); a photo still in it keeps "processing" on until then
+     * (the dots round the TYPE button), and a start asked meanwhile waits for
+     * its end (start()). The destructor
      * (the app closing) waits instead: the process would be killed with it. */
     if (old->state() != QProcess::NotRunning) {
         old->write("quit\n");
@@ -337,7 +362,16 @@ void IndrawPreview::stop(bool wait)
         } else {
             connect(old, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
                     old, &QObject::deleteLater);
-            QTimer::singleShot(3000, old, [old]() { if (old->state() != QProcess::NotRunning) old->kill(); });
+            /* its end lets a start that waited for it go (a crash or a kill too) */
+            connect(old, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+                    this, [this]() { if (m_startPending && m_active && !m_process) start(); });
+            /* a photo being computed ends it: "processing" until then */
+            if (busy) {
+                m_retiringBusy = true;
+                connect(old, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+                        this, [this]() { m_retiringBusy = false; setProcessing(false); });
+            }
+            QTimer::singleShot(30000, old, [old]() { if (old->state() != QProcess::NotRunning) old->kill(); });
         }
     } else
         old->deleteLater();
@@ -351,6 +385,7 @@ void IndrawPreview::sendCommand(const QString &command)
         return;
     m_process->write(command.toUtf8());
     m_process->write("\n");        /* the engine reads one command per line     */
+    if (command.startsWith(QLatin1String("sh "))) { setProcessing(true); m_procTimer->start(45000); }
 }
 
 /* Settings: a plain INI file in the app's config directory (whitelisted by
@@ -811,6 +846,7 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         if (kind == QLatin1String("preview"))   /* the engine's DNG render: make the jpg */
             convertDngPreview(path, f.value("orientation").toInt());
         emit fileWritten(kind, path);
+        if (m_processing && kind != QLatin1String("preview")) m_procTimer->start(600);
     } else if (name == "caps") {
         /* The engine gives n/d for the EV step; the UI wants EV per step. */
         const QList<QByteArray> step = f.value("ev_step", "0/1").split('/');
