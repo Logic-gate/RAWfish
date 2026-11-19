@@ -15,6 +15,11 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-460 (patch 0460): the launcher icon fills its frame as
+  the Sailfish template asks (Sailfish-Apps-icon-template: the outline
+  from 0.3 to 85.7 px of 86). It had 2 px empty on each side at 86 px (4
+  at 172), about 5 % smaller than the system's icons beside it. Same
+  shape and art; scripts/launcher-icons.py makes the four sizes.
 - The build 0.3.9-457 (patch 0457): the busy dots round the TYPE button
   half as big, and starting at the flash rather than at the press.
 - The build 0.3.9-455 (patch 0455): a photo still being computed is no
