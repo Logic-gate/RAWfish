@@ -1,0 +1,16 @@
+# Jolla Phone 2, camera 0 (main), RAW16, ISO 400, tripod, steady light; 21 November 2026.
+# raw - exp=T iso=400 (measure only). center_mean: centre mean minus black (DN);
+# image_ms: request to image. Two passes (up, then down; the light rose ~5 %).
+# Per second: ~165 DN/s up to 0.575 s, ~325 DN/s from 0.6 to 0.675 s (x2),
+# then a wrap near 0.68 s (0.69 s: almost black, delivered in 0.4 s).
+exposure_s,center_mean_up,image_ms_up,center_mean_down,image_ms_down
+0.125,21.93,476.8,23.36,499.5
+0.25,41.73,613.3,44.22,620.4
+0.4,65.76,798.3,69.10,807.9
+0.5,81.92,869.3,85.49,880.3
+0.55,90.48,931.4,93.47,951.0
+0.575,94.74,971.3,97.21,965.3
+0.6,194.40,1004.2,198.45,991.8
+0.65,210.49,1048.1,213.52,998.7
+0.675,218.61,1078.9,221.39,1070.4
+0.69,4.60,448.4,4.63,406.4

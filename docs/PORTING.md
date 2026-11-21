@@ -60,7 +60,15 @@ exposure ceiling, the focus calibration, the aid thresholds (below).
 5. Measure the **single-exposure ceiling**: the longest `exp=` the HAL really
    honours (on the JP2 it says 16 s and lies above 1/2 s). Put it in
    `override-hal.json` as `observed_shutter_max_ns`. Everything longer is
-   stacked.
+   stacked. Judge by the image, never by `applied`: the HAL reports the
+   exposure asked whatever it took. With the phone on a tripod and a steady
+   light, run `raw - exp=T iso=N` for a series of T (short ones included,
+   as the reference) and divide `measured.center_mean` by T: it must stay
+   constant. Take the ceiling below the first T where it does not, with a
+   margin. The JP2 (`docs/measurements/jp2-shutter-ceiling.csv`) is linear
+   up to 0.575 s, twice as bright from 0.6 s, and wraps near 0.68 s (a
+   longer request gives a nearly black frame, delivered early); it keeps
+   1/2 s. Asking CAPTURE_INTENT_MANUAL changes nothing there (tested).
 6. Run the app. Check: the viewfinder is upright on every camera and
    orientation; a tap's circle lands where you tap; the wheels' ranges look
    right (caps); the gallery shows the captures.

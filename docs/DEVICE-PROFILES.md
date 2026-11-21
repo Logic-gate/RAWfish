@@ -43,6 +43,10 @@ Corrections wired today (both optional, per camera):
 - `observed_shutter_max_ns`: the real single-exposure ceiling, found by testing,
   which replaces the built-in 1/2 s stacking sub-frame maximum. On the JP2 the
   HAL claims 16 s but applies ~1/2 s, so a JP2 profile sets `500000000`.
+  Measured on 21 November 2026 (`docs/measurements/jp2-shutter-ceiling.csv`):
+  linear up to 0.575 s, then twice as bright from 0.6 s (a hidden gain),
+  then a wrap near 0.68 s, while `applied` always repeats the request. So
+  1/2 s keeps a margin below the jump.
 - `observed_iso_max`: the highest ISO a manual exposure may ask for, when
   testing showed the camera takes more than its declared range (the JP2's
   18 mm declares 2400; its own AE reaches 15537). The ISO wheel goes that

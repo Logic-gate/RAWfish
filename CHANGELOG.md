@@ -15,6 +15,13 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-465 (patch 0465), documentation only: the JP2's
+  single-exposure ceiling measured (docs/measurements/jp2-shutter-ceiling.csv):
+  linear up to 0.575 s, twice as bright from 0.6 s, a nearly black frame
+  past ~0.68 s, while the HAL reports the exposure asked. The 1/2 s
+  ceiling stays. Asking CAPTURE_INTENT_MANUAL, as another JP2 app does,
+  changes nothing. docs/PORTING.md now says how to measure the ceiling
+  by the image.
 - The build 0.3.9-460 (patch 0460): the launcher icon fills its frame as
   the Sailfish template asks (Sailfish-Apps-icon-template: the outline
   from 0.3 to 85.7 px of 86). It had 2 px empty on each side at 86 px (4
