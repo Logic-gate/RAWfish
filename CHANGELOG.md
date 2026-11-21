@@ -15,6 +15,9 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-468 (patch 0468), documentation only: a hand-held RAW
+  merge (aligned frames, moving parts left out) added to the ROADMAP's
+  ideas.
 - The build 0.3.9-466 (patch 0466), documentation only: the focus
   calibration steps (USER-GUIDE) still asked for the FOCUS mode "once",
   gone since 0.3.2; a touch on the target now does it.

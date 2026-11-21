@@ -154,6 +154,18 @@ falling back on the previous one where it does not work:
    on each device's graphics driver: test on the JP2 first.
 
 
+### A hand-held RAW merge
+Σ adds its sub-frames as they are, without aligning them: it needs a
+tripod, and whatever moves leaves a trail. A RAW merge would take a burst
+of short RAW16 frames, align each part of each frame on a reference frame
+(a tile search, coarse to fine, to a fraction of a pixel), leave out the
+tiles that do not match (a moving subject), and write the sum as one DNG,
+as Σ does. For hand-held night shots, and a Σ that forgives a small move.
+Open: aligning on the Bayer mosaic (2x2 blocks, or a half-size grey
+image), the time per full-size frame on the phone, and keeping the DNG's
+brightness exact where tiles are left out (each pixel divided by its own
+count of frames).
+
 ### Merge with RAWfish
 Possible shape: RAWfish-ir's engine (one process, one Camera2 session for
 viewfinder and photos) under RAWfish's interface in photo mode, GStreamer
