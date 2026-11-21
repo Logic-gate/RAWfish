@@ -15,6 +15,9 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-466 (patch 0466), documentation only: the focus
+  calibration steps (USER-GUIDE) still asked for the FOCUS mode "once",
+  gone since 0.3.2; a touch on the target now does it.
 - The build 0.3.9-465 (patch 0465), documentation only: the JP2's
   single-exposure ceiling measured (docs/measurements/jp2-shutter-ceiling.csv):
   linear up to 0.575 s, twice as bright from 0.6 s, a nearly black frame

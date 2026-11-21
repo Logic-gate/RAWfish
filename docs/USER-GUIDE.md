@@ -281,7 +281,8 @@ Changes take effect the next time the camera starts.
 
 1. Turn on "Focus calibration in the camera menu".
 2. Put something with sharp details at a measured distance, e.g. 0.5 m.
-3. FOCUS on **once**, tap the target, wait for the solid circle.
+3. Tap the target: the camera searches there and holds the distance it
+   found. Wait for the solid circle (red: it did not lock, tap again).
 4. Menu, column **Focus cal.**, tap **0.5m**: it blinks red; tap it **again**
    to record (this two-tap rule protects a calibration from a stray touch;
    the same for **clear**, which forgets all the recorded points).
