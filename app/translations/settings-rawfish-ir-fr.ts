@@ -15,8 +15,8 @@
     </message>
     <message>
         <location line="+5"/>
-        <source>Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added only when two photos fall in the same second.</source>
-        <translation>Lettres, chiffres, - et _ (32 au plus ; pas de - au début). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS.EXT, ou AAAAMMJJ_HHMMSS.EXT si le champ est vide ; les millisecondes (_mmm) ne s'ajoutent que si deux photos tombent dans la même seconde.</translation>
+        <source>Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added when two photos fall in the same second, and always for a bracket or a burst.</source>
+        <translation>Lettres, chiffres, - et _ (32 au plus ; pas de - au début). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS.EXT, ou AAAAMMJJ_HHMMSS.EXT si le champ est vide ; les millisecondes (_mmm) s'ajoutent si deux photos tombent dans la même seconde, et toujours pour un bracketing ou une rafale.</translation>
     </message>
     <message>
         <source>No prefix</source>

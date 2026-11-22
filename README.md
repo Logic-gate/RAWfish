@@ -109,8 +109,8 @@ converges, and a JPEG output sits on the same session, so a photo is a single re
 
 Captures are written to `~/Pictures/RAWfish-ir/` as `NAME_YYYYMMDD_HHMMSS.EXT`: the command's
 first argument is a name prefix (`+`: none, the file name starts with the date), and the engine always appends the capture time
-and the extension (`.jpg`, `.dng`), with the milliseconds (`_mmm`) only when another shot already has
-that name (two photos in the same second, a burst). DNGs carry the capture time in
+and the extension (`.jpg`, `.dng`), with the milliseconds (`_mmm`) when another shot already has
+that name (two photos in the same second), and always for the photos of a burst or a bracket. DNGs carry the capture time in
 EXIF (`DateTimeOriginal`). (`~/Pictures` is outside the Sailjail auto-whitelist: the app declares
 the Pictures permission.) **The command-line tool is not sandboxed**: run from a terminal,
 `rawfish-ir-cli` has the user's rights, and `--jpgdir` / `--dngdir` take any folder the user can
@@ -386,7 +386,7 @@ lens's f-number).
 
 ## Where captures go, and their names
 
-By default everything goes to `~/Pictures/RAWfish-ir/` as `photo_YYYYMMDD_HHMMSS.EXT` (`_mmm` added when two shots fall in the same second; an empty prefix: `YYYYMMDD_HHMMSS.EXT`). The system
+By default everything goes to `~/Pictures/RAWfish-ir/` as `photo_YYYYMMDD_HHMMSS.EXT` (`_mmm` added when two shots fall in the same second, and always for a burst or a bracket; an empty prefix: `YYYYMMDD_HHMMSS.EXT`). The system
 Settings app has a RAWfish-ir page (Settings > Apps > RAWfish-ir, like RAWfish) with the file name prefix
 and the JPEG and DNG folders; they are dconf keys under `/apps/rawfish-ir/output` (`prefix`, `jpgDir`,
 `dngDir`), read by the app at every engine start. The prefix is letters, digits, `-` and `_` (up to

@@ -15,6 +15,11 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-481 (patch 0481): the photos of a bracket and of a
+  burst (x3) always carry their milliseconds (NAME_YYYYMMDD_HHMMSS_mmm),
+  the first one too: a series is named alike and sorts in order. The
+  engine's `jpeg` and `raw` take `ms=1` for it, which the app sends for
+  the bracket's three photos; `burst` always does it.
 - The build 0.3.9-478 (patch 0478): shorter file names, and photos
   without a prefix. Files are now named NAME_YYYYMMDD_HHMMSS.EXT: the
   milliseconds (_mmm) are added only when another shot already has that

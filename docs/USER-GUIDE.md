@@ -265,7 +265,7 @@ Press both volume keys at once: the screen is saved to
 
 | Setting | Meaning |
 |---|---|
-| File name prefix | the start of every file name (`photo` by default): letters, digits, `-`, `_`, not starting with `-`. Empty: no prefix, the files are named by the date alone (`YYYYMMDD_HHMMSS.jpg`). The milliseconds (`_mmm`) are added only when two photos fall in the same second |
+| File name prefix | the start of every file name (`photo` by default): letters, digits, `-`, `_`, not starting with `-`. Empty: no prefix, the files are named by the date alone (`YYYYMMDD_HHMMSS.jpg`). The milliseconds (`_mmm`) are added when two photos fall in the same second, and always for the photos of a bracket or a burst (x3) |
 | JPEG folder, DNG folder | where the pictures go; under `~/Pictures` (the only place the app may write) |
 | Reset to defaults | the three above |
 | Scenes in the camera menu (not yet implemented) | shows the Scene column in the menu (off by default) |

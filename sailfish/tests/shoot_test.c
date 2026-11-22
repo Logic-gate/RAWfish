@@ -86,6 +86,8 @@ int main(void)
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 3 && strstr(lines[0], "exp=0.0500000") && strstr(lines[1], "exp=0.2000000") && strstr(lines[2], "exp=0.5000000"),
           "bracket +-2: 1/20, 1/5, and the ceiling 1/2");
-    printf(fails ? "shoot: FAILED (%d)\n" : "shoot: OK (6 rules)\n", fails);
+    CHECK(strstr(lines[0], " ms=1") && strstr(lines[1], " ms=1") && strstr(lines[2], " ms=1"),
+          "bracket: the milliseconds always in its names (ms=1)");
+    printf(fails ? "shoot: FAILED (%d)\n" : "shoot: OK (7 rules)\n", fails);
     return fails ? 1 : 0;
 }

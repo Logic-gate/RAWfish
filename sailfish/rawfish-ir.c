@@ -1032,15 +1032,17 @@ static int stem_taken(const char *stem, const char *jdir, const char *ddir, cons
  * (~/Pictures/RAWfish-ir by default, created if missing). The command's NAME
  * becomes <prefix>; NAME "+" (NO_PREFIX) gives <YYYYMMDD>_<HHMMSS>.<ext>.
  * The milliseconds are added (<HHMMSS>_<mmm>) only when that name is already
- * taken by another shot -- a second photo in the same second, a burst --
- * and a counter after them (_<mmm>-2 ...) in the unlikely case that is
- * taken too. All the files of one shot (the same `ts`) get the same name,
- * whatever their order. Returns 0, or -1 if the path does not fit, the
- * folder cannot be made or HOME is unset. (~/Pictures is not one of the
- * folders Sailjail opens by itself: the app declares the Pictures
- * permission; the CLI tool runs unsandboxed.) */
-static int build_output_path(const char *prefix, const char *ext,
-                             const struct timespec *ts, char *buf, size_t n)
+ * taken by another shot -- a second photo in the same second -- or always
+ * with `force_ms` (the files of a series: a burst, a bracket, so that its
+ * photos are named alike and sort in order), and a counter after them
+ * (_<mmm>-2 ...) in the unlikely case that is taken too. All the files of
+ * one shot (the same `ts`) get the same name, whatever their order.
+ * Returns 0, or -1 if the path does not fit, the folder cannot be made or
+ * HOME is unset. (~/Pictures is not one of the folders Sailjail opens by
+ * itself: the app declares the Pictures permission; the CLI tool runs
+ * unsandboxed.) */
+static int build_output_path_ms(const char *prefix, const char *ext, const struct timespec *ts,
+                                int force_ms, char *buf, size_t n)
 {
     const char *home = getenv("HOME");
     const int is_dng = !strcmp(ext, "dng") || !strcmp(ext, "raw16");
@@ -1072,7 +1074,7 @@ static int build_output_path(const char *prefix, const char *ext,
         }
     if (!found) {
         snprintf(stem, sizeof stem, "%s", base);
-        if (stem_taken(stem, jdir, ddir, ts)) {
+        if (force_ms || stem_taken(stem, jdir, ddir, ts)) {
             snprintf(stem, sizeof stem, "%s_%03d", base, ms);
             for (k = 2; k < 100 && stem_taken(stem, jdir, ddir, ts); ++k)
                 snprintf(stem, sizeof stem, "%s_%03d-%d", base, ms, k);
@@ -1085,6 +1087,13 @@ static int build_output_path(const char *prefix, const char *ext,
     pthread_mutex_unlock(&g_stem_lock);
     len = snprintf(buf, n, "%s/%s.%s", is_dng ? ddir : jdir, stem, ext);
     return (len < 0 || (size_t)len >= n) ? -1 : 0;
+}
+
+/* The usual name: the milliseconds only when needed. */
+static int build_output_path(const char *prefix, const char *ext,
+                             const struct timespec *ts, char *buf, size_t n)
+{
+    return build_output_path_ms(prefix, ext, ts, 0, buf, n);
 }
 
 /* Loads libhybris-common and its android_dlopen/android_dlsym. */
@@ -1255,12 +1264,13 @@ static void usage(void)
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
             "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS.EXT\n"
             "  (NAME: letters, digits, - and _; NAME + = no prefix: YYYYMMDD_HHMMSS.EXT; _mmm, the milliseconds,\n"
-            "  added only when another shot already has that name: a second photo in the same second, a burst)\n"
+            "  added when another shot already has that name, a second photo in the same second; always for a\n"
+            "  burst, and for jpeg / raw with ms=1: the photos of a bracket)\n"
             "  stdin: jpeg NAME [q=95] [default_noise|off_noise|fast_noise|hq_noise|minimal_noise|zsl_noise]\n"
             "                   [default_edge|off_edge|fast_edge|hq_edge|zsl_edge]\n"
             "                   [focus=auto|continuous|continuous_video|macro|edof|inf|<m>m] [easy]\n"
-            "                   [exp=T] [iso=N]\n"
-            "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N]   (- = measure only)\n"
+            "                   [exp=T] [iso=N] [ms=1]   (ms=1: the milliseconds always in the name)\n"
+            "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N] [ms=1]   (- = measure only)\n"
             "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
             "                                [colour=0..5] [median=0..4] [sharpen=0..5]\n"
             "                                (colour: our colour filter, 1, 2, 3, 5, 8 x the noise (denoise=on = 2); median:\n"
@@ -1663,13 +1673,13 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
     char *prefix = strtok_r(NULL, " \t\r\n", save); /* filename prefix (1st)   */
     char file[1200];                                  /* built timestamped path  */
     char *tok;
-    int iso = 0, variant = 0, v;
+    int iso = 0, variant = 0, v, force_ms = 0;
     int focus_mode = F_KEEP, focus_set = 0;    /* default: keep the auto focus   */
     float focus_diopters = 0.0f;
     int64_t exposure_ns = 0;
     /* "-" keeps its measure-only meaning (writes nothing); any other value is a
      * filename prefix. raw writes a DNG, so the auto name uses .dng. */
-    struct timespec now;
+    struct timespec now = { 0, 0 };
     char dt[24] = "";
     if (!prefix) { emit("{\"ok\":false,\"error\":\"raw: missing NAME\"}"); return 1; }
     if (!strcmp(prefix, "-")) {
@@ -1681,13 +1691,11 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
         }
         clock_gettime(CLOCK_REALTIME, &now);       /* name and EXIF share this   */
         exif_from_ts(&now, dt, sizeof dt);
-        if (build_output_path(prefix, "dng", &now, file, sizeof file)) {
-            emit("{\"ok\":false,\"error\":\"raw: cannot build output path\"}");
-            return 1;
-        }
     }
     while ((tok = strtok_r(NULL, " \t\r\n", save))) {
-        if (!strncmp(tok, "exp=", 4)) {
+        if (!strcmp(tok, "ms=1")) force_ms = 1;    /* a bracket's: _mmm always   */
+        else if (!strcmp(tok, "ms=0")) force_ms = 0;
+        else if (!strncmp(tok, "exp=", 4)) {
             if (!parse_exposure(tok + 4, &exposure_ns)) {
                 emit("{\"ok\":false,\"error\":\"raw: bad exp\"}");
                 return 1;
@@ -1705,6 +1713,11 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
             focus_set = 1;
         }
         else { emit("{\"ok\":false,\"error\":\"raw: unknown option\"}"); return 1; }
+    }
+    /* The name once the options are read (ms=), at the instant taken above. */
+    if (strcmp(prefix, "-") && build_output_path_ms(prefix, "dng", &now, force_ms, file, sizeof file)) {
+        emit("{\"ok\":false,\"error\":\"raw: cannot build output path\"}");
+        return 1;
     }
     if (!raw) { emit("{\"ok\":false,\"error\":\"raw: bridge has no indraw_raw\"}"); return 1; }
     /* Default (nothing set): all-auto -- keep the session's continuous focus and,
@@ -1731,7 +1744,7 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
     char file[1200];                                  /* built timestamped path  */
     char *tok;
     int quality = 95, nr = -1, edge = -1, iso = 0, variant = 0, v;
-    int focus_mode = F_KEEP, easy = 0;         /* default: keep the auto focus   */
+    int focus_mode = F_KEEP, easy = 0, force_ms = 0; /* default: keep the auto focus */
     float focus_diopters = 0.0f;
     int64_t exposure_ns = 0;
     struct timespec now;
@@ -1741,12 +1754,10 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
         return 1;
     }
     clock_gettime(CLOCK_REALTIME, &now);          /* one instant for the name     */
-    if (build_output_path(prefix, "jpg", &now, file, sizeof file)) {
-        emit("{\"ok\":false,\"error\":\"jpeg: cannot build output path\"}");
-        return 1;
-    }
     while ((tok = strtok_r(NULL, " \t\r\n", save))) {   /* key=value options    */
-        if (!strncmp(tok, "q=", 2)) quality = atoi(tok + 2);
+        if (!strcmp(tok, "ms=1")) force_ms = 1;   /* a bracket's: _mmm always    */
+        else if (!strcmp(tok, "ms=0")) force_ms = 0;
+        else if (!strncmp(tok, "q=", 2)) quality = atoi(tok + 2);
         else if (!strncmp(tok, "exp=", 4)) {
             if (!parse_exposure(tok + 4, &exposure_ns)) {
                 emit("{\"ok\":false,\"error\":\"jpeg: bad exp\"}");
@@ -1768,6 +1779,11 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
         else if (!strcmp(tok, "easy")) easy = 1;   /* combined AF + AE (one call) */
         else if (!strncmp(tok, "label=", 6)) label = tok + 6;   /* the kind, in Exif Software ("snap") */
         else { emit("{\"ok\":false,\"error\":\"jpeg: unknown option\"}"); return 1; }
+    }
+    /* The name once the options are read (ms=), at the instant taken above. */
+    if (build_output_path_ms(prefix, "jpg", &now, force_ms, file, sizeof file)) {
+        emit("{\"ok\":false,\"error\":\"jpeg: cannot build output path\"}");
+        return 1;
     }
     if (quality < 1 || quality > 100) {
         emit("{\"ok\":false,\"error\":\"jpeg: bad value\"}");
@@ -2040,7 +2056,8 @@ static int cmd_yuv(void *bridge, char **save, char *out)
 /* Handles one "burst NAME [n=N] [q=Q] [NOISE] [EDGE] [exp=SEC iso=N]" line:
  * N JPEGs (2..8, default 3) back to back at one exposure (the given manual
  * pair, or the live automatic one frozen). Each file gets its own name, the
- * timestamp's milliseconds advanced by one per frame. */
+ * timestamp's milliseconds advanced by one per frame and always written
+ * (the first one's too: the series is named alike). */
 static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
 {
     char *prefix = strtok_r(NULL, " \t\r\n", save), *tok;
@@ -2066,7 +2083,7 @@ static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
         struct timespec t = now;
         t.tv_nsec += (long)k * 1000000L;              /* one ms apart: unique names  */
         if (t.tv_nsec >= 1000000000L) { t.tv_sec += 1; t.tv_nsec -= 1000000000L; }
-        if (build_output_path(prefix, "jpg", &t, files[k], sizeof files[k])) {
+        if (build_output_path_ms(prefix, "jpg", &t, 1, files[k], sizeof files[k])) {
             emit("{\"ok\":false,\"error\":\"burst: cannot build output path\"}"); return 1;
         }
         paths[k] = files[k];

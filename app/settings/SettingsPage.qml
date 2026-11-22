@@ -84,7 +84,7 @@ Page {
                 text: output.prefix
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                 errorHighlight: !page.prefixOk(text)
-                description: qsTr("Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added only when two photos fall in the same second.")
+                description: qsTr("Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added when two photos fall in the same second, and always for a bracket or a burst.")
                 // Saved when the edit ends (Enter, or the field left), not at
                 // every keystroke. (Silica's TextField has no editingFinished:
                 // using it made the whole page fail to load.)

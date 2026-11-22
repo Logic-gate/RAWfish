@@ -85,7 +85,8 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
     /* The head of a jpeg / raw line, the same for the bracket's three. */
 #define HEAD(line, l) put(line, l, "%s %s%s%s%s", req->raw ? "raw" : "jpeg", req->name, farg, \
                           req->raw ? "" : q, !req->raw && req->snap ? " label=snap" : "")
-    /* Bracket: three real exposures around the pair (x3 in raw: three the same). */
+    /* Bracket: three real exposures around the pair (x3 in raw: three the same),
+     * named with their milliseconds always (ms=1): the series is named alike. */
     if (req->bracket >= 0) {
         int stops = req->bracket, k;
         const int list[3] = { -stops, 0, stops };
@@ -94,7 +95,7 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
             if (e < exp_min_ns) e = exp_min_ns;
             if (e > smax) e = smax;
             len = 0;
-            if (!HEAD(lines[k], &len) || !put(lines[k], &len, " exp=%.7f iso=%d", e / 1e9, iso)) return 0;
+            if (!HEAD(lines[k], &len) || !put(lines[k], &len, " exp=%.7f iso=%d ms=1", e / 1e9, iso)) return 0;
         }
         return 3;
     }

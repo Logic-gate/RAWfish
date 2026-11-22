@@ -40,9 +40,11 @@ defaults to 1280x960. Without `raw=` there is no RAW stream (no `raw`, `stack`,
 
 Names (`NAME`) are letters, digits, `-` and `_` only (`+`: no prefix); the
 engine writes `NAME_YYYYMMDD_HHMMSS.jpg` / `.dng` in the folders above, and
-adds the milliseconds (`_mmm`, then `-2`...) only when another shot already
-has that name (a second photo in the same second, a burst). The files of one
-shot (a JPEG and its DNG) always share their name. Exposure times (`exp=`, `film=`, `sub=`) are decimal
+adds the milliseconds (`_mmm`, then `-2`...) when another shot already has
+that name (a second photo in the same second), and always for the photos of
+a series: a `burst`, and a `jpeg` / `raw` given `ms=1` (the app's bracket),
+so that a series is named alike. The files of one shot (a JPEG and its DNG)
+always share their name. Exposure times (`exp=`, `film=`, `sub=`) are decimal
 seconds (`0.008`, `0.5`, `4`).
 
 ### Photos
@@ -57,6 +59,7 @@ seconds (`0.008`, `0.5`, `4`).
 | | `easy` | the one combined path: AF + AE before the shot |
 | `raw NAME` | `focus=`, `exp=SEC`, `iso=N` | as above; writes a DNG (+ its preview in `.previews/`) |
 | `raw -` | same | measure only, nothing written |
+| `jpeg` / `raw` | `ms=1` | the milliseconds (`_mmm`) always in the name: the photos of a bracket (the app sends it for its three) |
 | `stack NAME film=T` | `sub=T` sub-frame length | default and maximum: the single-exposure ceiling (1/2 s, or `observed_shutter_max_ns`) |
 | | `stk_denoise=1\|2\|4` extra frames divided out | 1 |
 | | `iso=N` | the sensor's range |
@@ -64,7 +67,7 @@ seconds (`0.008`, `0.5`, `4`).
 | `burst NAME` | `n=N` frames | 2..8, default 3 |
 | | `q=Q`, noise and edge modes | as for `jpeg` |
 | | `exp=SEC iso=N` | default: the live automatic pair, frozen for the burst |
-| | | JPEG only; one capture call, frames back to back at the sensor's pace; no flash; files `NAME_..._HHMMSS.jpg`, then `_mmm` for the next ones (their timestamps one millisecond apart) |
+| | | JPEG only; one capture call, frames back to back at the sensor's pace; no flash; files `NAME_..._HHMMSS_mmm.jpg`, the first one's too (their timestamps one millisecond apart) |
 | `noiseprofile FILE.json [sub=T]` | sweeps the ISOs and writes a darktable noise profile | developer tool |
 
 Diagnostic variants for `jpeg` / `raw`: `preview=pause` (stop the preview
