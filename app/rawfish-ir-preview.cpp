@@ -400,7 +400,9 @@ static QString settingsPath()
 /* Output settings, from dconf through the QML (ConfigurationGroup). A folder
  * outside ~/Pictures would make every sandboxed write fail: it is accepted
  * (a developer may run unsandboxed), but an empty or relative value and a
- * prefix outside the engine's safe charset fall back to the defaults. */
+ * prefix outside the engine's safe charset fall back to the defaults. An
+ * empty prefix is a choice (files named by the date alone): kept as is,
+ * sent to the engine as its "no prefix" NAME (capturePrefix). */
 void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, const QString &dngDir)
 {
     const QString def = QDir::homePath() + QStringLiteral("/Pictures/RAWfish-ir");
@@ -411,9 +413,11 @@ void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, cons
         while (v.size() > 1 && v.endsWith(QLatin1Char('/'))) v.chop(1);
         return v;
     };
-    static const QRegularExpression safe(QStringLiteral("^[A-Za-z0-9_-]{1,32}$"));
+    /* The settings page's rule: not starting with '-' ("-" alone is the
+     * engine's "measure only", no file). */
+    static const QRegularExpression safe(QStringLiteral("^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$"));
     const QString jp = folder(jpgDir), dn = folder(dngDir);
-    const QString pf = safe.match(prefix).hasMatch() ? prefix : QStringLiteral("photo");
+    const QString pf = prefix.isEmpty() || safe.match(prefix).hasMatch() ? prefix : QStringLiteral("photo");
     if (jp == m_jpgDir && dn == m_dngDir && pf == m_prefix) return;
     const bool dirsChanged = jp != m_jpgDir || dn != m_dngDir;
     m_jpgDir = jp; m_dngDir = dn; m_prefix = pf;
@@ -430,7 +434,9 @@ void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, cons
 }
 QString IndrawPreview::jpgDir() const { return m_jpgDir; }
 QString IndrawPreview::dngDir() const { return m_dngDir; }
-QString IndrawPreview::capturePrefix() const { return m_prefix; }
+/* The NAME of a shot's command: the prefix, or "+" (the engine's "no
+ * prefix") when it is empty. */
+QString IndrawPreview::capturePrefix() const { return m_prefix.isEmpty() ? QStringLiteral("+") : m_prefix; }
 
 /* The first start of a newly installed version sets the user's earlier
  * files aside, so that the version starts from its own defaults and its own

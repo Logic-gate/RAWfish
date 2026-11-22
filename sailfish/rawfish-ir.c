@@ -385,10 +385,23 @@ static void exif_from_ts(const struct timespec *ts, char *buf, size_t n)
 /* True if `name` is a safe filename prefix: non-empty and only letters, digits,
  * '-' and '_'. This refuses '/', spaces and shell/path metacharacters, so a
  * prefix can never escape ~/Pictures/RAWfish-ir/ or make an odd filename. */
+/* The NAME that means "no prefix": the files are then named
+ * YYYYMMDD_HHMMSS.EXT. A word of its own because the command's NAME
+ * cannot be empty, and outside the prefix charset so that no prefix can mean
+ * it (the interface sends it when its prefix setting is empty). */
+#define NO_PREFIX "+"
+
+/* The prefix a NAME puts in front of the file names: "" for NO_PREFIX. */
+static const char *name_prefix(const char *name)
+{
+    return !strcmp(name, NO_PREFIX) ? "" : name;
+}
+
 static int valid_name(const char *name)
 {
     const char *p;
     if (!name || !name[0]) return 0;
+    if (!strcmp(name, NO_PREFIX)) return 1;
     for (p = name; *p; ++p) {
         char c = *p;
         if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -972,13 +985,6 @@ static int write_focus_calibration(const char *id, const float *real_d, const fl
     return 0;
 }
 
-/* Builds an output path: ~/Pictures/RAWfish-ir/<prefix>_<YYYYMMDD>_<HHMMSS>_<ms>.<ext>
- * The command's filename argument becomes <prefix>; indraw always appends the
- * timestamp (with milliseconds, so a burst never collides) and the extension
- * for the command. Creates ~/Pictures/RAWfish-ir/ if missing. Returns 0, or -1 if
- * the path does not fit or HOME is unset. (Note: ~/Pictures is NOT one of the
- * three dirs Sailjail auto-whitelists; the CLI tool runs unsandboxed, but the
- * future Qt app will need a Pictures permission to write here.) */
 /* Output folders: ~/Pictures/RAWfish-ir by default for everything; the app (or
  * the caller) can put JPEGs and DNGs elsewhere with --jpgdir / --dngdir, a
  * "~/" prefix standing for HOME. Nothing else decides where files go. */
@@ -993,26 +999,91 @@ static int expand_home(const char *in, char *out, size_t n)
     }
     return snprintf(out, n, "%s", in) >= (int)n ? -1 : 0;
 }
+/* The file names already given out by this process, newest last (a ring):
+ * a stem is the name without folder or extension, and `sec`/`nsec` the shot
+ * it belongs to. The files of one shot (a JPEG and its DNG, the bracket's
+ * three JPEGs named before any is written) are not on the disk yet when the
+ * next name is chosen, so the disk alone cannot tell they are taken. */
+#define STEM_RING 32
+static struct { char stem[192]; long long sec; long nsec; } g_stems[STEM_RING];
+static int g_stem_next;
+static pthread_mutex_t g_stem_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* 1 when `stem` belongs to another shot than `ts`: given out by this process
+ * for another shot, or on the disk (as a JPEG in the JPEG folder, or a DNG
+ * in the DNG folder, whatever the file asked for now: the two files of a
+ * shot share their name). Under g_stem_lock. */
+static int stem_taken(const char *stem, const char *jdir, const char *ddir, const struct timespec *ts)
+{
+    char p[1400];
+    int k;
+    for (k = 0; k < STEM_RING; ++k)
+        if (g_stems[k].stem[0] && !strcmp(g_stems[k].stem, stem)
+            && (g_stems[k].sec != (long long)ts->tv_sec || g_stems[k].nsec != ts->tv_nsec)) return 1;
+    snprintf(p, sizeof p, "%s/%s.jpg", jdir, stem);
+    if (access(p, F_OK) == 0) return 1;
+    snprintf(p, sizeof p, "%s/%s.dng", ddir, stem);
+    if (access(p, F_OK) == 0) return 1;
+    return 0;
+}
+
+/* Builds an output path: <folder>/<prefix>_<YYYYMMDD>_<HHMMSS>.<ext>, the
+ * folder being the DNG one for a DNG (or .raw16) and the JPEG one otherwise
+ * (~/Pictures/RAWfish-ir by default, created if missing). The command's NAME
+ * becomes <prefix>; NAME "+" (NO_PREFIX) gives <YYYYMMDD>_<HHMMSS>.<ext>.
+ * The milliseconds are added (<HHMMSS>_<mmm>) only when that name is already
+ * taken by another shot -- a second photo in the same second, a burst --
+ * and a counter after them (_<mmm>-2 ...) in the unlikely case that is
+ * taken too. All the files of one shot (the same `ts`) get the same name,
+ * whatever their order. Returns 0, or -1 if the path does not fit, the
+ * folder cannot be made or HOME is unset. (~/Pictures is not one of the
+ * folders Sailjail opens by itself: the app declares the Pictures
+ * permission; the CLI tool runs unsandboxed.) */
 static int build_output_path(const char *prefix, const char *ext,
                              const struct timespec *ts, char *buf, size_t n)
 {
     const char *home = getenv("HOME");
-    const char *want = (!strcmp(ext, "dng") || !strcmp(ext, "raw16")) ? g_dngdir : g_jpgdir;
-    char dir[1024];
+    const int is_dng = !strcmp(ext, "dng") || !strcmp(ext, "raw16");
+    char jdir[1024], ddir[1024], base[160], stem[sizeof g_stems[0].stem];
     struct tm tm;
     time_t t = ts->tv_sec;
-    int len, ms;
-    if (want[0]) { snprintf(dir, sizeof dir, "%s", want); }
-    else {
+    int len, ms, k, found = 0;
+    const char *pf = name_prefix(prefix);         /* NO_PREFIX: the date first     */
+    if (!g_jpgdir[0] || !g_dngdir[0]) {
         if (!home || !home[0]) return -1;
-        if (snprintf(dir, sizeof dir, "%s/Pictures/RAWfish-ir", home) >= (int)sizeof dir) return -1;
     }
-    if (mkdir_p(dir) != 0) return -1;             /* ensure the folder exists     */
+    if (g_jpgdir[0]) snprintf(jdir, sizeof jdir, "%s", g_jpgdir);
+    else if (snprintf(jdir, sizeof jdir, "%s/Pictures/RAWfish-ir", home) >= (int)sizeof jdir) return -1;
+    if (g_dngdir[0]) snprintf(ddir, sizeof ddir, "%s", g_dngdir);
+    else if (snprintf(ddir, sizeof ddir, "%s/Pictures/RAWfish-ir", home) >= (int)sizeof ddir) return -1;
+    if (mkdir_p(is_dng ? ddir : jdir) != 0) return -1;   /* ensure the folder exists */
     localtime_r(&t, &tm);                         /* the SAME instant as the EXIF */
     ms = (int)(ts->tv_nsec / 1000000);            /* milliseconds 0..999          */
-    len = snprintf(buf, n, "%s/%s_%04d%02d%02d_%02d%02d%02d_%03d.%s",
-                   dir, prefix, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                   tm.tm_hour, tm.tm_min, tm.tm_sec, ms, ext);
+    len = snprintf(base, sizeof base, "%s%s%04d%02d%02d_%02d%02d%02d", pf, pf[0] ? "_" : "",
+                   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    if (len < 0 || (size_t)len >= sizeof base) return -1;
+    pthread_mutex_lock(&g_stem_lock);
+    for (k = 0; k < STEM_RING; ++k)               /* this shot named already: the same name */
+        if (g_stems[k].stem[0] && g_stems[k].sec == (long long)ts->tv_sec && g_stems[k].nsec == ts->tv_nsec
+            && !strncmp(g_stems[k].stem, base, strlen(base))) {
+            memcpy(stem, g_stems[k].stem, sizeof stem);   /* same size, NUL-terminated */
+            found = 1;
+            break;
+        }
+    if (!found) {
+        snprintf(stem, sizeof stem, "%s", base);
+        if (stem_taken(stem, jdir, ddir, ts)) {
+            snprintf(stem, sizeof stem, "%s_%03d", base, ms);
+            for (k = 2; k < 100 && stem_taken(stem, jdir, ddir, ts); ++k)
+                snprintf(stem, sizeof stem, "%s_%03d-%d", base, ms, k);
+        }
+        memcpy(g_stems[g_stem_next].stem, stem, sizeof stem);
+        g_stems[g_stem_next].sec = (long long)ts->tv_sec;
+        g_stems[g_stem_next].nsec = ts->tv_nsec;
+        g_stem_next = (g_stem_next + 1) % STEM_RING;
+    }
+    pthread_mutex_unlock(&g_stem_lock);
+    len = snprintf(buf, n, "%s/%s.%s", is_dng ? ddir : jdir, stem, ext);
     return (len < 0 || (size_t)len >= n) ? -1 : 0;
 }
 
@@ -1182,7 +1253,9 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
-            "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS_mmm.EXT\n"
+            "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS.EXT\n"
+            "  (NAME: letters, digits, - and _; NAME + = no prefix: YYYYMMDD_HHMMSS.EXT; _mmm, the milliseconds,\n"
+            "  added only when another shot already has that name: a second photo in the same second, a burst)\n"
             "  stdin: jpeg NAME [q=95] [default_noise|off_noise|fast_noise|hq_noise|minimal_noise|zsl_noise]\n"
             "                   [default_edge|off_edge|fast_edge|hq_edge|zsl_edge]\n"
             "                   [focus=auto|continuous|continuous_video|macro|edof|inf|<m>m] [easy]\n"

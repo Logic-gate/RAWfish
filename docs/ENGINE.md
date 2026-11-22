@@ -38,9 +38,11 @@ defaults to 1280x960. Without `raw=` there is no RAW stream (no `raw`, `stack`,
 
 ## Commands on stdin (`run` / `stream`)
 
-Names (`NAME`) are letters, digits, `-` and `_` only; the engine writes
-`NAME_YYYYMMDD_HHMMSS_mmm.jpg` / `.dng` in the folders above (milliseconds, so
-a burst never collides). Exposure times (`exp=`, `film=`, `sub=`) are decimal
+Names (`NAME`) are letters, digits, `-` and `_` only (`+`: no prefix); the
+engine writes `NAME_YYYYMMDD_HHMMSS.jpg` / `.dng` in the folders above, and
+adds the milliseconds (`_mmm`, then `-2`...) only when another shot already
+has that name (a second photo in the same second, a burst). The files of one
+shot (a JPEG and its DNG) always share their name. Exposure times (`exp=`, `film=`, `sub=`) are decimal
 seconds (`0.008`, `0.5`, `4`).
 
 ### Photos
@@ -62,7 +64,7 @@ seconds (`0.008`, `0.5`, `4`).
 | `burst NAME` | `n=N` frames | 2..8, default 3 |
 | | `q=Q`, noise and edge modes | as for `jpeg` |
 | | `exp=SEC iso=N` | default: the live automatic pair, frozen for the burst |
-| | | JPEG only; one capture call, frames back to back at the sensor's pace; no flash; files `NAME_..._mmm.jpg` one millisecond apart |
+| | | JPEG only; one capture call, frames back to back at the sensor's pace; no flash; files `NAME_..._HHMMSS.jpg`, then `_mmm` for the next ones (their timestamps one millisecond apart) |
 | `noiseprofile FILE.json [sub=T]` | sweeps the ISOs and writes a darktable noise profile | developer tool |
 
 Diagnostic variants for `jpeg` / `raw`: `preview=pause` (stop the preview

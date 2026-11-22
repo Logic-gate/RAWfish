@@ -225,7 +225,7 @@ The system Settings page's values (everything else is in `rawfish-ir.conf`):
 
 | Key | Values | Default |
 |---|---|---|
-| `/apps/rawfish-ir/output/prefix` | file name prefix: letters, digits, `-` `_` | `photo` |
+| `/apps/rawfish-ir/output/prefix` | file name prefix: letters, digits, `-` `_` (not first); empty = no prefix | `photo` |
 | `/apps/rawfish-ir/output/jpgDir`, `dngDir` | folders, under `~/Pictures` | `~/Pictures/RAWfish-ir` |
 | `/apps/rawfish-ir/menu/startMode` | `last`, `simple`, `advanced` | `last` |
 | `/apps/rawfish-ir/menu/startManual` | start in manual focus and exposure | `false` |

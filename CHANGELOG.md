@@ -15,6 +15,21 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-478 (patch 0478): shorter file names, and photos
+  without a prefix. Files are now named NAME_YYYYMMDD_HHMMSS.EXT: the
+  milliseconds (_mmm) are added only when another shot already has that
+  name (two photos in the same second, a burst), then a counter (-2...)
+  in the unlikely case that is taken too. The files of one shot (a JPEG
+  and its DNG) always share their name, even when the second is written
+  after the first; the bracket's three JPEGs, named before any is
+  written, are told apart too. The gallery and the cover read both forms
+  (the plain name sorts as the earlier shot of its second). The Settings
+  page's prefix may now be empty (its field showed "photo" as a
+  placeholder, and an empty prefix was refused): the files are then named
+  by the date alone, YYYYMMDD_HHMMSS.EXT. The engine's NAME for it is
+  `+` (a NAME cannot be empty; `raw + ...`). A prefix may no longer start
+  with `-`: a lone `-` is the engine's "measure only", which saved
+  nothing.
 - The build 0.3.9-468 (patch 0468), documentation only: a hand-held RAW
   merge (aligned frames, moving parts left out) added to the ROADMAP's
   ideas.

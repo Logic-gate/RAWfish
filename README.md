@@ -107,9 +107,10 @@ converges, and a JPEG output sits on the same session, so a photo is a single re
 
 ## Output files
 
-Captures are written to `~/Pictures/RAWfish-ir/` as `NAME_YYYYMMDD_HHMMSS_mmm.EXT`: the command's
-first argument is a name prefix, and the engine always appends the capture timestamp (milliseconds
-so a burst never collides) and the extension (`.jpg`, `.dng`). DNGs carry the capture time in
+Captures are written to `~/Pictures/RAWfish-ir/` as `NAME_YYYYMMDD_HHMMSS.EXT`: the command's
+first argument is a name prefix (`+`: none, the file name starts with the date), and the engine always appends the capture time
+and the extension (`.jpg`, `.dng`), with the milliseconds (`_mmm`) only when another shot already has
+that name (two photos in the same second, a burst). DNGs carry the capture time in
 EXIF (`DateTimeOriginal`). (`~/Pictures` is outside the Sailjail auto-whitelist: the app declares
 the Pictures permission.) **The command-line tool is not sandboxed**: run from a terminal,
 `rawfish-ir-cli` has the user's rights, and `--jpgdir` / `--dngdir` take any folder the user can
@@ -168,9 +169,9 @@ printf 'raw b\njpeg b-denoise_off-sharp_off off_noise off_edge\nquit\n' \
 ```
 
 `raw NAME` writes a ready-to-develop DNG directly on the phone, as
-`NAME_YYYYMMDD_HHMMSS_mmm.dng` (lens shading GainMap, colour calibration, white balance, noise
+`NAME_YYYYMMDD_HHMMSS.dng` (lens shading GainMap, colour calibration, white balance, noise
 profile, EXIF). NAME is a prefix of letters, digits, `-` and `_` only: the engine adds the date and
-the extension (see "Output files"). Files written before 0.47 as raw pixels (`.raw16`, uint16
+the extension (see "Output files"). NAME `+` means no prefix: `YYYYMMDD_HHMMSS.dng`. Files written before 0.47 as raw pixels (`.raw16`, uint16
 little-endian, with a `.json` sidecar: layout, static sensor facts, the per-frame result) are
 still read by `scripts/raw16-check.py` (levels, WB, shading, PNG) and turned into DNGs by
 `scripts/raw16-to-dng.py` on a PC.
@@ -385,7 +386,7 @@ lens's f-number).
 
 ## Where captures go, and their names
 
-By default everything goes to `~/Pictures/RAWfish-ir/` as `photo_YYYYMMDD_HHMMSS_mmm.EXT`. The system
+By default everything goes to `~/Pictures/RAWfish-ir/` as `photo_YYYYMMDD_HHMMSS.EXT` (`_mmm` added when two shots fall in the same second; an empty prefix: `YYYYMMDD_HHMMSS.EXT`). The system
 Settings app has a RAWfish-ir page (Settings > Apps > RAWfish-ir, like RAWfish) with the file name prefix
 and the JPEG and DNG folders; they are dconf keys under `/apps/rawfish-ir/output` (`prefix`, `jpgDir`,
 `dngDir`), read by the app at every engine start. The prefix is letters, digits, `-` and `_` (up to

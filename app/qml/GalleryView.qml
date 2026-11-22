@@ -43,7 +43,8 @@ Item {
     FolderListModel {
         id: jpgs
         folder: gallery.folder
-        nameFilters: [ "*_???.jpg", "*_???.jpeg" ]   // NAME_YYYYMMDD_HHMMSS_mmm.EXT
+        // NAME_YYYYMMDD_HHMMSS.EXT; _mmm (and -N) only when the name was taken
+        nameFilters: [ "*_??????.jpg", "*_???.jpg", "*_???-*.jpg", "*_??????.jpeg", "*_???.jpeg" ]
         showDirs: false
         sortField: FolderListModel.Time     // QDir::Time: newest first
         onCountChanged: gallery.rebuild()
@@ -51,7 +52,7 @@ Item {
     FolderListModel {
         id: dngs
         folder: gallery.dngFolder
-        nameFilters: [ "*_???.dng" ]
+        nameFilters: [ "*_??????.dng", "*_???.dng", "*_???-*.dng" ]
         showDirs: false
         sortField: FolderListModel.Time
         onCountChanged: gallery.rebuild()
@@ -62,15 +63,19 @@ Item {
     // A file whose details are not read yet (the folder still loading) is
     // skipped this time, not allowed to abort the whole list; the list is
     // then brought up to date once more a moment later.
-    // The capture's time: the one in its name (NAME_YYYYMMDD_HHMMSS_mmm.EXT,
-    // the shutter's moment, to the millisecond), else the file's. Sorting by
+    // The capture's time: the one in its name (NAME_YYYYMMDD_HHMMSS.EXT, to
+    // the second, or NAME_YYYYMMDD_HHMMSS_mmm.EXT, to the millisecond, when
+    // a shot in the same second came first: the plain name is the earlier
+    // one; no NAME: the date first), else the file's. Sorting by
     // the file's time put a bracket out of order: its three JPEGs are
     // written by another thread, and their times did not follow the shots
     // (log of 14 Nov, 16:42:46).
     function nameTime(n) {
-        var r = /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_(\d{3})\.[A-Za-z]+$/.exec(n)
+        var r = /(?:^|_)(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:_(\d{3})(?:-(\d+))?)?\.[A-Za-z]+$/.exec(n)
         if (!r) return -1
-        return new Date(+r[1], +r[2] - 1, +r[3], +r[4], +r[5], +r[6], +r[7]).getTime()
+        // a counter (-N, the same millisecond taken) adds a fraction: kept in order
+        return new Date(+r[1], +r[2] - 1, +r[3], +r[4], +r[5], +r[6], r[7] ? +r[7] : 0).getTime()
+               + (r[8] ? +r[8] / 100 : 0)
     }
     function entry(model, i, dng) {
         var m = model.get(i, "fileModified"), n = model.get(i, "fileName")

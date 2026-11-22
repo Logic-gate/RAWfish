@@ -84,7 +84,8 @@ ApplicationWindow {
             FolderListModel {
                 id: coverModel
                 folder: "file://" + coverPaths.jpgDir
-                nameFilters: [ "*_???.jpg", "*_???.jpeg" ]   /* JPEG captures (DNG previews are in .previews/) */
+                /* JPEG captures, NAME_YYYYMMDD_HHMMSS[_mmm[-N]].jpg (DNG previews are in .previews/) */
+                nameFilters: [ "*_??????.jpg", "*_???.jpg", "*_???-*.jpg", "*_??????.jpeg", "*_???.jpeg" ]
                 showDirs: false
                 sortField: FolderListModel.Time
                 sortReversed: true

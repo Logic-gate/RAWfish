@@ -52,7 +52,9 @@ Page {
         if (t.indexOf("~/Pictures") === 0) return true
         return t.indexOf(picturesHome) === 0
     }
-    function prefixOk(p) { return /^[A-Za-z0-9_-]{1,32}$/.test(p) }
+    // Empty: no prefix (files named by the date alone). Not starting with
+    // "-": a lone "-" is the engine's "measure only", which writes no file.
+    function prefixOk(p) { return p === "" || /^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$/.test(p) }
 
     SilicaFlickable {
         anchors.fill: parent
@@ -78,11 +80,11 @@ Page {
                 id: prefixField
                 width: parent.width
                 label: qsTr("File name prefix")
-                placeholderText: "photo"
+                placeholderText: qsTr("No prefix")
                 text: output.prefix
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                 errorHighlight: !page.prefixOk(text)
-                description: qsTr("Letters, digits, - and _ (up to 32). Files are named PREFIX_YYYYMMDD_HHMMSS_mmm.EXT.")
+                description: qsTr("Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added only when two photos fall in the same second.")
                 // Saved when the edit ends (Enter, or the field left), not at
                 // every keystroke. (Silica's TextField has no editingFinished:
                 // using it made the whole page fail to load.)
