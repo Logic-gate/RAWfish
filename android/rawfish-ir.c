@@ -6568,6 +6568,23 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     return IR_OK;
 }
 
+/* Adds our JPEG's capture requests (the YUV photo, and the four of a
+ * merged 2- or 4-frame JPG) to a list of requests a setting is written
+ * into. They are reusable requests made once at the open, like the HAL
+ * JPEG's still_request: a setting written into the preview only reaches
+ * them if it is written there too. Up to 0.3.10-519 the white balance was
+ * not: on the JP2 (MediaTek) the photo followed the
+ * viewfinder anyway, the HAL applying its current white to every capture;
+ * on the Xperia 10 III (Qualcomm), which applies each request's own
+ * settings, our JPG kept the automatic white whatever the menu said
+ * (23 Nov 2026). `all` must have room for 5 more. */
+static void add_yuv_requests(ACaptureRequest **all, int *n)
+{
+    int i;
+    if (g.yuv_request) all[(*n)++] = g.yuv_request;
+    for (i = 0; i < 4; ++i) if (g.yuv_burst_req[i]) all[(*n)++] = g.yuv_burst_req[i];
+}
+
 /* White balance (JPEG and preview; the RAW stays linear, its as-shot
  * multipliers are only written as metadata): CONTROL_AWB_MODE on every
  * request. mode is the Camera2 value (1 AUTO .. 8 SHADE); OFF is refused
@@ -6576,7 +6593,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size);
 static int wb_wait_awb(void);
 IR_API int indraw_wb(int mode, char *out, size_t out_size)
 {
-    ACaptureRequest *reqs[1], *all[5];
+    ACaptureRequest *reqs[1], *all[10];   /* 5 HAL requests + our JPEG's 5 */
     uint8_t u8;
     int n = 0, i;
     camera_status_t st;
@@ -6617,6 +6634,7 @@ IR_API int indraw_wb(int mode, char *out, size_t out_size)
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
     if (g.meter_request) all[n++] = g.meter_request;
+    add_yuv_requests(all, &n);                   /* our JPG: the same white (add_yuv_requests) */
     for (i = 0; i < n; ++i)
         if (all[i]) ACaptureRequest_setEntry_u8(all[i], ACAMERA_CONTROL_AWB_MODE, 1, &u8);
     g.awb_mode = mode;
@@ -6660,7 +6678,7 @@ IR_API int indraw_wb_manual(int shift, int tint, char *out, size_t out_size)
  * base fixed and no shift, back to the HAL's AWB. */
 static int wb_apply(int shift, int tint, char *out, size_t out_size)
 {
-    ACaptureRequest *reqs[1], *all[5];
+    ACaptureRequest *reqs[1], *all[10];   /* 5 HAL requests + our JPEG's 5 */
     float gains[4] = { 1, 1, 1, 1 };
     uint8_t u8, cc;
     int n = 0, i;
@@ -6674,6 +6692,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size)
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
     if (g.meter_request) all[n++] = g.meter_request;
+    add_yuv_requests(all, &n);                   /* our JPG: the same white (add_yuv_requests) */
     if (shift < -20 || shift > 20 || tint < -100 || tint > 100)
         return fail(out, out_size, IR_EARG, "wb", "shift -20..20, tint -100..100", shift);
     if (shift == 0 && tint == 0 && !g.wb_fixed && !g.wb_offset_on) {  /* back to the HAL's AWB     */

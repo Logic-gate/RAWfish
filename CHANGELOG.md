@@ -21,6 +21,12 @@ repository). Newest first.
   device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...).
   The package is now rawfish-ir-all-in-one (rawfish-ir up to 0.3.9-50x):
   installed over the earlier one, it replaces it.
+- The white balance on our JPG (patch 0520): the white balance reaches our JPG: the menu's
+  white (a preset, the warmth and tint steps, a measured or carried white)
+  was written into the viewfinder's and the HAL JPEG's
+  requests, not into those of our JPEG (the YUV photo and the merged 2- or
+  4-frame JPG). The JP2's camera applied them anyway; the Xperia 10 III's
+  applies each request's own: its JPGs kept the automatic white.
 - The interface's badge reads "ui 209" (patch 0519): it had stayed at 208
   since 0.3.9 while the interface changed (the menu's peek at the start,
   the busy dots, the black top band).
