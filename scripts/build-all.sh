@@ -32,7 +32,7 @@ done
 sfdk=${SFDK:-sfdk}
 # Every sfdk build runs with 'no-fix-version': with a git tag in the history
 # (a release, v0.47.69...) sfdk would otherwise replace the spec's version by
-# the tag's plus a git suffix (rawfish-ir-0.1.0+main.2026...). The version is
+# the tag's plus a git suffix (rawfish-ir-all-in-one-0.1.0+main.2026...). The version is
 # the spec's own.
 if [ -n "$all" ]; then
     previous=$("$sfdk" config --show 2>/dev/null | sed -n 's/^target = //p')

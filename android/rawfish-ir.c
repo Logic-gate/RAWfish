@@ -3402,6 +3402,15 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
                     g.low_fps[0] = fe.data.i32[k];
                     g.low_fps[1] = fe.data.i32[k + 1];
                 }
+        /* The range the long exposures switch to (variant IR_V_FPS_LOW) must
+         * not reach past the device profile's "fps_max" either, or it would
+         * bring the binned sensor mode back for those photos. In practice the
+         * lowest range is well under it (the Xperia 10 III: 15-15); this only
+         * guards a HAL that lists nothing lower than its fast ranges. */
+        if (g.cap_fps[1] > 0 && g.low_fps[1] > g.cap_fps[1]) {
+            g.low_fps[0] = g.cap_fps[0];
+            g.low_fps[1] = g.cap_fps[1];
+        }
     }
 
     /* RAW request: RAW16 + preview. Noise/edge modes do not touch RAW data. */
@@ -6120,6 +6129,9 @@ static void emit_caps(void)
      * or the device profile's list (indraw_set_camera_list: its order, its
      * hidden cameras left out), already checked against the HAL's. */
     if (g.manager) {
+        /* `own`: the profile's list split into an ACameraIdList of our own
+         * (pointing into own_buf), so the loop below reads either list the
+         * same way; `have` says it is ours (not to be freed by the NDK). */
         ACameraIdList *list = NULL, own;
         const char *own_ids[16];
         char own_buf[sizeof g.cam_list];
@@ -7968,9 +7980,6 @@ IR_API int indraw_set_jpeg_stream(int on)
     return IR_OK;
 }
 
-/* Before indraw_open: the device profile says JPEG or RAW, one session each
- * ("streams": "exclusive"); the caps line carries it so the app reopens the
- * session when the image type changes. */
 /* Before indraw_open: the device profile's "fps_max" -- the highest AE
  * frame rate any request or the session asks (0: the templates' own). For a
  * HAL that picks a binned sensor mode for a range reaching past it (the
@@ -7993,6 +8002,10 @@ IR_API int indraw_set_camera_list(const char *ids)
     return IR_OK;
 }
 
+/* Before indraw_open: the device profile says JPEG or RAW, one session each
+ * ("streams": "exclusive"); the caps line carries it so the app reopens the
+ * session when the image type changes. No shipped profile uses it since
+ * 0.3.9-495 (the Xperia 10 III's driver deaths came from its binned mode). */
 IR_API int indraw_set_streams_exclusive(int on)
 {
     g.lim_exclusive = on ? 1 : 0;

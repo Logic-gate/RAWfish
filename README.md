@@ -125,8 +125,8 @@ One spec, two packages; install one of them on the phone (as root):
 
 ```sh
 ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-rpm.sh
-# RPMS/rawfish-ir-X.Y.Z-N.beta.aarch64.rpm           the app with its engine
-# RPMS/rawfish-ir-cli-only-X.Y.Z-N.beta.aarch64.rpm  the engine alone (command line)
+# RPMS/rawfish-ir-all-in-one-X.Y.Z-N.beta.aarch64.rpm  the app with its engine
+# RPMS/rawfish-ir-cli-only-X.Y.Z-N.beta.aarch64.rpm    the engine alone (command line)
 ```
 
 Both carry the engine: `librawfish-ir.so` (prebuilt with the NDK, installed to

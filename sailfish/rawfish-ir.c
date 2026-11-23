@@ -606,7 +606,12 @@ static void apply_fps_max(void *bridge, const char *id)
  * open no session of ours). Only ids the HAL lists count, so one profile
  * serves a phone whose cameras change (the 10 III: 0 and 1, or 0 to 6 with
  * its three back cameras enabled). Neither key: nothing is set, the HAL's
- * list as before. The CLI can still open any camera. */
+ * list as before. The CLI can still open any camera.
+ * How: the HAL's ids are read from indraw_cameras' reply; the hidden ones
+ * are marked used; then the order's ids are taken in their order (those the
+ * HAL lists and not yet taken), and last every id still not taken, in the
+ * HAL's order. The result goes to the engine (indraw_set_camera_list), whose
+ * caps line then gives the app that list. */
 static void apply_camera_list(void *bridge)
 {
     typedef int (*cams_fn)(char *, size_t);
@@ -640,6 +645,8 @@ static void apply_camera_list(void *bridge)
         if (ov_bool(hal[i], "hidden", &h) && h) { used[i] = 1; any = 1; }
     }
     if (!any) return;
+    /* Pass j < n_ord: order[j], if the HAL lists it; the last pass (j ==
+     * n_ord): every id not taken yet. */
     for (j = 0; j <= n_ord; ++j)                              /* the order's ids, then the rest */
         for (i = 0; i < n_hal; ++i)
             if (!used[i] && (j == n_ord || !strcmp(hal[i], order[j])) && strlen(list) + strlen(hal[i]) + 2 < sizeof list) {
@@ -654,7 +661,9 @@ static void apply_camera_list(void *bridge)
 /* The device profile's limits on the streams, applied BEFORE open:
  * "raw_stream": false (no RAW stream) and "jpeg_max": "WxH" (the largest
  * JPEG asked for). For a camera driver that dies with the full combination
- * (the Xperia 10 III). Logged, so a limited phone is never silent. */
+ * of streams (the Xperia 10 III seemed to, until 0.3.9-489 found the cause:
+ * its binned sensor mode, see "fps_max"). Logged, so a limited phone is
+ * never silent. */
 static void apply_stream_limits(void *bridge, const char *id, int type_raw)
 {
     typedef int (*lim_fn)(int, int, int);
@@ -667,8 +676,10 @@ static void apply_stream_limits(void *bridge, const char *id, int type_raw)
     if (!lf) return;
     ov_bool(id, "raw_stream", &raw_on);
     /* "streams": "exclusive": JPEG or RAW, one session each, by the type asked
-     * (type=raw|jpeg on the command line; JPEG without it). The driver of the
-     * Xperia 10 III dies with both streams in one session, takes either alone. */
+     * (type=raw|jpeg on the command line; JPEG without it). For a driver that
+     * takes either stream alone but dies with both in one session. (The
+     * Xperia 10 III's profile had it until 0.3.9-494; at 30 fps its
+     * driver takes every combination.) */
     if (ov_string(id, "streams", v, sizeof v)) {
         if (!strcmp(v, "exclusive")) {
             excl = 1;
