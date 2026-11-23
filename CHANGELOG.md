@@ -15,6 +15,17 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-489 (patch 0489): the Xperia 10 III's photos at the
+  sensor's full size: its HAL ran the sensor in a binned 2016x1136 mode
+  (the templates ask 15-120 fps, a session key there), so the "4032x3016"
+  DNG held that small image in its first rows and was black below, and the
+  camera's JPEG, upscaled from it, came out soft, dull and narrow. A new
+  device-profile key, "fps_max", caps the AE frame rate of every request
+  and of the session (the highest listed range at most N fps); the 10 III's
+  profile sets 30 on both cameras. The open's reply gives the range
+  (limits.fps). Other phones: unchanged (no such key in their profiles).
+  The log no longer calls an exclusive JPEG session's missing RAW stream a
+  stopgap.
 - The build 0.3.9-486 (patch 0486): one package with everything, rawfish-ir (the app and its engine), or the
   engine alone, rawfish-ir-cli-only (the command line); one spec builds both
   (rpm/rawfish-ir.spec), they exclude each other and replace the former pair

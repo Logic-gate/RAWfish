@@ -550,6 +550,8 @@ static struct {
                                              * never inherit them: each shot says its own, or the
                                              * template default applies */
     int32_t tpl_fps[2];                     /* template AE FPS range, or {-1,-1} */
+    int fps_max;                            /* device profile "fps_max" (0: none; indraw_set_fps_max) */
+    int32_t cap_fps[2];                     /* the AE range it gives, on every request and the session, or {-1,-1} */
     int32_t low_fps[2];                     /* lowest listed AE FPS range       */
     char camera_id[16];
     char make[64], model[64];               /* ro.product.manufacturer / .model  */
@@ -1022,6 +1024,13 @@ static uint8_t *yuv_to_rgb(AImage *img, int *out_w, int *out_h)
 
 static int photo_orientation_deg(void);     /* with indraw_orient, below */
 static int apply_session_request(ACaptureRequest *req);   /* session parameters, below */
+/* The device profile's AE frame-rate cap (g.cap_fps) on a request just made
+ * from a template: a no-op without "fps_max". */
+static void apply_fps_cap(ACaptureRequest *req)
+{
+    if (req && g.cap_fps[0] > 0)
+        ACaptureRequest_setEntry_i32(req, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, g.cap_fps);
+}
 static int photo_orientation_tiff(void);
 static int active_array(int32_t *ax, int32_t *ay, int32_t *aw, int32_t *ah, float *max_zoom);
 /* What a viewfinder frame of w x h pixels shows of the crop region it was
@@ -3132,6 +3141,28 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     if (g.lim_exclusive && g.yuv_w != 0) {        /* JPEG or RAW alone in a session: no third stream */
         g.yuv_w = g.yuv_h = 0;
     }
+    /* "fps_max" (device profile): the AE frame-rate range every request and
+     * the session ask, the listed one whose maximum is the highest at most
+     * fps_max (then the lowest minimum: the longest automatic exposures). On
+     * the Xperia 10 III the templates ask 15-120 fps, and the AE range is a
+     * session key there: the HAL then runs the sensor in a binned 2016x1136
+     * mode and a RAW16 4032x3016 holds only that small image in its first
+     * rows (23 Nov 2026); the JPEG, upscaled from it, is soft and dull. At
+     * 15-30 the sensor runs its full 4032x3016 mode. */
+    g.cap_fps[0] = g.cap_fps[1] = -1;
+    if (g.fps_max > 0) {
+        ACameraMetadata_const_entry fe;
+        uint32_t k;
+        if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES, &fe) == ACAMERA_OK
+                && fe.type == ACAMERA_TYPE_INT32)
+            for (k = 0; k + 1 < fe.count; k += 2) {
+                int32_t lo = fe.data.i32[k], hi = fe.data.i32[k + 1];
+                if (hi > g.fps_max || lo <= 0) continue;
+                if (g.cap_fps[1] < 0 || hi > g.cap_fps[1] || (hi == g.cap_fps[1] && lo < g.cap_fps[0])) {
+                    g.cap_fps[0] = lo; g.cap_fps[1] = hi;
+                }
+            }
+    }
     if (g.yuv_w == -1 && !largest_output_size(g.chars, AIMAGE_FORMAT_YUV_420_888, 0, &g.yuv_w, &g.yuv_h))
         g.yuv_w = g.yuv_h = 0;
     g.yuv_down = 1;
@@ -3274,7 +3305,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
      * With session parameters from the device profile, the API 28 variant,
      * looked up at run time (an Android 8.1 base has it not). */
     g.session_params_used = 0;
-    if (g.n_session_req > 0) {
+    if (g.n_session_req > 0 || g.cap_fps[0] > 0) {   /* the profile's keys, or its AE range (a session key) */
         typedef camera_status_t (*create_sp_fn)(ACameraDevice *, const ACaptureSessionOutputContainer *,
                                                 const ACaptureRequest *, const ACameraCaptureSession_stateCallbacks *,
                                                 ACameraCaptureSession **);
@@ -3283,6 +3314,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
             ACaptureRequest *sp = NULL;
             if (ACameraDevice_createCaptureRequest(g.device, TEMPLATE_PREVIEW, &sp) == ACAMERA_OK && sp) {
                 int n = apply_session_request(sp);
+                if (g.cap_fps[0] > 0) { apply_fps_cap(sp); ++n; }
                 st = create_sp(g.device, g.outputs, sp, &ses_cb, &g.session);
                 ACaptureRequest_free(sp);
                 if (st != ACAMERA_OK) SETUP_FAIL("session", "createCaptureSessionWithSessionParameters", st);
@@ -3318,6 +3350,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Preview request: preview stream only, full auto. */
     st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_PREVIEW, &g.preview_request);
     if (st != ACAMERA_OK) SETUP_FAIL("preview_request", "createCaptureRequest", st);
+    apply_fps_cap(g.preview_request);
     ACaptureRequest_addTarget(g.preview_request, g.preview_target);
     {   /* The template's own metering and focus zones, as the HAL meters
          * before any point is set: what removing a point must give back. A
@@ -3335,6 +3368,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Still request: JPEG + preview, so the viewfinder keeps flowing during a photo. */
     st = ACameraDevice_createCaptureRequest(g.device, g.still_template_preview ? TEMPLATE_PREVIEW : TEMPLATE_STILL_CAPTURE, &g.still_request);
     if (st != ACAMERA_OK) SETUP_FAIL("still_request", "createCaptureRequest", st);
+    apply_fps_cap(g.still_request);              /* before tpl_fps is read: the variants restore the cap */
     if (g.jpeg_target) ACaptureRequest_addTarget(g.still_request, g.jpeg_target);
     ACaptureRequest_addTarget(g.still_request, g.preview_target);
     g.tpl_nr = template_u8(g.still_request, ACAMERA_NOISE_REDUCTION_MODE);
@@ -3371,6 +3405,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     if (rw) {
         st = ACameraDevice_createCaptureRequest(g.device, g.still_template_preview ? TEMPLATE_PREVIEW : TEMPLATE_STILL_CAPTURE, &g.raw_request);
         if (st != ACAMERA_OK) SETUP_FAIL("raw_request", "createCaptureRequest", st);
+        apply_fps_cap(g.raw_request);
         ACaptureRequest_addTarget(g.raw_request, g.raw_target);
         ACaptureRequest_addTarget(g.raw_request, g.preview_target);
         if (g.shading_map) {                     /* ask for the vignetting gains   */
@@ -3382,6 +3417,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
          * same AF), and reflects what the photo will be. */
         st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_PREVIEW, &g.meter_request);
         if (st != ACAMERA_OK) SETUP_FAIL("meter_request", "createCaptureRequest", st);
+        apply_fps_cap(g.meter_request);
         ACaptureRequest_addTarget(g.meter_request, g.raw_target);
         ACaptureRequest_addTarget(g.meter_request, g.preview_target);
     }
@@ -3391,6 +3427,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     if (g.yuv_w > 0) {
         st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_STILL_CAPTURE, &g.yuv_request);
         if (st != ACAMERA_OK) SETUP_FAIL("yuv_request", "createCaptureRequest", st);
+        apply_fps_cap(g.yuv_request);
         ACaptureRequest_addTarget(g.yuv_request, g.yuv_target);
         ACaptureRequest_addTarget(g.yuv_request, g.preview_target);
         if (u8_list_has(g.chars, ACAMERA_NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES, ACAMERA_NOISE_REDUCTION_MODE_OFF)) {
@@ -3406,6 +3443,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
             for (bk = 0; bk < 4; ++bk) {
                 st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_STILL_CAPTURE, &g.yuv_burst_req[bk]);
                 if (st != ACAMERA_OK) SETUP_FAIL("yuv_burst_request", "createCaptureRequest", st);
+                apply_fps_cap(g.yuv_burst_req[bk]);
                 ACaptureRequest_addTarget(g.yuv_burst_req[bk], g.yuv_target);
                 if (u8_list_has(g.chars, ACAMERA_NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES, ACAMERA_NOISE_REDUCTION_MODE_OFF)) {
                     u8 = ACAMERA_NOISE_REDUCTION_MODE_OFF;
@@ -3422,6 +3460,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     /* Trigger request: like the preview, sent once to start/cancel AF and AE. */
     st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_PREVIEW, &g.trigger_request);
     if (st != ACAMERA_OK) SETUP_FAIL("trigger_request", "createCaptureRequest", st);
+    apply_fps_cap(g.trigger_request);
     ACaptureRequest_addTarget(g.trigger_request, g.preview_target);
 
     /* Same AF mode on both requests, so a photo does not restart focusing. */
@@ -3509,13 +3548,14 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     jw_add(&w, ",\"jpeg_size\":[%d,%d],\"preview_size\":[%d,%d],"
                "\"raw16_size\":[%d,%d],\"yuv_size\":[%d,%d],\"yuv_down\":%d,\"shading_map\":%s,"
                "\"af_continuous\":%s,\"template\":{\"noise\":\"%s\",\"edge\":\"%s\"},"
-               "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\",\"jpeg_stream\":%s,\"exclusive\":%s},"
+               "\"session_params\":\"%s\",\"limits\":{\"raw_stream\":%s,\"jpeg_max\":\"%dx%d\",\"jpeg_stream\":%s,\"exclusive\":%s,\"fps\":[%d,%d]},"
                "\"ms\":{\"open\":%.1f,\"session\":%.1f,\"first_frame\":%.1f}}",
            jw, jh, pw, ph, rw, rh, g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_h > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.shading_map ? "true" : "false",
            g.af_continuous ? "true" : "false",
            g.tpl_nr >= 0 ? nr_name(g.tpl_nr) : "none", g.tpl_edge >= 0 ? edge_name(g.tpl_edge) : "none",
            g.session_params_used < 0 ? "unsupported" : g.session_params_used ? "applied" : "none",
            g.lim_raw_off ? "false" : "true", g.lim_jw, g.lim_jh, g.lim_no_jpeg ? "false" : "true", g.lim_exclusive ? "true" : "false",
+           g.cap_fps[0] > 0 ? g.cap_fps[0] : 0, g.cap_fps[1] > 0 ? g.cap_fps[1] : 0,
            t_open - t0, t_session - t0, t_first - t0);
     return IR_OK;
 #undef SETUP_FAIL
@@ -7895,6 +7935,17 @@ IR_API int indraw_set_jpeg_stream(int on)
 /* Before indraw_open: the device profile says JPEG or RAW, one session each
  * ("streams": "exclusive"); the caps line carries it so the app reopens the
  * session when the image type changes. */
+/* Before indraw_open: the device profile's "fps_max" -- the highest AE
+ * frame rate any request or the session asks (0: the templates' own). For a
+ * HAL that picks a binned sensor mode for a range reaching past it (the
+ * Xperia 10 III: 15-120 fps gave a 2016x1136 RAW). */
+IR_API int indraw_set_fps_max(int fps)
+{
+    if (fps < 0 || fps > 1000) return IR_EARG;
+    g.fps_max = fps;
+    return IR_OK;
+}
+
 IR_API int indraw_set_streams_exclusive(int on)
 {
     g.lim_exclusive = on ? 1 : 0;

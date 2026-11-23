@@ -439,7 +439,7 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "real_m", "hal_diopters", "cameras",
                                            "vendor_request", "tag", "type", "value", "on",
                                            "shading", "still_template", "session_request",
-                                           "raw_stream", "jpeg_max", "streams",
+                                           "raw_stream", "jpeg_max", "streams", "fps_max",
                                            /* a shipped device profile's own keys */
                                            "match", "make", "models", "raw", "notch", "shading_file",
                                            "name", NULL };
@@ -562,6 +562,42 @@ static int ov_bool(const char *id, const char *key, int *val)
     return found;
 }
 
+/* An integer "key": N in camera `id`'s block (the user's file, then the
+ * shipped profile); 1 found. */
+static int ov_int(const char *id, const char *key, int *val)
+{
+    int which, found = 0;
+    char kq[80];
+    snprintf(kq, sizeof kq, "\"%s\"", key);
+    for (which = 0; which < 2 && !found; ++which) {
+        char *text = ov_source(which), *end = NULL, *cam, *p, *e;
+        long v;
+        if (!text) continue;
+        cam = ov_cam(text, id, &end);
+        if (cam && (p = find_key(cam, end, kq)) && (p = strchr(p + strlen(kq), ':'))) {
+            v = strtol(p + 1, &e, 10);
+            if (e != p + 1 && v >= 0 && v <= 1000) { *val = (int)v; found = 1; }
+        }
+    }
+    return found;
+}
+
+/* The device profile's "fps_max", applied BEFORE open: the highest AE
+ * frame rate asked, for a HAL that picks a binned sensor mode past it (the
+ * Xperia 10 III). Logged. */
+static void apply_fps_max(void *bridge, const char *id)
+{
+    typedef int (*fps_fn)(int);
+    fps_fn ff = (fps_fn)a_dlsym(bridge, "indraw_set_fps_max");
+    int v = 0;
+    char msg[160];
+    if (!ff || !ov_int(id, "fps_max", &v) || v <= 0) return;
+    ff(v);
+    snprintf(msg, sizeof msg, "fps_max (device profile) for camera %s: the AE frame rate asked at most %d fps "
+             "(the full-size sensor mode; the open's reply gives the range)", id, v);
+    log_line("# ", msg);
+}
+
 /* The device profile's limits on the streams, applied BEFORE open:
  * "raw_stream": false (no RAW stream) and "jpeg_max": "WxH" (the largest
  * JPEG asked for). For a camera driver that dies with the full combination
@@ -574,7 +610,7 @@ static void apply_stream_limits(void *bridge, const char *id, int type_raw)
     flag_fn jsf = (flag_fn)a_dlsym(bridge, "indraw_set_jpeg_stream");
     flag_fn exf = (flag_fn)a_dlsym(bridge, "indraw_set_streams_exclusive");
     char v[32], msg[200];
-    int raw_on = 1, jw = 0, jh = 0;
+    int raw_on = 1, jw = 0, jh = 0, excl = 0;
     if (!lf) return;
     ov_bool(id, "raw_stream", &raw_on);
     /* "streams": "exclusive": JPEG or RAW, one session each, by the type asked
@@ -582,6 +618,7 @@ static void apply_stream_limits(void *bridge, const char *id, int type_raw)
      * Xperia 10 III dies with both streams in one session, takes either alone. */
     if (ov_string(id, "streams", v, sizeof v)) {
         if (!strcmp(v, "exclusive")) {
+            excl = 1;
             if (exf) exf(1);
             if (type_raw) { if (jsf) jsf(0); }
             else raw_on = 0;
@@ -601,6 +638,9 @@ static void apply_stream_limits(void *bridge, const char *id, int type_raw)
     if (jw < 0) jw = jh = 0;                           /* "max" means no limit */
     if (raw_on && jw == 0) return;
     lf(!raw_on, jw, jh);
+    /* An exclusive JPEG session has no RAW stream by design, not as a
+     * stopgap: said above already. */
+    if (excl && jw == 0) return;
     snprintf(msg, sizeof msg, "streams limited by the device profile for camera %s:%s%s -- a stopgap: please report this phone (docs/DEVICE-PROFILES.md)",
              id, raw_on ? "" : " no RAW stream", jw > 0 ? " JPEG at most" : "");
     if (jw > 0) snprintf(msg + strlen(msg), sizeof msg - strlen(msg), " %dx%d", jw, jh);
@@ -2633,6 +2673,7 @@ int main(int argc, char **argv)
         g_ov_user_ok = check_override(argv[2]);
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
         apply_stream_limits(bridge, argv[2], type_raw);   /* raw_stream / jpeg_max / streams, before open */
+        apply_fps_max(bridge, argv[2]);                   /* fps_max, before open */
         if (have_streams) {                        /* streams=: only what this session needs */
             typedef int (*flag_fn)(int);
             typedef int (*yuvsize_fn)(int, int);

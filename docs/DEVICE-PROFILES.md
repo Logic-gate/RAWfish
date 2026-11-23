@@ -293,6 +293,13 @@ cause can be looked for and a shipped profile written.
   reopens it when the type changes; if the RAW session dies at its first
   frame, the app falls back to JPEG and says so. `"both"` is the default.
 
+- `"fps_max": N` -- the highest AE frame rate any request (and the session)
+  asks: the listed range with the highest maximum at most N. For a HAL that
+  picks a binned sensor mode when the range reaches past the full-size mode's
+  rate (the Xperia 10 III: its templates ask 15-120 fps, and a "4032x3016"
+  RAW held a 2016x1136 image; at 15-30 the sensor runs full size). The
+  open's reply gives the range used (`"limits":{..."fps":[15,30]}`).
+
 The shipped profile of the Xperia 10 III uses `"streams": "exclusive"` on
 both cameras, with its `_why` recording what was tested (and what ProCam
 showed); nothing to write on that phone.
