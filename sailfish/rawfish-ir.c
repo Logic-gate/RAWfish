@@ -439,7 +439,8 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "real_m", "hal_diopters", "cameras",
                                            "vendor_request", "tag", "type", "value", "on",
                                            "shading", "still_template", "session_request",
-                                           "raw_stream", "jpeg_max", "streams", "fps_max",
+                                           "raw_stream", "jpeg_max", "streams", "fps_max", "hidden",
+                                           "camera_order",
                                            /* a shipped device profile's own keys */
                                            "match", "make", "models", "raw", "notch", "shading_file",
                                            "name", NULL };
@@ -595,6 +596,58 @@ static void apply_fps_max(void *bridge, const char *id)
     ff(v);
     snprintf(msg, sizeof msg, "fps_max (device profile) for camera %s: the AE frame rate asked at most %d fps "
              "(the full-size sensor mode; the open's reply gives the range)", id, v);
+    log_line("# ", msg);
+}
+
+/* The cameras the app offers and their order, from the device profile:
+ * "camera_order": ["2", "0", "3", "1"] at the top level (the ids listed,
+ * in that order, then any other) and "hidden": true in a camera's
+ * overrides (left out: the Xperia 10 III's logical multi-cameras, which
+ * open no session of ours). Only ids the HAL lists count, so one profile
+ * serves a phone whose cameras change (the 10 III: 0 and 1, or 0 to 6 with
+ * its three back cameras enabled). Neither key: nothing is set, the HAL's
+ * list as before. The CLI can still open any camera. */
+static void apply_camera_list(void *bridge)
+{
+    typedef int (*cams_fn)(char *, size_t);
+    typedef int (*list_fn)(const char *);
+    cams_fn cams = (cams_fn)a_dlsym(bridge, "indraw_cameras");
+    list_fn setl = (list_fn)a_dlsym(bridge, "indraw_set_camera_list");
+    char out[512], hal[16][16], order[16][16], list[64] = "", msg[200];
+    int n_hal = 0, n_ord = 0, used[16] = {0}, i, j, which, any = 0;
+    char *p, *e;
+    if (!cams || !setl || cams(out, sizeof out) != 0 || !(p = strstr(out, "\"cameras\""))
+        || !(p = strchr(p, '[')) || !(e = strchr(p, ']'))) return;
+    while (n_hal < 16 && (p = strchr(p, '"')) && p < e) {     /* the HAL's ids */
+        char *q = strchr(p + 1, '"');
+        if (!q || q > e || q - p - 1 >= (long)sizeof hal[0]) break;
+        snprintf(hal[n_hal++], sizeof hal[0], "%.*s", (int)(q - p - 1), p + 1);
+        p = q + 1;
+    }
+    for (which = 0; which < 2 && !n_ord; ++which) {          /* "camera_order", the user's first */
+        char *text = ov_source(which), *o, *oe;
+        if (!text || !(o = strstr(text, "\"camera_order\"")) || !(o = strchr(o, '[')) || !(oe = strchr(o, ']'))) continue;
+        while (n_ord < 16 && (o = strchr(o, '"')) && o < oe) {
+            char *q = strchr(o + 1, '"');
+            if (!q || q > oe || q - o - 1 >= (long)sizeof order[0]) break;
+            snprintf(order[n_ord++], sizeof order[0], "%.*s", (int)(q - o - 1), o + 1);
+            o = q + 1;
+        }
+    }
+    any = n_ord > 0;
+    for (i = 0; i < n_hal; ++i) {                             /* hidden ones: used already */
+        int h = 0;
+        if (ov_bool(hal[i], "hidden", &h) && h) { used[i] = 1; any = 1; }
+    }
+    if (!any) return;
+    for (j = 0; j <= n_ord; ++j)                              /* the order's ids, then the rest */
+        for (i = 0; i < n_hal; ++i)
+            if (!used[i] && (j == n_ord || !strcmp(hal[i], order[j])) && strlen(list) + strlen(hal[i]) + 2 < sizeof list) {
+                snprintf(list + strlen(list), sizeof list - strlen(list), "%s%s", list[0] ? "," : "", hal[i]);
+                used[i] = 1;
+            }
+    if (!list[0] || setl(list) != 0) return;
+    snprintf(msg, sizeof msg, "cameras offered (device profile: camera_order / hidden): %s", list);
     log_line("# ", msg);
 }
 
@@ -2674,6 +2727,7 @@ int main(int argc, char **argv)
         apply_session_requests(bridge, argv[2]);   /* session parameters, before open */
         apply_stream_limits(bridge, argv[2], type_raw);   /* raw_stream / jpeg_max / streams, before open */
         apply_fps_max(bridge, argv[2]);                   /* fps_max, before open */
+        apply_camera_list(bridge);                        /* camera_order / hidden: the cameras offered */
         if (have_streams) {                        /* streams=: only what this session needs */
             typedef int (*flag_fn)(int);
             typedef int (*yuvsize_fn)(int, int);

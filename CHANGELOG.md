@@ -15,6 +15,15 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-0498 (patch 0498): the Xperia 10 III's ultra-wide and
+  telephoto cameras, when its three back cameras are enabled
+  (multiCameraEnable=TRUE in the vendor camera settings): capped at 30 fps
+  like the others (at 90 fps the ultra-wide's driver died), with whole RAWs
+  and our JPEG. The camera button goes through the back cameras by focal
+  length (16, 27, 54 mm), the front one by a long press; the HAL's three
+  logical multi-cameras, which open no session, are not offered. Two new
+  device-profile keys: "hidden" (a camera not offered) and "camera_order";
+  the JP2 and the XA2 have neither, nothing changes for them.
 - The build 0.3.9-0495 (patch 0495): the Xperia 10 III's JPG is RAWfish-ir's
   own (our JPEG, denoised and sharpened as on the other phones) instead of
   the camera's JPEG, and RAW, JPG and snap share one session again (no

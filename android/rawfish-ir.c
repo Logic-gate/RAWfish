@@ -552,6 +552,7 @@ static struct {
                                              * template default applies */
     int32_t tpl_fps[2];                     /* template AE FPS range, or {-1,-1} */
     int fps_max;                            /* device profile "fps_max" (0: none; indraw_set_fps_max) */
+    char cam_list[64];                      /* the cameras the app offers, in order ("" : the HAL's list; indraw_set_camera_list) */
     int32_t cap_fps[2];                     /* the AE range it gives, on every request and the session, or {-1,-1} */
     int32_t low_fps[2];                     /* lowest listed AE FPS range       */
     char camera_id[16];
@@ -6114,10 +6115,25 @@ static void emit_caps(void)
     if (focal > 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, &e) == ACAMERA_OK &&
         e.count >= 2 && e.data.f[0] > 0)
         focal_eq = focal * 36.0f / e.data.f[0];
-    /* The camera ids the HAL lists, so the UI cycles only through real ones. */
+    /* The camera ids the HAL lists, so the UI cycles only through real ones;
+     * or the device profile's list (indraw_set_camera_list: its order, its
+     * hidden cameras left out), already checked against the HAL's. */
     if (g.manager) {
-        ACameraIdList *list = NULL;
-        if (ACameraManager_getCameraIdList(g.manager, &list) == ACAMERA_OK && list) {
+        ACameraIdList *list = NULL, own;
+        const char *own_ids[16];
+        char own_buf[sizeof g.cam_list];
+        int have = 0;
+        if (g.cam_list[0]) {
+            char *tok, *save = NULL;
+            own.numCameras = 0;
+            snprintf(own_buf, sizeof own_buf, "%s", g.cam_list);
+            for (tok = strtok_r(own_buf, ",", &save); tok && own.numCameras < 16; tok = strtok_r(NULL, ",", &save))
+                own_ids[own.numCameras++] = tok;
+            own.cameraIds = own_ids;
+            have = own.numCameras > 0;
+            if (have) list = &own;
+        }
+        if (have || (ACameraManager_getCameraIdList(g.manager, &list) == ACAMERA_OK && list)) {
             int i; size_t n = 0;
             for (i = 0; i < list->numCameras && n < sizeof cams - 8; ++i) {
                 ACameraMetadata *ch = NULL;
@@ -6140,7 +6156,7 @@ static void emit_caps(void)
                 if (strlen(facing) + 10 < sizeof facing) snprintf(facing + strlen(facing), sizeof facing - strlen(facing), "%s%s", i ? "," : "", fc);
                 if (strlen(rawcams) + 3 < sizeof rawcams) snprintf(rawcams + strlen(rawcams), sizeof rawcams - strlen(rawcams), "%s%d", i ? "," : "", hasraw);
             }
-            ACameraManager_deleteCameraIdList(list);
+            if (!have) ACameraManager_deleteCameraIdList(list);
         }
     }
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM, &e) == ACAMERA_OK && e.count)
@@ -7962,6 +7978,17 @@ IR_API int indraw_set_fps_max(int fps)
 {
     if (fps < 0 || fps > 1000) return IR_EARG;
     g.fps_max = fps;
+    return IR_OK;
+}
+
+/* The cameras the app offers, in order, as "id,id,...": the device profile's
+ * "camera_order" and "hidden" applied by the CLI to the HAL's list (ids the
+ * HAL lists only). "" or NULL: the HAL's list, as before. The caps line's
+ * cameras=, facing= and raw_cams= follow it. */
+IR_API int indraw_set_camera_list(const char *ids)
+{
+    if (ids && strlen(ids) >= sizeof g.cam_list) return IR_EARG;
+    snprintf(g.cam_list, sizeof g.cam_list, "%s", ids ? ids : "");
     return IR_OK;
 }
 

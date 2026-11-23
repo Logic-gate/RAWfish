@@ -309,6 +309,37 @@ both cameras until 0.3.9-495: the driver's deaths came from the binned
 sensor mode, and `"fps_max": 30` alone now lets it take every stream (its
 `_why` records what was tested); nothing to write on that phone.
 
+### The cameras offered, and their order
+
+- `"hidden": true` in a camera's `overrides` -- the app does not offer
+  this camera (its camera button skips it); the CLI can still open it. For
+  a camera that opens no session of ours (the Xperia 10 III's logical
+  multi-cameras).
+- `"camera_order": ["2", "0", "3", "1"]` at the top level -- the order the
+  camera button goes through them: the ids listed first, in that order,
+  then any other. The button cycles the back cameras by a tap and reaches
+  the front one by a long press, each in this order.
+
+Only ids the HAL lists count, so one profile serves a phone whose list
+changes. The log says the list in force (`cameras offered (device
+profile ...)`); without either key, the HAL's list as before.
+
+The Xperia 10 III lists two cameras (0 main, 1 front) unless its three
+back cameras are enabled: `multiCameraEnable=TRUE` in
+`/vendor/etc/camera/camxoverridesettings.txt`, then the camera provider
+restarted (or a reboot). The simplest way is nephros's package
+x10iii-cam-button (https://github.com/nephros/x10iii-cam-button), which
+adds that switch to the Settings app; by hand, as root:
+
+    sed -i 's/^multiCameraEnable=.*/multiCameraEnable=TRUE/' /vendor/etc/camera/camxoverridesettings.txt
+    pkill -f android.hardware.camera.provider@2.4-service_64
+
+(FALSE to go back). It then lists seven: 0 main (27 mm), 1 front,
+2 ultra-wide (16 mm), 3 telephoto (54 mm), 4 to 6 logical. Its profile
+gives 2 and 3 `"fps_max": 30` (at 90 fps the ultra-wide's driver dies,
+as the main one did), hides 4 to 6 and offers 16, 27, 54 mm, then the
+front camera.
+
 `rawfish-ir-cli streamtest ID` finds which combinations the camera survives
 (five opens, a few seconds each, the last one RAW + viewfinder without JPEG;
 the camera service is given up to 20 s to come back after a failure, and a
