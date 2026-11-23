@@ -507,7 +507,8 @@ SHARED LIMITATION (not solved by either):
   bracketing; settings persisted), gallery on an inner left-to-right swipe
   with DNG previews (NAME_vf.jpg), real zoom, focus loupe, volume-key focus
   and double-press screenshot, UI rotation, cameras shown by focal length.
-  Packaging: rawfish-ir-cli + rawfish-ir-gui RPMs, one shared version.
+  Packaging: rawfish-ir-cli + rawfish-ir-gui RPMs, one shared version (since
+  0.3.9-486: one spec, rawfish-ir with everything, or rawfish-ir-cli-only).
 - Since then (ui 78-105, see CHANGELOG.md): RAWfish-style menu, simple and
   advanced modes, scenes, manual white balance, stacked exposures (Σ) with
   progress/abort, DNG previews from the raw, gallery as a system page, output

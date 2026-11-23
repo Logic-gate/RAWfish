@@ -2,7 +2,7 @@
 # Builds build/android/librawfish-ir.so with the Android NDK (API 24) for one ABI:
 #   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-android.sh            # arm64-v8a (64-bit phones)
 #   ANDROID_ABI=armeabi-v7a ANDROID_NDK_HOME=... ./scripts/build-android.sh   # 32-bit phones
-# build-engine-rpm.sh picks the ABI from the sfdk target (aarch64 / armv7hl).
+# build-rpm.sh picks the ABI from the sfdk target (aarch64 / armv7hl).
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)        # project root
 ndk=${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to the NDK directory}

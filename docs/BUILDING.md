@@ -4,17 +4,27 @@
 A step-by-step guide for someone who has never built a Sailfish app. It takes
 about an hour the first time (most of it downloads), five minutes afterwards.
 
-RAWfish-ir is two packages, built by two different toolchains, because the phone
+RAWfish-ir is made of two parts, built by two different toolchains, because the phone
 runs two worlds at once:
 
-| Package | What is in it | Built with | Why |
+| Part | What it is | Built with | Why |
 |---|---|---|---|
-| `rawfish-ir-cli` | `librawfish-ir.so` (talks to the camera through Android's Camera2) and the `rawfish-ir-cli` command-line tool | the **Android NDK** for the library, the **Sailfish SDK** for the tool | the camera driver (HAL) is Android code; Sailfish reaches it through libhybris |
-| `rawfish-ir-gui` | the Qt/QML user interface | the **Sailfish SDK** | a normal Sailfish application |
+| the engine | `librawfish-ir.so` (talks to the camera through Android's Camera2) and the `rawfish-ir-cli` command-line tool | the **Android NDK** for the library, the **Sailfish SDK** for the tool | the camera driver (HAL) is Android code; Sailfish reaches it through libhybris |
+| the app | the Qt/QML user interface | the **Sailfish SDK** | a normal Sailfish application |
 
-Both are plain RPM files you copy to the phone and install. The engine's
-version is written in one file, `rawfish-ir-version.h`, and the tool refuses to run
-with a library of another version, so always install both packages together.
+One spec, `rpm/rawfish-ir.spec`, builds both parts into two packages:
+
+| Package | Holds | For |
+|---|---|---|
+| `rawfish-ir` | the app **and** its engine | the camera app (what nearly everyone installs) |
+| `rawfish-ir-cli-only` | the engine only, no app | the command line, or an interface of your own |
+
+Install one of the two: they hold the same engine files and exclude each
+other. The app and its engine can no longer be of different versions (up to
+0.3.9-48x they were two packages, rawfish-ir-cli and rawfish-ir-gui,
+installed separately; an app with an older engine lost its photos). Both
+replace that former pair when installed over it. The version is written in
+one file, `rawfish-ir-version.h`; the tool refuses a library of another one.
 
 ## 1. What you need
 
@@ -88,13 +98,12 @@ this directory.
 ./scripts/build-all.sh
 ```
 
-That is all. The script builds the library with the NDK, then the tool and
-the engine RPM in the Sailfish build engine, then the app RPM, and ends by
-listing the two files:
+That is all. The script builds the library with the NDK, then the tool, the
+app and the two RPMs in the Sailfish build engine, and ends by listing them:
 
 ```
-RPMS/rawfish-ir-cli-0.3.0-1.beta.aarch64.rpm
-app/RPMS/rawfish-ir-gui-0.3.0-1.beta.aarch64.rpm
+RPMS/rawfish-ir-0.3.9-486.beta.aarch64.rpm
+RPMS/rawfish-ir-cli-only-0.3.9-486.beta.aarch64.rpm
 ```
 
 What the script does, if you prefer the pieces:
@@ -102,8 +111,7 @@ What the script does, if you prefer the pieces:
 | Step | Command | Result |
 |---|---|---|
 | library | `./scripts/build-android.sh` | `build/android/librawfish-ir.so` |
-| engine RPM | `./scripts/build-engine-rpm.sh` (runs the step above too) | `RPMS/rawfish-ir-cli-*.rpm` |
-| app RPM | `cd app && sfdk build` | `app/RPMS/rawfish-ir-gui-*.rpm` |
+| the RPMs | `./scripts/build-rpm.sh` (runs the step above too) | `RPMS/rawfish-ir-*.rpm`, `RPMS/rawfish-ir-cli-only-*.rpm` |
 
 The scripts number each build's Release with the last patch applied (the
 newest commit whose subject starts with four digits: `0424-...` gives
@@ -122,20 +130,23 @@ QML is always checked for JavaScript newer than the phone's Qt 5.6 (`let`,
 
 ## 6. Install on the phone
 
-1. Copy the two RPMs to the phone, e.g. over SSH (`nemo`/`defaultuser` is
-   the user name shown in developer tools; the password is the one you set):
+1. Copy the RPM to the phone, e.g. over SSH (`nemo`/`defaultuser` is the
+   user name shown in developer tools; the password is the one you set):
    ```sh
-   scp RPMS/rawfish-ir-cli-*.rpm app/RPMS/rawfish-ir-gui-*.rpm defaultuser@<phone-ip>:Downloads/
+   scp RPMS/rawfish-ir-0.3.9-*.aarch64.rpm defaultuser@<phone-ip>:Downloads/
    ```
 2. On the phone (Terminal app or `ssh defaultuser@<phone-ip>`), become root
-   and install both at once:
+   and install it:
    ```sh
    devel-su
    cd /home/defaultuser/Downloads
-   pkcon install-local -y rawfish-ir-cli-*.rpm rawfish-ir-gui-*.rpm
+   pkcon install-local -y rawfish-ir-0.3.9-*.rpm
    ```
-   To update later, the same command with the new files; to remove:
-   `pkcon remove rawfish-ir-gui rawfish-ir-cli`.
+   Over the former pair (rawfish-ir-cli + rawfish-ir-gui) it replaces both.
+   To update later, the same command with the new file; to remove:
+   `pkcon remove rawfish-ir`. The engine alone, for the command line:
+   `rawfish-ir-cli-only-*.rpm` instead (it removes rawfish-ir, and the
+   reverse).
 3. RAWfish-ir appears in the app grid. The first launch creates
    `~/Pictures/RAWfish-ir/` for the photos and `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`,
    the engine's log -- the first thing to look at if something is wrong.
@@ -177,7 +188,7 @@ and install it again (step 2.4). Reinstalling the whole SDK is rarely needed.
 On the phone, to start as a brand-new user:
 
 ```sh
-pkcon remove rawfish-ir-gui rawfish-ir-cli
+pkcon remove rawfish-ir
 rm -rf ~/.config/com.rawfish ~/.cache/com.rawfish ~/.local/share/com.rawfish
 # your photos in ~/Pictures/RAWfish-ir/ are yours: keep or delete them
 ```
@@ -187,7 +198,7 @@ rm -rf ~/.config/com.rawfish ~/.cache/com.rawfish ~/.local/share/com.rawfish
 | Symptom | Cause | Fix |
 |---|---|---|
 | `ld.lld: error: undefined symbol: ...` while building the library | a C function the Android library does not link (e.g. from libm) | the library only links `camera2ndk` and `mediandk` on purpose; keep it that way in your code |
-| `nothing provides 'libc.so()(64bit)'` at install | an old spec let rpm scan the Android library for dependencies | fixed in `rpm/rawfish-ir-cli.spec` (scanner excluded); rebuild |
+| `nothing provides 'libc.so()(64bit)'` at install | an old spec let rpm scan the Android library for dependencies | fixed in `rpm/rawfish-ir.spec` (scanner excluded); rebuild |
 | `version mismatch: CLI x, library y` in the log | engine tool and library from different builds | install both RPMs from the same build |
 | `jpeg size not listed` / `raw16 size not listed` in the log | a size the camera does not offer (another camera, 16:9) | the app asks for `max` now; if you drive the tool by hand, use `max` |
 | white screen from the app grid, works from a terminal | the app ran sandboxed and could not find its files | fixed by installing to `/usr/share/rawfish-ir`; make sure the RPM is the one you just built (`rpm -ql rawfish-ir-gui`) |
@@ -211,8 +222,7 @@ rawfish-ir-version.h   the version, shared by the library, the tool and both spe
 
 ## Versions and git tags
 
-The packages carry the versions written in their specs (the engine's in
-rpm/rawfish-ir-cli.spec, the app's in app/rpm/rawfish-ir-gui.spec; they differ).
+The packages carry the version written in their spec (rpm/rawfish-ir.spec).
 sfdk would otherwise derive them from a git tag found in the history
 (`git describe`) -- after a release tag such as v0.47.69 both packages
 came out as 0.47.69+main.<date>.<hash>, and the app's "requires engine >="
@@ -241,7 +251,7 @@ so `dconf reset -f /apps/rawfish-ir/` returns to a fresh install's state.
 ## Starting from scratch
 
 What a new user gets, to check a release: with the app closed, as root
-`pkcon remove rawfish-ir-gui rawfish-ir-cli`, then as the user
+`pkcon remove rawfish-ir`, then as the user
 
 ```sh
 rm -rf ~/.local/share/com.rawfish/rawfish-ir ~/.config/com.rawfish/rawfish-ir ~/.cache/com.rawfish/rawfish-ir
@@ -252,7 +262,7 @@ dconf reset -f /apps/rawfish-ir/
 too; photos are not touched). The focus calibration and a lens-shading
 calibration of your own are measurements: keep a copy first if you have
 some (`tar czf ~/rawfish-ir-perso.tgz -C ~ .local/share/com.rawfish/rawfish-ir .config/com.rawfish/rawfish-ir`).
-Then install the two packages: the first start asks Sailjail's permissions,
+Then install the package rawfish-ir: the first start asks Sailjail's permissions,
 uses the lens-shading calibration shipped for the phone, has no focus
 calibration (it is made by hand), and copies the commented example
 `override-hal.example.jsonc` into `~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.

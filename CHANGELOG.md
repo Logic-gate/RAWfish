@@ -15,6 +15,13 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-486 (patch 0486): one package with everything, rawfish-ir (the app and its engine), or the
+  engine alone, rawfish-ir-cli-only (the command line); one spec builds both
+  (rpm/rawfish-ir.spec), they exclude each other and replace the former pair
+  rawfish-ir-cli + rawfish-ir-gui. An app installed with an older engine had
+  lost every photo (an empty prefix the old engine refused): the two can no
+  longer be of different versions. scripts/build-rpm.sh replaces
+  build-engine-rpm.sh; the RPMs are all in RPMS/.
 - The build 0.3.9-481 (patch 0481): the photos of a bracket and of a
   burst (x3) always carry their milliseconds (NAME_YYYYMMDD_HHMMSS_mmm),
   the first one too: a series is named alike and sorts in order. The

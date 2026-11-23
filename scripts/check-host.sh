@@ -200,16 +200,21 @@ fi
 python3 -I "$root/scripts/qmlcheck.py" --self-test || exit 1
 python3 -I "$root/scripts/qmlcheck.py" $qml_files || { echo "qml: JavaScript newer than Qt 5.6 (see above)" >&2; exit 1; }
 echo "qml: no let / const / => / template strings (Qt 5.6: ES5) (OK)"
-# One version number for the two packages and the library (RAWfish-ir 0.1.0+).
+# One version number for the packages and the library (RAWfish-ir 0.1.0+):
+# one spec since 0.3.9-486 (rawfish-ir + rawfish-ir-cli-only).
 v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/rawfish-ir-version.h")
-v_cli=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir-cli.spec")
-v_gui=$(sed -n 's/^Version: *//p' "$root/app/rpm/rawfish-ir-gui.spec")
-if [ "$v_h" = "$v_cli" ] && [ "$v_h" = "$v_gui" ]; then echo "version: $v_h in rawfish-ir-version.h and both specs (OK)"
-else echo "version MISMATCH: rawfish-ir-version.h $v_h, rawfish-ir-cli.spec $v_cli, rawfish-ir-gui.spec $v_gui" >&2; exit 1; fi
+v_spec=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir.spec")
+if [ "$v_h" = "$v_spec" ]; then echo "version: $v_h in rawfish-ir-version.h and the spec (OK)"
+else echo "version MISMATCH: rawfish-ir-version.h $v_h, rawfish-ir.spec $v_spec" >&2; exit 1; fi
+# The former two specs must not come back (the app and its engine built
+# apart could be installed at different versions).
+for old in "$root/rpm/rawfish-ir-cli.spec" "$root/app/rpm/rawfish-ir-gui.spec"; do
+    [ ! -e "$old" ] || { echo "$old: the packages are built by rpm/rawfish-ir.spec only" >&2; exit 1; }
+done
 
 # only a path ("%{_datadir}/...") is a %files entry put in the wrong section
 # (it then runs as a command and the build fails in %install). Twice so far.
-for spec in "$root/rpm/rawfish-ir-cli.spec" "$root/app/rpm/rawfish-ir-gui.spec"; do
+for spec in "$root/rpm/rawfish-ir.spec"; do
     bad=$(awk '/^%install/{f=1;next} /^%(files|clean|changelog|post|pre)/{f=0} f && /^%\{_/' "$spec")
     if [ -n "$bad" ]; then echo "$spec: path line(s) in %install (belong in %files):"; echo "$bad"; exit 1; fi
     echo "$(basename "$spec"): %install OK"
@@ -217,7 +222,7 @@ done
 
 # RPM specs: a "#" after a tag on the same line is NOT a comment for rpm (it
 # would read "# words" as more dependency names). Comments go on their own line.
-for spec in "$root/rpm/rawfish-ir-cli.spec" "$root/app/rpm/rawfish-ir-gui.spec"; do
+for spec in "$root/rpm/rawfish-ir.spec"; do
     bad=$(grep -nE '^[A-Za-z]+[(A-Za-z0-9)]*:.*[[:space:]]#' "$spec" || true)   # no match = fine (set -e)
     if [ -n "$bad" ]; then echo "$spec: comment after a tag (rpm would parse it):"; echo "$bad"; exit 1; fi
 done
@@ -306,7 +311,7 @@ echo "android/rawfish-ir.c: lock contract OK (g.lock not re-taken, order g.lock 
 
 # A "(64bit)" provide named outside an "%ifarch aarch64" block breaks the
 # 32-bit package (armv7hl: "nothing provides ...(64bit)", 0.47.24).
-for spec in "$root/rpm/rawfish-ir-cli.spec" "$root/app/rpm/rawfish-ir-gui.spec"; do
+for spec in "$root/rpm/rawfish-ir.spec"; do
     awk '/^%ifarch aarch64/ { a = 1; next } /^%(else|endif)/ { a = 0; next }
          /^(Requires|BuildRequires|Provides)/ && /\(64bit\)/ && !a { print FILENAME ":" FNR ": " $0; bad = 1 }
          END { exit bad }' "$spec" || { echo "specs: a (64bit) dependency outside %ifarch aarch64"; exit 1; }

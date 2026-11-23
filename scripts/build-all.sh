@@ -1,6 +1,7 @@
 #!/bin/sh
-# Builds BOTH packages in one go -- the engine RPM (NDK library + CLI) and the
-# app RPM -- and lists them. The one command a newcomer needs after the
+# Builds the packages in one go -- the NDK library, then rpm/rawfish-ir.spec:
+# rawfish-ir (the app with its engine) and rawfish-ir-cli-only (the engine
+# alone) -- and lists them. The one command a newcomer needs after the
 # one-time setup in docs/BUILDING.md:
 #   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-all.sh
 # Add --clean to rebuild everything from scratch. Switching the sfdk target
@@ -12,7 +13,7 @@
 # architectures (aarch64 and armv7hl), one after the other (the build is
 # in-tree: two at once would overwrite each other), then puts the sfdk
 # target back as it was, even on a failure. The RPMs carry their
-# architecture in their names and stay side by side in RPMS/ and app/RPMS/.
+# architecture in their names and stay side by side in RPMS/.
 # Pick the targets with INDRAW_TARGETS="target1 target2" if more than one
 # per architecture is installed.
 set -eu
@@ -30,10 +31,9 @@ done
 : "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to the Android NDK directory (see docs/BUILDING.md)}"
 sfdk=${SFDK:-sfdk}
 # Every sfdk build runs with 'no-fix-version': with a git tag in the history
-# (a release, v0.47.69...) sfdk would otherwise replace BOTH specs' versions
-# by the tag's plus a git suffix (rawfish-ir-gui-0.1.0+main.2026...), the app
-# would then require an engine version that no package carries. The
-# versions are the specs' own (the engine's and the app's differ).
+# (a release, v0.47.69...) sfdk would otherwise replace the spec's version by
+# the tag's plus a git suffix (rawfish-ir-0.1.0+main.2026...). The version is
+# the spec's own.
 if [ -n "$all" ]; then
     previous=$("$sfdk" config --show 2>/dev/null | sed -n 's/^target = //p')
     targets=${INDRAW_TARGETS:-$("$sfdk" tools list 2>/dev/null | grep -o 'SailfishOS-[0-9.]*-\(aarch64\|armv7hl\)' | sort -u)}
@@ -51,8 +51,8 @@ if [ -n "$all" ]; then
     echo "Built for:$done_list (the sfdk target is back to ${previous:-unset})."
     echo "Packages:"
     for a in aarch64 armv7hl; do
-        ls -1t RPMS/rawfish-ir-cli-*."$a".rpm 2>/dev/null | head -1
-        ls -1t app/RPMS/rawfish-ir-gui-*."$a".rpm 2>/dev/null | head -1
+        ls -1t RPMS/rawfish-ir-[0-9]*."$a".rpm 2>/dev/null | head -1
+        ls -1t RPMS/rawfish-ir-cli-only-*."$a".rpm 2>/dev/null | head -1
     done
     exit 0
 fi
@@ -68,15 +68,13 @@ case "$target" in
     *armv7hl*) arch=armv7hl; want="32-bit LSB.*ARM" ;;
     *) echo "sfdk target '$target': cannot tell its architecture (aarch64 or armv7hl)" >&2; exit 1 ;;
 esac
-echo "== engine (library with the NDK, CLI + RPM with sfdk) =="
+echo "== library (NDK), then engine + app + packages (sfdk) =="
 # --clean removes this architecture's RPMs only: with --all, the other
 # architecture's were built a minute ago and must stay (wiping RPMS/ left
-# only the last architecture's engine package).
+# only the last architecture's packages). The CLI and the app always build
+# from clean anyway (the spec's %build).
 if [ -n "$clean" ]; then rm -rf build/android sailfish/rawfish-ir-cli; rm -f RPMS/*."$arch".rpm; fi
-./scripts/build-engine-rpm.sh
-echo "== app (sfdk) =="
-# (the Release numbered by the last patch, as the engine's: with-build-release.sh)
-( cd app && ../scripts/with-build-release.sh rpm/rawfish-ir-gui.spec "$sfdk" -c no-fix-version build $clean )      # the app's spec always builds from clean
+./scripts/build-rpm.sh
 
 # The binaries must be of the target's architecture (a package built from a
 # stale binary of the other one cannot be installed). Checked with file(1),
@@ -89,9 +87,10 @@ for bin in sailfish/rawfish-ir-cli app/rawfish-ir; do
         exit 1
     fi
 done
-eng=$(ls -1t RPMS/rawfish-ir-cli-*."$arch".rpm 2>/dev/null | head -1)
-app=$(ls -1t app/RPMS/rawfish-ir-gui-*."$arch".rpm 2>/dev/null | head -1)
+all_pkg=$(ls -1t RPMS/rawfish-ir-[0-9]*."$arch".rpm 2>/dev/null | head -1)
+cli=$(ls -1t RPMS/rawfish-ir-cli-only-*."$arch".rpm 2>/dev/null | head -1)
 echo
-echo "Packages to copy to the phone and install together (as root: pkcon install-local -y <both>):"
-echo "$eng"
-echo "$app"
+echo "The app with its engine (as root: pkcon install-local -y <it>):"
+echo "$all_pkg"
+echo "Or the engine alone, for the command line (excludes the one above):"
+echo "$cli"

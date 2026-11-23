@@ -69,7 +69,7 @@ https://forum.sailfishos.org/t/next-gen-native-camera-app-rawfish/34150
 
 Names: **RAWfish-ir** is the project (this branch of RAWfish); **RAWfish-ir**
 is what you see on the phone (the app grid, Settings); `rawfish-ir` is the
-technical name (packages `rawfish-ir-cli` and `rawfish-ir-gui`, binaries,
+technical name (packages `rawfish-ir` and `rawfish-ir-cli-only`, binaries,
 paths, settings, source files); `indraw` remains only inside the code (the library's functions, `indraw_*`, and the C++ class).
 
 
@@ -119,18 +119,20 @@ write. Only the app (and the engine it launches) runs inside Sailjail.
 ## Build
 
 New to this? `docs/BUILDING.md` walks through every step, from installing the SDK and NDK to
-rebuilding from zero. The short version: `./scripts/build-all.sh` makes both RPMs.
+rebuilding from zero. The short version: `./scripts/build-all.sh` makes the RPMs.
 
-Two RPMs, installed on the phone with `rpm -Uvh` (as root):
+One spec, two packages; install one of them on the phone (as root):
 
 ```sh
-ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh   # RPMS/rawfish-ir-cli-X.Y.Z-1.beta.aarch64.rpm
-cd app && sfdk build                                           # app/RPMS/rawfish-ir-gui-X.Y.Z-1.beta.aarch64.rpm
+ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-rpm.sh
+# RPMS/rawfish-ir-X.Y.Z-N.beta.aarch64.rpm           the app with its engine
+# RPMS/rawfish-ir-cli-only-X.Y.Z-N.beta.aarch64.rpm  the engine alone (command line)
 ```
 
-`rawfish-ir-cli` carries `librawfish-ir.so` (prebuilt with the NDK, installed to
+Both carry the engine: `librawfish-ir.so` (prebuilt with the NDK, installed to
 `/usr/libexec/droid-hybris/system/lib64/`) and the `rawfish-ir-cli` program (`/usr/libexec/rawfish-ir/rawfish-ir-cli`,
-plus `/usr/bin/rawfish-ir-cli`); `rawfish-ir-gui` requires it. The version is `rawfish-ir-version.h`, shared by
+plus `/usr/bin/rawfish-ir-cli`); `rawfish-ir` adds the app. They exclude each
+other, and replace the former pair rawfish-ir-cli + rawfish-ir-gui. The version is `rawfish-ir-version.h`, shared by
 the library, the CLI and the spec; the CLI refuses to run with a library of another version.
 
 Install by hand (development): copy `build/android/librawfish-ir.so` to

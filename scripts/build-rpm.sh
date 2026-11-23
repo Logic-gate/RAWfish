@@ -1,18 +1,19 @@
 #!/bin/sh
-# Builds the rawfish-ir-cli RPM: the Android library with the NDK (on this PC),
-# then the CLI + packaging in the Sailfish SDK build engine (sfdk, at the top
-# of the repository, where rpm/rawfish-ir-cli.spec is).
+# Builds the two packages of rpm/rawfish-ir.spec: rawfish-ir (the app with its
+# engine) and rawfish-ir-cli-only (the engine alone). The Android library with
+# the NDK (on this PC), then the CLI, the app and the packaging in the Sailfish
+# SDK build engine (sfdk, at the top of the repository, where the spec is).
 #   sfdk config target=<SailfishOS-x.y.z-aarch64 or -armv7hl>   # once
-#   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-engine-rpm.sh
-# The RPM lands in RPMS/ at the top of the repository, its Release numbered
-# by the last patch applied (scripts/with-build-release.sh: 0.3.8-424.beta).
+#   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-rpm.sh
+# The RPMs land in RPMS/ at the top of the repository, their Release numbered
+# by the last patch applied (scripts/with-build-release.sh: 0.3.9-486.beta).
 set -eu
 cd "$(dirname -- "$0")/.."
 sfdk=${SFDK:-sfdk}
 ver=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' rawfish-ir-version.h)
-spec_ver=$(sed -n 's/^Version: *//p' rpm/rawfish-ir-cli.spec)
+spec_ver=$(sed -n 's/^Version: *//p' rpm/rawfish-ir.spec)
 if [ "$ver" != "$spec_ver" ]; then
-    echo "rawfish-ir-version.h says $ver but rpm/rawfish-ir-cli.spec says $spec_ver" >&2
+    echo "rawfish-ir-version.h says $ver but rpm/rawfish-ir.spec says $spec_ver" >&2
     exit 1
 fi
 # The library's ABI follows the sfdk target: a 64-bit target (aarch64) gets
@@ -26,6 +27,6 @@ case "$target" in
 esac
 ./scripts/build-android.sh                 # build/android/librawfish-ir.so (prebuilt for the RPM)
 "$sfdk" build-init
-./scripts/with-build-release.sh rpm/rawfish-ir-cli.spec "$sfdk" -c no-fix-version build
-echo "rawfish-ir-cli $ver:"
-ls -1 RPMS/rawfish-ir-cli-*.rpm
+./scripts/with-build-release.sh rpm/rawfish-ir.spec "$sfdk" -c no-fix-version build
+echo "rawfish-ir $ver:"
+ls -1t RPMS/rawfish-ir-[0-9]*.rpm RPMS/rawfish-ir-cli-only-*.rpm 2>/dev/null | head -4
