@@ -85,6 +85,7 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "yuv.h"                 /* the preview's YUV -> RGB conversion       */
 #include "viewfield.h"           /* what a viewfinder frame shows of its crop (16:9 on 4:3) */
 #include "rawcheck.h"            /* a RAW16 frame the HAL left partly unwritten */
+#include "focal35.h"             /* the 35 mm-equivalent focal length, by the diagonal */
 
 static int g_screen_notch = -1;   /* the screen's top cutout, from the device profile (-1 unknown) */
 
@@ -4281,7 +4282,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
             ex.f_number = fe.data.f[0];
         if (ex.focal_mm > 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, &fe) == ACAMERA_OK &&
             fe.count >= 2 && fe.data.f[0] > 0)
-            ex.focal_eq_mm = (int)(ex.focal_mm * 36.0f / fe.data.f[0] + 0.5f);
+            ex.focal_eq_mm = (int)(focal_35mm(ex.focal_mm, fe.data.f[0], fe.data.f[1]) + 0.5f);
         ex.orientation = 0;                                         /* keep the HAL's tag  */
         ex.wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;       /* the white the file got */
         ex.exposure_manual = exposure_ns > 0;                       /* a manual pair was asked */
@@ -6109,12 +6110,12 @@ static void emit_caps(void)
         min_focus = e.data.f[0];
     /* the profile's real stop, when the lens stops before the declared one */
     if (g.override_focus_max_d > 0 && min_focus > g.override_focus_max_d) min_focus = g.override_focus_max_d;
-    /* 35 mm-equivalent focal length: f x 36 / sensor width (mm). */
+    /* 35 mm-equivalent focal length, by the diagonal (focal35.h). */
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, &e) == ACAMERA_OK && e.count)
         focal = e.data.f[0];
     if (focal > 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, &e) == ACAMERA_OK &&
         e.count >= 2 && e.data.f[0] > 0)
-        focal_eq = focal * 36.0f / e.data.f[0];
+        focal_eq = focal_35mm(focal, e.data.f[0], e.data.f[1]);
     /* The camera ids the HAL lists, so the UI cycles only through real ones;
      * or the device profile's list (indraw_set_camera_list: its order, its
      * hidden cameras left out), already checked against the HAL's. */
@@ -7689,7 +7690,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
             f->f_number = fe.data.f[0];
         if (f->focal_mm > 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, &fe) == ACAMERA_OK &&
             fe.count >= 2 && fe.data.f[0] > 0)
-            f->focal_eq_mm = (int)(f->focal_mm * 36.0f / fe.data.f[0] + 0.5f);
+            f->focal_eq_mm = (int)(focal_35mm(f->focal_mm, fe.data.f[0], fe.data.f[1]) + 0.5f);
     }
     snprintf(f->make, sizeof f->make, "%s", g.make);
     snprintf(f->model, sizeof f->model, "%s", g.model);
@@ -7923,7 +7924,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
             frames[k].f_number = e.data.f[0];
         if (frames[k].focal_mm > 0 && ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, &e) == ACAMERA_OK &&
             e.count >= 2 && e.data.f[0] > 0)
-            frames[k].focal_eq_mm = (int)(frames[k].focal_mm * 36.0f / e.data.f[0] + 0.5f);
+            frames[k].focal_eq_mm = (int)(focal_35mm(frames[k].focal_mm, e.data.f[0], e.data.f[1]) + 0.5f);
         snprintf(frames[k].make, sizeof frames[k].make, "%s", g.make);
         snprintf(frames[k].model, sizeof frames[k].model, "%s", g.model);
     }

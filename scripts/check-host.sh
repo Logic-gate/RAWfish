@@ -248,6 +248,10 @@ run_test /tmp/indraw-ct-test
 # 10 III's binned image in a full-size buffer told from a whole, dark frame.
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-rawcheck-test "$root/android/tests/rawcheck_test.c"
 run_test /tmp/indraw-rawcheck-test
+# The 35 mm-equivalent focal length by the diagonal (android/focal35.h),
+# against the Xperia 10 III's four cameras.
+gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-focal35-test "$root/android/tests/focal35_test.c" -lm
+run_test /tmp/indraw-focal35-test
 
 # The measured lens-shading calibration (android/shading.h, pure C): the
 # JP2's own file, parsing, interpolation, dosing.

@@ -15,6 +15,13 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-0501 (patch 0501): the 35 mm-equivalent focal length (the focal button's "27mm", the
+  Exif FocalLengthIn35mmFilm, the hand-held speed limit) is now worked out
+  by the sensor's diagonal, as the standard has it, instead of its width:
+  about 4 % shorter on a 4:3 sensor (the Xperia 10 III: 16, 28, 52 mm
+  instead of 16, 29, 54; Sony says 16, 27, 54) and 5 % longer on a 16:9
+  one. All phones are concerned; the HAL's own figure is not used (the 10
+  III's telephoto writes 6 mm).
 - The build 0.3.9-0498 (patch 0498): the Xperia 10 III's ultra-wide and
   telephoto cameras, when its three back cameras are enabled
   (multiCameraEnable=TRUE in the vendor camera settings): capped at 30 fps
