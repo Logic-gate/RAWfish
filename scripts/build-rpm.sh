@@ -6,7 +6,7 @@
 #   sfdk config target=<SailfishOS-x.y.z-aarch64 or -armv7hl>   # once
 #   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-rpm.sh
 # The RPMs land in RPMS/ at the top of the repository, their Release numbered
-# by the last patch applied (scripts/with-build-release.sh: 0.3.9-486.beta).
+# by the last patch applied (scripts/with-build-release.sh: 0.3.10-516.beta).
 set -eu
 cd "$(dirname -- "$0")/.."
 sfdk=${SFDK:-sfdk}

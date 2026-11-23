@@ -1,12 +1,12 @@
 # Changelog (AI generated)
 
-Since 0.1.0 one version covers the library and both packages
-(`indraw_version.h`, the two specs); before it, the versions were the
+Since 0.1.0 one version covers the library and the packages
+(`rawfish-ir-version.h`, the spec); before it, the versions were the
 engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.3.9)
+## Known issues (as of 0.3.10)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
@@ -14,7 +14,13 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
-## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+## 0.3.10 (beta) — the Xperia 10 III at the sensor's full size, with its three back cameras and our JPEG; one package with everything; a black top band (patches 0448–0516)
+- The version 0.3.10 (patch 0516), the release of the builds 0.3.9-448 to
+  0.3.9-513 listed below (each was installed as 0.3.9-NNN). As at every
+  new version, the app's first start sets the earlier configuration and
+  device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...).
+  The package is now rawfish-ir-all-in-one (rawfish-ir up to 0.3.9-50x):
+  installed over the earlier one, it replaces it.
 - The build 0.3.9-513 (patch 0513): a review before the release: the frame-rate range
   of long exposures can no longer exceed a device profile's "fps_max" (a
   guard: no shipped phone is concerned); comments brought up to date (the
@@ -33,17 +39,17 @@ repository). Newest first.
   replaces it, files and all; settings and photos are not touched. To
   remove it: pkcon remove rawfish-ir-all-in-one. To go back to a build from
   before the rename, remove it first.
-- The build 0.3.9-0504 (patch 0504): docs/DEVICE-PROFILES.md gives the way to
+- The build 0.3.9-504 (patch 0504): docs/DEVICE-PROFILES.md gives the way to
   enable the Xperia 10 III's three back cameras as Jolla's help article does
   (a line in the vendor camera settings, then the camera provider restarted).
-- The build 0.3.9-0501 (patch 0501): the 35 mm-equivalent focal length (the focal button's "27mm", the
+- The build 0.3.9-501 (patch 0501): the 35 mm-equivalent focal length (the focal button's "27mm", the
   Exif FocalLengthIn35mmFilm, the hand-held speed limit) is now worked out
   by the sensor's diagonal, as the standard has it, instead of its width:
   about 4 % shorter on a 4:3 sensor (the Xperia 10 III: 16, 28, 52 mm
   instead of 16, 29, 54; Sony says 16, 27, 54) and 5 % longer on a 16:9
   one. All phones are concerned; the HAL's own figure is not used (the 10
   III's telephoto writes 6 mm).
-- The build 0.3.9-0498 (patch 0498): the Xperia 10 III's ultra-wide and
+- The build 0.3.9-498 (patch 0498): the Xperia 10 III's ultra-wide and
   telephoto cameras, when its three back cameras are enabled
   (multiCameraEnable=TRUE in the vendor camera settings): capped at 30 fps
   like the others (at 90 fps the ultra-wide's driver died), with whole RAWs
@@ -52,7 +58,7 @@ repository). Newest first.
   logical multi-cameras, which open no session, are not offered. Two new
   device-profile keys: "hidden" (a camera not offered) and "camera_order";
   the JP2 and the XA2 have neither, nothing changes for them.
-- The build 0.3.9-0495 (patch 0495): the Xperia 10 III's JPG is RAWfish-ir's
+- The build 0.3.9-495 (patch 0495): the Xperia 10 III's JPG is RAWfish-ir's
   own (our JPEG, denoised and sharpened as on the other phones) instead of
   the camera's JPEG, and RAW, JPG and snap share one session again (no
   reopening when the type changes; a DNG with each JPG works). Its profile
@@ -155,6 +161,8 @@ repository). Newest first.
   brings the peek back). The same version, a new build: the settings,
   the focus calibration and the measured shading maps are kept (a new
   version would set them aside).
+
+## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
 - A version number of its own for the publication: 0.3.0 to 0.3.8 were
   test builds, never published; their changes, listed below, all reach
   users with this one. Nothing else changes (version, the "ui" badge

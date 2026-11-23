@@ -102,8 +102,8 @@ That is all. The script builds the library with the NDK, then the tool, the
 app and the two RPMs in the Sailfish build engine, and ends by listing them:
 
 ```
-RPMS/rawfish-ir-all-in-one-0.3.9-507.beta.aarch64.rpm
-RPMS/rawfish-ir-cli-only-0.3.9-507.beta.aarch64.rpm
+RPMS/rawfish-ir-all-in-one-0.3.10-516.beta.aarch64.rpm
+RPMS/rawfish-ir-cli-only-0.3.10-516.beta.aarch64.rpm
 ```
 
 What the script does, if you prefer the pieces:
@@ -133,14 +133,14 @@ QML is always checked for JavaScript newer than the phone's Qt 5.6 (`let`,
 1. Copy the RPM to the phone, e.g. over SSH (`nemo`/`defaultuser` is the
    user name shown in developer tools; the password is the one you set):
    ```sh
-   scp RPMS/rawfish-ir-all-in-one-0.3.9-*.aarch64.rpm defaultuser@<phone-ip>:Downloads/
+   scp RPMS/rawfish-ir-all-in-one-0.3.10-*.aarch64.rpm defaultuser@<phone-ip>:Downloads/
    ```
 2. On the phone (Terminal app or `ssh defaultuser@<phone-ip>`), become root
    and install it:
    ```sh
    devel-su
    cd /home/defaultuser/Downloads
-   pkcon install-local -y rawfish-ir-all-in-one-0.3.9-*.rpm
+   pkcon install-local -y rawfish-ir-all-in-one-0.3.10-*.rpm
    ```
    Over the earlier names (`rawfish-ir` up to 0.3.9-50x, or the pair
    rawfish-ir-cli + rawfish-ir-gui) it replaces them. To update later, the
