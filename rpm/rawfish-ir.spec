@@ -2,7 +2,7 @@ Name:       rawfish-ir
 Summary:    RAWfish-ir camera: the app with its engine
 # Keep in step with rawfish-ir-version.h (scripts/build-rpm.sh checks).
 Version:    0.3.9
-# "beta" in the release, so the files say it: rawfish-ir-0.3.9-1.beta.<arch>.rpm.
+# "beta" in the release, so the files say it: rawfish-ir-all-in-one-0.3.9-1.beta.<arch>.rpm.
 # The package's name and the version's order are untouched: the first
 # version after the beta takes a higher Version and a plain "1" here.
 # scripts/with-build-release.sh puts the build number in front.
@@ -13,11 +13,14 @@ Source0:    %{name}-%{version}.tar.bz2
 # One spec, two packages built from the same tree, so that the app and its
 # engine can no longer be of different versions (an app of 481 on an engine
 # of 452 lost every photo, November 2026):
-#   rawfish-ir           everything: the app, the engine, the data
-#   rawfish-ir-cli-only  the engine alone (the command line, or an
-#                        interface of your own), without the app
-# The two hold the same engine files and exclude each other. Both replace
-# the former pair rawfish-ir-cli + rawfish-ir-gui (up to 0.3.9-48x).
+#   rawfish-ir-all-in-one  everything: the app, the engine, the data
+#   rawfish-ir-cli-only    the engine alone (the command line, or an
+#                          interface of your own), without the app
+# The two hold the same engine files and exclude each other. They replace
+# the earlier names: rawfish-ir (0.3.9-486 to 0.3.9-50x) and the pair
+# rawfish-ir-cli + rawfish-ir-gui (up to 0.3.9-48x). The spec and the
+# source archive keep the name rawfish-ir; no package of that name is built
+# (no plain %files section), so the file names say what each one holds.
 # The Android-side library lives in droid-hybris' lib64 on 64-bit ports
 # (aarch64) and lib on 32-bit ones (armv7hl); the library itself is built for
 # the matching ABI by scripts/build-android.sh.
@@ -40,6 +43,20 @@ BuildRequires:  qt5-qmake
 # lrelease: the build compiles the translations
 BuildRequires:  qt5-qttools-linguist
 
+# librawfish-ir.so is an Android (bionic) library loaded through libhybris: keep
+# rpm's automatic dependency scanner away from it, or the package would
+# "need" the Android libc.so / libcamera2ndk.so, which no Sailfish package
+# provides. The glibc dependencies of the CLI and the app are still
+# generated normally.
+%global __requires_exclude_from ^%{_libexecdir}/droid-hybris/.*$
+%global __provides_exclude_from ^%{_libexecdir}/droid-hybris/.*$
+
+%description
+The RAWfish-ir camera, source package: builds rawfish-ir-all-in-one (the
+app with its engine) and rawfish-ir-cli-only (the engine alone).
+
+%package -n rawfish-ir-all-in-one
+Summary:    RAWfish-ir camera: the app with its engine
 # The engine's run-time needs, loaded with dlopen so that rpm does not find
 # them by itself: libhybris (the bridge to the Android libraries) and
 # droidmedia (only to start the binder thread pool the camera service calls
@@ -70,20 +87,16 @@ Requires:       nemo-qml-plugin-configuration-qt5
 # QtFeedback: the vibrations (release, TYPE)
 Requires:       qml(QtFeedback)
 Requires:       libkeepalive
-# The former pair, replaced (an install over them removes them), and the
-# engine-only package, which holds the same engine files.
+# The earlier names, replaced (an install over them removes them, files
+# and all): rawfish-ir (0.3.9-486 to 0.3.9-50x) and the former pair; and
+# the engine-only package, which holds the same engine files.
+Obsoletes:      rawfish-ir < %{version}-%{release}
+Provides:       rawfish-ir = %{version}-%{release}
 Obsoletes:      rawfish-ir-gui < %{version}-%{release}
 Obsoletes:      rawfish-ir-cli < %{version}-%{release}
 Conflicts:      rawfish-ir-cli-only
-# librawfish-ir.so is an Android (bionic) library loaded through libhybris: keep
-# rpm's automatic dependency scanner away from it, or the package would
-# "need" the Android libc.so / libcamera2ndk.so, which no Sailfish package
-# provides. The glibc dependencies of the CLI and the app are still
-# generated normally.
-%global __requires_exclude_from ^%{_libexecdir}/droid-hybris/.*$
-%global __provides_exclude_from ^%{_libexecdir}/droid-hybris/.*$
 
-%description
+%description -n rawfish-ir-all-in-one
 Beta. RAWfish-ir camera application: the live viewfinder, the deck of controls
 and the gallery, with its engine: librawfish-ir.so (Android side, built
 beforehand with the NDK by scripts/build-android.sh and shipped prebuilt in
@@ -102,13 +115,14 @@ Requires:       libhybris-common.so.1
 %endif
 Requires:       droidmedia
 Obsoletes:      rawfish-ir-cli < %{version}-%{release}
+Conflicts:      rawfish-ir-all-in-one
 Conflicts:      rawfish-ir
 
 %description -n rawfish-ir-cli-only
 Beta. The RAWfish-ir engine ALONE, for the command line (or an interface of
 your own talking to the controller): librawfish-ir.so, rawfish-ir-cli
 (/usr/bin/rawfish-ir-cli), the device profiles and lens-shading maps. No
-app: for the camera app, install the package rawfish-ir instead (it holds
+app: for the camera app, install the package rawfish-ir-all-in-one instead (it holds
 this engine too; the two exclude each other). The CLI refuses a library of
 another version.
 
@@ -168,7 +182,7 @@ install -D -m 644 settings/rawfish-ir.json %{buildroot}%{_datadir}/jolla-setting
 install -D -m 644 settings/SettingsPage.qml %{buildroot}%{_datadir}/jolla-settings/pages/rawfish-ir/SettingsPage.qml
 cd ..
 
-%files
+%files -n rawfish-ir-all-in-one
 %license LICENSE
 %{_libexecdir}/rawfish-ir/rawfish-ir-cli
 %{_bindir}/rawfish-ir-cli

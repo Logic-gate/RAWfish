@@ -16,7 +16,7 @@ One spec, `rpm/rawfish-ir.spec`, builds both parts into two packages:
 
 | Package | Holds | For |
 |---|---|---|
-| `rawfish-ir` | the app **and** its engine | the camera app (what nearly everyone installs) |
+| `rawfish-ir-all-in-one` | the app **and** its engine | the camera app (what nearly everyone installs) |
 | `rawfish-ir-cli-only` | the engine only, no app | the command line, or an interface of your own |
 
 Install one of the two: they hold the same engine files and exclude each
@@ -102,8 +102,8 @@ That is all. The script builds the library with the NDK, then the tool, the
 app and the two RPMs in the Sailfish build engine, and ends by listing them:
 
 ```
-RPMS/rawfish-ir-0.3.9-486.beta.aarch64.rpm
-RPMS/rawfish-ir-cli-only-0.3.9-486.beta.aarch64.rpm
+RPMS/rawfish-ir-all-in-one-0.3.9-507.beta.aarch64.rpm
+RPMS/rawfish-ir-cli-only-0.3.9-507.beta.aarch64.rpm
 ```
 
 What the script does, if you prefer the pieces:
@@ -111,7 +111,7 @@ What the script does, if you prefer the pieces:
 | Step | Command | Result |
 |---|---|---|
 | library | `./scripts/build-android.sh` | `build/android/librawfish-ir.so` |
-| the RPMs | `./scripts/build-rpm.sh` (runs the step above too) | `RPMS/rawfish-ir-*.rpm`, `RPMS/rawfish-ir-cli-only-*.rpm` |
+| the RPMs | `./scripts/build-rpm.sh` (runs the step above too) | `RPMS/rawfish-ir-all-in-one-*.rpm`, `RPMS/rawfish-ir-cli-only-*.rpm` |
 
 The scripts number each build's Release with the last patch applied (the
 newest commit whose subject starts with four digits: `0424-...` gives
@@ -133,20 +133,23 @@ QML is always checked for JavaScript newer than the phone's Qt 5.6 (`let`,
 1. Copy the RPM to the phone, e.g. over SSH (`nemo`/`defaultuser` is the
    user name shown in developer tools; the password is the one you set):
    ```sh
-   scp RPMS/rawfish-ir-0.3.9-*.aarch64.rpm defaultuser@<phone-ip>:Downloads/
+   scp RPMS/rawfish-ir-all-in-one-0.3.9-*.aarch64.rpm defaultuser@<phone-ip>:Downloads/
    ```
 2. On the phone (Terminal app or `ssh defaultuser@<phone-ip>`), become root
    and install it:
    ```sh
    devel-su
    cd /home/defaultuser/Downloads
-   pkcon install-local -y rawfish-ir-0.3.9-*.rpm
+   pkcon install-local -y rawfish-ir-all-in-one-0.3.9-*.rpm
    ```
-   Over the former pair (rawfish-ir-cli + rawfish-ir-gui) it replaces both.
-   To update later, the same command with the new file; to remove:
-   `pkcon remove rawfish-ir`. The engine alone, for the command line:
-   `rawfish-ir-cli-only-*.rpm` instead (it removes rawfish-ir, and the
-   reverse).
+   Over the earlier names (`rawfish-ir` up to 0.3.9-50x, or the pair
+   rawfish-ir-cli + rawfish-ir-gui) it replaces them. To update later, the
+   same command with the new file; to remove:
+   `pkcon remove rawfish-ir-all-in-one`. The engine alone, for the command
+   line: `rawfish-ir-cli-only-*.rpm` instead (it removes
+   rawfish-ir-all-in-one, and the reverse). To go back to a build from
+   before the rename (a `rawfish-ir-0.3.9-…` file), remove
+   rawfish-ir-all-in-one first: rpm will not install the old name over it.
 3. RAWfish-ir appears in the app grid. The first launch creates
    `~/Pictures/RAWfish-ir/` for the photos and `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log`,
    the engine's log -- the first thing to look at if something is wrong.
@@ -188,7 +191,7 @@ and install it again (step 2.4). Reinstalling the whole SDK is rarely needed.
 On the phone, to start as a brand-new user:
 
 ```sh
-pkcon remove rawfish-ir
+pkcon remove rawfish-ir-all-in-one
 rm -rf ~/.config/com.rawfish ~/.cache/com.rawfish ~/.local/share/com.rawfish
 # your photos in ~/Pictures/RAWfish-ir/ are yours: keep or delete them
 ```
@@ -251,7 +254,7 @@ so `dconf reset -f /apps/rawfish-ir/` returns to a fresh install's state.
 ## Starting from scratch
 
 What a new user gets, to check a release: with the app closed, as root
-`pkcon remove rawfish-ir`, then as the user
+`pkcon remove rawfish-ir-all-in-one`, then as the user
 
 ```sh
 rm -rf ~/.local/share/com.rawfish/rawfish-ir ~/.config/com.rawfish/rawfish-ir ~/.cache/com.rawfish/rawfish-ir
@@ -262,7 +265,7 @@ dconf reset -f /apps/rawfish-ir/
 too; photos are not touched). The focus calibration and a lens-shading
 calibration of your own are measurements: keep a copy first if you have
 some (`tar czf ~/rawfish-ir-perso.tgz -C ~ .local/share/com.rawfish/rawfish-ir .config/com.rawfish/rawfish-ir`).
-Then install the package rawfish-ir: the first start asks Sailjail's permissions,
+Then install the package rawfish-ir-all-in-one: the first start asks Sailjail's permissions,
 uses the lens-shading calibration shipped for the phone, has no focus
 calibration (it is made by hand), and copies the commented example
 `override-hal.example.jsonc` into `~/.local/share/com.rawfish/rawfish-ir/device-profiles/`.

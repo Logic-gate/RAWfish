@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds the packages in one go -- the NDK library, then rpm/rawfish-ir.spec:
-# rawfish-ir (the app with its engine) and rawfish-ir-cli-only (the engine
+# rawfish-ir-all-in-one (the app with its engine) and rawfish-ir-cli-only (the engine
 # alone) -- and lists them. The one command a newcomer needs after the
 # one-time setup in docs/BUILDING.md:
 #   ANDROID_NDK_HOME=/path/to/ndk ./scripts/build-all.sh
@@ -51,7 +51,7 @@ if [ -n "$all" ]; then
     echo "Built for:$done_list (the sfdk target is back to ${previous:-unset})."
     echo "Packages:"
     for a in aarch64 armv7hl; do
-        ls -1t RPMS/rawfish-ir-[0-9]*."$a".rpm 2>/dev/null | head -1
+        ls -1t RPMS/rawfish-ir-all-in-one-*."$a".rpm 2>/dev/null | head -1
         ls -1t RPMS/rawfish-ir-cli-only-*."$a".rpm 2>/dev/null | head -1
     done
     exit 0
@@ -87,7 +87,7 @@ for bin in sailfish/rawfish-ir-cli app/rawfish-ir; do
         exit 1
     fi
 done
-all_pkg=$(ls -1t RPMS/rawfish-ir-[0-9]*."$arch".rpm 2>/dev/null | head -1)
+all_pkg=$(ls -1t RPMS/rawfish-ir-all-in-one-*."$arch".rpm 2>/dev/null | head -1)
 cli=$(ls -1t RPMS/rawfish-ir-cli-only-*."$arch".rpm 2>/dev/null | head -1)
 echo
 echo "The app with its engine (as root: pkcon install-local -y <it>):"

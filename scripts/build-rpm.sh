@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the two packages of rpm/rawfish-ir.spec: rawfish-ir (the app with its
+# Builds the two packages of rpm/rawfish-ir.spec: rawfish-ir-all-in-one (the app with its
 # engine) and rawfish-ir-cli-only (the engine alone). The Android library with
 # the NDK (on this PC), then the CLI, the app and the packaging in the Sailfish
 # SDK build engine (sfdk, at the top of the repository, where the spec is).
@@ -29,4 +29,4 @@ esac
 "$sfdk" build-init
 ./scripts/with-build-release.sh rpm/rawfish-ir.spec "$sfdk" -c no-fix-version build
 echo "rawfish-ir $ver:"
-ls -1t RPMS/rawfish-ir-[0-9]*.rpm RPMS/rawfish-ir-cli-only-*.rpm 2>/dev/null | head -4
+ls -1t RPMS/rawfish-ir-all-in-one-*.rpm RPMS/rawfish-ir-cli-only-*.rpm 2>/dev/null | head -4

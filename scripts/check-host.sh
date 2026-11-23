@@ -201,11 +201,18 @@ python3 -I "$root/scripts/qmlcheck.py" --self-test || exit 1
 python3 -I "$root/scripts/qmlcheck.py" $qml_files || { echo "qml: JavaScript newer than Qt 5.6 (see above)" >&2; exit 1; }
 echo "qml: no let / const / => / template strings (Qt 5.6: ES5) (OK)"
 # One version number for the packages and the library (RAWfish-ir 0.1.0+):
-# one spec since 0.3.9-486 (rawfish-ir + rawfish-ir-cli-only).
+# one spec since 0.3.9-486 (rawfish-ir-all-in-one + rawfish-ir-cli-only since 0.3.9-507).
 v_h=$(sed -n 's/^#define IR_VERSION "\(.*\)"/\1/p' "$root/rawfish-ir-version.h")
 v_spec=$(sed -n 's/^Version: *//p' "$root/rpm/rawfish-ir.spec")
 if [ "$v_h" = "$v_spec" ]; then echo "version: $v_h in rawfish-ir-version.h and the spec (OK)"
 else echo "version MISMATCH: rawfish-ir-version.h $v_h, rawfish-ir.spec $v_spec" >&2; exit 1; fi
+# The packages' names (0.3.9-507): no package plain "rawfish-ir" (a %files
+# section without -n would build one), and rawfish-ir-all-in-one replaces it.
+spec="$root/rpm/rawfish-ir.spec"
+if grep -q '^%files *$' "$spec"; then echo "rawfish-ir.spec: a plain %files section builds a package named rawfish-ir (use -n rawfish-ir-all-in-one)" >&2; exit 1; fi
+grep -q '^%package -n rawfish-ir-all-in-one$' "$spec" && grep -q '^Obsoletes: *rawfish-ir < ' "$spec" \
+    || { echo "rawfish-ir.spec: rawfish-ir-all-in-one must exist and obsolete rawfish-ir" >&2; exit 1; }
+echo "rawfish-ir.spec: packages rawfish-ir-all-in-one + rawfish-ir-cli-only (OK)"
 # The former two specs must not come back (the app and its engine built
 # apart could be installed at different versions).
 for old in "$root/rpm/rawfish-ir-cli.spec" "$root/app/rpm/rawfish-ir-gui.spec"; do

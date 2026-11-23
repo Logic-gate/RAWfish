@@ -15,6 +15,13 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-507 (patch 0507): the package with the app is named rawfish-ir-all-in-one
+  (the file: rawfish-ir-all-in-one-0.3.9-NNN.beta.aarch64.rpm), so that its
+  name says it holds everything, next to rawfish-ir-cli-only. Installed over
+  rawfish-ir (or the older pair rawfish-ir-cli + rawfish-ir-gui), it
+  replaces it, files and all; settings and photos are not touched. To
+  remove it: pkcon remove rawfish-ir-all-in-one. To go back to a build from
+  before the rename, remove it first.
 - The build 0.3.9-0504 (patch 0504): docs/DEVICE-PROFILES.md gives the way to
   enable the Xperia 10 III's three back cameras as Jolla's help article does
   (a line in the vendor camera settings, then the camera provider restarted).
