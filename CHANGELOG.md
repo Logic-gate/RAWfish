@@ -15,6 +15,9 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-0504 (patch 0504): docs/DEVICE-PROFILES.md gives the way to
+  enable the Xperia 10 III's three back cameras as Jolla's help article does
+  (a line in the vendor camera settings, then the camera provider restarted).
 - The build 0.3.9-0501 (patch 0501): the 35 mm-equivalent focal length (the focal button's "27mm", the
   Exif FocalLengthIn35mmFilm, the hand-held speed limit) is now worked out
   by the sensor's diagonal, as the standard has it, instead of its width:

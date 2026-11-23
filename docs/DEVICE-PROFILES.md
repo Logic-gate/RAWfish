@@ -327,12 +327,11 @@ profile ...)`); without either key, the HAL's list as before.
 The Xperia 10 III lists two cameras (0 main, 1 front) unless its three
 back cameras are enabled: `multiCameraEnable=TRUE` in
 `/vendor/etc/camera/camxoverridesettings.txt`, then the camera provider
-restarted (or a reboot). The simplest way is nephros's package
-x10iii-cam-button (https://github.com/nephros/x10iii-cam-button), which
-adds that switch to the Settings app; by hand, as root:
+restarted (or a reboot), as root (Jolla's help article:
+https://docs.sailfishos.org/Support/Help_Articles/Camera/#multiple-cameras-of-xperia-10-iii):
 
     sed -i 's/^multiCameraEnable=.*/multiCameraEnable=TRUE/' /vendor/etc/camera/camxoverridesettings.txt
-    pkill -f android.hardware.camera.provider@2.4-service_64
+    killall /vendor/bin/hw/android.hardware.camera.provider@2.4-service_64
 
 (FALSE to go back). It then lists seven: 0 main (27 mm), 1 front,
 2 ultra-wide (16 mm), 3 telephoto (54 mm), 4 to 6 logical. Its profile
