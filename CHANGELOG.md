@@ -21,6 +21,9 @@ repository). Newest first.
   device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...).
   The package is now rawfish-ir-all-in-one (rawfish-ir up to 0.3.9-50x):
   installed over the earlier one, it replaces it.
+- The interface's badge reads "ui 209" (patch 0519): it had stayed at 208
+  since 0.3.9 while the interface changed (the menu's peek at the start,
+  the busy dots, the black top band).
 - The build 0.3.9-513 (patch 0513): a review before the release: the frame-rate range
   of long exposures can no longer exceed a device profile's "fps_max" (a
   guard: no shipped phone is concerned); comments brought up to date (the
