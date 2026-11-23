@@ -3,8 +3,9 @@
  *
  * One page, as Jolla Camera: a horizontal strip (the switcher) holds the
  * gallery (GalleryView.qml) and, to its right, the camera. The camera,
- * portrait, top to bottom: the black notch band with two text buttons
- * either side of the cutout (zebra, peak / level, AE); the viewfinder, at
+ * portrait, top to bottom: the black top band with four text buttons
+ * (zebra, peak / level, AE; on a screen with a notch, two either side of
+ * the cutout, otherwise spread over the width); the viewfinder, at
  * the photo's proportions; the control deck (focal / type / focus cycle
  * buttons, the histogram and the shutter with the EV wheel and the fine
  * white balance, the speed and ISO wheels), scaled down on small screens.
@@ -158,17 +159,28 @@ ApplicationWindow {
             readonly property real deckMm: Screen.pixelDensity > 0 ? Screen.pixelDensity : 16
             readonly property real deckMinNormal: Theme.fontSizeTiny + Theme.paddingSmall + Theme.itemSizeSmall / 2
                 + (2 * Theme.itemSizeSmall + Theme.itemSizeLarge + 10 * deckMm + Theme.paddingMedium) / 0.66
-            // A screen with no cutout to work around: the band's four words
-            // (zebra, peak, level, AE) then lie over the top of the viewfinder,
-            // spread evenly, and the viewfinder starts at the top of the screen.
-            // The device profile says whether the screen has a notch (caps
-            // notch: 1 / 0); for a phone it does not know (-1), a guess from the
-            // screen's proportions: no notch up to 1.9:1 (the XA2's 16:9 has
-            // none, the JP2's tall screen has one).
+            // The top band (zebra, peak, level, AE) is black on every phone, in
+            // portrait: the viewfinder starts under it, and the deck below gets
+            // what is left (its scale, deckScale, counts the band's height).
+            // Up to 0.3.9-509, a screen with no notch (the XA2, the Xperia 10
+            // III) had the four words over the top of the image instead, with
+            // no background: hard to read on a bright scene.
+            // What a notch still changes is where the four buttons sit: a gap
+            // in the middle for the cutout (two buttons either side), or none
+            // (the four spread evenly over the width). The device profile says
+            // whether the screen has a notch (caps notch: 1 / 0); for a phone
+            // it does not know (-1), a guess from the screen's proportions: no
+            // notch up to 1.9:1 (the XA2's 16:9 has none, the JP2's tall
+            // screen has one).
             readonly property int screenNotch: viewfinder.caps.notch !== undefined ? viewfinder.caps.notch : -1
-            readonly property bool bandOverlay: portrait
-                && (screenNotch === 0 || (screenNotch !== 1 && screenLong / screenShort < 1.9))
-            readonly property real bandSpace: bandOverlay ? 0 : notchHeight
+            readonly property bool noCutout: screenNotch === 0 || (screenNotch !== 1 && screenLong / screenShort < 1.9)
+            // The height the band takes from the screen, for the viewfinder
+            // and the deck. The same in both orientations, as it always was
+            // on the JP2 (and in landscape on every phone): deckScale below is
+            // meant to be the same in portrait and landscape, so the deck does
+            // not change size when the phone turns. (In landscape the band
+            // itself is 0 high: its four buttons move into the deck.)
+            readonly property real bandSpace: notchHeight
             // A compact deck, when the photo at full width leaves less room than
             // the normal deck needs (the XA2; the JP2 in 4:3 has the room and
             // keeps its deck): a shorter histogram, tighter button rows, smaller
@@ -1338,20 +1350,18 @@ ApplicationWindow {
                         // black behind a viewfinder narrower than the screen
                         Rectangle { anchors.fill: parent; color: "black"; z: -1 }
 
-            // --- Notch band: two buttons left of the cutout, two right. ---
+            // --- Top band: zebra, peak (left), level, AE (right). Black, so the
+            //     words are always readable; the viewfinder starts under it. ---
             Rectangle {
                 id: notchBand
-                // Black above a notch; over the viewfinder (no notch), no
-                // background at all: just the four words on the image.
-                color: page.bandOverlay ? "transparent" : "black"
-                z: page.bandOverlay ? 5 : 0
+                color: "black"
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: page.portrait ? page.notchHeight : 0
                 // The empty centre for the cutout; none without a notch: the four
                 // words then spread evenly over the width.
-                property real notchGap: page.bandOverlay ? 0 : width * 0.40   // ui 164: 0.28 put peak and level at the JP2's notch edges
+                property real notchGap: page.noCutout ? 0 : width * 0.40   // ui 164: 0.28 put peak and level at the JP2's notch edges
 
                 Row {
                     anchors.left: parent.left
@@ -1418,7 +1428,7 @@ ApplicationWindow {
                 id: viewfinderZone
                 color: "black"
                 clip: true
-                anchors.top: page.bandOverlay ? parent.top : notchBand.bottom
+                anchors.top: notchBand.bottom              // under the black top band (portrait; 0 high in landscape)
                 anchors.horizontalCenter: page.portrait ? parent.horizontalCenter : undefined
                 // Landscape: image on the left, deck on the right -- and the
                 // other way round in inverted landscape (phone turned the other

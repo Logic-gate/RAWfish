@@ -841,7 +841,8 @@ and the full-size deck left too little height. Now:
 - bandOverlay (portrait, screen up to 1.9:1, a heuristic for "no notch"):
   zebra / peak / level / AE lie over the top of the viewfinder, the words
   alone with no background (ui 160), and the viewfinder starts at the top of
-  the screen;
+  the screen (removed in 0.3.9-510: see "A black top band on every screen"
+  below);
 - compactDeck (portrait, when the photo at full width leaves less room than
   the normal deck): the histogram takes 20 % of the deck's column instead
   of 34 %, the + / shutter / - rows are tighter, the left buttons' values
@@ -913,3 +914,16 @@ the pitch is straight; both turn green when both are; white otherwise.
 The engine's log (~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log) is rotated by
 the app before each engine start once it passes 2 MB: the previous .1 is
 removed and the log becomes it. Two files, 4 MB at most.
+
+## A black top band on every screen (0.3.9-510)
+
+The four words zebra / peak / level / AE lay over the top of the image on
+screens without a notch (bandOverlay, ui 159-160), hard to read over a
+bright scene. They now sit in a black band on every phone, as on the JP2:
+the viewfinder starts under it, and the deck's scale (deckScale) and its
+compact form (compactDeck) take the band's height into account, as they
+already did on the JP2. A notch only decides the buttons' places
+(noCutout: a gap of 40 % of the width for the cutout, or the four spread
+evenly). Landscape is unchanged (no band). The Xperia 10 III (21:9) has the
+room: its viewfinder moves down, its deck keeps its size in 4:3. The XA2
+(16:9) has little: its deck is scaled down a little more.

@@ -15,6 +15,12 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-510 (patch 0510): the top band (zebra, peak, level, AE) is black on
+  every phone, in portrait: on screens without a notch (the Xperia XA2 and
+  10 III) its four words lay over the top of the image, hard to read on a
+  bright scene. The viewfinder starts under the band, and the deck below is
+  scaled to what is left (on the XA2, a little smaller than before). The JP2
+  and landscape are unchanged.
 - The build 0.3.9-507 (patch 0507): the package with the app is named rawfish-ir-all-in-one
   (the file: rawfish-ir-all-in-one-0.3.9-NNN.beta.aarch64.rpm), so that its
   name says it holds everything, next to rawfish-ir-cli-only. Installed over
