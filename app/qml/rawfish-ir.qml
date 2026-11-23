@@ -2103,6 +2103,7 @@ ApplicationWindow {
             SettingsMenu {
                 id: settingsMenu
                 viewfinder: viewfinder
+                exclusiveStreams: page.exclusiveStreams     // halJpegNoise=auto: hq on the camera's JPEG
                 focusCalibrationMenu: deviceConf.focusCalibrationMenu
                 startMode: menuConf.startMode
                 showScenes: menuConf.showScenes

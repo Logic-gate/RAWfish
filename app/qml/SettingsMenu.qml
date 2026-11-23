@@ -82,6 +82,15 @@ Item {
     // Photo processing (the Noise / Sharpen columns): sent with each JPEG.
     property int noiseIndex: 1
     property int edgeIndex: 1
+    // halJpegNoise=auto (the default since 0.3.9-492): the camera's
+    // high-quality noise reduction where the session cannot hold our YUV
+    // stream ("streams": "exclusive", the Xperia 10 III), whose JPG is the
+    // camera's JPEG (off, it came out grainy at ISO 800, 23 Nov 2026); off
+    // everywhere else, as before (our JPG does its own). exclusiveStreams
+    // is set by the page.
+    property bool halNoiseAuto: true
+    property bool exclusiveStreams: false
+    readonly property string halNoise: halNoiseAuto ? (exclusiveStreams ? "hq_noise" : "off_noise") : noiseModes[noiseIndex]
     // Preview processing, separate: for judging framing, focus and exposure.
     // Default (0.3.8): the camera's high-quality noise reduction and
     // sharpening. Until then fast noise reduction and no sharpening, chosen
@@ -240,7 +249,9 @@ Item {
         snapSize = /^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$/.test(ss) ? ss : ""
         logChecks = pick("logChecks", "false", ["false", "true"]) === "true"
         zebraJpegMode = pick("zebraJpegMode", "luma", ["luma", "channel"])
-        noiseIndex = Math.max(0, noiseModes.indexOf(pick("halJpegNoise", "off", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
+        var hn = pick("halJpegNoise", "auto", ["auto", "default", "off", "fast", "hq", "minimal"])
+        halNoiseAuto = hn === "auto"
+        noiseIndex = halNoiseAuto ? 1 : Math.max(0, noiseModes.indexOf(hn + "_noise"))
         edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "hq", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
@@ -396,13 +407,13 @@ Item {
     function stepTint(d) { tint = Math.max(-100, Math.min(100, tint + d * fineTintStep)); save("tint", tint); applyShift() }
     // The noise and edge options a HAL JPEG / burst command carries.
     function photoProcessing() {
-        return " " + noiseModes[noiseIndex] + " " + edgeModes[edgeIndex]
+        return " " + halNoise + " " + edgeModes[edgeIndex]
     }
     // The same two modes as "noise=... edge=..." fields (the controller's "sh").
     // The HAL JPEG's processing, from rawfish-ir.conf (halJpegNoise,
     // halJpegSharpen); stacks, brackets and bursts use it too.
     function photoProcessingFields() {
-        return " noise=" + noiseModes[noiseIndex] + " edge=" + edgeModes[edgeIndex]
+        return " noise=" + halNoise + " edge=" + edgeModes[edgeIndex]
     }
     function applyLive() {
         if (!viewfinder || !viewfinder.running) return

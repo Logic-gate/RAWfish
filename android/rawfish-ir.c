@@ -84,6 +84,7 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "shading_build.h"       /* building one from flat-field captures     */
 #include "yuv.h"                 /* the preview's YUV -> RGB conversion       */
 #include "viewfield.h"           /* what a viewfinder frame shows of its crop (16:9 on 4:3) */
+#include "rawcheck.h"            /* a RAW16 frame the HAL left partly unwritten */
 
 static int g_screen_notch = -1;   /* the screen's top cutout, from the device profile (-1 unknown) */
 
@@ -4660,6 +4661,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     float a_focus = -1.0f;
     uint16_t *dng_px = NULL;                      /* contiguous copy for the DNG  */
     long chk_hist[3][64] = {{0}}; int chk_ok = 0;  /* the image's histogram, meter's bins (report) */
+    int unwritten = -1;                           /* rows the HAL left unwritten (rawcheck.h) */
     float *sh_gains = NULL;
     int sh_cols = 0, sh_rows = 0;
     a3_report_t a3 = { "skipped", -1, -1 };
@@ -4788,6 +4790,9 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
             n_px += 3 * w_px / 4 - w_px / 4;
         }
     }
+    /* A frame the HAL filled only in part (rawcheck.h): said in the reply
+     * ("damaged"), the photo still written as before. */
+    unwritten = raw_unwritten_rows(data, (size_t)stride, w_px, h_px, black);
     {   /* Meter vs photo: the same histogram as the RAW meter's (64 bins,
          * k_hist_edge, of (value - black) / (white - black)) on this image,
          * every 16th quad, by colour from the CFA; reported beside the
@@ -4897,6 +4902,8 @@ report:
            a_control, a_focus,
            res_ts == img_ts ? "true" : "false", (long long)exposure_ns, iso,
            n_px ? sum / n_px - black : -1.0, n_px ? 100.0 * n_clip / n_px : -1.0, frames_during);
+    if (raw_damaged(unwritten, h_px))
+        jw_add(&w, "\"damaged\":\"%d of %d rows unwritten\",", unwritten, h_px);
     if (chk_ok) {   /* meter vs photo (computed above, while the image was ours) */
         int c, i;
         jw_add(&w, "\"check\":{\"meter_hist\":\"");
@@ -5151,6 +5158,8 @@ static int indraw_stack_impl(const char *path, const char *datetime, int64_t fil
     double base_eff;                               /* frames of light in the result */
     double blk_sum[4] = { 0, 0, 0, 0 };            /* sum of every frame's black, per CFA phase */
     int blk_frames = 0;                            /* frames whose black was added  */
+    int n_damaged = 0;                             /* frames the HAL filled only in part (rawcheck.h) */
+    char dmg[48] = "";                             /* ,"damaged_frames":N for the reply, if any */
     double black = 64.0, peak = 0.0;
     float *sh_gains = NULL;
     int sh_cols = 0, sh_rows = 0;
@@ -5244,6 +5253,14 @@ static int indraw_stack_impl(const char *path, const char *datetime, int64_t fil
                 img = NULL;                      /* avoid a double free at done:  */
                 rc = fail(out, out_size, IR_ECAPTURE, "stack", "unexpected raw16 layout mid-burst", 0);
                 goto done;
+            }
+            {   /* a frame the HAL filled only in part: counted for the reply,
+                 * summed as before (rawcheck.h) */
+                ACameraMetadata_const_entry be;
+                double sb = 64.0;
+                if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_BLACK_LEVEL_PATTERN, &be) == ACAMERA_OK && be.count == 4)
+                    sb = (be.data.i32[0] + be.data.i32[1] + be.data.i32[2] + be.data.i32[3]) / 4.0;
+                if (raw_damaged(raw_unwritten_rows(data, (size_t)cs, w, h, sb), h)) ++n_damaged;
             }
             for (y = 0; y < h; ++y) {             /* sum into the 32-bit accumulator */
                 const uint16_t *src = (const uint16_t *)(data + (size_t)y * cs);
@@ -5369,15 +5386,16 @@ static int indraw_stack_impl(const char *path, const char *datetime, int64_t fil
         if (rc) { rc = fail(out, out_size, IR_EFILE, "dng", rc > 0 ? strerror(rc) : "bad dng params", rc); goto done; }
         t_written = now_ms();
         emit_written("dng", path);                     /* like any other photo       */
+        if (n_damaged) snprintf(dmg, sizeof dmg, ",\"damaged_frames\":%d", n_damaged);
         jw_init(&w_, out, out_size);
         jw_add(&w_, "{\"ok\":true,\"path\":");
         jw_str(&w_, path);                       /* JSON-escaped path            */
         jw_add(&w_, ",\"sidecar\":\"-\",\"size\":[%d,%d],\"bytes\":%lld,"
-                    "\"frames\":%d,\"sub_exposure_ns\":%lld,\"stk_denoise\":%d,"
+                    "\"frames\":%d%s,\"sub_exposure_ns\":%lld,\"stk_denoise\":%d,"
                     "\"film_exposure_ns\":%lld,\"iso\":%d,"
                     "\"equiv\":{\"brightness_ns\":%lld,\"noise_like_ns\":%lld},"
                     "\"saturated\":%s,\"ms\":{\"total\":%.1f}}",
-               w, h, (long long)w * h * 2, n, (long long)sub_ns, stk_denoise,
+               w, h, (long long)w * h * 2, n, dmg, (long long)sub_ns, stk_denoise,
                (long long)(base * sub_ns), g.r_iso,
                /* brightness equivalent: the film exposure (base frames) */
                (long long)(base * sub_ns),
@@ -5436,11 +5454,12 @@ static int indraw_stack_impl(const char *path, const char *datetime, int64_t fil
     jw_str(&w_, path);                           /* JSON-escaped path            */
     jw_add(&w_, ",\"sidecar\":");
     jw_str(&w_, side);                           /* escaped sidecar path         */
+    if (n_damaged) snprintf(dmg, sizeof dmg, ",\"damaged_frames\":%d", n_damaged);
     jw_add(&w_, ",\"size\":[%d,%d],"
-                "\"bytes\":%lld,\"frames\":%d,\"sub_exposure_ns\":%lld,\"stk_denoise\":%d,"
+                "\"bytes\":%lld,\"frames\":%d%s,\"sub_exposure_ns\":%lld,\"stk_denoise\":%d,"
                 "\"film_exposure_ns\":%lld,\"iso\":%d,\"peak_above_black\":%.0f,"
                 "\"saturated\":%s,\"ms\":{\"total\":%.1f}}",
-           w, h, (long long)w * h * 4, n, (long long)sub_ns, stk_denoise,
+           w, h, (long long)w * h * 4, n, dmg, (long long)sub_ns, stk_denoise,
            (long long)(base * sub_ns), g.r_iso, peak - black * n,
            n_sat ? "true" : "false", t_written - t0);
 

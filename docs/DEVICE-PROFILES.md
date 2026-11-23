@@ -299,6 +299,9 @@ cause can be looked for and a shipped profile written.
   rate (the Xperia 10 III: its templates ask 15-120 fps, and a "4032x3016"
   RAW held a 2016x1136 image; at 15-30 the sensor runs full size). The
   open's reply gives the range used (`"limits":{..."fps":[15,30]}`).
+  Whatever the cause, a RAW frame the HAL filled only in part (an eighth
+  of its rows or more never written) is said in the photo's reply:
+  `"damaged":"N of M rows unwritten"` (a stack: `"damaged_frames":N`).
 
 The shipped profile of the Xperia 10 III uses `"streams": "exclusive"` on
 both cameras, with its `_why` recording what was tested (and what ProCam

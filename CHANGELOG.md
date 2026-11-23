@@ -15,6 +15,16 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-492 (patch 0492): the camera's JPEG gets the camera's
+  high-quality noise reduction where it is the JPG (exclusive streams: the
+  Xperia 10 III), instead of none: without it the front camera's photos came
+  out grainy at ISO 800. rawfish-ir.conf's halJpegNoise has a new default,
+  auto: hq there, off everywhere else as before (the JP2 and the XA2 are
+  unchanged); an explicit value still applies everywhere. And a RAW frame
+  the HAL filled only in part (the 10 III's binned image in a full-size
+  buffer, black below) is now said: a DNG's reply carries "damaged":"N of M
+  rows unwritten" when an eighth of its rows or more were never written,
+  and a stack's reply "damaged_frames":N; the files are written as before.
 - The build 0.3.9-489 (patch 0489): the Xperia 10 III's photos at the
   sensor's full size: its HAL ran the sensor in a binned 2016x1136 mode
   (the templates ask 15-120 fps, a session key there), so the "4032x3016"

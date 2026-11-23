@@ -142,8 +142,10 @@ snapSize=
 ; Stacks, brackets and bursts use the HAL JPEG and its settings below. On a
 ; phone whose session cannot hold the YUV stream (exclusive streams), JPG is
 ; the HAL JPEG.
-; The HAL JPEG's noise reduction.               values: default, off, fast, hq, minimal   default off
-halJpegNoise=off
+; The HAL JPEG's noise reduction.               values: auto, default, off, fast, hq, minimal   default auto
+; auto: hq where the session cannot hold RAWfish-ir's YUV stream (exclusive
+; streams: the Xperia 10 III), whose JPG is the camera's JPEG; off elsewhere.
+halJpegNoise=auto
 ; The HAL JPEG's sharpening.                    values: default, off, fast, hq            default hq
 halJpegSharpen=hq
 ; The viewfinder's noise reduction (the HAL's).  values: default, off, fast, hq, minimal   default hq

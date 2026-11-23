@@ -244,6 +244,10 @@ gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-vf-test "$root/android/tests/v
 run_test /tmp/indraw-vf-test
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-ct-test "$root/android/tests/colortemp_test.c" -lm
 run_test /tmp/indraw-ct-test
+# A RAW16 frame the HAL filled only in part (android/rawcheck.h): the Xperia
+# 10 III's binned image in a full-size buffer told from a whole, dark frame.
+gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-rawcheck-test "$root/android/tests/rawcheck_test.c"
+run_test /tmp/indraw-rawcheck-test
 
 # The measured lens-shading calibration (android/shading.h, pure C): the
 # JP2's own file, parsing, interpolation, dosing.
