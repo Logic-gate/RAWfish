@@ -274,7 +274,8 @@ prints what it applied. Field reference for the generated file:
 
 Some ports' camera drivers accept the full combination of streams the app
 asks for (JPEG at its largest size + viewfinder + RAW) and then die at the
-first frame (the Xperia 10 III: the RAW stream kills it; JPEG alone works).
+first frame (the Xperia 10 III, until its profile got `"fps_max"`: the RAW
+stream killed it in the binned sensor mode; JPEG alone worked).
 Two keys in a camera's `overrides` limit what is asked:
 
 - `"raw_stream": false` -- no RAW stream for this camera (the app behaves
@@ -303,9 +304,10 @@ cause can be looked for and a shipped profile written.
   of its rows or more never written) is said in the photo's reply:
   `"damaged":"N of M rows unwritten"` (a stack: `"damaged_frames":N`).
 
-The shipped profile of the Xperia 10 III uses `"streams": "exclusive"` on
-both cameras, with its `_why` recording what was tested (and what ProCam
-showed); nothing to write on that phone.
+The shipped profile of the Xperia 10 III used `"streams": "exclusive"` on
+both cameras until 0.3.9-495: the driver's deaths came from the binned
+sensor mode, and `"fps_max": 30` alone now lets it take every stream (its
+`_why` records what was tested); nothing to write on that phone.
 
 `rawfish-ir-cli streamtest ID` finds which combinations the camera survives
 (five opens, a few seconds each, the last one RAW + viewfinder without JPEG;

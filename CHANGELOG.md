@@ -15,6 +15,13 @@ repository). Newest first.
   sensor); RAW and Σ are not yet tried there.
 
 ## 0.3.9 (beta) — the first publication since 0.2.4 (patch 0430)
+- The build 0.3.9-0495 (patch 0495): the Xperia 10 III's JPG is RAWfish-ir's
+  own (our JPEG, denoised and sharpened as on the other phones) instead of
+  the camera's JPEG, and RAW, JPG and snap share one session again (no
+  reopening when the type changes; a DNG with each JPG works). Its profile
+  drops "streams": "exclusive": the driver deaths it worked around came
+  from the binned sensor mode, gone since "fps_max": 30 (0.3.9-489); every
+  stream combination now works on both cameras.
 - The build 0.3.9-492 (patch 0492): the camera's JPEG gets the camera's
   high-quality noise reduction where it is the JPG (exclusive streams: the
   Xperia 10 III), instead of none: without it the front camera's photos came

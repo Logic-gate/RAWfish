@@ -84,8 +84,8 @@ Item {
     property int edgeIndex: 1
     // halJpegNoise=auto (the default since 0.3.9-492): the camera's
     // high-quality noise reduction where the session cannot hold our YUV
-    // stream ("streams": "exclusive", the Xperia 10 III), whose JPG is the
-    // camera's JPEG (off, it came out grainy at ISO 800, 23 Nov 2026); off
+    // stream (a device profile's "streams": "exclusive"), whose JPG is the
+    // camera's JPEG (off, the 10 III's came out grainy at ISO 800, 23 Nov 2026); off
     // everywhere else, as before (our JPG does its own). exclusiveStreams
     // is set by the page.
     property bool halNoiseAuto: true
