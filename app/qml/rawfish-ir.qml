@@ -231,8 +231,8 @@ ApplicationWindow {
             readonly property bool ownJpeg: !page.exclusiveStreams && !viewfinder.yuvFellBack
             // The session holds only the streams the type and the settings need
             // (every stream costs the HAL): RAW for raw; our YUV for jpg, with
-            // RAW too when a DNG is asked with it, and the JPEG one when a
-            // bracket needs it; the JPEG one for haljpg (or jpg without YUV).
+            // RAW too when a DNG is asked with it; the JPEG one instead of our
+            // YUV for a bracket; the JPEG one for haljpg (or jpg without YUV).
             readonly property string sessionStreams: {
                 // What the engine opens beside the viewfinder (streams=):
                 //  - RAW in every session where the camera has it: the white-
@@ -240,8 +240,13 @@ ApplicationWindow {
                 //    without RAW: the pick measures on the viewfinder instead);
                 //  - jpg, raw and snap share ONE session (our YUV stream + RAW),
                 //    so TYPE never restarts the engine (snap is our YUV, binned
-                //    finer); a bracket adds the camera's JPEG stream (brackets
-                //    are HAL JPEGs: one restart when it is chosen, a rare case);
+                //    finer); a bracket in jpg takes the camera's JPEG stream IN
+                //    PLACE of our YUV (brackets are HAL JPEGs, the YUV would not
+                //    be used: one restart when it is chosen, a rare case). It
+                //    used to be added beside the YUV, four streams with the
+                //    viewfinder, which the Xperia XA2's camera refuses (log of
+                //    24 Nov 2026: the session failed twice, then our JPG fell
+                //    back to the camera's until the next camera change);
                 //  - where our YUV is not possible (exclusive streams, or a
                 //    session that refused it): the camera's JPEG stream, at the
                 //    snap size for snap (see jpegOverride).
@@ -257,9 +262,8 @@ ApplicationWindow {
                 // of 13 Nov 2026).
                 var raw = ",raw"
                 if (!page.ownJpeg) return "jpeg" + raw
-                var s = "yuv" + raw                                   // jpg and raw alike
-                if (page.imageType === "jpg" && settingsMenu.effBracket !== "off") s += ",jpeg"
-                return s
+                if (page.imageType === "jpg" && settingsMenu.effBracket !== "off") return "jpeg" + raw   // a bracket: the camera's JPEGs
+                return "yuv" + raw                                    // jpg and raw alike
             }
             onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
             Component.onCompleted: viewfinder.sessionStreams = sessionStreams
@@ -1131,11 +1135,33 @@ ApplicationWindow {
             // The HAL's camera ids, remembered from the first caps line (a
             // restart on another camera reports the same list), with their
             // facings; and the last back camera, to return to from the front.
+            // The list is also kept in rawfish-ir.conf (knownCameras,
+            // knownFacing): when no session has opened yet (a camera that
+            // refuses its streams), a switch takes the list of an earlier
+            // start instead of guessing ids. It guessed "0","1","2" and went
+            // to a camera the Xperia XA2 does not have ("unknown camera id",
+            // log of 24 Nov 2026).
             property var cameraIds: []
             property var cameraFacing: []
             property string lastBackCamera: ""
+            function loadKnownCameras() {
+                if (page.cameraIds.length > 0) return
+                var ids = String(viewfinder.setting("knownCameras", "")).trim()
+                var fc = String(viewfinder.setting("knownFacing", "")).trim()
+                if (ids === "") return
+                page.cameraIds = ids.split(" ")
+                page.cameraFacing = fc !== "" ? fc.split(" ") : []
+            }
+            function saveKnownCameras() {
+                var ids = page.cameraIds.join(" "), fc = page.cameraFacing.join(" ")
+                if (String(viewfinder.setting("knownCameras", "")) !== ids) viewfinder.setSetting("knownCameras", ids)
+                if (String(viewfinder.setting("knownFacing", "")) !== fc) viewfinder.setSetting("knownFacing", fc)
+            }
             function switchCamera(longPress) {
-                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1","2"]
+                page.loadKnownCameras()
+                // no list at all (the first start, before any session opened):
+                // the back and the front camera, the two every phone has
+                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1"]
                 var fc = page.cameraFacing
                 if (fc.length !== ids.length) {                       // no facings: cycle all
                     viewfinder.cameraId = ids[(ids.indexOf(viewfinder.cameraId)+1) % ids.length]
@@ -1163,6 +1189,7 @@ ApplicationWindow {
                     if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0) {
                         page.cameraIds = viewfinder.caps.cameras
                         page.cameraFacing = viewfinder.caps.facing ? viewfinder.caps.facing : []
+                        page.saveKnownCameras()
                     }
                     page.applyAidThresholds()
                     if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()

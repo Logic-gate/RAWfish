@@ -15,6 +15,18 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- A bracket in JPG opens on the Xperia XA2, and the camera button no
+  longer goes to a camera that is not there (patch 0529; log of 24 Nov
+  2026). A bracket asked the camera for its JPEG stream beside our YUV and
+  the RAW, four streams with the viewfinder, which the XA2's camera
+  refuses: the engine failed twice, then our JPG fell back to the camera's
+  until the next camera change. A bracket now takes the camera's JPEG in
+  place of our YUV (it never used the YUV: a bracket's photos are the
+  camera's JPEGs), three streams as for the camera's JPG; the JP2's
+  brackets are the same photos. And while no session had opened, the
+  camera button guessed the ids 0, 1, 2 and went to a camera 2 the XA2
+  does not have; it now takes the list the last session gave (kept in
+  rawfish-ir.conf, knownCameras and knownFacing), or 0 and 1 before any.
 - The img_transport branch is now main (patch 0528). Its work since 0.3.9
   comes in, listed below with that branch's patch numbers: the viewfinder
   without copies (the camera's buffers drawn by the GPU as they are; any

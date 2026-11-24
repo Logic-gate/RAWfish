@@ -36,6 +36,11 @@ captureSize=
 ; Internal: 1 once the 12.5 MP default (0.3.1) has been applied over a size
 ; stored by an earlier version's default. Not to edit.
 sizeDefaultApplied=0
+; Internal: the camera ids and their sides (back, front), as the last session
+; listed them, for the camera button when no session has opened yet. Not to
+; edit (rewritten at each start).
+knownCameras=
+knownFacing=
 ; JPEG quality (JPG and HAL JPG).
 ;                                 values: 20, 40, 60, 80, 90, 95, 100   default 95
 jpegQuality=95
