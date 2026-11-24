@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QTransform>
 #include <signal.h>
+#include <sys/stat.h>
 #include <QSettings>
 #include <QRegularExpression>
 static QString settingsPath();   /* defined with the settings code below */
@@ -251,6 +252,12 @@ void IndrawPreview::start()
             QFile::rename(log, log + QStringLiteral(".1"));
         }
     }
+    /* A memory card may have been put in or taken out since the folders
+     * were set: checked again at every engine start (the gallery follows). */
+    {
+        const QString oldNote = m_storageNote;
+        if (resolveFolders() || m_storageNote != oldNote) emit outputChanged();
+    }
     /* The output folders exist before the first photo, so the gallery's
      * folder models watch existing directories from the start. */
     QDir().mkpath(m_jpgDir);
@@ -397,12 +404,59 @@ static QString settingsPath()
     QDir().mkpath(dir);
     return dir + QStringLiteral("/rawfish-ir.conf");
 }
-/* Output settings, from dconf through the QML (ConfigurationGroup). A folder
- * outside ~/Pictures would make every sandboxed write fail: it is accepted
- * (a developer may run unsandboxed), but an empty or relative value and a
- * prefix outside the engine's safe charset fall back to the defaults. An
- * empty prefix is a choice (files named by the date alone): kept as is,
- * sent to the engine as its "no prefix" NAME (capturePrefix). */
+/* The memory card a folder lies on: "/run/media/<user>/<card>" for a folder
+ * at or below it (where the system mounts memory cards and USB drives),
+ * "" for any other folder. */
+static QString cardRoot(const QString &folder)
+{
+    static const QString media = QStringLiteral("/run/media/");
+    if (!folder.startsWith(media)) return QString();
+    const QStringList parts = folder.mid(media.size()).split(QLatin1Char('/'), QString::SkipEmptyParts);
+    if (parts.size() < 2) return QString();      /* /run/media/<user> itself: no card named */
+    return media + parts.at(0) + QLatin1Char('/') + parts.at(1);
+}
+
+/* True when a file system is mounted on `root`: it exists, is a folder, and
+ * lies on another device than its parent folder. (When a card is taken out
+ * the system removes its folder; an empty folder left behind is on the
+ * parent's device, and writing there would fill the phone's /run, a small
+ * memory-backed file system, with photos lost at the next boot.) */
+static bool isMountPoint(const QString &root)
+{
+    struct stat s, p;
+    const QByteArray r = QFile::encodeName(root), up = QFile::encodeName(QFileInfo(root).absolutePath());
+    if (stat(r.constData(), &s) != 0 || !S_ISDIR(s.st_mode)) return false;
+    if (stat(up.constData(), &p) != 0) return false;
+    return s.st_dev != p.st_dev;
+}
+
+bool IndrawPreview::resolveFolders()
+{
+    const QString def = QDir::homePath() + QStringLiteral("/Pictures/RAWfish-ir");
+    QStringList missing;
+    auto usable = [&](const QString &want) {
+        const QString root = cardRoot(want);
+        if (root.isEmpty() || isMountPoint(root)) return want;
+        if (!missing.contains(root)) missing << root;
+        return def;
+    };
+    const QString jp = usable(m_jpgWant), dn = usable(m_dngWant);
+    m_storageNote = missing.isEmpty() ? QString()
+        : QStringLiteral("storage: memory card %1 not mounted: saving to %2 instead").arg(missing.join(QStringLiteral(", ")), def);
+    const bool changed = jp != m_jpgDir || dn != m_dngDir;
+    m_jpgDir = jp; m_dngDir = dn;
+    return changed;
+}
+
+/* Output settings, from dconf through the QML (ConfigurationGroup). The
+ * folders the sandbox lets the app write to are ~/Pictures and, with the
+ * RemovableMedia permission, the memory cards under /run/media/<user>; any
+ * other folder is accepted (a developer may run unsandboxed), but an empty
+ * or relative value and a prefix outside the engine's safe charset fall back
+ * to the defaults. A folder on a memory card that is not mounted is replaced
+ * by the default one (resolveFolders). An empty prefix is a choice (files
+ * named by the date alone): kept as is, sent to the engine as its "no
+ * prefix" NAME (capturePrefix). */
 void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, const QString &dngDir)
 {
     const QString def = QDir::homePath() + QStringLiteral("/Pictures/RAWfish-ir");
@@ -416,11 +470,12 @@ void IndrawPreview::setOutput(const QString &prefix, const QString &jpgDir, cons
     /* The settings page's rule: not starting with '-' ("-" alone is the
      * engine's "measure only", no file). */
     static const QRegularExpression safe(QStringLiteral("^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$"));
-    const QString jp = folder(jpgDir), dn = folder(dngDir);
     const QString pf = prefix.isEmpty() || safe.match(prefix).hasMatch() ? prefix : QStringLiteral("photo");
-    if (jp == m_jpgDir && dn == m_dngDir && pf == m_prefix) return;
-    const bool dirsChanged = jp != m_jpgDir || dn != m_dngDir;
-    m_jpgDir = jp; m_dngDir = dn; m_prefix = pf;
+    m_jpgWant = folder(jpgDir); m_dngWant = folder(dngDir);
+    const QString oldNote = m_storageNote;
+    const bool dirsChanged = resolveFolders();
+    if (!dirsChanged && pf == m_prefix && m_storageNote == oldNote) return;
+    m_prefix = pf;
     QDir().mkpath(m_jpgDir);
     QDir().mkpath(m_dngDir);
     /* The DNG previews' hidden folder exists from the start: a folder model
@@ -929,6 +984,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
             sendCommand(QStringLiteral("# ") + s_archiveNote);
             s_archiveNote.clear();
         }
+        /* where the photos go when the memory card asked for is not there */
+        if (!m_storageNote.isEmpty()) sendCommand(QStringLiteral("# ") + m_storageNote);
         m_sizeFallback = false;
         m_yuvFails = 0;
         /* The streams or the JPEG size asked changed while this engine was

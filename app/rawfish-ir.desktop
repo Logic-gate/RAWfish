@@ -10,4 +10,4 @@ Comment[fr]=RAWfish-ir : appareil photo RAW et JPEG aux réglages manuels
 [X-Sailjail]
 OrganizationName=com.rawfish
 ApplicationName=rawfish-ir
-Permissions=Camera;Pictures;MediaIndexing
+Permissions=Camera;Pictures;RemovableMedia;MediaIndexing

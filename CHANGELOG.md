@@ -21,6 +21,16 @@ repository). Newest first.
   device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...).
   The package is now rawfish-ir-all-in-one (rawfish-ir up to 0.3.9-50x):
   installed over the earlier one, it replaces it.
+- Photos on the memory card (patch 0524): Settings > Apps > RAWfish-ir has
+  a "Storage" choice, the phone's memory or a memory card (as listed by the
+  system, with its free space), which moves the JPEG and DNG folders to
+  Pictures/RAWfish-ir there; the two folder fields also take a folder on a
+  card. The app declares Sailjail's RemovableMedia permission (asked once,
+  at the first start). A card that is not mounted when the camera starts
+  is not written to (an empty folder left behind would hold the photos in
+  the phone's memory-backed /run, lost at the next boot): the photos go to
+  ~/Pictures/RAWfish-ir, the log says so, and the gallery shows that folder;
+  the card is used again at the next start once it is back.
 - The white balance on our JPG (patch 0520): the white balance reaches our JPG: the menu's
   white (a preset, the warmth and tint steps, a measured or carried white)
   was written into the viewfinder's and the HAL JPEG's

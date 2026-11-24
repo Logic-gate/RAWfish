@@ -4,7 +4,7 @@
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="+68"/>
+        <location filename="../settings/SettingsPage.qml" line="+103"/>
         <source>Captures</source>
         <translation>Photos</translation>
     </message>
@@ -16,24 +16,20 @@
     <message>
         <location line="+5"/>
         <source>Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added when two photos fall in the same second, and always for a bracket or a burst.</source>
-        <translation>Lettres, chiffres, - et _ (32 au plus ; pas de - au début). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS.EXT, ou AAAAMMJJ_HHMMSS.EXT si le champ est vide ; les millisecondes (_mmm) s'ajoutent si deux photos tombent dans la même seconde, et toujours pour un bracketing ou une rafale.</translation>
+        <translation>Lettres, chiffres, - et _ (32 au plus ; pas de - au début). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS.EXT, ou AAAAMMJJ_HHMMSS.EXT si le champ est vide ; les millisecondes (_mmm) s&apos;ajoutent si deux photos tombent dans la même seconde, et toujours pour un bracketing ou une rafale.</translation>
     </message>
     <message>
+        <location line="-4"/>
         <source>No prefix</source>
         <translation>Aucun préfixe</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+79"/>
         <source>JPEG folder</source>
         <translation>Dossier des JPEG</translation>
     </message>
     <message>
-        <location line="+5"/>
-        <source>Under ~/Pictures (the only place the app may write).</source>
-        <translation>Dans ~/Pictures (le seul endroit où l&apos;app peut écrire).</translation>
-    </message>
-    <message>
-        <location line="+12"/>
+        <location line="+17"/>
         <source>DNG folder</source>
         <translation>Dossier des DNG</translation>
     </message>
@@ -155,7 +151,7 @@
         <translation>Ombrage de l&apos;objectif (vignetage)</translation>
     </message>
     <message>
-        <location line="-103"/>
+        <location line="-166"/>
         <source>Also save a DNG with each JPG</source>
         <translation>Enregistrer aussi un DNG avec chaque JPG</translation>
     </message>
@@ -165,7 +161,42 @@
         <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Ne fonctionne pas avec le JPEG de l&apos;appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
     </message>
     <message>
-        <location line="+68"/>
+        <location line="+29"/>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Moves both folders below to Pictures/RAWfish-ir on the phone or on the memory card. If the card is not there when the camera starts, photos go to the phone&apos;s ~/Pictures/RAWfish-ir.</source>
+        <translation>Place les deux dossiers ci-dessous dans Pictures/RAWfish-ir, sur le téléphone ou sur la carte mémoire. Si la carte n&apos;est pas là au démarrage de l&apos;appareil photo, les photos vont dans ~/Pictures/RAWfish-ir du téléphone.</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Phone memory</source>
+        <translation>Mémoire du téléphone</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Memory card not inserted</source>
+        <translation>Carte mémoire absente</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Memory card (%1 free)</source>
+        <translation>Carte mémoire (%1 libres)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Memory card not mounted</source>
+        <translation>Carte mémoire non montée</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Under ~/Pictures or on the memory card (/run/media/…), the only places the app may write.</source>
+        <translation>Dans ~/Pictures ou sur la carte mémoire (/run/media/…), les seuls endroits où l&apos;app peut écrire.</translation>
+    </message>
+    <message>
+        <location line="+38"/>
         <source>JPG processing in the camera menu</source>
         <translation>Traitement du JPG dans le menu</translation>
     </message>

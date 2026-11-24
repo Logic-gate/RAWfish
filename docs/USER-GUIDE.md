@@ -266,8 +266,9 @@ Press both volume keys at once: the screen is saved to
 | Setting | Meaning |
 |---|---|
 | File name prefix | the start of every file name (`photo` by default): letters, digits, `-`, `_`, not starting with `-`. Empty: no prefix, the files are named by the date alone (`YYYYMMDD_HHMMSS.jpg`). The milliseconds (`_mmm`) are added when two photos fall in the same second, and always for the photos of a bracket or a burst (x3) |
-| JPEG folder, DNG folder | where the pictures go; under `~/Pictures` (the only place the app may write) |
-| Reset to defaults | the three above |
+| Storage | the phone's memory or a memory card: moves both folders below to `Pictures/RAWfish-ir` there. If the card is not mounted when the camera starts, the photos go to `~/Pictures/RAWfish-ir` (the log says so) and back to the card once it is there again |
+| JPEG folder, DNG folder | where the pictures go; under `~/Pictures` or on a memory card (`/run/media/<user>/<card>/...`), the only places the app may write |
+| Reset to defaults | the prefix and the two folders (back to the phone's memory) |
 | Scenes in the camera menu (not yet implemented) | shows the Scene column in the menu (off by default) |
 | Start in manual focus and exposure | at start, manual focus at the last distance and both wheels pinned at the last ISO and speed (advanced mode; off by default) |
 | Mode at start | simple, advanced, or as left (the last mode used) |

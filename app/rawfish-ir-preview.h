@@ -122,10 +122,16 @@ class IndrawPreview : public QQuickItem
     /* Where captures go and how they are named: set by the QML from dconf
      * (/apps/rawfish-ir/output, edited in the system Settings app) through
      * setOutput(); absolute folders, "~/" for HOME; defaults
-     * ~/Pictures/RAWfish-ir and "photo". Used at every engine start. */
+     * ~/Pictures/RAWfish-ir and "photo". Used at every engine start.
+     * A folder on a memory card (/run/media/<user>/<card>/...) is used only
+     * while that card is mounted; otherwise the default folder takes its
+     * place (storageNote says so, and the log). */
     Q_PROPERTY(QString jpgDir READ jpgDir NOTIFY outputChanged)
     Q_PROPERTY(QString dngDir READ dngDir NOTIFY outputChanged)
     Q_PROPERTY(QString capturePrefix READ capturePrefix NOTIFY outputChanged)
+    /* "" when the folders in use are the ones asked for; otherwise why not
+     * (a memory card not mounted), in English, for the log. */
+    Q_PROPERTY(QString storageNote READ storageNote NOTIFY outputChanged)
     /* True between the stack command and its stack_done: the engine is kept
      * running through inactivity (screen off) until the stack ends. */
     Q_PROPERTY(bool stacking READ stacking NOTIFY stackingChanged)
@@ -256,6 +262,7 @@ public:
     bool processing() const { return m_processing; }
     QString jpgDir() const;
     QString dngDir() const;
+    QString storageNote() const { return m_storageNote; }
     QString capturePrefix() const;
 
     QVariantMap caps() const;
@@ -472,6 +479,12 @@ private:
     QTimer *m_procTimer = nullptr; /* ends "processing": quiet after the file, or the 45 s cap */
     void setProcessing(bool on) { if (on != m_processing) { m_processing = on; emit processingChanged(); } }
     QString m_jpgDir, m_dngDir, m_prefix;   /* output settings in force         */
+    QString m_jpgWant, m_dngWant;  /* the folders asked for (setOutput), before the card check */
+    QString m_storageNote;         /* see storageNote                            */
+    /* m_jpgDir / m_dngDir from m_jpgWant / m_dngWant: each asked folder, or
+     * the default one when it is on a memory card that is not mounted now.
+     * Sets m_storageNote. True when either folder changed. */
+    bool resolveFolders();
     bool m_stopWanted = false;     /* setActive(false) arrived during a stack   */
     qint64 m_lastRestartMs = 0;
 
