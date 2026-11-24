@@ -288,6 +288,8 @@ static void find_shift(const uint8_t *ya, const uint8_t *yb, int w, int h, int *
  * 12.5 MP frame. */
 static int g_pick_sharpest = 1;
 void yuv_set_pick_sharpest(int on) { g_pick_sharpest = on ? 1 : 0; }
+static int g_merge_method = YUV_MERGE_CLASSIC;
+void yuv_set_merge_method(int method) { g_merge_method = method == YUV_MERGE_TILES ? YUV_MERGE_TILES : YUV_MERGE_CLASSIC; }
 static double sharpness(const uint8_t *y, int w, int h, double noise2)
 {
     const int st = g_scale;
@@ -305,6 +307,197 @@ static double sharpness(const uint8_t *y, int w, int h, double noise2)
     return s > 0 ? s : 0;
 }
 
+/* The tile merge (YUV_MERGE_TILES, 0453): the frame is cut into tiles of
+ * 64 pixels (128 on an enlarged 50 MP frame) and each is aligned on its
+ * own around the global shift: hand-held, a frame also turns a little and
+ * the lens does not move every part of the image alike, so one shift fits
+ * the middle and leaves the corners a few pixels off (and refused by the
+ * merge: they kept the grain of one frame). Each tile is searched first on
+ * the luminance reduced 4 times (8 at scale 2) within +-4 steps, then down
+ * a pyramid (halved each time) within +-1 at each level to full size; a tile with too little detail to tell
+ * (sky, a wall: its gradient on the reduced frame under 3 times the
+ * grain's there) keeps the global
+ * shift, and so does one whose best match is not clearly better than the
+ * global shift's (2 %): the grain alone must not move a tile. A 3x3 median
+ * of the tiles' shifts then removes a stray one. Between tile centres the
+ * shift is interpolated, then rounded to whole pixels for each pixel: no
+ * seam at the tiles' edges, and no resampling blur. The merge after it is
+ * the classic one, its rejection of what moved included. */
+typedef struct { int T, tw, th; float *dy, *dx; int *xi; float *xt; } field_t;   /* xi, xt: each column's tile pair and weight */
+/* one row's shifts, interpolated from the tile rows around it */
+static void field_row(const field_t *f, int y, float *rdy, float *rdx)
+{
+    float fy = (y + 0.5f) / f->T - 0.5f, t;
+    int t0 = (int)floorf(fy), t1, i;
+    if (t0 < 0) { t0 = 0; fy = 0; }
+    if (t0 >= f->th - 1) { t0 = f->th - 1; fy = (float)t0; }
+    t1 = t0 + 1 < f->th ? t0 + 1 : t0; t = fy - t0;
+    for (i = 0; i < f->tw; ++i) {
+        rdy[i] = f->dy[t0 * f->tw + i] * (1 - t) + f->dy[t1 * f->tw + i] * t;
+        rdx[i] = f->dx[t0 * f->tw + i] * (1 - t) + f->dx[t1 * f->tw + i] * t;
+    }
+}
+/* the pixel's whole shift, from its row's shifts (+1024: a fast floor) */
+static inline void field_px(const field_t *f, const float *rdy, const float *rdx, int x, int *dy, int *dx)
+{
+    const int i0 = f->xi[x], i1 = i0 + 1 < f->tw ? i0 + 1 : i0;
+    const float t = f->xt[x];
+    *dy = (int)(rdy[i0] + (rdy[i1] - rdy[i0]) * t + 1024.5f) - 1024;
+    *dx = (int)(rdx[i0] + (rdx[i1] - rdx[i0]) * t + 1024.5f) - 1024;
+}
+#define FIELD_TW_MAX 512
+#define PYR_MAX 4                                 /* levels: full size, /2, /4, /8 */
+typedef struct {
+    const uint8_t *a[PYR_MAX], *b[PYR_MAX]; int pw[PYR_MAX], ph[PYR_MAX], L;   /* L: the coarsest level (D = 2^L) */
+    int gdy, gdx; float noise2;
+    field_t *f; int *moved;
+} tiles_ctx_t;
+static double tile_sad(const uint8_t *a, const uint8_t *b, int w, int h, int x0, int y0, int x1, int y1, int dy, int dx, int step)
+{
+    /* the part of the tile whose match is inside the frame, then no test per pixel */
+    long s = 0, cnt = 0; int x, y;
+    if (y0 < dy) y0 += ((dy - y0 + step - 1) / step) * step;
+    if (x0 < dx) x0 += ((dx - x0 + step - 1) / step) * step;
+    if (y1 > h + dy) y1 = h + dy;
+    if (x1 > w + dx) x1 = w + dx;
+    for (y = y0; y < y1; y += step) {
+        const uint8_t *ra = a + (size_t)y * w, *rb = b + (size_t)(y - dy) * w - dx;
+        for (x = x0; x < x1; x += step) {
+            int d = ra[x] - rb[x];
+            d = d < 0 ? -d : d;
+            s += d > 24 ? 24 : d;
+        }
+        cnt += x1 > x0 ? (x1 - x0 + step - 1) / step : 0;
+    }
+    return cnt > 16 ? (double)s / cnt : 1e9;
+}
+static void tiles_rows(void *p, int r0, int r1)
+{
+    tiles_ctx_t *c = p; field_t *f = c->f; int ty, tx, moved = 0;
+    const int T = f->T, L = c->L, D = 1 << L, st = g_scale;   /* full-size samples: every pixel (every 2 at scale 2) */
+    const int w = c->pw[0], h = c->ph[0], wc = c->pw[L], hc = c->ph[L];
+    const uint8_t *ac = c->a[L];
+    for (ty = 0; ty < f->th; ++ty) {
+        if (ty * 16 < r0 || ty * 16 >= r1) continue;          /* this thread's tile rows */
+        for (tx = 0; tx < f->tw; ++tx) {
+            int x0 = tx * T, y0 = ty * T, x1 = x0 + T < w ? x0 + T : w, y1 = y0 + T < h ? y0 + T : h;
+            int i, j, by, bx, xx, yy, lv;
+            double g = 0, best, s, sg; long cnt = 0;
+            f->dy[ty * f->tw + tx] = (float)c->gdy; f->dx[ty * f->tw + tx] = (float)c->gdx;
+            /* Enough detail to align on? The gradient on the reduced frame,
+             * where the grain is averaged down D x D times (at full size the
+             * grain of a high ISO drowned a fine texture), against what the
+             * grain alone gives there (4 sigma^2 / D^2). */
+            {
+                int a0 = x0 / D, b0 = y0 / D, a1 = x1 / D, b1 = y1 / D;
+                for (yy = b0; yy + 1 < b1 && yy + 1 < hc; ++yy)
+                    for (xx = a0; xx + 1 < a1 && xx + 1 < wc; ++xx) {
+                        int gx = ac[(size_t)yy * wc + xx + 1] - ac[(size_t)yy * wc + xx];
+                        int gy = ac[(size_t)(yy + 1) * wc + xx] - ac[(size_t)yy * wc + xx];
+                        g += gx * gx + gy * gy; cnt++;
+                    }
+            }
+            if (!cnt || g / cnt < 3.0 * c->noise2 / (D * D) + 1.0) continue;   /* + 1: the 8-bit rounding */
+            /* coarse: +-4 steps around the global shift, on the frames reduced D times */
+            by = (int)floorf((float)c->gdy / D + 0.5f); bx = (int)floorf((float)c->gdx / D + 0.5f);
+            {
+                int cy = by, cx = bx;
+                best = 1e18;
+                for (j = cy - 4; j <= cy + 4; ++j)
+                    for (i = cx - 4; i <= cx + 4; ++i) {
+                        s = tile_sad(ac, c->b[L], wc, hc, x0 / D, y0 / D, x1 / D, y1 / D, j, i, 1);
+                        if (s < best) { best = s; by = j; bx = i; }
+                    }
+            }
+            /* then down the pyramid, +-1 at each level, to full size */
+            for (lv = L - 1; lv >= 0; --lv) {
+                const int f2 = 1 << lv, step = lv == 0 ? st : 1;
+                int cy = by * 2, cx = bx * 2;
+                best = 1e18;
+                for (j = cy - 1; j <= cy + 1; ++j)
+                    for (i = cx - 1; i <= cx + 1; ++i) {
+                        s = tile_sad(c->a[lv], c->b[lv], c->pw[lv], c->ph[lv], x0 / f2, y0 / f2, x1 / f2, y1 / f2, j, i, step);
+                        if (s < best) { best = s; by = j; bx = i; }
+                    }
+            }
+            /* kept only if clearly better than the global shift's own score */
+            sg = tile_sad(c->a[0], c->b[0], w, h, x0, y0, x1, y1, c->gdy, c->gdx, st);
+            if (best < sg * 0.98 && (by != c->gdy || bx != c->gdx)) {
+                f->dy[ty * f->tw + tx] = (float)by; f->dx[ty * f->tw + tx] = (float)bx; moved++;
+            }
+        }
+    }
+    { static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER; pthread_mutex_lock(&mu); *c->moved += moved; pthread_mutex_unlock(&mu); }
+}
+static float median9(float *v)
+{
+    int i, j;
+    for (i = 1; i < 9; ++i) { float t = v[i]; for (j = i; j > 0 && v[j - 1] > t; --j) v[j] = v[j - 1]; v[j] = t; }
+    return v[4];
+}
+/* A pyramid: level 0 the plane itself, each next one halved (2x2 means). */
+typedef struct { uint8_t *lv[PYR_MAX]; int w[PYR_MAX], h[PYR_MAX], n; } pyr_t;
+static int pyr_build(const uint8_t *y, int w, int h, int levels, pyr_t *p)
+{
+    int l;
+    memset(p, 0, sizeof *p);
+    p->lv[0] = (uint8_t *)y; p->w[0] = w; p->h[0] = h; p->n = levels;
+    for (l = 1; l < levels; ++l) {
+        p->lv[l] = malloc((size_t)(p->w[l - 1] / 2) * (p->h[l - 1] / 2) + 16);
+        if (!p->lv[l]) return -1;
+        downsample(p->lv[l - 1], p->w[l - 1], p->h[l - 1], 2, p->lv[l], &p->w[l], &p->h[l]);
+    }
+    return 0;
+}
+static void pyr_free(pyr_t *p) { int l; for (l = 1; l < PYR_MAX; ++l) { free(p->lv[l]); p->lv[l] = NULL; } }
+
+/* Builds the frame's tile field around its global shift; returns -1 on no
+ * memory (the caller then merges with the global shift alone). */
+static int build_field(const pyr_t *ra, const uint8_t *b, int gdy, int gdx, float sigma, field_t *f, float *moved_pct)
+{
+    tiles_ctx_t c;
+    const int w = ra->w[0], h = ra->h[0];
+    int moved = 0, k, i, j, di, dj, l;
+    pyr_t pb;
+    float *my, *mx;
+    f->T = 64 * g_scale; f->tw = (w + f->T - 1) / f->T; f->th = (h + f->T - 1) / f->T;
+    if (f->tw > FIELD_TW_MAX) return -1;
+    if (pyr_build(b, w, h, ra->n, &pb)) { pyr_free(&pb); return -1; }
+    f->dy = malloc(sizeof(float) * (size_t)f->tw * f->th); f->dx = malloc(sizeof(float) * (size_t)f->tw * f->th);
+    f->xi = malloc(sizeof(int) * (size_t)w); f->xt = malloc(sizeof(float) * (size_t)w);
+    my = malloc(sizeof(float) * (size_t)f->tw * f->th); mx = malloc(sizeof(float) * (size_t)f->tw * f->th);
+    if (!f->dy || !f->dx || !f->xi || !f->xt || !my || !mx) {
+        pyr_free(&pb); free(f->dy); free(f->dx); free(f->xi); free(f->xt); free(my); free(mx);
+        f->dy = f->dx = f->xt = NULL; f->xi = NULL; return -1;
+    }
+    for (i = 0; i < w; ++i) {                         /* each column: the tile centres around it */
+        float fx = (i + 0.5f) / f->T - 0.5f;
+        int i0 = (int)floorf(fx);
+        if (i0 < 0) { i0 = 0; fx = 0; }
+        if (i0 >= f->tw - 1) { i0 = f->tw - 1; fx = (float)i0; }
+        f->xi[i] = i0; f->xt[i] = fx - i0;
+    }
+    for (l = 0; l < ra->n; ++l) { c.a[l] = ra->lv[l]; c.b[l] = pb.lv[l]; c.pw[l] = ra->w[l]; c.ph[l] = ra->h[l]; }
+    c.L = ra->n - 1; c.gdy = gdy; c.gdx = gdx; c.noise2 = 4.0f * sigma * sigma; c.f = f; c.moved = &moved;
+    parallel_rows(tiles_rows, &c, f->th * 16);
+    pyr_free(&pb);
+    for (j = 0; j < f->th; ++j)                       /* 3x3 median: a stray tile follows its neighbours */
+        for (i = 0; i < f->tw; ++i) {
+            float vy[9], vx[9]; int n = 0;
+            for (dj = -1; dj <= 1; ++dj) for (di = -1; di <= 1; ++di) {
+                int jj = j + dj < 0 ? 0 : j + dj >= f->th ? f->th - 1 : j + dj;
+                int ii = i + di < 0 ? 0 : i + di >= f->tw ? f->tw - 1 : i + di;
+                vy[n] = f->dy[jj * f->tw + ii]; vx[n] = f->dx[jj * f->tw + ii]; n++;
+            }
+            my[j * f->tw + i] = median9(vy); mx[j * f->tw + i] = median9(vx);
+        }
+    k = f->tw * f->th;
+    memcpy(f->dy, my, sizeof(float) * (size_t)k); memcpy(f->dx, mx, sizeof(float) * (size_t)k);
+    free(my); free(mx);
+    *moved_pct = (float)(100.0 * moved / k);
+    return 0;
+}
+
 /* Merging the frames: each other frame is shifted onto the reference, then
  * added where its luminance differs from the reference by no more than the
  * noise allows (a soft threshold on the local mean difference); where it
@@ -315,14 +508,18 @@ typedef struct {
     float *ay, *au, *av, *wy, *wc;              /* accumulators (Y, U, V) and weights (luma, chroma) */
     const float *d;                             /* local mean |diff| (box 7x7) at full res */
     float T; double merged;                     /* sum of weights, for the share */
+    const field_t *field;                       /* the tile merge's shifts (NULL: dy, dx for all) */
 } merge_ctx_t;
 static void merge_rows(void *p, int y0, int y1)
 {
     merge_ctx_t *c = p; int w = c->w, h = c->h, x, y; double m = 0;
+    float rdy[FIELD_TW_MAX], rdx[FIELD_TW_MAX];
     for (y = y0; y < y1; ++y) {
         int sy = y - c->dy;
+        if (c->field) field_row(c->field, y, rdy, rdx);
         for (x = 0; x < w; ++x) {
             int sx = x - c->dx; float wgt;
+            if (c->field) { int fdy, fdx; field_px(c->field, rdy, rdx, x, &fdy, &fdx); sy = y - fdy; sx = x - fdx; }
             if (sy < 0 || sy >= h || sx < 0 || sx >= w) continue;
             { float dd = c->d[(size_t)y * w + x]; wgt = c->T > 0 ? (2 * c->T - dd) / c->T : (dd <= 0 ? 1.0f : 0.0f); wgt = wgt < 0 ? 0 : wgt > 1 ? 1 : wgt; }
             c->ay[(size_t)y * w + x] += wgt * c->f->y[(size_t)sy * w + sx];
@@ -353,14 +550,17 @@ static float diff_median(const float *d, size_t np)
     /* the integer bin k holds [k-0.5, k+0.5): its middle, at least half a level */
     return k > 0 ? (float)k : 0.5f;
 }
-typedef struct { const uint8_t *a, *b; int dy, dx, w, h; float *d; } diff_ctx_t;
+typedef struct { const uint8_t *a, *b; int dy, dx, w, h; float *d; const field_t *field; } diff_ctx_t;
 static void diff_rows(void *p, int y0, int y1)
 {
     diff_ctx_t *c = p; int x, y;
+    float rdy[FIELD_TW_MAX], rdx[FIELD_TW_MAX];
     for (y = y0; y < y1; ++y) {
         int sy = y - c->dy;
+        if (c->field) field_row(c->field, y, rdy, rdx);
         for (x = 0; x < c->w; ++x) {
             int sx = x - c->dx;
+            if (c->field) { int fdy, fdx; field_px(c->field, rdy, rdx, x, &fdy, &fdx); sy = y - fdy; sx = x - fdx; }
             c->d[(size_t)y * c->w + x] = (sy < 0 || sy >= c->h || sx < 0 || sx >= c->w) ? 1e6f
                 : (float)abs((int)c->a[(size_t)y * c->w + x] - (int)c->b[(size_t)sy * c->w + sx]);
         }
@@ -375,13 +575,14 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
     size_t np = (size_t)w * h, nc = (size_t)(w / 2) * (h / 2);
     double t0;
     memset(rep, 0, sizeof *rep);
-    if (n < 1 || n > 4 || !ref->y) return -1;
+    if (n < 1 || n > YUV_MERGE_MAX || !ref->y) return -1;
+    rep->method = g_merge_method;
     /* The reference: the sharpest frame. Another frame replaces the first
      * only when it is clearly sharper (by 3 %): between frames alike, the
      * scores differ by their grain alone, and the first, the nearest to the
      * press, stays. */
     if (n > 1 && g_pick_sharpest) {
-        double sc[4];
+        double sc[YUV_MERGE_MAX];
         int m = 0;                                      /* the sharpest */
         t0 = now_ms();
         float sg = luma_sigma(frames[0].y, w, h);       /* the burst's grain (the same ISO for all) */
@@ -409,16 +610,26 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
         float *wy = calloc(np, sizeof *wy), *wc = calloc(nc, sizeof *wc), *d = malloc(np * sizeof *d), *db = malloc(np * sizeof *db);
         size_t i;
         if (!ay || !au || !av || !wy || !wc || !d || !db) { free(ay); free(au); free(av); free(wy); free(wc); free(d); free(db); free(out->y); free(out->u); free(out->v); out->y = out->u = out->v = NULL; return -1; }
+        pyr_t rpyr;                                 /* the tile merge: the reference's pyramid, once */
+        int have_pyr = 0;
+        memset(&rpyr, 0, sizeof rpyr);
+        if (g_merge_method == YUV_MERGE_TILES) {
+            have_pyr = pyr_build(ref->y, w, h, g_scale == 2 ? 4 : 3, &rpyr) == 0;   /* coarse at /4 (/8 at scale 2) */
+            if (!have_pyr) pyr_free(&rpyr);
+        }
         for (i = 0; i < np; ++i) { ay[i] = ref->y[i]; wy[i] = 1; }
         for (i = 0; i < nc; ++i) { au[i] = ref->u[i]; av[i] = ref->v[i]; wc[i] = 1; }
         for (k = 0; k < n; ++k) {
-            merge_ctx_t mc; diff_ctx_t dc;
+            merge_ctx_t mc; diff_ctx_t dc; field_t fld; int have_field = 0;
             if (k == r) continue;                       /* the reference is already in */
             t0 = now_ms();
             find_shift(ref->y, frames[k].y, w, h, &rep->shift_dy[k], &rep->shift_dx[k]);
+            if (have_pyr) have_field = build_field(&rpyr, frames[k].y, rep->shift_dy[k], rep->shift_dx[k],
+                                                   rep->sigma, &fld, &rep->tiles_moved_pct[k]) == 0;
             rep->ms_align += now_ms() - t0;
             t0 = now_ms();
             dc.a = ref->y; dc.b = frames[k].y; dc.dy = rep->shift_dy[k]; dc.dx = rep->shift_dx[k]; dc.w = w; dc.h = h; dc.d = d;
+            dc.field = have_field ? &fld : NULL;
             parallel_rows(diff_rows, &dc, h);
             if (first_pair) {                           /* the reference and the first frame merged onto it */
                 first_pair = 0;
@@ -453,7 +664,9 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
             mc.ref = ref; mc.f = &frames[k]; mc.dy = dc.dy; mc.dx = dc.dx; mc.w = w; mc.h = h;
             mc.ay = ay; mc.au = au; mc.av = av; mc.wy = wy; mc.wc = wc; mc.d = db;
             mc.T = 2.5f * rep->sigma_merge * 1.4142f * 0.8f; mc.merged = 0;
+            mc.field = dc.field;
             parallel_rows(merge_rows, &mc, h);
+            if (have_field) { free(fld.dy); free(fld.dx); free(fld.xi); free(fld.xt); }
             rep->merged_pct[k] = (float)(100.0 * mc.merged / (double)np);
             rep->ms_merge += now_ms() - t0;
         }
@@ -463,7 +676,7 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
             out->u[i] = (uint8_t)(ou < 0 ? 0 : ou > 255 ? 255 : ou + 0.5f);
             out->v[i] = (uint8_t)(ov < 0 ? 0 : ov > 255 ? 255 : ov + 0.5f);
         }
-        free(ay); free(au); free(av); free(wy); free(wc); free(d); free(db);
+        free(ay); free(au); free(av); free(wy); free(wc); free(d); free(db); pyr_free(&rpyr);
     }
     if (median > 0 || colour > 0) {
         t0 = now_ms();

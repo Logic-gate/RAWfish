@@ -268,8 +268,8 @@ Like RAWfish in look (columns of round buttons, header naming the pressed
 value, a band wider than the screen with a position bar). Columns, left to
 right: Mode (simple/advanced), Timer, Format, Resolution, Quality, White
 balance, Warmth, Tint, Noise and Sharpening (photos), Vf noise and Vf sharpen
-(the viewfinder's own processing, optional from the Settings app), Bracket (off; x3 = a burst at one
-exposure; +/-1..3 stops), Flash (off/auto/on/torch, when the camera has one),
+(the viewfinder's own processing, optional from the Settings app), Bracket (off; x3 / x5 / x7 = a burst
+at one exposure; +/-1..3 stops), Flash (off/auto/on/torch, when the camera has one),
 Grid, Σ denoise (stacks), AF wait, Focus cal. (when enabled in the Settings app;
 two taps), Peak, Zebra, Scenes (grouped modes; they grey the atomic controls
 they drive). The full list with explanations: docs/USER-GUIDE.md.
@@ -431,6 +431,9 @@ the file is written.
 One stdout stream carries two packet types, told apart by a 4-byte magic and
 serialised by an output lock (like RAWfish's SF2P/SF2M):
 - **SF2P**: preview image frames (16-byte header + RGB888).
+- **SF2Y** (0.3.11): the same frames as I420 (16-byte header + Y, U, V), asked
+  with "vf yuv" once the first SF2P frame arrives, converted by a shader in
+  the item (three luminance textures, reused).
 - **SF2M**: metadata/events, one text line (8-byte header + text). The base for
   all live data the UI needs (captured now; iso/shutter, AE, histogram... later).
 Commands go to the engine's stdin; real errors stay on stderr; JSON reports go to
@@ -841,7 +844,7 @@ and the full-size deck left too little height. Now:
 - bandOverlay (portrait, screen up to 1.9:1, a heuristic for "no notch"):
   zebra / peak / level / AE lie over the top of the viewfinder, the words
   alone with no background (ui 160), and the viewfinder starts at the top of
-  the screen (removed in 0.3.9-510: see "A black top band on every screen"
+  the screen (removed in 0.3.9-511: see "A black top band on every screen"
   below);
 - compactDeck (portrait, when the photo at full width leaves less room than
   the normal deck): the histogram takes 20 % of the deck's column instead
@@ -915,7 +918,7 @@ The engine's log (~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log) is rotated by
 the app before each engine start once it passes 2 MB: the previous .1 is
 removed and the log becomes it. Two files, 4 MB at most.
 
-## A black top band on every screen (0.3.9-510)
+## A black top band on every screen (0.3.9-511)
 
 The four words zebra / peak / level / AE lay over the top of the image on
 screens without a notch (bandOverlay, ui 159-160), hard to read over a

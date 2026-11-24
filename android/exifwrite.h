@@ -15,6 +15,9 @@
 typedef struct {
     const char *make, *model, *software;   /* ASCII, may be NULL              */
     const char *datetime;                  /* "YYYY:MM:DD HH:MM:SS"           */
+    const char *description;               /* ASCII, may be NULL: written as ImageDescription,
+                                            * UserComment and an XMP dc:description (the
+                                            * fields viewers show; 400 characters at most) */
     int64_t exposure_ns;                   /* <= 0: not written                */
     int iso;                               /* <= 0: not written                */
     float focal_mm;                        /* <= 0: not written                */
@@ -32,8 +35,9 @@ typedef struct {
 
 /* Writes `jpeg` (len bytes, starting FF D8) to `path` with one Exif APP1:
  * the HAL's merged with ours (ours wins on the tags it carries), rewritten
- * little-endian with fresh offsets. Sub-IFDs we do not rewrite (GPS,
- * Interoperability) are dropped rather than left dangling; a maker note is
+ * little-endian with fresh offsets, then, with a description, an XMP APP1
+ * carrying it (for our JPEGs from YUV, which have none of their own). Sub-IFDs
+ * we do not rewrite (GPS, Interoperability) are dropped rather than left dangling; a maker note is
  * copied as bytes. Returns 0 or an errno value. `info->orientation` 0 lets
  * the HAL's tag through unchanged. */
 int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exif_info_t *info);

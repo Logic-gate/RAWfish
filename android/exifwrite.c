@@ -35,6 +35,7 @@ static void ent_undef4(entry_t *e, uint16_t tag, const char *four) { e->tag = ta
 
 static void ent_short(entry_t *e, uint16_t tag, uint16_t v) { e->tag = tag; e->type = T_SHORT; e->count = 1; memset(e->inl, 0, 4); e->inl[0] = v & 0xFF; e->inl[1] = v >> 8; e->ext = NULL; e->extlen = 0; }
 static void ent_long(entry_t *e, uint16_t tag, uint32_t v) { e->tag = tag; e->type = T_LONG; e->count = 1; set32(e->inl, v); e->ext = NULL; e->extlen = 0; }
+static void ent_undef(entry_t *e, uint16_t tag, const void *d, uint32_t n) { e->tag = tag; e->type = T_UNDEFINED; e->count = n; memset(e->inl, 0, 4); if (n <= 4) { memcpy(e->inl, d, n); e->ext = NULL; e->extlen = 0; } else { e->ext = d; e->extlen = n; } }
 static void ent_ascii(entry_t *e, uint16_t tag, const char *s) { e->tag = tag; e->type = T_ASCII; e->count = (uint32_t)strlen(s) + 1; memset(e->inl, 0, 4); if (e->count <= 4) { memcpy(e->inl, s, e->count); e->ext = NULL; e->extlen = 0; } else { e->ext = s; e->extlen = e->count; } }
 static void ent_rational(entry_t *e, uint16_t tag, uint32_t num, uint32_t den, uint8_t *scratch) { e->tag = tag; e->type = T_RATIONAL; e->count = 1; set32(scratch, num); set32(scratch + 4, den); e->ext = scratch; e->extlen = 8; memset(e->inl, 0, 4); }
 
@@ -84,8 +85,8 @@ static int merge_entry(entry_t *list, int n, int cap, const entry_t *ours)
 
 /* --- the HAL's APP1, read into entries whose data we own (little-endian) --- */
 #define HAL_MAX 64                        /* entries per IFD we keep */
-#define OURS_IFD0 8                       /* our IFD0 tags at most   */
-#define OURS_EXIF 16                      /* our Exif tags at most   */
+#define OURS_IFD0 9                       /* our IFD0 tags at most   */
+#define OURS_EXIF 17                      /* our Exif tags at most   */
 typedef struct {
     int le;                               /* its byte order            */
     const uint8_t *t; size_t tl;          /* its TIFF                  */
@@ -254,7 +255,8 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
     int n0 = 0, ne = 0, orient, rc = 0, have_hal = 0, k;
     size_t tiff0, ifd0_at, exif_at, ifd1_at = 0, thumb_at = 0, skip_from, skip_len = 0, insert_at = 2, i;
     uint32_t num, den;
-    char tmp[64];
+    char tmp[64], desc[401], ucom[8 + 400], *xmp = NULL;
+    size_t xmp_len = 0;
     hal_t hal;
     FILE *f;
 
@@ -292,6 +294,17 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
     if (orient)         { ent_short(&ours, 0x0112, (uint16_t)orient); n0 = merge_entry(ifd0, n0, HAL_MAX + OURS_IFD0, &ours); }
     else n0 = drop_entry(ifd0, n0, 0x0112);          /* the HAL's tag is 0 or absent: an invalid 0 is not kept */
     if (info->software) { ent_ascii(&ours, 0x0131, info->software); n0 = merge_entry(ifd0, n0, HAL_MAX + OURS_IFD0, &ours); }
+    desc[0] = '\0';
+    if (info->description && info->description[0]) {
+        /* ImageDescription (IFD0), UserComment (Exif, "ASCII" code then the
+         * text, no terminator), the XMP below: the three places viewers read */
+        size_t dl;
+        snprintf(desc, sizeof desc, "%s", info->description);
+        dl = strlen(desc);
+        ent_ascii(&ours, 0x010E, desc); n0 = merge_entry(ifd0, n0, HAL_MAX + OURS_IFD0, &ours);
+        memcpy(ucom, "ASCII\0\0\0", 8); memcpy(ucom + 8, desc, dl);
+        ent_undef(&ours, 0x9286, ucom, (uint32_t)(8 + dl)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);
+    }
     if (info->datetime) { ent_ascii(&ours, 0x0132, info->datetime); n0 = merge_entry(ifd0, n0, HAL_MAX + OURS_IFD0, &ours); }
     ent_long(&ours, 0x8769, 0); n0 = merge_entry(ifd0, n0, HAL_MAX + OURS_IFD0, &ours);   /* patched below */
     /* The APEX values (ShutterSpeedValue, ApertureValue, MaxApertureValue)
@@ -347,6 +360,28 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
         put(&b, hal.thumb, hal.thumb_len);
     }
     if (b.over || b.n + 4 > APP1_MAX) { rc = EOVERFLOW; goto out; }   /* any put() that did not fit */
+    if (desc[0]) {                                   /* the XMP APP1: dc:description, the text escaped */
+        static const char ns[] = "http://ns.adobe.com/xap/1.0/";
+        static const char head[] = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>"
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
+            "<rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+            "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">";
+        static const char tail[] = "</rdf:li></rdf:Alt></dc:description></rdf:Description></rdf:RDF></x:xmpmeta>"
+            "<?xpacket end=\"w\"?>";
+        size_t cap = 4 + sizeof ns + sizeof head + sizeof tail + 6 * strlen(desc), n = 4;
+        const char *c;
+        xmp = malloc(cap);
+        if (!xmp) { rc = ENOMEM; goto out; }
+        memcpy(xmp + n, ns, sizeof ns); n += sizeof ns;            /* with its terminator */
+        memcpy(xmp + n, head, sizeof head - 1); n += sizeof head - 1;
+        for (c = desc; *c; ++c) {
+            const char *e = *c == '&' ? "&amp;" : *c == '<' ? "&lt;" : *c == '>' ? "&gt;" : NULL;
+            if (e) { memcpy(xmp + n, e, strlen(e)); n += strlen(e); } else xmp[n++] = *c;
+        }
+        memcpy(xmp + n, tail, sizeof tail - 1); n += sizeof tail - 1;
+        xmp[0] = (char)0xFF; xmp[1] = (char)0xE1; xmp[2] = (char)(((n - 2) >> 8) & 0xFF); xmp[3] = (char)((n - 2) & 0xFF);
+        xmp_len = n;
+    }
 
     /* --- write: [SOI (+ APP0)], our APP1, the rest minus the HAL's APP1 --- */
     {
@@ -360,6 +395,7 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
         f = fopen(part, "wb");
         if (!f) { rc = errno ? errno : EIO; goto out; }
         if (fwrite(jpeg, 1, a, f) != a || fwrite(hdr, 1, 4, f) != 4 || fwrite(b.p, 1, b.n, f) != b.n ||
+            (xmp_len && fwrite(xmp, 1, xmp_len, f) != xmp_len) ||
             (s1 > a && fwrite(jpeg + a, 1, s1 - a, f) != s1 - a) ||
             fwrite(jpeg + s2, 1, len - s2, f) != len - s2) {
             rc = errno ? errno : EIO; fclose(f); unlink(part); goto out;
@@ -370,6 +406,7 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
 out:
     if (info->hal_dropped) *info->hal_dropped = hal.dropped;
     free(app1);
+    free(xmp);
     hal_free(&hal);
     return rc;
 }

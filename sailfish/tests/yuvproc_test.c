@@ -32,6 +32,30 @@ static ir_yuv_t make(int w, int h, int dy, int dx, int sqx, float sigma, unsigne
     }
     return f;
 }
+/* The same scene turned by `deg` degrees about the centre and shifted (a
+ * hand-held frame); sigma 0: the clean scene, the truth to compare with. */
+static ir_yuv_t make_rot(int w, int h, float deg, int dy, int dx, float sigma, unsigned seed)
+{
+    ir_yuv_t f; memset(&f, 0, sizeof f); f.w = w; f.h = h;
+    f.y = malloc((size_t)w * h); f.u = malloc((size_t)w / 2 * (h / 2)); f.v = malloc((size_t)w / 2 * (h / 2));
+    float a = deg * 3.14159265f / 180.0f, ca = cosf(a), sa = sinf(a);
+    for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+        float px = x - w / 2.0f - dx, py = y - h / 2.0f - dy;
+        int sx = (int)floorf(ca * px + sa * py + w / 2.0f + 0.5f), sy = (int)floorf(-sa * px + ca * py + h / 2.0f + 0.5f);
+        unsigned tex = (unsigned)((sx >> 3) * 2654435761u) ^ (unsigned)((sy >> 3) * 40503u);
+        float base = 60 + 120.0f * sx / w + 10 * sinf(sy * 0.05f) + (float)((tex >> 8) % 41) - 20;
+        float v = base + (sigma > 0 ? sigma * gauss(&seed) : 0);
+        f.y[(size_t)y * w + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+    }
+    for (int i = 0; i < w / 2 * (h / 2); ++i) { f.u[i] = 128; f.v[i] = 128; }
+    return f;
+}
+static double err_in(const uint8_t *p, const uint8_t *q, int w, int x0, int y0, int x1, int y1)   /* mean |p - q| in a box */
+{
+    double s = 0; long n = 0;
+    for (int y = y0; y < y1; ++y) for (int x = x0; x < x1; ++x) { s += abs((int)p[(size_t)y * w + x] - (int)q[(size_t)y * w + x]); n++; }
+    return s / n;
+}
 static float noise_in(const uint8_t *p, int w, int x0, int y0, int x1, int y1)   /* high-pass std in a box */
 {
     double s = 0, s2 = 0; long n = 0;
@@ -59,6 +83,69 @@ int main(void)
      * reference (another must be 3 % sharper to replace it). */
     CHECK(rep.ref == 0, "frames alike: the first stays the reference (sharpness %.0f %.0f %.0f %.0f %%)",
           rep.sharp_pct[0], rep.sharp_pct[1], rep.sharp_pct[2], rep.sharp_pct[3]);
+    {   /* 8 frames (YUV_MERGE_MAX), the method reported; the tile method
+         * (0445: still the classic merge) gives the same image. 9 frames refused. */
+        ir_yuv_t e[YUV_MERGE_MAX + 1], o8, ot; yuv_denoise_report_t r8, rt;
+        int k, same = 1; size_t i;
+        for (k = 0; k <= YUV_MERGE_MAX; ++k) e[k] = make(W, H, (k * 3) % 7 - 3, (k * 5) % 9 - 4, 500 + 20 * k, SIG, 40 + k);
+        yuv_set_merge_method(YUV_MERGE_CLASSIC);
+        CHECK(yuv_denoise(e, 8, 0, 0, &o8, &r8) == 0 && r8.method == YUV_MERGE_CLASSIC, "merge of 8 frames runs (%.0f ms merge)", r8.ms_merge);
+        float n8 = noise_in(o8.y, W, 100, 100, 400, 250);
+        /* the box's measure has a floor (the scene's 8-px texture): 8 frames
+         * below 4, not the full sqrt(2) */
+        CHECK(n8 < n4 * 0.95f, "flat area noise %.2f -> %.2f with 8 frames (4 frames: %.2f)", n1, n8, n4);
+        CHECK(r8.merged_pct[7] > 85, "the 8th frame merged (%.0f%%)", r8.merged_pct[7]);
+        yuv_set_merge_method(YUV_MERGE_TILES);
+        CHECK(yuv_denoise(e, 8, 0, 0, &ot, &rt) == 0 && rt.method == YUV_MERGE_TILES, "tile method reported");
+        for (i = 0; i < (size_t)W * H; ++i) if (ot.y[i] != o8.y[i]) { same = 0; break; }
+        CHECK(same, "tile method, frames only shifted: the classic merge's image (every tile keeps the global shift)");
+        yuv_set_merge_method(YUV_MERGE_CLASSIC);
+        CHECK(yuv_denoise(e, YUV_MERGE_MAX + 1, 0, 0, &ot, &rt) != 0, "9 frames refused");
+        for (k = 0; k <= YUV_MERGE_MAX; ++k) { free(e[k].y); free(e[k].u); free(e[k].v); }
+        free(o8.y); free(o8.u); free(o8.v); free(ot.y); free(ot.u); free(ot.v);
+    }
+    {   /* Hand-held frames turn a little (0.4 to 0.8 degrees: 3 to 7 pixels
+         * at the corners): the classic merge's one shift fits the middle and
+         * leaves the corners off, refused or blurred; the tiles align them.
+         * Against the clean scene, in a corner and in the middle. */
+        ir_yuv_t rf[4], clean = make_rot(W, H, 0, 0, 0, 0, 1), oc, ot;
+        yuv_denoise_report_t rc, rt;
+        const float deg[4] = { 0, 0.5f, -0.4f, 0.8f };
+        int k;
+        for (k = 0; k < 4; ++k) rf[k] = make_rot(W, H, deg[k], k, -k, SIG, 70 + k);
+        yuv_set_pick_sharpest(0);
+        yuv_set_merge_method(YUV_MERGE_CLASSIC);
+        CHECK(yuv_denoise(rf, 4, 0, 0, &oc, &rc) == 0, "turned frames, classic merge (%.0f ms align, %.0f ms merge)", rc.ms_align, rc.ms_merge);
+        yuv_set_merge_method(YUV_MERGE_TILES);
+        CHECK(yuv_denoise(rf, 4, 0, 0, &ot, &rt) == 0, "turned frames, tile merge (%.0f ms align, %.0f ms merge)", rt.ms_align, rt.ms_merge);
+        yuv_set_merge_method(YUV_MERGE_CLASSIC);
+        yuv_set_pick_sharpest(1);
+        double e1 = err_in(rf[0].y, clean.y, W, 40, 40, 240, 200);
+        double ec = err_in(oc.y, clean.y, W, 40, 40, 240, 200), et = err_in(ot.y, clean.y, W, 40, 40, 240, 200);
+        double mc = err_in(oc.y, clean.y, W, 412, 284, 612, 484), mt = err_in(ot.y, clean.y, W, 412, 284, 612, 484);
+        CHECK(et < ec * 0.85, "corner: error %.2f one frame, %.2f classic, %.2f tiles (tiles below classic)", e1, ec, et);
+        CHECK(mt < mc * 1.05, "middle: error %.2f classic, %.2f tiles (no worse)", mc, mt);
+        /* (the classic merge's share is high too: its misaligned corners are
+         * blurred in rather than refused, on this soft texture -- the error
+         * above is what tells) */
+        CHECK(rt.merged_pct[3] >= rc.merged_pct[3], "frame 4 (0.8 degrees) merged %.0f%% classic, %.0f%% tiles", rc.merged_pct[3], rt.merged_pct[3]);
+        CHECK(rt.tiles_moved_pct[3] > 20 && rt.tiles_moved_pct[1] > 5, "tiles moved apart from the global shift: %.0f%% %.0f%% %.0f%%",
+              rt.tiles_moved_pct[1], rt.tiles_moved_pct[2], rt.tiles_moved_pct[3]);
+        /* scale 2 (an enlarged 50 MP frame: tiles of 128, a pyramid of 4
+         * levels): runs clean, and still no worse than classic in the corner */
+        {
+            ir_yuv_t o2; yuv_denoise_report_t r2;
+            yuv_set_detail_scale(2); yuv_set_merge_method(YUV_MERGE_TILES); yuv_set_pick_sharpest(0);
+            CHECK(yuv_denoise(rf, 4, 0, 0, &o2, &r2) == 0, "turned frames, tile merge at scale 2 (%.0f ms align)", r2.ms_align);
+            double e2 = err_in(o2.y, clean.y, W, 40, 40, 240, 200);
+            CHECK(e2 < ec, "scale 2, corner: error %.2f (classic %.2f)", e2, ec);
+            yuv_set_detail_scale(1); yuv_set_merge_method(YUV_MERGE_CLASSIC); yuv_set_pick_sharpest(1);
+            free(o2.y); free(o2.u); free(o2.v);
+        }
+        for (k = 0; k < 4; ++k) { free(rf[k].y); free(rf[k].u); free(rf[k].v); }
+        free(clean.y); free(clean.u); free(clean.v);
+        free(oc.y); free(oc.u); free(oc.v); free(ot.y); free(ot.u); free(ot.v);
+    }
     {   /* The sharpest frame is the reference: frames 1, 2 and 4 shaken
          * (a 5-pixel horizontal blur, as a hand moving during the exposure),
          * frame 3 sharp. The merge must take frame 3 as its reference, and

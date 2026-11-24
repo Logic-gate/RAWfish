@@ -15,10 +15,17 @@ CONFIG += sailfishapp
 
 SOURCES += \
     main.cpp \
-    rawfish-ir-preview.cpp
+    rawfish-ir-preview.cpp \
+    hwprobe.cpp \
+    hwframes.cpp \
+    procstats.cpp
 
 HEADERS += \
-    rawfish-ir-preview.h
+    rawfish-ir-preview.h \
+    hwprobe.h \
+    hwframes.h \
+    hwegl.h \
+    procstats.h
 
 # The .desktop is installed by the .spec (%install), not here: the sailfishapp
 # qmake integration can shadow a .pro desktop INSTALLS rule.

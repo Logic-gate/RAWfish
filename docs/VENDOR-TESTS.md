@@ -16,6 +16,11 @@ preview RESULTS report for it (`# vendor_request in the results: {...}`):
 the value sent means the HAL echoes it; "absent" means the preview results
 do not carry the key (normal for a key acting on photos).
 
+A key that only a RESULT carries (nothing to send) is read with
+`raw ... vres=KEY,...` on the command line: the photo's own result gives
+each key's values in the reply (`"vendor_results"`), or `"absent"`. The
+keys and their types come from `generated-hal.json` (`result_keys`).
+
 ## JP2 (MediaTek), main camera
 
 ### 3DNR -- temporal noise reduction of the viewfinder (21 October 2026)

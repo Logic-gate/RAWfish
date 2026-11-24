@@ -1089,6 +1089,14 @@ static int write_focus_calibration(const char *id, const float *real_d, const fl
     return 0;
 }
 
+/* An exposure as people read it: "1/48 s" under a second, "2.5 s" above. */
+static void exposure_text(int64_t ns, char *buf, size_t n)
+{
+    if (ns <= 0) snprintf(buf, n, "?");
+    else if (ns >= 1000000000LL) snprintf(buf, n, "%.3g s", ns / 1e9);
+    else snprintf(buf, n, "1/%d s", (int)(1e9 / (double)ns + 0.5));
+}
+
 /* Output folders: ~/Pictures/RAWfish-ir by default for everything; the app (or
  * the caller) can put JPEGs and DNGs elsewhere with --jpgdir / --dngdir, a
  * "~/" prefix standing for HOME. Nothing else decides where files go. */
@@ -1375,18 +1383,28 @@ static void usage(void)
             "                   [focus=auto|continuous|continuous_video|macro|edof|inf|<m>m] [easy]\n"
             "                   [exp=T] [iso=N] [ms=1]   (ms=1: the milliseconds always in the name)\n"
             "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N] [ms=1]   (- = measure only)\n"
+            "                [vres=KEY,...]   (diagnosis: up to 8 vendor keys of the photo's result in the reply,\n"
+            "                 \"vendor_results\"; e.g. the sensor gain the HAL applied)\n"
             "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
             "                                [colour=0..5] [median=0..4] [sharpen=0..5]\n"
             "                                (colour: our colour filter, 1, 2, 3, 5, 8 x the noise (denoise=on = 2); median:\n"
-            "                                 a 3x3 .. 9x9 on the colour first (false colour); with n=2|4 the frames are\n"
+            "                                 a 3x3 .. 9x9 on the colour first (false colour); with n=2..8 the frames are\n"
             "                                 aligned and merged; sharpen: ours, 0.5 .. 4 x the fine detail, after the merge)\n"
-            "                                (N YUV frames in one burst, 1..4, the camera's NR and sharpening off; the\n"
+            "                                [nr=classic|tiles] [split=1|2|4]   (nr=tiles: each tile of a frame aligned\n"
+            "                                 on its own before the merge; split=2|4: each frame 1/2 or 1/4 of the pose,\n"
+            "                                 the ISO times 2 or 4: less blur, the noise averaged out by the frames)\n"
+            "                                (N YUV frames in one burst, 1..8, the camera's NR and sharpening off; the\n"
             "                                 first compressed by us; save=yuv keeps every frame as NAME-fK.yuv + .json)\n"
             "         stack NAME film=T [sub=T] [stk_denoise=1|2|4] [iso=N]\n"
             "         noiseprofile FILE.json [sub=T]   (darktable noise profile)\n"
             "         focus MODE|hold|rawD [nowait]   (set preview focus live; hold = the lens where it is; rawD = the HAL lens value D)\n"
             "         preview [off_noise|...] [off_edge|...]   (live viewfinder noise/edge)\n"
             "         preview-frame FILE.ppm   (save one preview frame, phase-1 diagnostic)\n"
+            "         vf hwb PATH  (stream mode: frames as SF2H buffer handles, the handles to the unix socket PATH: zero copy)\n"
+            "         vf aids N [E] (stream mode, with vf hwb: the aids' values per 2x2 cell as SF2A; N = 1 peaking,\n"
+            "                      2 luma max, 4 channel max, 8 2x2 mean luma, summed; 0 none; E: one frame in E, 1-4)\n"
+            "         vf yuv|rgb   (stream mode: viewfinder frames as SF2Y I420, converted by the interface, or SF2P RGB888)\n"
+            "         hwprobe PATH N   (stream mode: the next N frames' buffer handles to the unix socket PATH; zero-copy probe)\n"
             "         exposure auto | exp=SEC iso=N   (live preview exposure: AE, or a manual pair)\n"
             "         ev STEPS   (AE compensation in HAL steps, see the caps line)\n"
             "         meter on|off [rate=HZ]   (RAW16 exposure meter -> SF2M meter lines)\n"
@@ -1772,8 +1790,14 @@ static int cmd_stack(indraw_stack_fn stack, char **save, char *out)
 }
 
 /* Handles one "raw ..." line. */
-static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
+static int cmd_raw(void *bridge, indraw_raw_fn raw, char **save, char *out)
 {
+    /* vres=KEY[,KEY...]: diagnosis, the photo result's vendor keys in the
+     * reply (engine indraw_set_raw_vres), at most 8 */
+    typedef void (*vres_fn)(const uint32_t *, int);
+    vres_fn vf = NULL;
+    uint32_t vres[8];
+    int nvres = 0;
     char *prefix = strtok_r(NULL, " \t\r\n", save); /* filename prefix (1st)   */
     char file[1200];                                  /* built timestamped path  */
     char *tok;
@@ -1816,6 +1840,19 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
             }
             focus_set = 1;
         }
+        else if (!strncmp(tok, "vres=", 5)) {
+            char *p = tok + 5, *end;
+            nvres = 0;
+            while (*p) {
+                unsigned long k = strtoul(p, &end, 0);
+                if (end == p || nvres == 8 || k > 0xffffffffUL || (*end && *end != ',')) {
+                    emit("{\"ok\":false,\"error\":\"raw: bad vres (up to 8 keys, e.g. vres=0x80060010,0x80060011)\"}");
+                    return 1;
+                }
+                vres[nvres++] = (uint32_t)k;
+                p = *end ? end + 1 : end;
+            }
+        }
         else { emit("{\"ok\":false,\"error\":\"raw: unknown option\"}"); return 1; }
     }
     /* The name once the options are read (ms=), at the instant taken above. */
@@ -1824,14 +1861,21 @@ static int cmd_raw(indraw_raw_fn raw, char **save, char *out)
         return 1;
     }
     if (!raw) { emit("{\"ok\":false,\"error\":\"raw: bridge has no indraw_raw\"}"); return 1; }
+    if (nvres) {
+        vf = (vres_fn)a_dlsym(bridge, "indraw_set_raw_vres");
+        if (!vf) { emit("{\"ok\":false,\"error\":\"raw: vres= not in this engine\"}"); return 1; }
+        vf(vres, nvres);
+    }
     /* Default (nothing set): all-auto -- keep the session's continuous focus and,
      * when exposure is auto, run an AE precapture. A manual exposure (exp=/iso=)
      * turns AE off, so no precapture then. Focus set explicitly overrides. */
     {
         int ae_precapture = (exposure_ns <= 0 && iso <= 0);
         (void)focus_set;
-        if (raw(file, dt, focus_mode, focus_diopters, ae_precapture, exposure_ns, iso,
-                variant, timeout_for(exposure_ns), out, OUT_SIZE)) {
+        int failed = raw(file, dt, focus_mode, focus_diopters, ae_precapture, exposure_ns, iso,
+                         variant, timeout_for(exposure_ns), out, OUT_SIZE);
+        if (vf) vf(NULL, 0);                       /* the keys are for this shot only */
+        if (failed) {
             emit(out);
             return 1;
         }
@@ -1980,14 +2024,15 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     static char cap[OUT_SIZE];
     int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0, want_dng = 0;
     int light = 0;                               /* snap: a light photo (light=1) */
+    int split = 1, method = YUV_MERGE_CLASSIC;   /* split=2|4: shorter frames; nr=tiles: the merge by tiles */
     int detail_scale = 1;                        /* the filters' scale for this photo (1, or 2 for an enlarged 50 MP) */
     char dngfile[1200] = "";
     ir_yuv_t dn; yuv_denoise_report_t rep;
     memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
-    float focus_diopters = 0.0f, ev[4] = { 0, 0, 0, 0 };
-    int64_t exposure_ns = 0, ts[4] = { -1, -1, -1, -1 };
+    float focus_diopters = 0.0f, ev[YUV_MERGE_MAX] = { 0 };
+    int64_t exposure_ns = 0, ts[YUV_MERGE_MAX] = { -1, -1, -1, -1, -1, -1, -1, -1 };
     struct timespec now;
-    ir_yuv_t frames[4], f;
+    ir_yuv_t frames[YUV_MERGE_MAX], f;
     uint8_t *jpg = NULL;
     unsigned long jlen = 0;
     double t0, t1;
@@ -2002,16 +2047,19 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             if (!PARSE_ISO(tok, iso)) { emit("{\"ok\":false,\"error\":\"yuv: bad iso\"}"); return 1; }
         }
         else if (!strncmp(tok, "focus=", 6)) { if (!parse_focus(tok + 6, &focus_mode, &focus_diopters)) { emit("{\"ok\":false,\"error\":\"yuv: bad focus\"}"); return 1; } }
-        else if (!strncmp(tok, "n=", 2)) { n = atoi(tok + 2); if (n < 1 || n > 4) { emit("{\"ok\":false,\"error\":\"yuv: n=1..4\"}"); return 1; } }
+        else if (!strncmp(tok, "n=", 2)) { n = atoi(tok + 2); if (n < 1 || n > YUV_MERGE_MAX) { emit("{\"ok\":false,\"error\":\"yuv: n=1..8\"}"); return 1; } }
+        else if (!strncmp(tok, "split=", 6)) { split = atoi(tok + 6); if (split != 1 && split != 2 && split != 4) { emit("{\"ok\":false,\"error\":\"yuv: split=1|2|4\"}"); return 1; } }
+        else if (!strcmp(tok, "nr=tiles")) method = YUV_MERGE_TILES;
+        else if (!strcmp(tok, "nr=classic")) method = YUV_MERGE_CLASSIC;
         else if (!strncmp(tok, "ev=", 3)) {         /* ev=0,-2,... one per frame */
             char *q = tok + 3, *endp;
             nev = 0;
-            while (*q && nev < 4) {
+            while (*q && nev < YUV_MERGE_MAX) {
                 ev[nev] = (float)strtod(q, &endp);
                 if (endp == q || !(ev[nev] >= -6 && ev[nev] <= 6)) { emit("{\"ok\":false,\"error\":\"yuv: bad ev (each -6..6)\"}"); return 1; }
                 nev++; q = *endp == ',' ? endp + 1 : endp;
             }
-            if (*q) { emit("{\"ok\":false,\"error\":\"yuv: ev= takes 4 values at most\"}"); return 1; }
+            if (*q) { emit("{\"ok\":false,\"error\":\"yuv: ev= takes 8 values at most\"}"); return 1; }
         }
         else if (!strcmp(tok, "save=yuv")) do_save = 1;
         else if (!strcmp(tok, "dng=1")) want_dng = 1;     /* a DNG of the same instant, same name */
@@ -2025,6 +2073,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     }
     if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
     if (nev > 0) { if (nev != n) { emit("{\"ok\":false,\"error\":\"yuv: ev= needs one value per frame (n=)\"}"); return 1; } }
+    if (split > 1 && n == 1 && nev == 0) { nev = 1; ev[0] = 0.0f; }   /* the split is the burst path's (one frame is a burst of one) */
     if (want_dng) {
         /* JPG + DNG from one exposure: the burst path (one frame is a burst of
          * one), its last frame also read as RAW16 and written as the DNG. */
@@ -2042,13 +2091,18 @@ static int cmd_yuv(void *bridge, char **save, char *out)
          * set for it alone, cleared after whatever the outcome */
         typedef void (*light_fn)(int);
         light_fn lf = (light_fn)a_dlsym(bridge, "indraw_set_yuv_light");
+        typedef void (*split_fn)(int);
+        split_fn spf = (split_fn)a_dlsym(bridge, "indraw_set_yuv_split");
         int failed;
         if (lf) lf(light);
+        if (split > 1 && !spf) { emit("{\"ok\":false,\"error\":\"yuv: split= not in this engine\"}"); return 1; }
+        if (spf) spf(split);
         if (n == 1 && nev == 0)
             failed = yf(focus_mode, focus_diopters, exposure_ns, iso, timeout_for(exposure_ns), &f, out, OUT_SIZE);
         else
             failed = yb(n, nev ? ev : NULL, exposure_ns, iso, timeout_for(exposure_ns), frames, ts, out, OUT_SIZE);
         if (lf) lf(0);
+        if (spf) spf(1);
         if (failed) { emit(out); return 1; }
         if (!(n == 1 && nev == 0)) f = frames[0];   /* the JPEG is the first frame */
     }
@@ -2069,7 +2123,8 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     if (denoise) {                                        /* our own: colour, and the frames merged */
         const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
         int nin = (n == 1 && nev == 0) ? 1 : n;
-        yuv_set_pick_sharpest(nev == 0);                  /* frames of different exposures (ev=): always the first */
+        yuv_set_pick_sharpest(nev == 0 || split > 1);     /* frames of different exposures (ev=): always the first */
+        yuv_set_merge_method(method);
         if (yuv_denoise(in, nin, colour, median, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"denoise failed (memory)\"}"); return 1; }
     }
     if (sharpen) {                                        /* ours, on the merged frame */
@@ -2093,22 +2148,75 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         memset(&ex, 0, sizeof ex);
         localtime_r(&now.tv_sec, &tm);
         strftime(dt, sizeof dt, "%Y:%m:%d %H:%M:%S", &tm);
-        char sw[160];
+        char sw[160], desc[400], et[24], evs[64] = "";
+        int nm = (n == 1 && nev == 0) ? 1 : n;          /* the frames merged */
         ex.make = f.make[0] ? f.make : NULL;
         ex.model = f.model[0] ? f.model : NULL;
         /* Software says which JPEG this is and how it was made, so that a HAL
          * JPEG ("RAWfish-ir x.y.z (HAL JPEG)") and ours tell apart in any
          * viewer's Exif panel: frames merged, colour filter, false-colour
          * median and sharpening levels. */
-        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d, colour %d, moire %d, sharpen %d)",
-                 light ? "snap" : "JPG", (n == 1 && nev == 0) ? 1 : n, denoise ? colour : 0, denoise ? median : 0, sharpen);
+        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d%s%s, colour %d, moire %d, sharpen %d)",
+                 light ? "snap" : "JPG", (n == 1 && nev == 0) ? 1 : n, method == YUV_MERGE_TILES ? " tiles" : "",
+                 split == 2 ? " 1/2" : split == 4 ? " 1/4" : "", denoise ? colour : 0, denoise ? median : 0, sharpen);
         ex.software = sw;
+        /* The description: the same in words, with the exposure of each frame
+         * (ImageDescription, UserComment and XMP: what desktop viewers show;
+         * the Sailfish gallery shows none of them). */
+        exposure_text(f.exposure_ns, et, sizeof et);
+        if (nev > 0 && nm > 1) {
+            size_t el = 0;
+            for (k = 0; k < nm && el + 8 < sizeof evs; ++k)
+                el += (size_t)snprintf(evs + el, sizeof evs - el, "%s%+g", k ? "," : " at EV ", ev[k]);
+        }
+        snprintf(desc, sizeof desc, "RAWfish-ir %s from YUV: %d frame%s of %s at ISO %d%s%s%s%s; colour NR %d, moire %d, sharpen %d",
+                 light ? "snap" : "JPG", nm, nm > 1 ? "s" : "", et, f.iso, evs,
+                 split > 1 ? (split == 2 ? " (each 1/2 of the pose)" : " (each 1/4 of the pose)") : "",
+                 nm > 1 ? (method == YUV_MERGE_TILES ? ", merged by tiles" : ", merged whole") : "",
+                 nm > 1 && nev > 0 ? " (the first frame's exposure)" : "",
+                 denoise ? colour : 0, denoise ? median : 0, sharpen);
+        ex.description = desc;
         ex.datetime = dt;
         ex.exposure_ns = f.exposure_ns; ex.iso = f.iso;
         ex.focal_mm = f.focal_mm; ex.focal_eq_mm = f.focal_eq_mm; ex.f_number = f.f_number;
         ex.orientation = o == 90 ? 6 : o == 180 ? 3 : o == 270 ? 8 : 1;   /* our pixels are as read */
-        ex.wb_manual = f.wb_manual; ex.exposure_manual = f.exposure_manual;
+        /* ExposureMode: manual when the pair was ours (exp=), auto otherwise --
+         * a burst sets each frame's pair itself, which is not a manual choice */
+        ex.wb_manual = f.wb_manual; ex.exposure_manual = exposure_ns > 0;
         ex.flash = f.flash; ex.digital_zoom = f.digital_zoom;
+        /* Detailed log ("checks on"): the settings in the file name too, the
+         * only free text the Sailfish gallery shows (its "File path") --
+         * photo_tiles4-half_1-48s_iso4428_col2_moire0_sharp3_20261115_175005.jpg:
+         * after the prefix, so that the name still ends in the time
+         * (_<HHMMSS>[_<mmm>].jpg), the pattern the app's gallery and cover
+         * look for (put at the end, in 0446, the photos were on the disk and
+         * in no gallery) */
+        if (g_log_detail) {
+            char tag[128], es[24], *dot = strrchr(file, '.');
+            if (f.exposure_ns >= 1000000000LL) snprintf(es, sizeof es, "%.3gs", f.exposure_ns / 1e9);
+            else if (f.exposure_ns > 0) snprintf(es, sizeof es, "1-%ds", (int)(1e9 / (double)f.exposure_ns + 0.5));
+            else snprintf(es, sizeof es, "exp0");
+            char kind[24];
+            if (light) snprintf(kind, sizeof kind, "snap");
+            else if (nm == 1) snprintf(kind, sizeof kind, "single%s", split == 2 ? "-half" : split == 4 ? "-quarter" : "");
+            else snprintf(kind, sizeof kind, "%s%d%s", nev > 0 ? "ev" : method == YUV_MERGE_TILES ? "tiles" : "classic",
+                          nm, split == 2 ? "-half" : split == 4 ? "-quarter" : "");
+            snprintf(tag, sizeof tag, "_%s_%s_iso%d_col%d_moire%d_sharp%d", kind, es, f.iso,
+                     denoise ? colour : 0, denoise ? median : 0, sharpen);
+            {
+                char *base = strrchr(file, '/');
+                const char *pfx = name_prefix(prefix);
+                size_t pl = strlen(pfx);
+                base = base ? base + 1 : file;
+                if (dot && !strncmp(base, pfx, pl) && strlen(file) + strlen(tag) < sizeof file) {
+                    char rest[256];
+                    snprintf(rest, sizeof rest, "%s", base + pl);              /* _<date>_<time>_<ms>.jpg */
+                    /* without a prefix: <tag without its _>_<date>... */
+                    snprintf(base + pl, sizeof file - (size_t)(base + pl - file), "%s%s%s",
+                             pl ? tag : tag + 1, pl ? "" : "_", rest);
+                }
+            }
+        }
         rc = exif_write_jpeg(file, jpg, jlen, &ex);
     }
     free(jpg);
@@ -2132,18 +2240,22 @@ static int cmd_yuv(void *bridge, char **save, char *out)
              * sharpest); "ref" is the reference's number (1-based), the
              * sharpest frame since 0.3.8 (the first before). */
             int nf = (n == 1 && nev == 0) ? 1 : n, j;
-            char sh[96] = "", mp[48] = "", sp[48] = "";
-            for (j = 0; j < nf && j < 4; ++j) {
+            char sh[200] = "", mp[64] = "", sp[64] = "", tm[96] = "";
+            for (j = 0; j < nf && j < YUV_MERGE_MAX; ++j) {
                 snprintf(sh + strlen(sh), sizeof sh - strlen(sh), "%s[%d,%d]", j ? "," : "", rep.shift_dy[j], rep.shift_dx[j]);
                 snprintf(mp + strlen(mp), sizeof mp - strlen(mp), "%s%.0f", j ? "," : "", rep.merged_pct[j]);
                 snprintf(sp + strlen(sp), sizeof sp - strlen(sp), "%s%.0f", j ? "," : "", rep.sharp_pct[j]);
+                snprintf(tm + strlen(tm), sizeof tm - strlen(tm), "%s%.0f", j ? "," : "", rep.tiles_moved_pct[j]);
             }
             snprintf(out + strlen(out), OUT_SIZE - strlen(out),
-                     ",\"denoise\":{\"frames\":%d,\"scale\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
+                     ",\"denoise\":{\"method\":\"%s\",\"split\":%d,\"frames\":%d,\"scale\":%d,\"colour\":%d,\"median\":%d,\"sigma\":%.2f,\"sigma_pair\":%.2f,\"sigma_merge\":%.2f,"
                      "\"ms\":{\"align\":%.0f,\"merge\":%.0f,\"colour\":%.0f},"
-                     "\"ref\":%d,\"sharpness_pct\":[%s],\"shifts\":[%s],\"merged_pct\":[%s]}",
-                     nf, detail_scale, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
-                     rep.ms_align, rep.ms_merge, rep.ms_colour, rep.ref + 1, sp, sh, mp);
+                     "\"ref\":%d,\"sharpness_pct\":[%s],\"shifts\":[%s],\"merged_pct\":[%s]%s%s%s}",
+                     rep.method == YUV_MERGE_TILES ? "tiles" : "classic", split, nf, detail_scale, colour, median, rep.sigma, rep.sigma_pair, rep.sigma_merge,
+                     rep.ms_align, rep.ms_merge, rep.ms_colour, rep.ref + 1, sp, sh, mp,
+                     /* tiles: each frame's share of tiles aligned apart from its global shift */
+                     rep.method == YUV_MERGE_TILES && nf > 1 ? ",\"tiles_moved_pct\":[" : "",
+                     rep.method == YUV_MERGE_TILES && nf > 1 ? tm : "", rep.method == YUV_MERGE_TILES && nf > 1 ? "]" : "");
         }
         if (sharpen) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"sharpen\":{\"level\":%d,\"ms\":%.0f}", sharpen, rep.ms_sharpen);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
@@ -2943,7 +3055,7 @@ int main(int argc, char **argv)
                     if (!ccmd) continue;
                     ctl_engine_busy(1);
                     if (!strcmp(ccmd, "jpeg")) failures += cmd_jpeg(jpeg, &csave, out);
-                    else if (!strcmp(ccmd, "raw")) failures += cmd_raw(raw, &csave, out);
+                    else if (!strcmp(ccmd, "raw")) failures += cmd_raw(bridge, raw, &csave, out);
                     else if (!strcmp(ccmd, "stack")) failures += cmd_stack(stack, &csave, out);
                     else if (!strcmp(ccmd, "burst")) failures += cmd_burst(bf, &csave, out);
                     else if (!strcmp(ccmd, "yuv")) failures += cmd_yuv(bridge, &csave, out);
@@ -2995,7 +3107,7 @@ int main(int argc, char **argv)
                 !strcmp(cmd, "noiseprofile") || !strcmp(cmd, "burst")) {
                 ctl_engine_busy(1);
                 if (!strcmp(cmd, "jpeg")) failures += cmd_jpeg(jpeg, &save, out);
-                else if (!strcmp(cmd, "raw")) failures += cmd_raw(raw, &save, out);
+                else if (!strcmp(cmd, "raw")) failures += cmd_raw(bridge, raw, &save, out);
                 else if (!strcmp(cmd, "stack")) failures += cmd_stack(stack, &save, out);
                 else if (!strcmp(cmd, "noiseprofile")) failures += cmd_noiseprofile(np, &save, out);
                 else failures += cmd_burst(bf, &save, out);
@@ -3029,6 +3141,34 @@ int main(int argc, char **argv)
             else if (!strcmp(cmd, "viewwin")) failures += cmd_viewwin(vwf, &save, out);
             else if (!strcmp(cmd, "loupe")) failures += cmd_loupe(lf, &save, out);
             else if (!strcmp(cmd, "shading")) failures += cmd_shading(&save, out);
+            else if (!strcmp(cmd, "hwprobe")) {               /* "hwprobe PATH N": zero-copy probe (branch zero_copy) */
+                typedef int (*hp_fn)(const char *, int, char *, size_t);
+                hp_fn hpf = (hp_fn)a_dlsym(bridge, "indraw_hwprobe");
+                char *pth = strtok_r(NULL, " \t\r\n", &save), *num = strtok_r(NULL, " \t\r\n", &save);
+                if (!hpf) { emit("{\"ok\":false,\"error\":\"hwprobe: not in this engine\"}"); failures++; }
+                else { failures += hpf(pth, num ? atoi(num) : 0, out, OUT_SIZE) != 0; emit(out); }
+            }
+            else if (!strcmp(cmd, "vf")) {                    /* "vf yuv|rgb": the viewfinder frames' format (SF2Y | SF2P) */
+                typedef int (*vf_fn)(const char *, char *, size_t);
+                vf_fn vff = (vf_fn)a_dlsym(bridge, "indraw_stream_format");
+                char *a = strtok_r(NULL, " \t\r\n", &save);
+                if (a && !strcmp(a, "aids")) {                 /* "vf aids N": the aids' maps with SF2H (SF2A) */
+                    typedef int (*aids_fn)(int, int, char *, size_t);
+                    aids_fn af = (aids_fn)a_dlsym(bridge, "indraw_stream_aids");
+                    char *num = strtok_r(NULL, " \t\r\n", &save), *ev = strtok_r(NULL, " \t\r\n", &save);
+                    if (!af) { emit("{\"ok\":false,\"error\":\"vf aids: not in this engine\"}"); failures++; }
+                    else { failures += af(num ? atoi(num) : -1, ev ? atoi(ev) : 1, out, OUT_SIZE) != 0; emit(out); }
+                }
+                else if (a && !strcmp(a, "hwb")) {             /* "vf hwb PATH": zero copy (SF2H) */
+                    typedef int (*hwb_fn)(const char *, char *, size_t);
+                    hwb_fn hf = (hwb_fn)a_dlsym(bridge, "indraw_stream_hwb");
+                    char *pth = strtok_r(NULL, " \t\r\n", &save);
+                    if (!hf) { emit("{\"ok\":false,\"error\":\"vf hwb: not in this engine\"}"); failures++; }
+                    else { failures += hf(pth, out, OUT_SIZE) != 0; emit(out); }
+                }
+                else if (!vff) { emit("{\"ok\":false,\"error\":\"vf: not in this engine (frames stay SF2P)\"}"); failures++; }
+                else { failures += vff(a, out, OUT_SIZE) != 0; emit(out); }
+            }
             else emit("{\"ok\":false,\"error\":\"unknown command\"}");
             ctl_unlock();
         }

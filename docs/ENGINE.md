@@ -59,7 +59,8 @@ seconds (`0.008`, `0.5`, `4`).
 | | `easy` | the one combined path: AF + AE before the shot |
 | `raw NAME` | `focus=`, `exp=SEC`, `iso=N` | as above; writes a DNG (+ its preview in `.previews/`) |
 | `raw -` | same | measure only, nothing written |
-| `jpeg` / `raw` | `ms=1` | the milliseconds (`_mmm`) always in the name: the photos of a bracket (the app sends it for its three) |
+| `jpeg` / `raw` | `ms=1` | the milliseconds (`_mmm`) always in the name: the photos of a bracket (the app sends it for each of its photos) |
+| | `vres=KEY,...` (up to 8, e.g. `vres=0x80060010,0x80060011`) | diagnosis: the photo result's own values for these keys (chipset keys that only a result carries), in `"vendor_results"`; a key the result lacks says `"absent"`. See docs/VENDOR-TESTS.md |
 | `stack NAME film=T` | `sub=T` sub-frame length | default and maximum: the single-exposure ceiling (1/2 s, or `observed_shutter_max_ns`) |
 | | `stk_denoise=1\|2\|4` extra frames divided out | 1 |
 | | `iso=N` | the sensor's range |
@@ -145,7 +146,10 @@ stripes that share of the viewfinder's brightest pixels (the RAW zebra) --
 and `zlost=`: the share where two or three of red, green and blue reach it
 (striped fully; the rest of `zclip`, one channel alone, lightly).
 
-Besides the frames (SF2P), the stream carries one-line events (SF2M): `caps`,
+The frames are SF2P (16-byte header "SF2P", width, height, byte count, then
+RGB888), or SF2Y after the command `vf yuv` (the same header with "SF2Y",
+then I420: Y, U, V, the chroma at half resolution, (w+1)/2 by (h+1)/2;
+0.3.11); `vf rgb` goes back. Besides the frames, the stream carries one-line events (SF2M): `caps`,
 `ae` (the preview's live values; also `cct=` and `duv=`, the white balance in force as a correlated colour temperature and its Duv, estimated from the colour gains through the sensor's calibration matrix), `meter` (the RAW meter; its histogram covers the displayed window (`viewwin`), and `shist=` is the spot's own while a reference is set -- `vfmeter` likewise), `vfmeter` (the viewfinder meter: the linear
 mean -- centre-weighted, or the tap's spot --, clipping percentages, the
 pair the frame was exposed with when known (`iso=`, `exp_ns=`, else 0) and
@@ -209,7 +213,7 @@ as events.
 | `vw tap U V` | a tap at a display-window point: the controller maps it to the viewfinder frame and runs the focus sequence (as `fc ref`) |
 | `vw clear` / `vw state` | the reference point forgotten / the state once |
 
-| `sh name=N type=jpg\|raw q=Q noise=M edge=M bracket=off\|0\|1\|2\|3 denoise_sigma=D` | a press of the shutter: the controller turns it into the engine's `jpeg` / `raw` / `stack` / `burst` lines (the held pair, the manual distance, a stack for a Σ speed, a burst or three shots for a bracket), run as if typed; the self-timer is the interface's |
+| `sh name=N type=jpg\|raw q=Q noise=M edge=M bracket=off\|0\|1\|2\|3 bracket_n=3\|5\|7 denoise_sigma=D` | a press of the shutter: the controller turns it into the engine's `jpeg` / `raw` / `stack` / `burst` lines (the held pair, the manual distance, a stack for a Σ speed, a burst or shots in turn for a bracket: bracket 0 takes `bracket_n` frames the same, 3 by default; bracket N three exposures), run as if typed; the self-timer is the interface's |
 
 Event: `vwstate zoom= loupe= view=x,y,w,h ref=has,u,v` -- the view window to
 show (array-normalised) and the reference point in display-window

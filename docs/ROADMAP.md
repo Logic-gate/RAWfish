@@ -5,6 +5,21 @@ Each item says why, so it can be picked up later without re-deriving it.
 
 ## Open: to do or to decide
 
+### Branches
+- **`main`** is the one line of work since 24 Nov 2026 (patch 0528): the
+  development branch `img_transport` came into it once tried on the JP2,
+  the Xperia 10 III and the XA2. That branch held patches 0431-0435 (the
+  viewfinder as YUV converted by the GPU, the aids reading it, the engine
+  handover after a capture, the 18 mm's burst ISO, the settings kept
+  across patch builds), then `zero_copy` (0436-0443: the zero-copy
+  viewfinder, the aids' maps from the engine drawn by the GPU, the stats
+  lines, the display kept on), then the ports of main's patches; the
+  comments that say "branch zero_copy" date from then. The release before
+  it is the tag of 0.3.10.
+- **`longexp`** (personal use, not published): main plus the long
+  exposures on the JP2 (the sensor's registers through I2C, the patched
+  camera HAL), unsandboxed.
+
 ### Before a first public release
 - **Publication**: a fresh snapshot as the public repository's first commit
   (the history keeps old names and notes that are not for publication; the
@@ -118,6 +133,17 @@ Each item says why, so it can be picked up later without re-deriving it.
 - **The HAL's multi-frame noise reduction by default** (JP2, key
   `0x80040000`): does the HAL blend frames on a plain photo when we say
   nothing? Compare a photo with the key at 0 and without it, in low light.
+- **A noisy Σ at a low ISO** (JP2, November 2026): 15 s at ISO 400 is
+  clean, 60 s at ISO 100 very noisy, though both gather the same light.
+  Candidates: the read noise of four times as many sub-frames adding up
+  (each sub-frame's ceiling the same, so 60 s at ISO 100 is 4x the
+  frames), and the sensor's heat over a minute (dark current). To measure:
+  a dark Σ at both pairs, the noise per sub-frame and the sum. If it is
+  the read noise, Σ could choose a higher sub-frame ISO itself (fewer,
+  shorter frames for the same light), as the tile merge's split does.
+- **The tile merge (0445/0453) against the classic one**: hand-held at
+  1/2 and 1/4 of the pose, 4 and 8 frames; the noise and the detail
+  after the sharpening, against the same shot classic.
 - **The XA2's RAW noise and linearity**: a dark-frame and flat series as
   for the JP2 (docs/measurements).
 - **Level**: the sign of the roll in landscape (portrait is verified).
@@ -143,15 +169,122 @@ gain stays proportional but quantises the shadows.
 
 ### Viewfinder transport: cheaper and sharper
 
-Today the engine converts each preview frame to RGB and sends it through a
-pipe (SF2P), 1280x960 at most -- the same as RAWfish's bridge. Steps, each
-falling back on the previous one where it does not work:
-1. YUV frames in shared memory, converted to colour by the GPU (a shader):
-   removes most of the CPU cost, allows a larger viewfinder; portable.
+Up to 0.3.9 the engine converted each preview frame to RGB and sent it
+through a pipe (SF2P), 1280x960 at most -- the same as RAWfish's bridge.
+Steps, each falling back on the previous one where it does not work:
+1. YUV frames converted to colour by the GPU (a shader). **First half done
+   in 0.3.11** (patch 0431): SF2Y, I420 through the same pipe (half the
+   bytes, no conversion on the camera thread nor in the app), the shader in
+   the item. ProCam (a RAWfish fork) does the same. Left: measure it on the
+   phone (viewfinderYuv=0 / 1), 15 Nov 2026: the engine's own time per
+   frame ~5 ms shorter (wall time, waits on the pipe included), the CPU
+   that `top` shows for the two processes about the same within its noise
+   (a first comparison that looked like -39 % mixed 19 and 29 frames a
+   second; the runs whose mode the log confirms show no clear CPU change).
+   Kept for the halved pipe traffic, a viewfinder larger than 1280x960
+   later, and no cost. The aids read the YUV frame directly since 0432.
+   Shared memory skipped: the copy through the pipe is not what costs.
 2. Zero-copy: `AImageReader` producing `AHardwareBuffer`s, handed to the app
    (`AHardwareBuffer_sendHandleToUnixSocket`) and imported as EGL images via
    libhybris -- what GStreamer's `droideglsink` does. Best performance; depends
    on each device's graphics driver: test on the JP2 first.
+   **Branch `zero_copy`, step 0: a probe (patch 0436).** rawfish-ir.conf
+   `hwProbe=5` (and `hwProbeGpuUsage=1` for buffers allocated for GPU
+   sampling too) has the engine send its next 5 viewfinder buffers' gralloc
+   handles (fds over a unix socket, SCM_RIGHTS) to the app, which imports
+   each with libhybris's `eglHybrisCreateRemoteBuffer` (what a Wayland
+   compositor does with a client's buffer), binds it to an external texture,
+   draws it off screen and reads it back. The log says at each step what
+   worked ("hwprobe ..." from the engine, "# hwprobe app: ..." from the app,
+   RESULT=picture when the GPU saw the image); the first good one is saved
+   as ~/.cache/com.rawfish/rawfish-ir/hwprobe-*.png. The viewfinder itself
+   is unchanged. If it works: the frames' handles instead of their pixels,
+   the shader on the external texture, a few buffers in flight, released
+   when drawn. If not: the YUV pipe (0431) stays.
+   Result on the JP2 (Mali-G610 MC2): RESULT=picture, 5/5, three runs;
+   format 0x23, usage 0x20033, an import takes 2-8 ms (once per buffer).
+   **Step 1: the transport (patch 0437).** SF2H packets (a buffer id and a
+   sequence number) in the pipe, each buffer's handle once over the socket
+   (HWB2), the app's releases back (REL1); 6 viewfinder buffers by default
+   (`vfBuffers`, 4-10): at most `vfBuffers - 2` held by the app, the
+   oldest taken back beyond that ("forced=" in the "viewfinder pace" line).
+   The zebra and the peaking switch the engine to the YUV pipe while on
+   (they read pixels); any failure falls back to it. To measure on the
+   phone: CPU and VmRSS of both processes against `viewfinderZeroCopy=0`,
+   at the same frame rate (same light), and how often "forced" grows.
+   **Measured on the JP2 (15 Nov 2026, patch 0438's "# stats" lines).**
+   Zero copy works on the three cameras, `held=2 forced=0` throughout,
+   the picture unchanged to the eye. Same scene, same frame rate (29.5
+   fps), 5 lines of 5 s each way (one switch, zero copy then YUV):
+   app CPU 22.5 % against 40.4 % (-18 points, -44 %), engine 14.0 %
+   against 23.8 % (-10 points, -41 %) -- together -28 % of a core; the
+   system -5 points of 8 cores (some of it the compositor and the GPU
+   driver, no longer fed 1.8 MB a frame); engine VmRSS 45 MB against
+   48-49; latency 101 ms against 111; the engine's time per frame 3.0 ms
+   against 11-12 (19.5 fps: 5.0 against 13.7). The battery current
+   (~860 against ~915 mA) is within its noise (790-1020 mA from one line
+   to the next): the screen dominates; minutes each way would be needed.
+   **Step 2: the aids without leaving zero copy (patch 0439).** The zebra
+   and the peaking no longer switch the viewfinder to the YUV pipe: the
+   engine works out what they compare with their thresholds on the full
+   frame, with the app's own arithmetic, and sends one value per 2x2 cell
+   -- the one that decides (SF2A, `vf aids N`): the peaking's |Laplacian|
+   coded so that `q >= edge` exactly where a pixel passes, the luma or
+   brightest-channel maximum for the zebra, the 2x2 mean the RAW zebra's
+   histogram already read. Exact in value, coarser in place (the user's
+   choice). Checked: the engine's maps against the app's full-resolution
+   decisions, every cell, three frame sizes. Costs ~0.3 MB a frame per
+   aid instead of 1.8 MB, and the peaking's maps ~5-6 ms a frame on the
+   engine's camera thread (measured on a desktop; the app no longer
+   computes the full-resolution Laplacian). An engine without SF2A: the
+   aids from the YUV pipe, as before, after 2 s.
+   Measured on the JP2 (15 Nov 2026, 13:24, 29.5 fps, app + engine CPU):
+   no aid 36 %, zebra on the luma 72 %, peaking 96 %, both 102 % -- the
+   YUV pipe with both 110 % (the system: 43.9 against 45.1 % of 8 cores;
+   the battery ~945 against ~1050 mA, the ranges apart). A smaller gain
+   than hoped: the engine read the camera's buffer byte by byte, which is
+   not cached for the CPU (the luma maximum 5.5 ms a frame against 0.7 on
+   a desktop), and the frame waited for the maps (latency 110 ms against
+   93). **Patch 0440:** the planes copied in one block per row first, the
+   maps worked out after the frame went (the overlay follows a few ms
+   later), and on one frame in `aidsEvery` (default 2: 15 a second; the
+   app redraws the overlay at that pace). The "viewfinder pace" line says
+   `aids_ms` (each map set) and `aids_fps`.
+   Measured (15 Nov 2026, 13:50-13:53, both aids, ~29.3 fps): every frame
+   102 % (app 57 + engine 45), one in two 75 % (42 + 33), the YUV pipe
+   111 % (89 + 22); the system 43.2 / 39.8 / 45.2 %; the battery ~930 /
+   ~840 / ~1050 mA; the frame no longer waits (`ours_ms` 1.7-2.0 against
+   15; latency 116 against 127 ms for the YUV pipe in the same minute).
+   One in two looks fine to the eye: the default. The copy changed
+   nothing: a map set still took ~14 ms -- the work itself, likely on a
+   little core (Cortex-A55). **Patch 0441:** the peaking's Laplacian row
+   by row (a few rows in the cache instead of two whole planes) in loops
+   the compiler vectorises (checked in the aarch64 assembly): 6.6 to
+   2.7 ms on a desktop with clang (the NDK's compiler), the same values.
+   Measured (14:07, both aids, one map set in two): a map set ~13 ms
+   against ~17.5 (-25 %, less than on the desktop: the core runs slowly
+   at this load -- at 14:00:04 the CPU sped up and a set took 7.8 ms),
+   the engine 27 % against 33 %.
+   **Patch 0442: the aids drawn by the GPU.** The maps uploaded as two
+   one-byte textures (0.3 MB each) when they change, a shader making
+   overlayCore's decisions per fragment (border, local maximum, line
+   thickening, stripes every 4 cells, the same colours); no ARGB image
+   built and uploaded per update. Checked: the GPU's overlay and the
+   CPU's identical pixel for pixel (peaking, both zebras, line widths,
+   the magnifier). The RAW zebra (levels from the histogram, stripes
+   kept from frame to frame) stays on the CPU. `aidsGpu=0` to compare.
+   Measured (14:23-14:26, three sessions 0 / 1 / 0, both aids, one map
+   set in two): the app 31.9 % against 44.5 and 45.6, the system 38.9 %
+   against 40.2 and 40.3 of 8 cores (the app's saving, not moved to the
+   compositor), the battery unchanged (~840 mA); the same look.
+   **Where it ended, 15 Nov 2026** (both aids, 29.5 fps): app + engine
+   59 % against 111 % for the YUV pipe, the system 38.9 against 45.2 %,
+   the battery ~840 against ~1050 mA, latency ~101 against ~110 ms; with
+   no aid: 36 %, 34.4 %, ~830 mA.
+   **Later, small gain: a viewfinder larger than 1280x960.** The JP2's
+   screen is ~1032-1080 px wide (a forum readout: 1032x2272): 960 px of
+   viewfinder are enlarged 8-12 %. 1440x1088 would cover it. Worth it
+   with a full-resolution peaking (the cells would halve it again).
 
 
 ### A hand-held RAW merge

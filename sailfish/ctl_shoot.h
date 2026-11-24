@@ -12,8 +12,9 @@
  * - a shutter beyond the single-exposure ceiling, with a pair, is a STACK:
  *   film = the photo-equivalent seconds, the engine adds sub-frames at the
  *   ceiling; stk_denoise = extra frames divided out;
- * - bracket "0" in JPEG is a real burst of three (one capture call, back to
- *   back); in raw three shots in turn; bracket N: three real exposures at
+ * - bracket "0" in JPEG is a real burst of bracket_n (3, 5 or 7: one
+ *   capture call, back to back); in raw as many shots in turn; bracket N:
+ *   three real exposures at
  *   -N, 0, +N stops around the pair (ISO kept), clamped to the single
  *   exposure range;
  * - JPEG lines carry the quality and the photo's processing modes; raw lines
@@ -30,15 +31,18 @@ typedef struct {
     int raw;                    /* 1 raw, 0 jpeg */
     int yuv;                    /* 1: our JPEG from the YUV stream (frames, colour, median, sharpen) */
     int frames, colour, median, sharpen;
+    int nr_tiles;               /* yuv: 1 = the frames merged by tiles (each tile aligned), 0 = the classic merge */
+    int split;                  /* yuv, with nr_tiles: 2|4 = each frame 1/2 or 1/4 of the pose, the ISO raised to match */
     int dng;                    /* yuv: a DNG of the same exposure too */
     int snap;                   /* jpeg: the snap type (label=snap in the Exif) */
     int quality;                /* JPEG quality */
     char noise[24], edge[24];   /* the photo's processing modes (jpeg), "" = none */
-    int bracket;                /* -1 off, 0 = x3 same exposure, 1..3 stops */
+    int bracket;                /* -1 off, 0 = same exposure (bracket_n frames), 1..3 stops (3 frames) */
+    int bracket_n;              /* bracket 0: 3, 5 or 7 frames (others: 3) */
     int denoise;                /* stacks: 1, 2 or 4 */
 } ctl_shoot_req_t;
 
-#define CTL_SHOOT_MAX_LINES 3
+#define CTL_SHOOT_MAX_LINES 7   /* x7 in raw: seven shots in turn */
 #define CTL_SHOOT_LINE 256
 
 /* Fills lines[] with the engine commands and returns their number (0 if the

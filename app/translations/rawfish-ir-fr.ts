@@ -471,6 +471,42 @@
         <translation>Une image</translation>
     </message>
     <message>
+        <source>Denoise</source>
+        <translation>Débruitage</translation>
+    </message>
+    <message>
+        <source>Frames merged by tiles: each part aligned on its own</source>
+        <translation>Images fusionnées par tuiles : chaque partie alignée séparément</translation>
+    </message>
+    <message>
+        <source>Frames merged whole: one shift per frame</source>
+        <translation>Images fusionnées entières : un décalage par image</translation>
+    </message>
+    <message>
+        <source>tiles</source>
+        <translation>tuiles</translation>
+    </message>
+    <message>
+        <source>classic</source>
+        <translation>classique</translation>
+    </message>
+    <message>
+        <source>%1 frames merged by tiles</source>
+        <translation>%1 images fusionnées par tuiles</translation>
+    </message>
+    <message>
+        <source>Per frame</source>
+        <translation>Pose/image</translation>
+    </message>
+    <message>
+        <source>Each frame the whole pose</source>
+        <translation>Chaque image : la pose entière</translation>
+    </message>
+    <message>
+        <source>Each frame 1/%1 of the pose, the ISO x%1 (less blur)</source>
+        <translation>Chaque image : 1/%1 de la pose, ISO x%1 (moins de flou)</translation>
+    </message>
+    <message>
         <location line="+0" />
         <source>%1 frames merged (less grain)</source>
         <translation>%1 images fusionnées (moins de grain)</translation>
@@ -567,8 +603,8 @@
     </message>
     <message>
         <location line="+1" />
-        <source>3 frames in a row, same exposure</source>
-        <translation>3 images d'affilée, même exposition</translation>
+        <source>%1 frames in a row, same exposure</source>
+        <translation>%1 images d'affilée, même exposition</translation>
     </message>
     <message>
         <location line="+1" />

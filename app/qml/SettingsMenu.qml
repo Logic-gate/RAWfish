@@ -119,6 +119,14 @@ Item {
     // (its chosen value is kept and comes back, as with the Σ).
     readonly property bool flashAuto: (flash === "on" || flash === "auto") && !!(viewfinder && viewfinder.caps && viewfinder.caps.flash)
     readonly property string effBracket: (stackSelected || flashAuto) ? "off" : bracket
+    // The same-exposure series: "0" 3 frames, "0x5" 5, "0x7" 7; the
+    // bracket's fields for the shutter's "sh" line (sailfish/controller.c).
+    function bracketFrames(v) { return v === "0x5" ? 5 : v === "0x7" ? 7 : 3 }
+    function bracketFields() {
+        var v = effBracket
+        if (v.charAt(0) === "0") return " bracket=0 bracket_n=" + bracketFrames(v)
+        return " bracket=" + v
+    }
     property string flash: "off"                   // off | auto | on | torch (if the camera has a flash)
     property bool menuDiscovered: false            // the menu opened once: no peek at the start any more
     property int stackDenoise: 1                   // stack: frames multiplied then divided out (1, 2, 4)
@@ -127,7 +135,16 @@ Item {
     property string snapActualSize: ""             // the size snap uses on this camera (from the page), for the menu
     property bool logChecks: false                 // the reports carry the viewfinder-vs-photo histograms (a check)
     property string zebraJpegMode: "luma"          // JPEG zebra: luma (a pixel that comes out white) or channel (any one)
-    property int yuvFrames: 1                      // 1, 2 or 4 frames merged
+    property int yuvFrames: 1                      // classic merge: 1, 2, 4 or 8 frames
+    property bool yuvNrTiles: false                // the denoise method: false = classic (one shift per frame), true = by tiles
+    property int yuvTileFrames: 4                  // tile merge: 2, 4 or 8 frames
+    property int yuvTileSplit: 1                   // tile merge: each frame 1, 1/2 or 1/4 of the pose (the ISO raised to match)
+    // The shoot command's merge fields; a flash fires on one frame: one frame then.
+    function yuvMergeFields(oneFrame) {
+        if (oneFrame) return " frames=1"
+        if (!yuvNrTiles) return " frames=" + yuvFrames
+        return " frames=" + yuvTileFrames + " nr=tiles" + (yuvTileSplit > 1 ? " split=" + yuvTileSplit : "")
+    }
     property int yuvColour: 2                      // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
     property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
     property int yuvSharpen: 3                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
@@ -255,8 +272,11 @@ Item {
         edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "hq", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
-        bracket = pick("bracket", "off", ["off", "0", "1", "2", "3"])
-        yuvFrames = pick("jpgFrames", "1", ["1", "2", "4"]) * 1
+        bracket = pick("bracket", "off", ["off", "0", "0x5", "0x7", "1", "2", "3"])
+        yuvFrames = pick("jpgFrames", "1", ["1", "2", "4", "8"]) * 1
+        yuvNrTiles = pick("jpgNrMethod", "classic", ["classic", "tiles"]) === "tiles"
+        yuvTileFrames = pick("jpgTileFrames", "4", ["2", "4", "8"]) * 1
+        yuvTileSplit = pick("jpgTileSplit", "1", ["1", "2", "4"]) * 1
         yuvColour = num("jpgNoiseColourFilter", 2, 0, 5)
         yuvMedian = num("jpgMoireFilter", 0, 0, 4)
         yuvSharpen = num("jpgSharpen", 3, 0, 5)
@@ -675,15 +695,16 @@ Item {
                 dimmedHint: menu.stackSelected ? qsTr("Σ: one long exposure, no bracketing")
                           : menu.flashAuto ? qsTr("Flash: no bracketing")
                           : qsTr("snap: one shot, no bracketing")
-                caption: qsTr("Bracket"); values: ["off", "0", "1", "2", "3"]; current: menu.effBracket
+                // "0", "0x5", "0x7": 3, 5 or 7 frames the same (bracketFields)
+                caption: qsTr("Bracket"); values: ["off", "0", "0x5", "0x7", "1", "2", "3"]; current: menu.effBracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
-                                              : v === "0" ? qsTr("3 frames in a row, same exposure")
+                                              : v.charAt(0) === "0" ? qsTr("%1 frames in a row, same exposure").arg(menu.bracketFrames(v))
                                               : qsTr("3 frames, ±%1 EV").arg(v) }
-                shortFor: function(v) { return v === "off" ? qsTr("off") : v === "0" ? "x3" : "±" + v }
+                shortFor: function(v) { return v === "off" ? qsTr("off") : v.charAt(0) === "0" ? "x" + menu.bracketFrames(v) : "±" + v }
                 onPicked: { menu.bracket = value; menu.save("bracket", value) } }
             // RAWfish-ir's JPG processing, when Settings > Camera menu asks for
             // it (otherwise in rawfish-ir.conf only). Saved to the same keys.
-            // The four columns are one group, set off by a faint frame with its
+            // The columns are one group, set off by a faint frame with its
             // name under them, and greyed together (yuvColumnsOff): they act on
             // our JPG only, not on RAW, snap, Σ or the camera's own JPEG.
             Item {
@@ -699,12 +720,39 @@ Item {
                 Row {
                     id: jpgRow
                     spacing: Theme.paddingMedium
+                // The denoise method: it shows its own columns (classic: Frames;
+                // tiles: Frames and the pose per frame), the other's hidden.
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
+                    defaultValue: "classic"
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Denoise"); values: ["classic", "tiles"]; current: menu.yuvNrTiles ? "tiles" : "classic"
+                    labelFor: function(v) { return v === "tiles" ? qsTr("Frames merged by tiles: each part aligned on its own")
+                                                                 : qsTr("Frames merged whole: one shift per frame") }
+                    shortFor: function(v) { return v === "tiles" ? qsTr("tiles") : qsTr("classic") }
+                    onPicked: { menu.yuvNrTiles = value === "tiles"; menu.save("jpgNrMethod", value) } }
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
+                    visible: !menu.yuvNrTiles
                     defaultValue: 1
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                    caption: qsTr("Frames"); values: [1, 2, 4]; current: menu.yuvFrames
+                    caption: qsTr("Frames"); values: [1, 2, 4, 8]; current: menu.yuvFrames
                     labelFor: function(v) { return v === 1 ? qsTr("One frame") : qsTr("%1 frames merged (less grain)").arg(v) }
                     onPicked: { menu.yuvFrames = value; menu.save("jpgFrames", value) } }
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
+                    visible: menu.yuvNrTiles
+                    defaultValue: 4
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Frames"); values: [2, 4, 8]; current: menu.yuvTileFrames
+                    labelFor: function(v) { return qsTr("%1 frames merged by tiles").arg(v) }
+                    onPicked: { menu.yuvTileFrames = value; menu.save("jpgTileFrames", value) } }
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
+                    visible: menu.yuvNrTiles
+                    defaultValue: 1
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Per frame"); values: [1, 2, 4]; current: menu.yuvTileSplit
+                    labelFor: function(v) { return v === 1 ? qsTr("Each frame the whole pose")
+                                                           : qsTr("Each frame 1/%1 of the pose, the ISO x%1 (less blur)").arg(v) }
+                    shortFor: function(v) { return v === 1 ? "1" : "1/" + v }
+                    onPicked: { menu.yuvTileSplit = value; menu.save("jpgTileSplit", value) } }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: 2
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint

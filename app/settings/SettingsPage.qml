@@ -304,7 +304,7 @@ Page {
             SectionHeader { text: qsTr("Log") }
             TextSwitch {
                 text: qsTr("Detailed log")
-                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own. Takes effect at the next start of RAWfish-ir.")
+                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own; our JPG photos carry their settings in their file names (seen in the Gallery's details). Takes effect at the next start of RAWfish-ir.")
                 checked: device.extraLog
                 onCheckedChanged: device.extraLog = checked
             }

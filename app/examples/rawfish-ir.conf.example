@@ -80,8 +80,19 @@ flash=off
 ; JPG is RAWfish-ir's JPEG: the camera's image before its own noise reduction
 ; and sharpening (its YUV stream), processed by RAWfish-ir, then compressed.
 ; Frames taken and merged: less grain, no texture lost, a little more time.
-;                                               values: 1, 2, 4         default 1
+;                                               values: 1, 2, 4, 8      default 1
 jpgFrames=1
+; The merge: classic (each frame shifted whole onto the sharpest) or tiles
+; (each part of a frame aligned on its own: for hand-held shots and things
+; that move a little). The tile merge has its own frame count, and can take
+; each frame shorter (1/2, 1/4 of the pose, the ISO raised to match): less
+; blur, the extra noise averaged out by the frames.
+;                                               values: classic, tiles  default classic
+jpgNrMethod=classic
+;                                               values: 2, 4, 8         default 4
+jpgTileFrames=4
+;                                               values: 1, 2, 4         default 1
+jpgTileSplit=1
 ; Colour noise filter: 0 off, 1..5 = 1, 2, 3, 5, 8 times the measured noise
 ; (4 and 5 are deliberately too much, to see the effect).
 ;                                               range 0..5              default 2
@@ -111,7 +122,10 @@ zebraJpegMode=luma
 menuDiscovered=0
 ; Checks in the log: each photo's report then carries the histogram the app
 ; showed (viewfinder, or RAW meter) and the photo's own, for histo-check.py.
-; About 2 KB of log per photo; off for everyday use. The same switch is in
+; About 2 KB of log per photo; off for everyday use. Our JPG photos then
+; carry their settings in their file names as well (the Gallery's details
+; show the name, not the Exif we write):
+; photo_tiles4-half_1-48s_iso4428_col2_moire0_sharp3_..._717.jpg. The same switch is in
 ; Settings > Apps > RAWfish-ir > Log > "Detailed log".
 ;                                               values: false, true     default false
 logChecks=false
@@ -133,6 +147,58 @@ jpgYuvStream=jpeg
 ; lags. 0 = as before (the in-between stream).
 ;                                               values: 0, 1            default 1
 jpgYuvFromLargestStream=1
+; viewfinderYuv: how the viewfinder's frames come from the engine. 1: as YUV
+; (I420), turned into colour by the phone's GPU -- half the bytes through the
+; pipe and no conversion on the camera's thread (0.3.11). 0: as RGB, converted
+; by the engine, as up to 0.3.9: to compare the two (CPU, frames per second,
+; the detailed log's "vfpace" line). Applied when this file is saved.
+;                                               values: 0, 1            default 1
+viewfinderYuv=1
+; viewfinderZeroCopy (branch zero_copy): the viewfinder's frames stay in the
+; camera's buffers, drawn by the GPU as they are; only the buffers' ids go
+; through the pipe (with the zebra or the peaking on, also their values per
+; 2x2 pixels, worked out by the engine). Falls back to viewfinderYuv by
+; itself if anything fails (the log says "# zero copy: ..."). 0: off.
+; Applied when this file is saved.            values: 0, 1      default 1
+viewfinderZeroCopy=1
+; aidsEvery: with zero copy, the zebra and the peaking are worked out by the
+; engine on one frame in N (the viewfinder itself keeps every frame): 1 =
+; every frame (30 a second), 2 = 15, 3 = 10, 4 = 7.5 -- less CPU and battery,
+; the aids lag the picture a little when the phone moves. Applied when this
+; file is saved.                              values: 1 to 4    default 2
+aidsEvery=2
+; aidsGpu: with zero copy, the zebra and the peaking drawn by the GPU from
+; the engine's values (1), or as an image the app builds each time (0: to
+; compare; the RAW zebra is always the latter). Applied when this file is
+; saved.                                      values: 0, 1      default 1
+aidsGpu=1
+; screenOnMinutes: the display kept on while the viewfinder runs, up to N
+; minutes after the last touch; 0 = the system's own delay. Applied when
+; this file is saved.                         values: 0 to 60   default 5
+screenOnMinutes=5
+; statsLog: every N seconds, a "# stats" line in the log: the viewfinder's
+; mode and fps, CPU (100% = one core, as top), RSS, peak RSS and threads of
+; the app and the engine, the system's CPU, the battery (current, voltage,
+; charge, charging or not; unplug the phone to compare consumption). The
+; first line after an engine starts has no engine CPU yet ("-").
+; statsLog, viewfinderZeroCopy and viewfinderYuv apply as soon as this file
+; is saved ("# conf changed: ..." in the log).
+;                                             values: 0 (off) to 3600  default 0
+statsLog=0
+; vfBuffers: the camera buffers the viewfinder rotates through (the app may
+; hold all but two). More smooth out a late frame, each costs one frame of
+; memory (1.8 MB at 1280x960). Read when an engine starts.
+;                                             values: 4 to 10   default 6
+vfBuffers=6
+; hwProbe (branch zero_copy, a test): the engine sends its next N viewfinder
+; buffers to the app to be imported without a copy (eglHybrisCreateRemoteBuffer);
+; the log says what worked, a picture that came through is saved beside it
+; (hwprobe-*.png). The viewfinder is unchanged. Read when an engine starts.
+;                                               values: 0 (off) to 20   default 0
+hwProbe=0
+; hwProbeGpuUsage: with hwProbe, the viewfinder's buffers allocated for GPU
+; sampling too (AImageReader_newWithUsage).    values: 0, 1            default 0
+hwProbeGpuUsage=0
 ; snap (in TYPE): the camera driver's own JPEG at a small size, for utility
 ; shots (a receipt, a sign), noise reduction and sharpening HQ. Its size, as
 ; WIDTHxHEIGHT among the camera's JPEG sizes ("" = the largest 4:3 size of

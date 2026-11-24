@@ -35,7 +35,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "209"                             // shown in the deck
+    readonly property string uiVersion: "208"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -1234,7 +1234,9 @@ ApplicationWindow {
             // this for video): the display is black with the progress, which
             // costs little on an OLED, and the user always sees the shot is
             // still running instead of a dark phone that might be touched.
-            DisplayBlanking { preventBlanking: page.stacking }
+            // The viewfinder too, while used: until rawfish-ir.conf
+            // screenOnMinutes (default 5) without a touch.
+            DisplayBlanking { preventBlanking: page.stacking || viewfinder.keepScreenOn }
 
             // A running stack: frames done / total, for the overlay.
             property int stackFrame: 0
@@ -1287,12 +1289,12 @@ ApplicationWindow {
                                        + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
-                                       + " bracket=" + settingsMenu.effBracket
+                                       + settingsMenu.bracketFields()
                                        + " denoise_sigma=" + settingsMenu.stackDenoise
                                        // A flash fires on one frame: with "on" or "auto" our JPG is
                                        // one frame, whatever the Frames column says (a merge of
                                        // flashed and unflashed frames would be a mess).
-                                       + (isYuv ? " frames=" + (settingsMenu.flashAuto ? 1 : settingsMenu.yuvFrames)
+                                       + (isYuv ? settingsMenu.yuvMergeFields(settingsMenu.flashAuto)
                                                 + " colour=" + settingsMenu.yuvColour
                                                   + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
                                                   + (outputConf.jpgWithDng && page.rawAvailable ? " dng=1" : "") : ""))

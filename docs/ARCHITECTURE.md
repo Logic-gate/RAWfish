@@ -52,6 +52,9 @@ and peaking).
    the circle, the level, the menus.
 5. **One frame protocol.** SF2P (viewfinder frames) and SF2M (events) stay
    the transport to the interface; SF2M gains the controller's states.
+   Since 0.3.11 a frame can also come as SF2Y (I420, the same header):
+   the interface asks for it ("vf yuv") and converts it on its GPU; an
+   engine that does not know the command keeps sending SF2P.
 
 ## Threads and locks
 

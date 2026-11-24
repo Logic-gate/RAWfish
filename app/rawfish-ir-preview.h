@@ -2,8 +2,9 @@
  * rawfish-ir-preview.h -- the viewfinder, a QQuickItem shown in QML.
  *
  * It launches the indraw engine in 'stream' mode as a child process, reads the
- * continuous SF2P frame stream from its stdout, turns each frame into a QImage,
- * and draws it on the GPU. Commands (focus, capture, exposure...) are written to
+ * continuous frame stream from its stdout -- SF2Y (I420, converted to colour
+ * by a shader on the GPU; asked with "vf yuv" since 0.3.11) or SF2P (RGB888,
+ * an older engine) -- and draws it on the GPU. Commands (focus, capture, exposure...) are written to
  * the process's stdin; the engine's JSON replies go to its log, not here.
  *
  * This is the phase-3 skeleton: display the live viewfinder. Overlays (peaking,
@@ -23,6 +24,7 @@
 #include <QVariantMap>
 #include <QVariant>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QThread>
 
 /* The zebra / peaking overlay is computed off the UI thread: OverlayWorker
@@ -57,7 +59,10 @@ class OverlayWorker : public QObject
 {
     Q_OBJECT
 public slots:
-    void compute(const QImage &frame, const OverlayParams &p);
+    /* frame: RGB888; or, when it is null, `i420` of `size` (read as it is). */
+    void compute(const QImage &frame, const QByteArray &i420, const QSize &size, const OverlayParams &p);
+    /* the engine's aids maps (SF2A) of `cells` (2x2 cells), `mask` the maps in them */
+    void computeCells(const QByteArray &maps, const QSize &cells, int mask, const OverlayParams &p);
 signals:
     void done(const QImage &overlay);
 private:
@@ -66,6 +71,19 @@ private:
 /* The computation; `st` (may be null) carries the RAW zebra from frame to
  * frame. Safe on any thread with its own state. */
 QImage computeOverlay(const QImage &frame, const OverlayParams &p, OverlayState *st = nullptr);
+/* The same from an I420 frame of `size` (SF2Y), read where it lies: the
+ * zebra and the peaking on its Y plane, the zebra on channels from the
+ * pixel's colour (0.3.11). */
+QImage computeOverlayI420(const QByteArray &i420, const QSize &size, const OverlayParams &p, OverlayState *st = nullptr);
+/* An I420 frame (SF2Y: Y, then U and V at half resolution) as RGB888, with
+ * the engine's arithmetic (android/yuv.h: BT.601 full range, chroma
+ * nearest): what the aids, a saved preview and an RGB fallback read. A null
+ * image when the bytes do not match the size. */
+QImage i420ToRgb(const QByteArray &i420, const QSize &size);
+/* The same from the engine's aids maps (SF2A: zero copy), one value per 2x2
+ * cell (mask: 1 peaking, 2 luma max, 4 channel max, 8 2x2 mean luma, the
+ * maps in that order): an overlay of the cells' size. */
+QImage computeOverlayCells(const QByteArray &maps, const QSize &cells, int mask, const OverlayParams &p, OverlayState *st = nullptr);
 
 class IndrawPreview : public QQuickItem
 {
@@ -140,6 +158,10 @@ class IndrawPreview : public QQuickItem
      * a restart), at most 45 s after the shot. The UI turns dots round the
      * TYPE button meanwhile. */
     Q_PROPERTY(bool processing READ processing NOTIFY processingChanged)
+    /* keepScreenOn: the viewfinder is running and was touched less than
+     * rawfish-ir.conf screenOnMinutes ago (the page keeps the display on,
+     * DisplayBlanking). */
+    Q_PROPERTY(bool keepScreenOn READ keepScreenOn NOTIFY keepScreenOnChanged)
 
     /* caps: the sensor limits from the engine's SF2M "caps" line (isoMin,
      * isoMax, isoAnalogMax, expMinNs, expMaxNs, shutterMaxNs, evMin, evMax,
@@ -260,6 +282,7 @@ public:
     QString configDir() const;
     bool stacking() const;
     bool processing() const { return m_processing; }
+    bool keepScreenOn() const { return m_keepScreenOn; }
     QString jpgDir() const;
     QString dngDir() const;
     QString storageNote() const { return m_storageNote; }
@@ -314,6 +337,10 @@ public:
     Q_INVOKABLE void sendCommand(const QString &command);
     /* Restarts the engine (new sizes take effect); no-op while inactive. */
     Q_INVOKABLE void restart();
+    /* One "# stats ..." line in the engine's log now: CPU, memory and threads
+     * of the app and the engine, the system's CPU, the battery (procstats.h).
+     * rawfish-ir.conf statsLog=N writes one every N seconds. */
+    Q_INVOKABLE void logStats();
     /* Asks the engine to stop a running stack at its next sub-frame (SIGUSR1):
      * it writes what it accumulated, labelled with the exposure reached. */
     Q_INVOKABLE void abortCapture();
@@ -402,6 +429,7 @@ signals:
     void stackDone(int frames, int n, bool aborted, int ms);
     void stackingChanged();
     void processingChanged();
+    void keepScreenOnChanged();
     void outputChanged();
     void capsChanged();
     void liveChanged();
@@ -418,6 +446,8 @@ signals:
 protected:
     /* Qt calls this on the render thread to (re)build what is drawn. */
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
+    void itemChange(ItemChange change, const ItemChangeData &value) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void onReadyRead();            /* bytes available on the engine's stdout    */
@@ -427,7 +457,10 @@ private slots:
 private:
     void start();                  /* launch the engine in stream mode          */
     void stop(bool wait = false);  /* quit the engine; wait only when closing   */
-    void parseFrames();            /* pull whole SF2P frames out of m_buffer     */
+    void parseFrames();            /* pull whole SF2P / SF2Y frames out of m_buffer */
+    bool hasFrame() const { return !m_frame.isNull() || !m_yuv.isEmpty() || m_hwbId != 0; }
+    Q_INVOKABLE void syncVfMode(); /* asks the engine for the frames' format wanted now */
+    QImage frameRgb() const;       /* the latest frame in RGB (converted from I420) */
     void parseEvent(const QByteArray &line);   /* one SF2M line                 */
     void scheduleRestart();        /* after an unexpected engine exit            */
     void buildOverlay();           /* asks the worker for m_frame's overlay      */
@@ -437,7 +470,48 @@ private:
 
     QProcess *m_process = nullptr; /* the indraw engine                         */
     QByteArray m_buffer;           /* accumulates stdout until a full frame      */
-    QImage m_frame;                /* the latest decoded frame (what we draw)    */
+    QImage m_frame;                /* the latest SF2P frame (RGB), or null       */
+    QByteArray m_yuv;              /* the latest SF2Y frame (I420), or empty: one of
+                                    * the two is set, of size m_frameSize        */
+    QString m_vfModeSent;          /* "hwb" / "yuv" / "rgb" asked of this engine ("" none yet) */
+    bool m_zeroCopy = true;        /* rawfish-ir.conf viewfinderZeroCopy        */
+    bool m_vfYuvPref = true;       /* rawfish-ir.conf viewfinderYuv             */
+    class HwFrames *m_hwframes = nullptr;  /* zero copy: the buffers' handles (hwframes.h) */
+    quint64 m_hwbId = 0;           /* the latest frame is the camera's buffer m_hwbId (SF2H), or 0 */
+    quint64 m_hwbShown = 0;        /* the buffer drawn last (written by the render thread) */
+    /* The aids with zero copy (SF2A): the engine's maps of the latest frame,
+     * their 2x2 cells and which maps they are; what was asked of it. */
+    QByteArray m_aidMaps;
+    QSize m_aidCells;
+    int m_aidMask = 0;
+    int m_aidsSent = -1;           /* "vf aids N" last sent (-1: not since the mode) */
+    int m_aidsEvery = 2;           /* rawfish-ir.conf aidsEvery: the maps of one frame in N */
+    int m_aidsEverySent = 0;       /* ... as last sent                         */
+    bool m_aidsNew = false;        /* maps came in this read: the overlay is redrawn */
+    quint64 m_aidSerial = 0;       /* counts the maps received (the GPU's upload) */
+    bool m_aidsGpu = false;        /* the aids drawn by the GPU from the maps now */
+    bool m_aidsGpuPref = true;     /* rawfish-ir.conf aidsGpu                  */
+    bool m_aidsGot = false;        /* maps came since the last ask             */
+    bool m_aidsUnsupported = false;/* an engine that never sent any: the YUV pipe for the aids */
+    QElapsedTimer m_aidsClock;     /* since the last ask                       */
+    int aidsMask() const;          /* the maps the aids on now need            */
+    void readLiveConf(bool announce);  /* statsLog, viewfinderZeroCopy, viewfinderYuv, applied at once */
+    class ProcStats *m_stats = nullptr;
+    class QTimer *m_statsTimer = nullptr;
+    class QFileSystemWatcher *m_confWatch = nullptr;
+    QTimer *m_confDebounce = nullptr;  /* rawfish-ir.conf read once the saving is over */
+    /* The display kept on while the viewfinder is used: the last touch
+     * anywhere in the window (an event filter on it), screenOnMinutes. */
+    QElapsedTimer m_lastTouch;
+    int m_screenOnMin = 5;
+    bool m_keepScreenOn = false;
+    QTimer *m_screenTimer = nullptr;
+    void updateKeepScreenOn();
+    int m_statsSecs = 0;           /* rawfish-ir.conf statsLog (0: off)         */
+    quint64 m_statsSerial = 0;     /* m_frameSerial at the last stats line      */
+    QElapsedTimer m_statsClock;    /* since the last stats line                 */
+    QString m_liveConf;            /* the values last applied, to log changes   */
+    quint64 m_frameSerial = 0;     /* counts the frames taken (m_frame / m_yuv)  */
 
     bool m_active = false;
     bool m_running = false;
@@ -460,6 +534,9 @@ private:
     QSize m_startedOverride;       /* the override the running engine was started with */
     bool m_restartQueued = false;  /* a restart check waits for the end of this event-loop turn */
     QPointer<QProcess> m_retiring; /* the engine told to quit, until it has ended */
+    class HwProbe *m_hwprobe = nullptr;  /* zero-copy probe (hwprobe.h), when asked */
+    int m_hwpFrames = 0;           /* rawfish-ir.conf hwProbe                  */
+    bool m_hwpAsked = false;       /* "hwprobe" sent to this engine            */
     bool m_startPending = false;   /* start() waits for m_retiring to end      */
     bool sessionOutdated() const;  /* what is asked differs from what the engine was started with */
     void restartIfOutdated();

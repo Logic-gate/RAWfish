@@ -472,6 +472,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Denoise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Frames merged by tiles: each part aligned on its own</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Frames merged whole: one shift per frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>tiles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>classic</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 frames merged by tiles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Per frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Each frame the whole pose</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Each frame 1/%1 of the pose, the ISO x%1 (less blur)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+0"/>
         <source>%1 frames merged (less grain)</source>
         <translation type="unfinished"></translation>
@@ -568,7 +604,7 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>3 frames in a row, same exposure</source>
+        <source>%1 frames in a row, same exposure</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

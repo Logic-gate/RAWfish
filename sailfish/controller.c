@@ -284,6 +284,13 @@ static void note(const char *fmt, ...)
  * detailed log), which goes to the log and nowhere else. */
 static void on_event(const char *line)
 {
+    if (!strncmp(line, "hwprobe ", 8)) {       /* the zero-copy probe (branch zero_copy): the log only */
+        char t[420];
+        snprintf(t, sizeof t, "%.410s", line);
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
     if (!strncmp(line, "vfpace ", 7)) {        /* the viewfinder's pace (detailed log, see vf_pace) */
         char t[200];
         snprintf(t, sizeof t, "viewfinder pace %.160s", line + 7);
@@ -424,8 +431,9 @@ static int view_command(const char *line)
     return 1;
 }
 
-/* "sh name=N type=jpg|raw|yuv q=Q noise=M edge=M bracket=off|0|1|2|3 denoise_sigma=D
- *     frames=1|2|4 colour=0..5 median=0..4 sharpen=0..5 dng=0|1" (the last five for yuv):
+/* "sh name=N type=jpg|raw|yuv q=Q noise=M edge=M bracket=off|0|1|2|3 bracket_n=3|5|7 denoise_sigma=D
+ *     frames=1|2|4|8 nr=classic|tiles split=1|2|4 colour=0..5 median=0..4 sharpen=0..5 dng=0|1"
+ *     (frames to dng for yuv; split with nr=tiles only):
  * a press of the shutter (the self-timer is the interface's). The capture
  * lines go to the queue the CLI drains. */
 static int shoot_command(const char *line)
@@ -440,6 +448,8 @@ static int shoot_command(const char *line)
     if ((v = field(line, "type"))) { r.raw = !strncmp(v, "raw", 3); r.yuv = !strncmp(v, "yuv", 3); }
     r.frames = 1; r.colour = 2; r.median = 0; r.sharpen = 0;
     if ((v = field(line, "frames"))) r.frames = atoi(v);
+    r.nr_tiles = (v = field(line, "nr")) && !strncmp(v, "tiles", 5);
+    r.split = (v = field(line, "split")) ? atoi(v) : 1;
     if ((v = field(line, "colour"))) r.colour = atoi(v);
     if ((v = field(line, "median"))) r.median = atoi(v);
     if ((v = field(line, "sharpen"))) r.sharpen = atoi(v);
@@ -449,6 +459,7 @@ static int shoot_command(const char *line)
     if ((v = field(line, "noise"))) sscanf(v, "%23s", r.noise);
     if ((v = field(line, "edge"))) sscanf(v, "%23s", r.edge);
     if ((v = field(line, "bracket"))) r.bracket = !strncmp(v, "off", 3) ? -1 : atoi(v);
+    r.bracket_n = (v = field(line, "bracket_n")) ? atoi(v) : 3;   /* bracket 0: 3, 5 or 7 frames */
     /* denoise_sigma: the Σ stack's poses per frame (renamed from 'denoise',
      * which read like a noise-reduction mode; the old name still accepted) */
     if ((v = field(line, "denoise_sigma")) || (v = field(line, "denoise"))) r.denoise = atoi(v);

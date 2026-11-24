@@ -2,10 +2,25 @@
  * rawfish-ir-preview.cpp -- see rawfish-ir-preview.h.
  */
 #include "rawfish-ir-preview.h"
+#include "hwprobe.h"
+#include "hwframes.h"
+#include "hwegl.h"
+#include "procstats.h"
+#include <QTimer>
+#include <QFileSystemWatcher>
+#include <QElapsedTimer>
+#include <QProcessEnvironment>
 
 #include <QSGSimpleTextureNode>
 #include <QSGGeometryNode>
 #include <QSGTextureMaterial>
+#include <QSGMaterial>
+#include <QSGMaterialShader>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
+#include <QVector2D>
+#include <QSharedPointer>
 #include <cmath>
 #include <QQuickWindow>
 #include <QtEndian>
@@ -29,6 +44,9 @@ static QString settingsPath();   /* defined with the settings code below */
  * (width, height, byte count), 16 bytes total. Matches the engine's write_sf2p. */
 static const char SF2P_MAGIC[4] = { 'S', 'F', '2', 'P' };   // image frame
 static const char SF2M_MAGIC[4] = { 'S', 'F', '2', 'M' };   // metadata / event
+static const char SF2Y_MAGIC[4] = { 'S', 'F', '2', 'Y' };   // image frame, I420 (0.3.11)
+static const char SF2H_MAGIC[4] = { 'S', 'F', '2', 'H' };   // image frame, a buffer handle (zero copy)
+static const char SF2A_MAGIC[4] = { 'S', 'F', '2', 'A' };   // the aids' values of the next SF2H frame
 static const int SF2P_HEADER = 16;
 static const int SF2M_HEADER = 8;
 
@@ -58,6 +76,7 @@ IndrawPreview::IndrawPreview(QQuickItem *parent)
 IndrawPreview::~IndrawPreview()
 {
     stop(true);
+    delete m_stats;
     m_overlayThread->quit();
     m_overlayThread->wait(2000);
 }
@@ -326,6 +345,43 @@ void IndrawPreview::start()
     }
 
     m_buffer.clear();
+    m_vfModeSent.clear();          /* a new engine starts with SF2P: asked again */
+    m_aidsSent = -1; m_aidsGot = false; m_aidsUnsupported = false;
+    m_aidMaps.clear(); m_aidMask = 0;
+    m_hwbId = 0;
+    /* The frames' format (syncVfMode): zero copy unless rawfish-ir.conf
+     * viewfinderZeroCopy=0, the YUV pipe unless viewfinderYuv=0; the
+     * viewfinder's buffers from vfBuffers (4-10, default 6). */
+    {
+        QSettings conf(settingsPath(), QSettings::IniFormat);
+        m_liveConf.clear();
+        readLiveConf(false);
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        const int nb = conf.value(QStringLiteral("vfBuffers"), 6).toInt();
+        if (nb >= 4 && nb <= 10) env.insert(QStringLiteral("RAWFISH_VF_BUFFERS"), QString::number(nb));
+        m_process->setProcessEnvironment(env);
+        if (m_hwframes) m_hwframes->clearFailed();   /* each engine tries again */
+    }
+    /* hwprobe (branch zero_copy, docs/ROADMAP.md): rawfish-ir.conf hwProbe=N
+     * sends the engine's next N viewfinder buffers to be imported here
+     * without a copy (hwprobe.h); hwProbeGpuUsage=1 has them allocated for
+     * GPU sampling too. Off unless asked; read at each engine start. */
+    {
+        QSettings conf(settingsPath(), QSettings::IniFormat);
+        m_hwpFrames = qBound(0, conf.value(QStringLiteral("hwProbe"), 0).toInt(), 20);
+        m_hwpAsked = false;
+        if (m_hwpFrames > 0) {
+            if (!m_hwprobe) {
+                m_hwprobe = new HwProbe(this);
+                connect(m_hwprobe, &HwProbe::bufferArrived, this, &QQuickItem::update);
+                m_hwprobe->listen(cache + QStringLiteral("/hwprobe.sock"), cache);
+            }
+            QProcessEnvironment env = m_process->processEnvironment();
+            if (conf.value(QStringLiteral("hwProbeGpuUsage"), 0).toInt() == 1)
+                env.insert(QStringLiteral("RAWFISH_PREVIEW_GPU_USAGE"), QStringLiteral("1"));
+            m_process->setProcessEnvironment(env);
+        }
+    }
     /* Inside the Sailjail sandbox /usr/bin only holds the app binary
      * (firejail --private-bin), so "rawfish-ir-cli" in the PATH does not exist
      * there: use the engine's own directory, /usr/libexec/rawfish-ir, visible in the
@@ -333,12 +389,15 @@ void IndrawPreview::start()
     const QString libexec = QStringLiteral("/usr/libexec/rawfish-ir/rawfish-ir-cli");
     const QString engine = QFileInfo(libexec).isExecutable() ? libexec : QStringLiteral("rawfish-ir-cli");
     m_process->start(engine, args);
+    m_lastTouch.restart();                 /* opening the camera counts as a touch */
+    updateKeepScreenOn();
 }
 
 void IndrawPreview::stop(bool wait)
 {
     if (!m_process)
         return;
+    if (m_keepScreenOn) { m_keepScreenOn = false; emit keepScreenOnChanged(); }
     /* This process is on its way out: none of its signals must reach us any
      * more. Its "finished" (emitted inside waitForFinished, or later after a
      * kill) used to be taken for the NEW engine dying: "engine stopped" on a
@@ -506,11 +565,20 @@ QString IndrawPreview::capturePrefix() const { return m_prefix.isEmpty() ? QStri
  * profiles). Kept: the photos, the Settings page's choices (output folders,
  * prefix: in dconf), the examples (rewritten anyway), the log.
  * "installed-version" in the configuration folder records the version
- * whose files are in use; a build outside the package ("dev") moves nothing. */
+ * whose files are in use (the version only, not the package release: a new
+ * patch build of the same version keeps them); a build outside the package
+ * ("dev") moves nothing. */
 QString IndrawPreview::s_archiveNote;
 QString IndrawPreview::archiveOnNewVersion()
 {
-    const QString cur = QStringLiteral(APP_VERSION);
+    /* The version alone, without the package release: since 0.3.9 every
+     * build carries its patch number as the release (0.3.9-433.beta,
+     * scripts/with-build-release.sh), and comparing the whole string set the
+     * settings, simple.json and the measured maps aside at every patch
+     * installed -- the app came back in simple mode each time (15 Nov 2026).
+     * A new version (0.3.10 -> 0.3.11) still starts from its own defaults. */
+    const QString full = QStringLiteral(APP_VERSION);
+    const QString cur = full.section(QLatin1Char('-'), 0, 0);
     const QString cfg = QDir::homePath() + QStringLiteral("/.config/com.rawfish/rawfish-ir");
     const QString data = QDir::homePath() + QStringLiteral("/.local/share/com.rawfish/rawfish-ir/device-profiles");
     const QString stampPath = cfg + QStringLiteral("/installed-version");
@@ -520,8 +588,8 @@ QString IndrawPreview::archiveOnNewVersion()
     QDir().mkpath(cfg);
     {
         QFile f(stampPath);
-        if (f.open(QIODevice::ReadOnly)) prev = QString::fromUtf8(f.readAll()).trimmed();
-    }
+        if (f.open(QIODevice::ReadOnly)) prev = QString::fromUtf8(f.readAll()).trimmed().section(QLatin1Char('-'), 0, 0);
+    }   /* a stamp written by 0.3.9-425..433 holds the release too: compared without it */
     if (prev == cur) return QString();
     {
         const struct { QString dir, sub, name; } files[] = {
@@ -742,10 +810,11 @@ bool IndrawPreview::convertDngPreview(const QString &ppmPath, int orientation)
 
 bool IndrawPreview::saveFramePreview(const QString &path, int rotation)
 {
-    if (m_frame.isNull()) return false;
+    const QImage rgb = frameRgb();
+    if (rgb.isNull()) return false;
     QTransform t;
     t.rotate(((rotation % 360) + 360) % 360);
-    const QImage upright = m_frame.transformed(t);
+    const QImage upright = rgb.transformed(t);
     return upright.save(path, "JPEG", 85);
 }
 
@@ -769,6 +838,9 @@ void IndrawPreview::parseFrames()
     bool gotFrame = false;
     int pos = 0, newest = -1;
     quint32 newestW = 0, newestH = 0;
+    bool newestYuv = false, newestHwb = false;
+    quint64 newestHwbId = 0;
+    int aidPos = -1; quint32 aidW = 0, aidH = 0, aidN = 0;   /* the latest SF2A */
     const int size = m_buffer.size();
     const char *base = m_buffer.constData();
     for (;;) {
@@ -778,14 +850,21 @@ void IndrawPreview::parseFrames()
                                     * until ui 183: a short event sat until the
                                     * next frame arrived)                      */
 
-        /* Which packet is at the front? SF2M (metadata/event) or SF2P (frame). */
+        /* Which packet is at the front? SF2M (metadata/event), SF2P (an RGB
+         * frame), SF2Y (an I420 frame) or SF2H (the camera buffer a frame is
+         * in: zero copy). */
         const bool isM = memcmp(base + pos, SF2M_MAGIC, 4) == 0;
+        const bool isY = memcmp(base + pos, SF2Y_MAGIC, 4) == 0;
         const bool isP = memcmp(base + pos, SF2P_MAGIC, 4) == 0;
-        if (!isM && !isP) {
-            /* Resync: jump to the next occurrence of either magic. */
-            int nP = m_buffer.indexOf(QByteArray(SF2P_MAGIC, 4), pos + 1);
-            int nM = m_buffer.indexOf(QByteArray(SF2M_MAGIC, 4), pos + 1);
-            int next = (nP < 0) ? nM : (nM < 0 ? nP : qMin(nP, nM));
+        const bool isH = memcmp(base + pos, SF2H_MAGIC, 4) == 0;
+        const bool isA = memcmp(base + pos, SF2A_MAGIC, 4) == 0;
+        if (!isM && !isP && !isY && !isH && !isA) {
+            /* Resync: jump to the next occurrence of any magic. */
+            int next = -1;
+            for (const char *magic : { SF2P_MAGIC, SF2M_MAGIC, SF2Y_MAGIC, SF2H_MAGIC, SF2A_MAGIC }) {
+                const int n = m_buffer.indexOf(QByteArray(magic, 4), pos + 1);
+                if (n >= 0 && (next < 0 || n < next)) next = n;
+            }
             if (next < 0) { pos = size; break; }
             pos = next;
             continue;
@@ -810,26 +889,87 @@ void IndrawPreview::parseFrames()
         const quint32 h = qFromLittleEndian<quint32>(p + 8);
         const quint32 n = qFromLittleEndian<quint32>(p + 12);
 
+        if (isA) {
+            /* SF2A: w x h cells, 16 bytes (the maps' mask, the frame's size),
+             * then one cell map per bit of the mask */
+            if (w == 0 || h == 0 || w > 8192 || h > 8192 || n < 16) { ++pos; continue; }
+            if (size - pos < SF2P_HEADER + 16) break;
+            const quint32 mask = qFromLittleEndian<quint32>(p + 16);
+            int k = 0;
+            for (int b = 1; b <= 8; b <<= 1) if (mask & quint32(b)) ++k;
+            if (mask == 0 || mask > 15 || quint64(n) != 16u + quint64(k) * w * h) { ++pos; continue; }
+            if (size - pos < SF2P_HEADER + int(n)) break;
+            aidPos = pos; aidW = w; aidH = h; aidN = n;
+            pos += SF2P_HEADER + int(n);
+            continue;
+        }
+
         /* Sanity-check the header before trusting the size: the product in
          * 64 bits (w = h = 65536 made w*h*3 wrap to 0 in 32 bits and a frame
          * announcing n = 0 pass, then img.copy() read 12 GB past the buffer:
          * October 2026 audit), and a frame no larger than any sensor's. */
-        if (w == 0 || h == 0 || w > 16384 || h > 16384 || quint64(n) != quint64(w) * h * 3u) {
+        /* SF2Y: Y (w*h), then U and V ((w+1)/2 * (h+1)/2 each) */
+        const quint64 want = isH ? 16u : isY ? quint64(w) * h + 2u * quint64((w + 1) / 2) * ((h + 1) / 2) : quint64(w) * h * 3u;
+        if (w == 0 || h == 0 || w > 16384 || h > 16384 || quint64(n) != want) {
             ++pos;                 /* bad header: slip a byte and resync         */
             continue;
         }
         if (size - pos < SF2P_HEADER + int(n))
             break;                 /* the pixels have not all arrived yet       */
 
+        /* a buffer frame passed over for a newer one goes back to the camera */
+        if (newest >= 0 && newestHwb && m_hwframes) m_hwframes->release(newestHwbId);
         newest = pos + SF2P_HEADER; newestW = w; newestH = h;   /* the latest so far */
+        newestYuv = isY;
+        newestHwb = isH;
+        if (isH) newestHwbId = qFromLittleEndian<quint64>(reinterpret_cast<const uchar *>(base + pos + SF2P_HEADER));
         pos += SF2P_HEADER + int(n);
         gotFrame = true;
     }
+    if (aidPos >= 0 && m_vfModeSent == QLatin1String("hwb")) {
+        /* the aids' values of the zero-copy frame that follows them (kept
+         * even when that frame comes with the next read) */
+        m_aidMask = int(qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(base + aidPos + SF2P_HEADER)));
+        m_aidMaps = m_buffer.mid(aidPos + SF2P_HEADER + 16, int(aidN) - 16);
+        m_aidCells = QSize(int(aidW), int(aidH));
+        m_aidsGot = true;
+        m_aidsNew = true;
+        ++m_aidSerial;
+    }
     if (newest >= 0) {
-        /* Copy the newest frame's RGB888 pixels into a QImage (the buffer's
-         * bytes are about to go). */
-        QImage img(reinterpret_cast<const uchar *>(base + newest), int(newestW), int(newestH), int(newestW * 3), QImage::Format_RGB888);
-        m_frame = img.copy();
+        /* Copy the newest frame's pixels (the buffer's bytes are about to
+         * go): an I420 frame as it is, for the shader (half the bytes of
+         * RGB, and no conversion on this thread); an RGB888 one into a QImage. */
+        if (newestHwb) {
+            /* zero copy: the frame is the camera's buffer; its handle came
+             * (or is waiting) on the socket. The one received before and
+             * never drawn goes back. */
+            if (m_hwframes) {
+                if (!m_hwframes->known(newestHwbId)) m_hwframes->drain();
+                if (m_hwbId && m_hwbId != m_hwbShown && m_hwbId != newestHwbId) m_hwframes->release(m_hwbId);
+            }
+            m_hwbId = newestHwbId;
+            m_yuv.clear();
+            m_frame = QImage();
+        } else if (newestYuv) {
+            m_yuv = m_buffer.mid(newest, int(quint64(newestW) * newestH + 2u * quint64((newestW + 1) / 2) * ((newestH + 1) / 2)));
+            m_frame = QImage();
+            m_hwbId = 0;
+        } else {
+            QImage img(reinterpret_cast<const uchar *>(base + newest), int(newestW), int(newestH), int(newestW * 3), QImage::Format_RGB888);
+            m_frame = img.copy();
+            m_yuv.clear();
+            m_hwbId = 0;
+        }
+        syncVfMode();
+        ++m_frameSerial;                                             /* the render thread uploads it once */
+        if (m_hwprobe) {               /* hwprobe: asked once per engine, its lines logged */
+            if (m_hwpFrames > 0 && !m_hwpAsked && m_process) {
+                m_hwpAsked = true;
+                sendCommand(QStringLiteral("hwprobe %1 %2").arg(m_hwprobe->path()).arg(m_hwpFrames));
+            }
+            for (const QString &r : m_hwprobe->takeResults()) sendCommand(QStringLiteral("# hwprobe app: ") + r);
+        }
         if (m_frameSize != QSize(int(newestW), int(newestH))) {     /* the page sizes the viewfinder from it */
             m_frameSize = QSize(int(newestW), int(newestH));
             emit frameSizeChanged();
@@ -837,7 +977,10 @@ void IndrawPreview::parseFrames()
     }
     if (pos >= size) m_buffer.clear();
     else if (pos > 0) m_buffer.remove(0, pos);
-    if (gotFrame) buildOverlay();
+    /* the overlay again: with a new frame -- zero copy: with new maps
+     * (one frame in aidsEvery; they come after their frame) */
+    if (m_hwbId ? m_aidsNew : gotFrame) buildOverlay();
+    m_aidsNew = false;
 
     if (gotFrame) {
         setRunning(true);          /* first frame proves the stream is live     */
@@ -1101,27 +1244,189 @@ void IndrawPreview::parseEvent(const QByteArray &line)
  * keeps the lines thin. Rebuilt per frame while an aid is on (~1.2 Mpx). */
 /* The pure computation: a frame and the aids' settings in, the ARGB overlay
  * out (null when nothing to draw). No static state: runs on the worker. */
-QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayState *st)
+/* The frame as the aids read it, pixel by pixel: `peak` the value the
+ * peaking smooths (the green), `luma` the Rec.601 luma, `maxCh` the
+ * brightest of R, G, B. An I420 frame is read where it lies (0.3.11): the
+ * luma is its Y plane as it is (the camera's Y is the Rec.601 luma the
+ * zebra computed from RGB); the green and the brightest channel are worked
+ * out for the pixel, with the engine's arithmetic, only when the peaking or
+ * the zebra on channels asks -- nothing converts the whole frame to RGB.
+ * The peaking keeps the green: on Y its marks fell on other pixels (the
+ * same density, 43 % of them moved on a test photo), and its threshold was
+ * tuned on the green. */
+struct OverlayRgbSrc
 {
-    if ((!prm.zebra && !prm.peaking) || frame.isNull()) return QImage();
-    const int w = frame.width(), h = frame.height();
-    if (w < 4 || h < 4) return QImage();
+    const uchar *b; int bpl, w, h;
+    explicit OverlayRgbSrc(const QImage &f) : b(f.constBits()), bpl(f.bytesPerLine()), w(f.width()), h(f.height()) {}
+    int peak(int x, int y) const { return b[y * bpl + 3 * x + 1]; }
+    int luma(int x, int y) const { const uchar *p = b + y * bpl + 3 * x; return (77 * p[0] + 150 * p[1] + 29 * p[2]) >> 8; }
+    int maxCh(int x, int y) const { const uchar *p = b + y * bpl + 3 * x; return qMax(p[0], qMax(p[1], p[2])); }
+};
+struct OverlayI420Src
+{
+    const uchar *py, *pu, *pv; int cw, w, h;
+    OverlayI420Src(const QByteArray &i420, const QSize &size)
+        : py(reinterpret_cast<const uchar *>(i420.constData())), cw((size.width() + 1) / 2), w(size.width()), h(size.height())
+    {
+        pu = py + w * h;
+        pv = pu + cw * ((h + 1) / 2);
+    }
+    int peak(int x, int y) const
+    {
+        const int ci = (y / 2) * cw + x / 2;
+        return qBound(0, py[y * w + x] - ((22554 * (pu[ci] - 128) + 46802 * (pv[ci] - 128)) >> 16), 255);
+    }
+    int luma(int x, int y) const { return py[y * w + x]; }
+    int maxCh(int x, int y) const
+    {
+        /* android/yuv.h's arithmetic: the pixel's R, G, B, the brightest */
+        const int Y = py[y * w + x], ci = (y / 2) * cw + x / 2, U = pu[ci] - 128, V = pv[ci] - 128;
+        const int r = Y + ((91881 * V) >> 16), g = Y - ((22554 * U + 46802 * V) >> 16), b = Y + ((116130 * U) >> 16);
+        return qBound(0, qMax(r, qMax(g, b)), 255);
+    }
+};
+
+/* What the overlay is drawn from, whatever the frame's form: the size
+ * (frame pixels, or the engine's 2x2 cells), the peaking's |Laplacian|
+ * (null: no peaking) and the value it must exceed, the border it skips,
+ * the RAW zebra's smoothed luma and the step its histogram samples it at,
+ * the zebra's stripe period (log2) and the peaking line's extra width;
+ * `pix` the luma and the brightest channel for the fixed zebra. */
+struct OverlayBase {
+    int w = 0, h = 0;
+    const short *lap = nullptr; int lapAbove = 0, border = 2;
+    const uchar *zl = nullptr; int histStep = 2;
+    int stripeShift = 3, extra = 0;
+};
+template <class Pix>
+static QImage overlayCore(const OverlayBase &ob, const Pix &src, const OverlayParams &prm, OverlayState *st)
+{
+    const int w = ob.w, h = ob.h;
     QImage overlay(w, h, QImage::Format_ARGB32_Premultiplied);
-    const int edge = prm.edge * 3;                         /* Laplacian scale: 8x luma span */
     const QRgb zebraA = qRgba(255, 255, 255, 220), zebraB = qRgba(0, 0, 0, 220);
     const QRgb zebraLight = qRgba(128, 128, 128, 128);    /* premultiplied: white at half opacity */
     const QRgb peak = qRgba(255, 40, 40, 255);
-
-    /* Smoothed luma (2x2 box of the green channel), one byte per pixel. */
-    QVector<uchar> luma(w * h);
-    QVector<short> lap(w * h);
+    const bool peaking = prm.peaking && ob.lap;
+    const short *lapAll = ob.lap;
+    const int edge = ob.lapAbove, bd = ob.border, sh = ob.stripeShift;
+    const bool shareMode = prm.zebra && prm.share >= 0 && ob.zl;
+    const uchar *zl = ob.zl;
+    const int RAW_HYST = 4;
+    int level = prm.level, lostLevel = -1;            /* -1: every stripe full */
+    bool zLuma = prm.zebraLuma;
+    if (st && (!shareMode || st->size != QSize(w, h))) {   /* a fresh start */
+        st->level = st->lostLevel = -1;
+        st->mask.clear();
+        st->size = QSize(w, h);
+    }
+    if (shareMode) {
+        const QRect r = prm.region.isValid() ? prm.region.intersected(QRect(0, 0, w, h)) : QRect(0, 0, w, h);
+        long cnt[256] = { 0 }, total = 0;
+        zLuma = true;
+        for (int y = r.top(); y <= r.bottom(); y += ob.histStep) {
+            const uchar *lr = zl + y * w;
+            for (int x = r.left(); x <= r.right(); x += ob.histStep) { cnt[lr[x]]++; total++; }
+        }
+        /* the luminance above which lie `share` of the pixels (256: none) */
+        auto levelFor = [&](double share) {
+            if (total <= 0 || share < 0.0001) return 256;
+            const double target = share * total;
+            long cum = 0;
+            for (int v = 255; v >= 0; --v) { cum += cnt[v]; if (cum >= target) return v; }
+            return 0;
+        };
+        level = levelFor(prm.share);
+        if (prm.lostShare >= 0) lostLevel = levelFor(qMin(prm.lostShare, prm.share));
+        if (st) {
+            /* eased: three quarters of the way to the new level each frame
+             * (a few frames at 20-30 a second); "none" (256) at once */
+            auto ease = [](double &kept, int now) {
+                if (now > 255 || now < 0 || kept < 0) kept = now;
+                else kept += 0.75 * (now - kept);
+                return now > 255 || now < 0 ? now : int(kept + 0.5);
+            };
+            level = ease(st->level, level);
+            if (lostLevel >= 0) lostLevel = ease(st->lostLevel, lostLevel); else st->lostLevel = -1;
+            if (st->mask.size() != w * h) st->mask = QVector<uchar>(w * h, 0);
+        }
+    }
+    uchar *zmask = shareMode && st ? st->mask.data() : nullptr;
     for (int y = 0; y < h; ++y) {
-        const uchar *r0 = frame.constScanLine(y);
-        const uchar *r1 = frame.constScanLine(y < h - 1 ? y + 1 : y);
-        uchar *out = luma.data() + y * w;
+        QRgb *out = reinterpret_cast<QRgb *>(overlay.scanLine(y));
+        const short *l = peaking ? lapAll + y * w : nullptr;
+        const short *lu = peaking ? lapAll + (y > 0 ? y - 1 : 0) * w : nullptr;
+        const short *ld = peaking ? lapAll + (y < h - 1 ? y + 1 : y) * w : nullptr;
         for (int x = 0; x < w; ++x) {
-            const int x1 = x < w - 1 ? x + 1 : x;
-            out[x] = uchar((r0[3 * x + 1] + r0[3 * x1 + 1] + r1[3 * x + 1] + r1[3 * x1 + 1]) >> 2);
+            QRgb v = 0;
+            if (peaking && x >= bd && x < w - bd && y >= bd && y < h - bd) {
+                const int a = l[x];
+                if (a > edge && a >= l[x - 1] && a >= l[x + 1] && a >= lu[x] && a >= ld[x]) v = peak;
+            }
+            if (shareMode) {
+                /* the RAW zebra: 0 none, 1 light, 2 full -- a pixel keeps
+                 * its stripes down to RAW_HYST below the level */
+                const int lv = zl[y * w + x], was = zmask ? zmask[y * w + x] : 0;
+                int z = 0;
+                if (lv >= level || (was && level <= 255 && lv >= level - RAW_HYST)) {
+                    z = 1;
+                    if (lostLevel < 0 || lv >= lostLevel || (was == 2 && lv >= lostLevel - RAW_HYST)) z = 2;
+                }
+                if (zmask) zmask[y * w + x] = uchar(z);
+                const bool stripe = ((x + y) >> sh) & 1;
+                if (z == 2) v = stripe ? zebraA : zebraB;               /* lost: full stripes */
+                else if (z == 1 && stripe && v == 0) v = zebraLight;   /* one channel: light, peaking kept */
+            } else if (prm.zebra) {
+                const bool hit = zLuma ? src.luma(x, y) >= level     /* Rec.601 luma */
+                                       : src.maxCh(x, y) >= level;   /* any channel */
+                if (hit) v = (((x + y) >> sh) & 1) ? zebraA : zebraB;
+            }
+            out[x] = v;
+        }
+    }
+    /* Line width: thicken the 1-pixel peaking marks by (width - 1) pixels to
+     * the right and below (a cheap dilation; width from the device override). */
+    if (peaking && ob.extra > 0) {
+        const int extra = ob.extra;
+        for (int y = h - 1; y >= 0; --y) {
+            QRgb *row = reinterpret_cast<QRgb *>(overlay.scanLine(y));
+            for (int x = w - 1; x >= 0; --x) {
+                if (row[x] != peak) continue;
+                for (int k = 1; k <= extra; ++k) {
+                    if (x + k < w && row[x + k] == 0) row[x + k] = peak;
+                    if (y + k < h) { QRgb *r2 = reinterpret_cast<QRgb *>(overlay.scanLine(y + k)); if (r2[x] == 0) r2[x] = peak; }
+                }
+            }
+        }
+    }
+    return overlay;
+}
+
+
+template <class Src>
+static QImage overlayFrom(const Src &src, const OverlayParams &prm, OverlayState *st)
+{
+    const int w = src.w, h = src.h;
+    if (w < 4 || h < 4) return QImage();
+
+    /* Smoothed luma (2x2 box of the green channel), one byte per pixel:
+     * only the peaking reads it. */
+    QVector<uchar> luma;
+    QVector<short> lap;
+    if (prm.peaking) {
+        QVector<uchar> green(w * h);
+        for (int y = 0; y < h; ++y) {
+            uchar *o = green.data() + y * w;
+            for (int x = 0; x < w; ++x) o[x] = uchar(src.peak(x, y));
+        }
+        luma.resize(w * h);
+        lap = QVector<short>(w * h, 0);
+        for (int y = 0; y < h; ++y) {
+            const uchar *r0 = green.constData() + y * w, *r1 = green.constData() + (y < h - 1 ? y + 1 : y) * w;
+            uchar *out = luma.data() + y * w;
+            for (int x = 0; x < w; ++x) {
+                const int x1 = x < w - 1 ? x + 1 : x;
+                out[x] = uchar((r0[x] + r0[x1] + r1[x] + r1[x1]) >> 2);
+            }
         }
     }
     /* |Laplacian| = |8c - sum of the 8 neighbours| on the smoothed luma. */
@@ -1153,9 +1458,8 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayStat
     if (shareMode) {
         QVector<uchar> y601(w * h);
         for (int y = 0; y < h; ++y) {
-            const uchar *px = frame.constScanLine(y);
             uchar *o = y601.data() + y * w;
-            for (int x = 0; x < w; ++x) o[x] = uchar((77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8);
+            for (int x = 0; x < w; ++x) o[x] = uchar(src.luma(x, y));
         }
         zl.resize(w * h);
         for (int y = 0; y < h; ++y) {
@@ -1167,133 +1471,331 @@ QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayStat
             }
         }
     }
-    const int RAW_HYST = 4;
-    int level = prm.level, lostLevel = -1;            /* -1: every stripe full */
-    bool zLuma = prm.zebraLuma;
-    if (st && (!shareMode || st->size != QSize(w, h))) {   /* a fresh start */
-        st->level = st->lostLevel = -1;
-        st->mask.clear();
-        st->size = QSize(w, h);
-    }
-    if (shareMode) {
-        const QRect r = prm.region.isValid() ? prm.region.intersected(QRect(0, 0, w, h)) : QRect(0, 0, w, h);
-        long cnt[256] = { 0 }, total = 0;
-        zLuma = true;
-        for (int y = r.top(); y <= r.bottom(); y += 2) {
-            const uchar *lr = zl.constData() + y * w;
-            for (int x = r.left(); x <= r.right(); x += 2) { cnt[lr[x]]++; total++; }
-        }
-        /* the luminance above which lie `share` of the pixels (256: none) */
-        auto levelFor = [&](double share) {
-            if (total <= 0 || share < 0.0001) return 256;
-            const double target = share * total;
-            long cum = 0;
-            for (int v = 255; v >= 0; --v) { cum += cnt[v]; if (cum >= target) return v; }
-            return 0;
-        };
-        level = levelFor(prm.share);
-        if (prm.lostShare >= 0) lostLevel = levelFor(qMin(prm.lostShare, prm.share));
-        if (st) {
-            /* eased: three quarters of the way to the new level each frame
-             * (a few frames at 20-30 a second); "none" (256) at once */
-            auto ease = [](double &kept, int now) {
-                if (now > 255 || now < 0 || kept < 0) kept = now;
-                else kept += 0.75 * (now - kept);
-                return now > 255 || now < 0 ? now : int(kept + 0.5);
-            };
-            level = ease(st->level, level);
-            if (lostLevel >= 0) lostLevel = ease(st->lostLevel, lostLevel); else st->lostLevel = -1;
-            if (st->mask.size() != w * h) st->mask = QVector<uchar>(w * h, 0);
-        }
-    }
-    uchar *zmask = shareMode && st ? st->mask.data() : nullptr;
-    for (int y = 0; y < h; ++y) {
-        const uchar *px = frame.constScanLine(y);
-        QRgb *out = reinterpret_cast<QRgb *>(overlay.scanLine(y));
-        const short *l = lap.constData() + y * w;
-        const short *lu = lap.constData() + (y > 0 ? y - 1 : 0) * w;
-        const short *ld = lap.constData() + (y < h - 1 ? y + 1 : y) * w;
-        for (int x = 0; x < w; ++x) {
-            QRgb v = 0;
-            if (prm.peaking && x > 1 && x < w - 2 && y > 1 && y < h - 2) {
-                const int a = l[x];
-                if (a > edge && a >= l[x - 1] && a >= l[x + 1] && a >= lu[x] && a >= ld[x]) v = peak;
-            }
-            if (shareMode) {
-                /* the RAW zebra: 0 none, 1 light, 2 full -- a pixel keeps
-                 * its stripes down to RAW_HYST below the level */
-                const int lv = zl[y * w + x], was = zmask ? zmask[y * w + x] : 0;
-                int z = 0;
-                if (lv >= level || (was && level <= 255 && lv >= level - RAW_HYST)) {
-                    z = 1;
-                    if (lostLevel < 0 || lv >= lostLevel || (was == 2 && lv >= lostLevel - RAW_HYST)) z = 2;
-                }
-                if (zmask) zmask[y * w + x] = uchar(z);
-                const bool stripe = ((x + y) >> 3) & 1;
-                if (z == 2) v = stripe ? zebraA : zebraB;               /* lost: full stripes */
-                else if (z == 1 && stripe && v == 0) v = zebraLight;   /* one channel: light, peaking kept */
-            } else if (prm.zebra) {
-                const bool hit = zLuma
-                    ? ((77 * px[3 * x] + 150 * px[3 * x + 1] + 29 * px[3 * x + 2]) >> 8) >= level   /* Rec.601 luma */
-                    : (px[3 * x] >= level || px[3 * x + 1] >= level || px[3 * x + 2] >= level);
-                if (hit) v = (((x + y) >> 3) & 1) ? zebraA : zebraB;
-            }
-            out[x] = v;
-        }
-    }
-    /* Line width: thicken the 1-pixel peaking marks by (width - 1) pixels to
-     * the right and below (a cheap dilation; width from the device override). */
-    if (prm.peaking && prm.width > 1) {
-        const int extra = qMin(prm.width, 6) - 1;
-        for (int y = h - 1; y >= 0; --y) {
-            QRgb *row = reinterpret_cast<QRgb *>(overlay.scanLine(y));
-            for (int x = w - 1; x >= 0; --x) {
-                if (row[x] != peak) continue;
-                for (int k = 1; k <= extra; ++k) {
-                    if (x + k < w && row[x + k] == 0) row[x + k] = peak;
-                    if (y + k < h) { QRgb *r2 = reinterpret_cast<QRgb *>(overlay.scanLine(y + k)); if (r2[x] == 0) r2[x] = peak; }
-                }
-            }
-        }
-    }
-    return overlay;
+    OverlayBase ob;
+    ob.w = w; ob.h = h;
+    ob.lap = prm.peaking ? lap.constData() : nullptr;
+    ob.lapAbove = prm.edge * 3;                          /* Laplacian scale: 8x luma span */
+    ob.border = 2;
+    ob.zl = shareMode ? zl.constData() : nullptr;
+    ob.histStep = 2;
+    ob.stripeShift = 3;
+    ob.extra = prm.width > 1 ? qMin(prm.width, 6) - 1 : 0;
+    return overlayCore(ob, src, prm, st);
 }
 
-void OverlayWorker::compute(const QImage &frame, const OverlayParams &p)
+QImage computeOverlay(const QImage &frame, const OverlayParams &prm, OverlayState *st)
 {
-    emit done(computeOverlay(frame, p, &m_state));
+    if ((!prm.zebra && !prm.peaking) || frame.isNull() || frame.format() != QImage::Format_RGB888) return QImage();
+    return overlayFrom(OverlayRgbSrc(frame), prm, st);
+}
+
+QImage computeOverlayI420(const QByteArray &i420, const QSize &size, const OverlayParams &prm, OverlayState *st)
+{
+    const int w = size.width(), h = size.height();
+    if ((!prm.zebra && !prm.peaking) || w <= 0 || h <= 0 ||
+        quint64(i420.size()) != quint64(w) * h + 2u * quint64((w + 1) / 2) * ((h + 1) / 2))
+        return QImage();
+    return overlayFrom(OverlayI420Src(i420, size), prm, st);
+}
+
+/* The engine's aids maps (SF2A, zero copy): one value per 2x2 cell of the
+ * frame, worked out on the full frame with this file's arithmetic and the
+ * strongest of the cell kept (android/rawfish-ir.c, aid_maps). The same
+ * decisions on the cells: the peaking's coded |Laplacian| q >= edge exactly
+ * where a pixel's a > 3 * edge, a cell striped where one of its pixels is
+ * at the level, the RAW zebra's histogram on the same 2x2 means. The
+ * overlay is the cells' size (drawn over the frame at twice its scale);
+ * stripes and lines keep their size on screen. */
+struct OverlayCellPix
+{
+    const uchar *ymax, *cmax; int w;
+    int luma(int x, int y) const { return ymax ? ymax[y * w + x] : 0; }
+    int maxCh(int x, int y) const { return cmax ? cmax[y * w + x] : 0; }
+};
+QImage computeOverlayCells(const QByteArray &maps, const QSize &cells, int mask, const OverlayParams &prmIn, OverlayState *st)
+{
+    const int w = cells.width(), h = cells.height();
+    const quint64 n = quint64(qMax(0, w)) * quint64(qMax(0, h));
+    int k = 0;
+    for (int b = 1; b <= 8; b <<= 1) if (mask & b) ++k;
+    if ((!prmIn.zebra && !prmIn.peaking) || w < 4 || h < 4 || quint64(maps.size()) != quint64(k) * n) return QImage();
+    const uchar *m = reinterpret_cast<const uchar *>(maps.constData());
+    const uchar *lapq = nullptr, *ymax = nullptr, *cmax = nullptr, *lum = nullptr;
+    if (mask & 1) { lapq = m; m += n; }
+    if (mask & 2) { ymax = m; m += n; }
+    if (mask & 4) { cmax = m; m += n; }
+    if (mask & 8) { lum = m; m += n; }
+    OverlayParams prm = prmIn;
+    if (prm.region.isValid())                            /* frame pixels -> cells */
+        prm.region = QRect(prm.region.x() / 2, prm.region.y() / 2, (prm.region.width() + 1) / 2, (prm.region.height() + 1) / 2);
+    /* the zebra this map set can draw (a map not sent yet: none) */
+    if (prm.zebra && prm.share < 0 && !(prm.zebraLuma ? ymax : cmax)) prm.zebra = false;
+    QVector<short> lap;
+    if (prm.peaking && lapq) {
+        lap.resize(int(n));
+        for (quint64 i = 0; i < n; ++i) lap[int(i)] = lapq[i];
+    }
+    OverlayBase ob;
+    ob.w = w; ob.h = h;
+    ob.lap = lap.isEmpty() ? nullptr : lap.constData();
+    ob.lapAbove = prm.edge - 1;                          /* q > edge - 1: q >= edge */
+    ob.border = 1;
+    ob.zl = prm.zebra && prm.share >= 0 ? lum : nullptr;
+    ob.histStep = 1;
+    ob.stripeShift = 2;
+    ob.extra = qMax(1, (qMin(prm.width, 6) + 1) / 2) - 1;
+    if (prm.zebra && prm.share >= 0 && !lum) prm.zebra = false;
+    return overlayCore(ob, OverlayCellPix{ ymax, cmax, w }, prm, st);
+}
+
+void OverlayWorker::computeCells(const QByteArray &maps, const QSize &cells, int mask, const OverlayParams &p)
+{
+    emit done(computeOverlayCells(maps, cells, mask, p, &m_state));
+}
+
+void OverlayWorker::compute(const QImage &frame, const QByteArray &i420, const QSize &size, const OverlayParams &p)
+{
+    /* An I420 frame read where it lies (no RGB conversion), an RGB one as before. */
+    emit done(frame.isNull() ? computeOverlayI420(i420, size, p, &m_state) : computeOverlay(frame, p, &m_state));
+}
+
+QImage i420ToRgb(const QByteArray &i420, const QSize &size)
+{
+    const int w = size.width(), h = size.height(), cw = (w + 1) / 2, ch = (h + 1) / 2;
+    if (w <= 0 || h <= 0 || quint64(i420.size()) != quint64(w) * h + 2u * quint64(cw) * ch) return QImage();
+    QImage rgb(w, h, QImage::Format_RGB888);
+    const uchar *py = reinterpret_cast<const uchar *>(i420.constData());
+    const uchar *pu = py + w * h, *pv = pu + cw * ch;
+    auto clip8 = [](int v) { return uchar(v < 0 ? 0 : (v > 255 ? 255 : v)); };
+    for (int y = 0; y < h; ++y) {
+        uchar *o = rgb.scanLine(y);
+        const uchar *yr = py + y * w, *ur = pu + (y / 2) * cw, *vr = pv + (y / 2) * cw;
+        for (int x = 0; x < w; ++x, o += 3) {
+            /* android/yuv.h's yuv420_to_rgb, the same fixed point */
+            const int Y = yr[x], U = ur[x / 2] - 128, V = vr[x / 2] - 128;
+            o[0] = clip8(Y + ((91881 * V) >> 16));
+            o[1] = clip8(Y - ((22554 * U + 46802 * V) >> 16));
+            o[2] = clip8(Y + ((116130 * U) >> 16));
+        }
+    }
+    return rgb;
+}
+
+/* The frames' format wanted now, asked of the engine when it changes:
+ * zero copy (SF2H) when it works and no aid needs the pixels (the zebra and
+ * the peaking read the YUV pipe's frames), else the YUV pipe (SF2Y), else
+ * RGB (SF2P) -- what an engine starts with, and what an older one keeps
+ * sending whatever it is asked. A failed import (HwFrames::failed) falls
+ * back to the YUV pipe for this engine. */
+/* The settings that apply without a new engine, read when an engine starts
+ * and again each time rawfish-ir.conf is saved (to compare two of them from
+ * one run: the log says when each took effect). */
+void IndrawPreview::readLiveConf(bool announce)
+{
+    const QString path = settingsPath();
+    if (!m_confWatch) {
+        m_confWatch = new QFileSystemWatcher(this);
+        /* Read 300 ms after the last change: an editor saves in steps (kate
+         * over sshfs: the file emptied, then written -- an empty file read
+         * in between gave the defaults, viewfinderZeroCopy=1 included, for
+         * 11 ms; log of 15 Nov, 12:06:38). An editor saving by renaming
+         * drops the watch: the folder is watched too. */
+        m_confDebounce = new QTimer(this);
+        m_confDebounce->setSingleShot(true);
+        m_confDebounce->setInterval(300);
+        connect(m_confDebounce, &QTimer::timeout, this, [this]() { readLiveConf(true); });
+        connect(m_confWatch, &QFileSystemWatcher::fileChanged, m_confDebounce, static_cast<void (QTimer::*)()>(&QTimer::start));
+        connect(m_confWatch, &QFileSystemWatcher::directoryChanged, m_confDebounce, static_cast<void (QTimer::*)()>(&QTimer::start));
+    }
+    if (!m_confWatch->files().contains(path) && QFileInfo::exists(path)) m_confWatch->addPath(path);
+    const QString dir = QFileInfo(path).absolutePath();
+    if (!m_confWatch->directories().contains(dir) && QFileInfo::exists(dir)) m_confWatch->addPath(dir);
+
+    QSettings conf(path, QSettings::IniFormat);
+    const bool zc = conf.value(QStringLiteral("viewfinderZeroCopy"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
+    const bool yuv = conf.value(QStringLiteral("viewfinderYuv"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
+    const int secs = qBound(0, conf.value(QStringLiteral("statsLog"), 0).toInt(), 3600);
+    const int every = qBound(1, conf.value(QStringLiteral("aidsEvery"), 2).toInt(), 4);
+    const bool gpu = conf.value(QStringLiteral("aidsGpu"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
+    const int screenMin = qBound(0, conf.value(QStringLiteral("screenOnMinutes"), 5).toInt(), 60);
+    const QString now = QStringLiteral("statsLog=%1 viewfinderZeroCopy=%2 viewfinderYuv=%3 aidsEvery=%4 aidsGpu=%5 screenOnMinutes=%6")
+                            .arg(secs).arg(zc ? 1 : 0).arg(yuv ? 1 : 0).arg(every).arg(gpu ? 1 : 0).arg(screenMin);
+    if (now == m_liveConf) return;     /* saved, but none of these changed */
+    m_liveConf = now;
+    m_zeroCopy = zc;
+    m_vfYuvPref = yuv;
+    if (m_zeroCopy && !m_hwframes) {
+        m_hwframes = new HwFrames(this);
+        const QString cache = QDir::homePath() + QStringLiteral("/.cache/com.rawfish/rawfish-ir");
+        QDir().mkpath(cache);
+        m_hwframes->listen(cache + QStringLiteral("/hwframes.sock"));
+    }
+    m_statsSecs = secs;
+    m_aidsEvery = every;
+    m_screenOnMin = screenMin;
+    updateKeepScreenOn();
+    if (m_aidsGpuPref != gpu) { m_aidsGpuPref = gpu; buildOverlay(); }
+    if (!m_stats) m_stats = new ProcStats;
+    if (!m_statsTimer) {
+        m_statsTimer = new QTimer(this);
+        connect(m_statsTimer, &QTimer::timeout, this, &IndrawPreview::logStats);
+    }
+    if (m_statsSecs > 0) {
+        if (!m_statsTimer->isActive()) {   /* the first line covers a whole interval */
+            m_stats->reset();
+            m_stats->line(m_process ? m_process->processId() : 0, QString());
+            m_statsSerial = m_frameSerial;
+            m_statsClock.start();
+        }
+        if (m_statsTimer->interval() != m_statsSecs * 1000 || !m_statsTimer->isActive()) m_statsTimer->start(m_statsSecs * 1000);
+    } else {
+        m_statsTimer->stop();
+    }
+    if (announce) {
+        sendCommand(QStringLiteral("# conf changed: ") + now);
+        syncVfMode();
+    }
+}
+
+void IndrawPreview::logStats()
+{
+    if (!m_process || m_process->state() != QProcess::Running) return;
+    if (!m_stats) m_stats = new ProcStats;
+    const double secs = m_statsClock.isValid() ? m_statsClock.nsecsElapsed() / 1e9 : 0.0;
+    m_statsClock.start();
+    QString extra = QStringLiteral("vf=") + (m_vfModeSent.isEmpty() ? QStringLiteral("rgb") : m_vfModeSent);
+    if (secs > 0 && m_frameSerial >= m_statsSerial)
+        extra += QStringLiteral(" fps=%1").arg(double(m_frameSerial - m_statsSerial) / secs, 0, 'f', 1);
+    m_statsSerial = m_frameSerial;
+    sendCommand(QStringLiteral("# stats ") + m_stats->line(m_process->processId(), extra));
+}
+
+void IndrawPreview::syncVfMode()
+{
+    if (!m_process || m_process->state() != QProcess::Running) return;   /* asked with its first frame */
+    if (m_hwframes) for (const QString &n : m_hwframes->takeNotes()) sendCommand(QStringLiteral("# zero copy: ") + n);
+    const int aids = aidsMask();
+    /* An engine that sends no aids' maps (older than 0439): the aids from
+     * the YUV pipe, as before. Two seconds of zero-copy frames without any. */
+    if (aids && m_vfModeSent == QLatin1String("hwb") && m_aidsSent == aids && !m_aidsGot && !m_aidsUnsupported &&
+        m_aidsClock.isValid() && m_aidsClock.elapsed() > 2000) {
+        m_aidsUnsupported = true;
+        sendCommand(QStringLiteral("# zero copy: no aids maps from this engine, the aids from the YUV pipe"));
+    }
+    const bool hwbOk = m_zeroCopy && m_hwframes && !m_hwframes->failed() && !(aids && m_aidsUnsupported);
+    const QString want = hwbOk ? QStringLiteral("hwb") : m_vfYuvPref ? QStringLiteral("yuv") : QStringLiteral("rgb");
+    if (want != m_vfModeSent && !(want == QLatin1String("rgb") && m_vfModeSent.isEmpty())) {
+        if (m_vfModeSent == QLatin1String("hwb") && m_hwframes && m_hwframes->failed())
+            sendCommand(QStringLiteral("# zero copy: failed, back to the YUV pipe"));
+        m_vfModeSent = want;
+        m_aidsSent = -1;
+        m_aidMaps.clear();
+        sendCommand(want == QLatin1String("hwb") ? QStringLiteral("vf hwb ") + m_hwframes->path() : QStringLiteral("vf ") + want);
+    }
+    /* zero copy: the maps the aids on now need, with each frame */
+    if (m_vfModeSent == QLatin1String("hwb") && (aids != m_aidsSent || (aids && m_aidsEvery != m_aidsEverySent))) {
+        m_aidsSent = aids;
+        m_aidsEverySent = m_aidsEvery;
+        m_aidsGot = false;
+        m_aidsClock.start();
+        if (!aids) m_aidMaps.clear();
+        sendCommand(aids ? QStringLiteral("vf aids %1 %2").arg(aids).arg(m_aidsEvery) : QStringLiteral("vf aids 0"));
+    }
+}
+
+/* The display kept on while the viewfinder is in use (it went to sleep
+ * after the system's delay, the viewfinder running: 15 Nov 2026): the
+ * engine running, a touch less than screenOnMinutes ago (0: the system's
+ * own delay, as before). Checked every 15 s and at each touch. */
+void IndrawPreview::updateKeepScreenOn()
+{
+    if (!m_screenTimer) {
+        m_screenTimer = new QTimer(this);
+        m_screenTimer->setInterval(15000);
+        connect(m_screenTimer, &QTimer::timeout, this, &IndrawPreview::updateKeepScreenOn);
+        m_screenTimer->start();
+    }
+    const bool on = m_active && m_process && m_process->state() != QProcess::NotRunning && m_screenOnMin > 0 &&
+                    m_lastTouch.isValid() && m_lastTouch.elapsed() < qint64(m_screenOnMin) * 60000;
+    if (on != m_keepScreenOn) { m_keepScreenOn = on; emit keepScreenOnChanged(); }
+}
+
+void IndrawPreview::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    /* every touch of the window counts, wherever it lands */
+    if (change == ItemSceneChange && value.window) value.window->installEventFilter(this);
+    QQuickItem::itemChange(change, value);
+}
+
+bool IndrawPreview::eventFilter(QObject *watched, QEvent *event)
+{
+    const QEvent::Type t = event->type();
+    if (t == QEvent::TouchBegin || t == QEvent::MouseButtonPress || t == QEvent::KeyPress) {
+        m_lastTouch.restart();
+        if (!m_keepScreenOn) updateKeepScreenOn();
+    }
+    return QQuickItem::eventFilter(watched, event);
+}
+
+/* The engine's maps the aids on now read (SF2A; android/rawfish-ir.c,
+ * aid_maps): 1 the peaking, 2 the zebra on the luma, 4 on the channels,
+ * 8 the RAW zebra. */
+int IndrawPreview::aidsMask() const
+{
+    int m = m_peaking ? 1 : 0;
+    if (m_zebra) m |= m_zebraRawShare ? 8 : m_zebraLuma ? 2 : 4;
+    return m;
+}
+
+QImage IndrawPreview::frameRgb() const
+{
+    return !m_frame.isNull() ? m_frame : i420ToRgb(m_yuv, m_frameSize);
 }
 
 /* Hands the latest frame to the worker, or notes that one waits. Nothing
  * to draw: the overlay is cleared at once. */
 void IndrawPreview::buildOverlay()
 {
-    if ((!m_zebra && !m_peaking) || m_frame.isNull()) { m_overlay = QImage(); m_overlayPending = false; return; }
+    if ((!m_zebra && !m_peaking) || !hasFrame()) { m_overlay = QImage(); m_overlayPending = false; m_aidsGpu = false; return; }
+    /* zero copy: the GPU draws the aids from the maps (AidsMaterial) --
+     * but the RAW zebra, which keeps state from frame to frame, and when
+     * rawfish-ir.conf aidsGpu=0 */
+    m_aidsGpu = m_hwbId && m_aidsGpuPref && !(m_zebra && m_zebraRawShare);
+    if (m_aidsGpu) { m_overlay = QImage(); m_overlayPending = false; update(); return; }
     if (m_overlayBusy) { m_overlayPending = true; return; }
     OverlayParams p; p.zebra = m_zebra; p.peaking = m_peaking; p.zebraLuma = m_zebraLuma; p.level = m_zebraLevel; p.edge = m_peakEdge; p.width = m_peakWidth;
     if (m_zebraRawShare) {                               /* the RAW zebra: the measured share, over what is shown */
         p.share = m_rawClipShare >= 0 ? qMin<qreal>(1, m_rawClipShare * m_zebraShareScale) : 0;
         if (m_rawLostShare >= 0) p.lostShare = qMin<qreal>(1, m_rawLostShare * m_zebraShareScale);
-        p.region = sourceRectIn(m_frame.size());
+        p.region = sourceRectIn(m_frameSize);
+    }
+    if (m_hwbId) {
+        /* zero copy: the engine's maps of the cells (none yet: nothing) */
+        if (m_aidMaps.isEmpty()) { m_overlay = QImage(); return; }
+        m_overlayBusy = true;
+        QMetaObject::invokeMethod(m_overlayWorker, "computeCells", Qt::QueuedConnection, Q_ARG(QByteArray, m_aidMaps),
+                                  Q_ARG(QSize, m_aidCells), Q_ARG(int, m_aidMask), Q_ARG(OverlayParams, p));
+        return;
     }
     m_overlayBusy = true;
-    QMetaObject::invokeMethod(m_overlayWorker, "compute", Qt::QueuedConnection, Q_ARG(QImage, m_frame), Q_ARG(OverlayParams, p));
+    QMetaObject::invokeMethod(m_overlayWorker, "compute", Qt::QueuedConnection, Q_ARG(QImage, m_frame),
+                              Q_ARG(QByteArray, m_yuv), Q_ARG(QSize, m_frameSize), Q_ARG(OverlayParams, p));
 }
 void IndrawPreview::onOverlayDone(const QImage &overlay)
 {
     m_overlayBusy = false;
-    if (m_zebra || m_peaking) { m_overlay = overlay; update(); }
+    if ((m_zebra || m_peaking) && !m_aidsGpu) { m_overlay = overlay; update(); }   /* the GPU draws them now: dropped */
     if (m_overlayPending) { m_overlayPending = false; buildOverlay(); }
 }
 int IndrawPreview::peakWidth() const { return m_peakWidth; }
 void IndrawPreview::setPeakWidth(int w) { w = qBound(1, w, 6); if (m_peakWidth == w) return; m_peakWidth = w; emit aidsChanged(); buildOverlay(); update(); }
 
 bool IndrawPreview::zebra() const { return m_zebra; }
-void IndrawPreview::setZebra(bool on) { if (m_zebra == on) return; m_zebra = on; emit aidsChanged(); buildOverlay(); update(); }
+void IndrawPreview::setZebra(bool on) { if (m_zebra == on) return; m_zebra = on; emit aidsChanged(); syncVfMode(); buildOverlay(); update(); }
 bool IndrawPreview::peaking() const { return m_peaking; }
-void IndrawPreview::setPeaking(bool on) { if (m_peaking == on) return; m_peaking = on; emit aidsChanged(); buildOverlay(); update(); }
+void IndrawPreview::setPeaking(bool on) { if (m_peaking == on) return; m_peaking = on; emit aidsChanged(); syncVfMode(); buildOverlay(); update(); }
 int IndrawPreview::zebraLevel() const { return m_zebraLevel; }
-void IndrawPreview::setZebraLuma(bool on) { if (m_zebraLuma == on) return; m_zebraLuma = on; emit aidsChanged(); buildOverlay(); update(); }
+void IndrawPreview::setZebraLuma(bool on) { if (m_zebraLuma == on) return; m_zebraLuma = on; emit aidsChanged(); syncVfMode(); buildOverlay(); update(); }
 void IndrawPreview::setZebraShareScale(qreal s)
 {
     s = qBound<qreal>(0.1, s, 3);
@@ -1306,7 +1808,7 @@ void IndrawPreview::setZebraRawShare(bool on)
     if (m_zebraRawShare == on) return;
     m_zebraRawShare = on;
     m_rawClipShare = m_rawLostShare = -1;                /* a measure from before is not this one's */
-    emit aidsChanged(); buildOverlay(); update();
+    emit aidsChanged(); syncVfMode(); buildOverlay(); update();
 }
 void IndrawPreview::setZebraLevel(int level) { level = qBound(1, level, 255); if (m_zebraLevel == level) return; m_zebraLevel = level; emit aidsChanged(); buildOverlay(); update(); }
 int IndrawPreview::peakEdge() const { return m_peakEdge; }
@@ -1394,18 +1896,395 @@ void IndrawPreview::setBubbleRadius(qreal r)
     update();
 }
 
-/* A disc of `texture` (a triangle fan): centred on `centre` with `radius`
- * (item pixels), showing the texture around the image point `texCentre`
- * (image pixels of a `texSize` image) at `pxPerImagePx` item pixels per
- * image pixel. The material refers to the texture; its node owns it. */
-static QSGGeometryNode *discNode(QSGTexture *texture, const QSizeF &texSize, const QPointF &centre, qreal radius,
-                                 const QPointF &texCentre, qreal pxPerImagePx, bool linear)
+/* --- The I420 frame on the GPU (SF2Y, 0.3.11) ---
+ *
+ * The three planes go into three one-byte (luminance) textures, reused from
+ * frame to frame while the size holds (glTexSubImage2D: no allocation), and
+ * a shader turns them into colour as it draws: BT.601 full range, the
+ * engine's coefficients (android/yuv.h), chroma filtered bilinearly. The
+ * CPU only copies the bytes received; the RGB conversion the engine did on
+ * the camera thread (1.2 Mpx, 30 times a second), the 3-byte frame in the
+ * pipe and Qt's own conversion of an RGB888 image to 32 bits before its
+ * upload are gone. Render thread only (updatePaintNode, the renderer). */
+class YuvPlanes
+{
+public:
+    ~YuvPlanes()
+    {
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        if (m_tex[0] && ctx && ctx == m_ctx) ctx->functions()->glDeleteTextures(3, m_tex);   /* only its own context's (see HwFrames::m_ctx) */
+    }
+    /* Uploads one frame; false without a current GL context or on a short buffer. */
+    bool upload(const QByteArray &i420, const QSize &size)
+    {
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        const int w = size.width(), h = size.height(), cw = (w + 1) / 2, ch = (h + 1) / 2;
+        if (!ctx || w <= 0 || h <= 0 || quint64(i420.size()) != quint64(w) * h + 2u * quint64(cw) * ch) return false;
+        QOpenGLFunctions *gl = ctx->functions();
+        if (ctx != m_ctx) { m_tex[0] = m_tex[1] = m_tex[2] = 0; m_size = QSize(); m_ctx = ctx; }   /* a new context: new names */
+        if (!m_tex[0]) gl->glGenTextures(3, m_tex);
+        const bool fresh = m_size != size;
+        m_size = size;
+        const uchar *p = reinterpret_cast<const uchar *>(i420.constData());
+        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);        /* rows unpadded: any width */
+        for (int i = 0; i < 3; ++i) {
+            const int pw = i ? cw : w, ph = i ? ch : h;
+            gl->glBindTexture(GL_TEXTURE_2D, m_tex[i]);
+            if (fresh) {
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, pw, ph, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, p);
+            } else {
+                gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pw, ph, GL_LUMINANCE, GL_UNSIGNED_BYTE, p);
+            }
+            p += pw * ph;
+        }
+        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        gl->glBindTexture(GL_TEXTURE_2D, 0);
+        return true;
+    }
+    GLuint tex(int i) const { return m_tex[i]; }
+private:
+    GLuint m_tex[3] = { 0, 0, 0 };
+    QSize m_size;
+    QOpenGLContext *m_ctx = nullptr;   /* the context the names belong to */
+};
+
+class YuvMaterial : public QSGMaterial
+{
+public:
+    explicit YuvMaterial(const QSharedPointer<YuvPlanes> &planes) : planes(planes) {}
+    QSGMaterialType *type() const override { static QSGMaterialType t; return &t; }
+    QSGMaterialShader *createShader() const override;
+    int compare(const QSGMaterial *other) const override
+    {
+        const YuvPlanes *a = planes.data(), *b = static_cast<const YuvMaterial *>(other)->planes.data();
+        return a == b ? 0 : (a < b ? -1 : 1);
+    }
+    QSharedPointer<YuvPlanes> planes;
+};
+
+class YuvShader : public QSGMaterialShader
+{
+public:
+    const char *vertexShader() const override
+    {
+        return "attribute highp vec4 qt_VertexPosition;\n"
+               "attribute highp vec2 qt_VertexTexCoord;\n"
+               "uniform highp mat4 qt_Matrix;\n"
+               "varying highp vec2 vTex;\n"
+               "void main() {\n"
+               "    vTex = qt_VertexTexCoord;\n"
+               "    gl_Position = qt_Matrix * qt_VertexPosition;\n"
+               "}\n";
+    }
+    const char *fragmentShader() const override
+    {
+        /* R = Y + 1.402 V, G = Y - 0.344 U - 0.714 V, B = Y + 1.772 U, with
+         * U and V centred on 128/255: yuv.h's 91881, 22554, 46802, 116130 / 65536 */
+        return "uniform sampler2D texY;\n"
+               "uniform sampler2D texU;\n"
+               "uniform sampler2D texV;\n"
+               "uniform lowp float qt_Opacity;\n"
+               "varying highp vec2 vTex;\n"
+               "void main() {\n"
+               "    mediump float y = texture2D(texY, vTex).r;\n"
+               "    mediump float u = texture2D(texU, vTex).r - 0.5019608;\n"
+               "    mediump float v = texture2D(texV, vTex).r - 0.5019608;\n"
+               "    mediump vec3 rgb = vec3(y + 1.4020 * v, y - 0.3441 * u - 0.7141 * v, y + 1.7720 * u);\n"
+               "    gl_FragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0) * qt_Opacity;\n"
+               "}\n";
+    }
+    char const *const *attributeNames() const override
+    {
+        static const char *const names[] = { "qt_VertexPosition", "qt_VertexTexCoord", nullptr };
+        return names;
+    }
+    void initialize() override
+    {
+        m_matrix = program()->uniformLocation("qt_Matrix");
+        m_opacity = program()->uniformLocation("qt_Opacity");
+        m_texY = program()->uniformLocation("texY");
+        m_texU = program()->uniformLocation("texU");
+        m_texV = program()->uniformLocation("texV");
+    }
+    void updateState(const RenderState &state, QSGMaterial *newMaterial, QSGMaterial *) override
+    {
+        if (state.isMatrixDirty()) program()->setUniformValue(m_matrix, state.combinedMatrix());
+        if (state.isOpacityDirty()) program()->setUniformValue(m_opacity, state.opacity());
+        program()->setUniformValue(m_texY, 0);
+        program()->setUniformValue(m_texU, 1);
+        program()->setUniformValue(m_texV, 2);
+        const YuvMaterial *m = static_cast<YuvMaterial *>(newMaterial);
+        QOpenGLFunctions *gl = QOpenGLContext::currentContext()->functions();
+        for (int i = 2; i >= 0; --i) {                    /* unit 0 (Y) left active, as Qt expects */
+            gl->glActiveTexture(GL_TEXTURE0 + i);
+            gl->glBindTexture(GL_TEXTURE_2D, m->planes->tex(i));
+        }
+    }
+private:
+    int m_matrix = -1, m_opacity = -1, m_texY = -1, m_texU = -1, m_texV = -1;
+};
+
+QSGMaterialShader *YuvMaterial::createShader() const { return new YuvShader; }
+
+/* A camera buffer drawn as it is (zero copy): an external texture, the
+ * GPU's own YUV sampling (hwframes.h). */
+class OesMaterial : public QSGMaterial
+{
+public:
+    explicit OesMaterial(unsigned tex) : tex(tex) {}
+    QSGMaterialType *type() const override { static QSGMaterialType t; return &t; }
+    QSGMaterialShader *createShader() const override;
+    int compare(const QSGMaterial *other) const override
+    {
+        const unsigned o = static_cast<const OesMaterial *>(other)->tex;
+        return tex == o ? 0 : (tex < o ? -1 : 1);
+    }
+    unsigned tex;
+};
+class OesShader : public QSGMaterialShader
+{
+public:
+    const char *vertexShader() const override
+    {
+        return "attribute highp vec4 qt_VertexPosition;\n"
+               "attribute highp vec2 qt_VertexTexCoord;\n"
+               "uniform highp mat4 qt_Matrix;\n"
+               "varying highp vec2 vTex;\n"
+               "void main() {\n"
+               "    vTex = qt_VertexTexCoord;\n"
+               "    gl_Position = qt_Matrix * qt_VertexPosition;\n"
+               "}\n";
+    }
+    const char *fragmentShader() const override
+    {
+        return "#extension GL_OES_EGL_image_external : require\n"
+               "uniform samplerExternalOES tex;\n"
+               "uniform lowp float qt_Opacity;\n"
+               "varying highp vec2 vTex;\n"
+               "void main() {\n"
+               "    gl_FragColor = vec4(texture2D(tex, vTex).rgb, 1.0) * qt_Opacity;\n"
+               "}\n";
+    }
+    char const *const *attributeNames() const override
+    {
+        static const char *const names[] = { "qt_VertexPosition", "qt_VertexTexCoord", nullptr };
+        return names;
+    }
+    void initialize() override
+    {
+        m_matrix = program()->uniformLocation("qt_Matrix");
+        m_opacity = program()->uniformLocation("qt_Opacity");
+        m_tex = program()->uniformLocation("tex");
+    }
+    void updateState(const RenderState &state, QSGMaterial *newMaterial, QSGMaterial *) override
+    {
+        if (state.isMatrixDirty()) program()->setUniformValue(m_matrix, state.combinedMatrix());
+        if (state.isOpacityDirty()) program()->setUniformValue(m_opacity, state.opacity());
+        program()->setUniformValue(m_tex, 0);
+        QOpenGLFunctions *gl = QOpenGLContext::currentContext()->functions();
+        gl->glActiveTexture(GL_TEXTURE0);
+        gl->glBindTexture(kGlTextureExternal, static_cast<OesMaterial *>(newMaterial)->tex);
+    }
+private:
+    int m_matrix = -1, m_opacity = -1, m_tex = -1;
+};
+QSGMaterialShader *OesMaterial::createShader() const { return new OesShader; }
+
+/* The aids drawn by the GPU from the engine's maps (zero copy, SF2A): the
+ * peaking's coded |Laplacian| and the zebra's value of each 2x2 cell in two
+ * one-byte textures, the decisions of overlayCore (cells: border 1, the
+ * peaking a local maximum >= edge, thickened right and down by `extra`
+ * cells, the zebra's stripes over it every 4 cells) made per fragment. No
+ * image built and uploaded per update (~20 points of CPU at 15 a second,
+ * 15 Nov 2026): two 0.3 MB textures refilled. The RAW zebra (its levels
+ * from the histogram, its stripes kept from frame to frame) stays on the
+ * CPU. Render thread only. */
+class AidTextures
+{
+public:
+    ~AidTextures()
+    {
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        if (m_tex[0] && ctx && ctx == m_ctx) ctx->functions()->glDeleteTextures(2, m_tex);   /* only its own context's */
+    }
+    /* i: 0 the peaking's map, 1 the zebra's; the bytes of one cw x ch map */
+    bool upload(int i, const uchar *map, const QSize &cells)
+    {
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        if (!ctx || !map || cells.isEmpty() || i < 0 || i > 1) return false;
+        QOpenGLFunctions *gl = ctx->functions();
+        if (ctx != m_ctx) { m_tex[0] = m_tex[1] = 0; m_size[0] = m_size[1] = QSize(); m_ctx = ctx; }   /* a new context: new names */
+        if (!m_tex[0]) gl->glGenTextures(2, m_tex);
+        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        gl->glBindTexture(GL_TEXTURE_2D, m_tex[i]);
+        if (m_size[i] != cells) {
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, cells.width(), cells.height(), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, map);
+            m_size[i] = cells;
+        } else {
+            gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cells.width(), cells.height(), GL_LUMINANCE, GL_UNSIGNED_BYTE, map);
+        }
+        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        gl->glBindTexture(GL_TEXTURE_2D, 0);
+        return true;
+    }
+    GLuint tex(int i) const { return m_tex[i]; }
+private:
+    GLuint m_tex[2] = { 0, 0 };
+    QSize m_size[2];
+    QOpenGLContext *m_ctx = nullptr;   /* the context the names belong to */
+};
+struct AidsDraw {
+    bool peak = false, zebra = false;
+    int edge = 40, level = 250, extra = 0;
+    QSize cells;
+};
+class AidsMaterial : public QSGMaterial
+{
+public:
+    AidsMaterial(const QSharedPointer<AidTextures> &t, const AidsDraw &d) : tex(t), d(d) { setFlag(Blending, true); }
+    QSGMaterialType *type() const override { static QSGMaterialType t; return &t; }
+    QSGMaterialShader *createShader() const override;
+    int compare(const QSGMaterial *other) const override
+    {
+        const AidTextures *a = tex.data(), *b = static_cast<const AidsMaterial *>(other)->tex.data();
+        return a == b ? 0 : (a < b ? -1 : 1);
+    }
+    QSharedPointer<AidTextures> tex;
+    AidsDraw d;
+};
+class AidsShader : public QSGMaterialShader
+{
+public:
+    const char *vertexShader() const override
+    {
+        return "attribute highp vec4 qt_VertexPosition;\n"
+               "attribute highp vec2 qt_VertexTexCoord;\n"
+               "uniform highp mat4 qt_Matrix;\n"
+               "varying highp vec2 vTex;\n"
+               "void main() {\n"
+               "    vTex = qt_VertexTexCoord;\n"
+               "    gl_Position = qt_Matrix * qt_VertexPosition;\n"
+               "}\n";
+    }
+    const char *fragmentShader() const override
+    {
+        /* the colours of overlayCore, premultiplied as there */
+        return "uniform sampler2D lapT;\n"
+               "uniform sampler2D valT;\n"
+               "uniform highp vec2 size;\n"
+               "uniform highp float edge;\n"
+               "uniform highp float level;\n"
+               "uniform highp float extra;\n"
+               "uniform highp float doPeak;\n"
+               "uniform highp float doZebra;\n"
+               "uniform lowp float qt_Opacity;\n"
+               "varying highp vec2 vTex;\n"
+               "highp float q(highp vec2 c) { return floor(texture2D(lapT, (c + 0.5) / size).r * 255.0 + 0.5); }\n"
+               "bool peakAt(highp vec2 c) {\n"
+               "    if (c.x < 1.0 || c.y < 1.0 || c.x > size.x - 2.0 || c.y > size.y - 2.0) return false;\n"
+               "    highp float a = q(c);\n"
+               "    return a >= edge && a >= q(c - vec2(1.0, 0.0)) && a >= q(c + vec2(1.0, 0.0))\n"
+               "        && a >= q(c - vec2(0.0, 1.0)) && a >= q(c + vec2(0.0, 1.0));\n"
+               "}\n"
+               "void main() {\n"
+               "    highp vec2 c = clamp(floor(vTex * size), vec2(0.0), size - 1.0);\n"
+               "    lowp vec4 col = vec4(0.0);\n"
+               "    if (doPeak > 0.5) {\n"
+               "        bool p = peakAt(c);\n"
+               "        for (int k = 1; k <= 5; ++k)\n"
+               "            if (float(k) <= extra && !p) p = peakAt(c - vec2(float(k), 0.0)) || peakAt(c - vec2(0.0, float(k)));\n"
+               "        if (p) col = vec4(1.0, 0.156863, 0.156863, 1.0);\n"
+               "    }\n"
+               "    if (doZebra > 0.5) {\n"
+               "        highp float v = floor(texture2D(valT, (c + 0.5) / size).r * 255.0 + 0.5);\n"
+               "        if (v >= level) col = mod(floor((c.x + c.y) / 4.0), 2.0) > 0.5 ? vec4(1.0, 1.0, 1.0, 0.862745) : vec4(0.0, 0.0, 0.0, 0.862745);\n"
+               "    }\n"
+               "    gl_FragColor = col * qt_Opacity;\n"
+               "}\n";
+    }
+    char const *const *attributeNames() const override
+    {
+        static const char *const names[] = { "qt_VertexPosition", "qt_VertexTexCoord", nullptr };
+        return names;
+    }
+    void initialize() override
+    {
+        QOpenGLShaderProgram *p = program();
+        m_matrix = p->uniformLocation("qt_Matrix"); m_opacity = p->uniformLocation("qt_Opacity");
+        m_lap = p->uniformLocation("lapT"); m_val = p->uniformLocation("valT");
+        m_size = p->uniformLocation("size"); m_edge = p->uniformLocation("edge"); m_level = p->uniformLocation("level");
+        m_extra = p->uniformLocation("extra"); m_doPeak = p->uniformLocation("doPeak"); m_doZebra = p->uniformLocation("doZebra");
+    }
+    void updateState(const RenderState &state, QSGMaterial *newMaterial, QSGMaterial *) override
+    {
+        QOpenGLShaderProgram *p = program();
+        if (state.isMatrixDirty()) p->setUniformValue(m_matrix, state.combinedMatrix());
+        if (state.isOpacityDirty()) p->setUniformValue(m_opacity, state.opacity());
+        const AidsMaterial *m = static_cast<AidsMaterial *>(newMaterial);
+        p->setUniformValue(m_lap, 0);
+        p->setUniformValue(m_val, 1);
+        p->setUniformValue(m_size, QVector2D(m->d.cells.width(), m->d.cells.height()));
+        p->setUniformValue(m_edge, GLfloat(m->d.edge));
+        p->setUniformValue(m_level, GLfloat(m->d.level));
+        p->setUniformValue(m_extra, GLfloat(m->d.extra));
+        p->setUniformValue(m_doPeak, GLfloat(m->d.peak ? 1 : 0));
+        p->setUniformValue(m_doZebra, GLfloat(m->d.zebra ? 1 : 0));
+        QOpenGLFunctions *gl = QOpenGLContext::currentContext()->functions();
+        gl->glActiveTexture(GL_TEXTURE1);
+        gl->glBindTexture(GL_TEXTURE_2D, m->tex->tex(1));
+        gl->glActiveTexture(GL_TEXTURE0);                 /* unit 0 left active, as Qt expects */
+        gl->glBindTexture(GL_TEXTURE_2D, m->tex->tex(0));
+    }
+private:
+    int m_matrix = -1, m_opacity = -1, m_lap = -1, m_val = -1, m_size = -1, m_edge = -1, m_level = -1,
+        m_extra = -1, m_doPeak = -1, m_doZebra = -1;
+};
+QSGMaterialShader *AidsMaterial::createShader() const { return new AidsShader; }
+
+/* What the item keeps from one frame to the next on the render thread: the
+ * I420 textures (sized once, refilled each frame) and which frame they hold.
+ * Its children (the frame, the aids, the magnifier) are rebuilt each time. */
+class FrameRoot : public QSGNode
+{
+public:
+    QSharedPointer<YuvPlanes> planes;
+    quint64 uploaded = 0;          /* m_frameSerial of the frame in the textures */
+    quint64 shownHwb = 0;          /* the camera buffer drawn (zero copy), 0 none */
+    QSharedPointer<AidTextures> aids;  /* the aids' maps (zero copy), on the GPU */
+    quint64 aidsUploaded = 0;      /* m_aidSerial of the maps in them */
+};
+
+static QSGTextureMaterial *textureMaterial(QSGTexture *texture, bool linear)
+{
+    QSGTextureMaterial *mat = new QSGTextureMaterial;
+    mat->setTexture(texture);
+    mat->setFlag(QSGMaterial::Blending, texture->hasAlphaChannel());   /* the overlay is transparent, the frame not */
+    mat->setFiltering(linear ? QSGTexture::Linear : QSGTexture::Nearest);
+    mat->setHorizontalWrapMode(QSGTexture::ClampToEdge);
+    mat->setVerticalWrapMode(QSGTexture::ClampToEdge);
+    return mat;
+}
+
+/* A disc of an image (a triangle fan) drawn with `mat`: centred on `centre`
+ * with `radius` (item pixels), showing the image around the point
+ * `texCentre` (image pixels of a `texSize` image, which fills `sub` of the
+ * texture: an atlas, or 0..1) at `pxPerImagePx` item pixels per image
+ * pixel. The node owns the material; the material refers to the texture. */
+static QSGGeometryNode *discNode(QSGMaterial *mat, const QRectF &sub, const QSizeF &texSize, const QPointF &centre, qreal radius,
+                                 const QPointF &texCentre, qreal pxPerImagePx)
 {
     const int n = 64;                                      /* segments: smooth at any size shown */
     QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), n + 2);
     geo->setDrawingMode(GL_TRIANGLE_FAN);
     QSGGeometry::TexturedPoint2D *v = geo->vertexDataAsTexturedPoint2D();
-    const QRectF sub = texture->normalizedTextureSubRect();  /* the texture may sit in an atlas */
     const qreal tr = radius / pxPerImagePx;                 /* the radius in image pixels */
     auto put = [&](int k, qreal dx, qreal dy) {
         const qreal u = (texCentre.x() + dx * tr) / texSize.width(), w = (texCentre.y() + dy * tr) / texSize.height();
@@ -1420,12 +2299,6 @@ static QSGGeometryNode *discNode(QSGTexture *texture, const QSizeF &texSize, con
     QSGGeometryNode *node = new QSGGeometryNode;
     node->setGeometry(geo);
     node->setFlag(QSGNode::OwnsGeometry);
-    QSGTextureMaterial *mat = new QSGTextureMaterial;
-    mat->setTexture(texture);
-    mat->setFlag(QSGMaterial::Blending, texture->hasAlphaChannel());   /* the overlay is transparent, the frame not */
-    mat->setFiltering(linear ? QSGTexture::Linear : QSGTexture::Nearest);
-    mat->setHorizontalWrapMode(QSGTexture::ClampToEdge);
-    mat->setVerticalWrapMode(QSGTexture::ClampToEdge);
     node->setMaterial(mat);
     node->setFlag(QSGNode::OwnsMaterial);
     return node;
@@ -1433,26 +2306,61 @@ static QSGGeometryNode *discNode(QSGTexture *texture, const QSizeF &texSize, con
 
 QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
-    delete oldNode;                /* simplest correct approach: rebuild         */
-    if (m_frame.isNull() || width() <= 0 || height() <= 0 || !window())
+    FrameRoot *root = static_cast<FrameRoot *>(oldNode);
+    if (m_hwprobe) m_hwprobe->renderPending(window());   /* zero-copy probe: off screen, GL current */
+    if (!hasFrame() || width() <= 0 || height() <= 0 || !window()) {
+        delete root;
         return nullptr;
+    }
+    /* Zero copy: the buffer's external texture (imported the first time).
+     * Not there yet (its handle still on its way) or failed: the last
+     * picture stays as it is -- its buffer is not released until a newer
+     * one is drawn. */
+    unsigned oesTex = 0;
+    if (m_hwbId) {
+        oesTex = m_hwframes ? m_hwframes->texture(m_hwbId) : 0;
+        if (!oesTex) {
+            if (m_hwframes && m_hwframes->failed()) QMetaObject::invokeMethod(this, "syncVfMode", Qt::QueuedConnection);
+            if (root) return root;
+            return nullptr;
+        }
+    }
+    if (!root) root = new FrameRoot;
+    /* the previous frame's children go; the textures stay */
+    while (QSGNode *child = root->firstChild()) { root->removeChildNode(child); delete child; }
+    /* the camera buffer drawn before goes back once a newer picture is drawn */
+    if (root->shownHwb && root->shownHwb != m_hwbId && m_hwframes) m_hwframes->release(root->shownHwb);
+    root->shownHwb = m_hwbId;
+    m_hwbShown = m_hwbId;
 
-    /* Upload the frame as a GPU texture. */
-    QSGTexture *texture = window()->createTextureFromImage(m_frame);
-    if (!texture)
-        return nullptr;
-    texture->setFiltering(QSGTexture::Linear);
-
-    QSGSimpleTextureNode *node = new QSGSimpleTextureNode;
-    node->setOwnsTexture(true);
-    node->setTexture(texture);
+    /* The frame: an I420 one into the reused textures, drawn by the shader
+     * (uploaded once per frame received, not at every repaint -- the aids
+     * and the magnifier repaint too); an RGB one as a texture, as before. */
+    const QSize frameSize = m_frameSize;
+    QSGTexture *texture = nullptr;                       /* the RGB frame's, if any */
+    bool yuv = false;
+    if (m_hwbId) {
+        root->planes.reset();
+        root->uploaded = 0;
+    } else if (!m_yuv.isEmpty()) {
+        if (!root->planes) root->planes.reset(new YuvPlanes);
+        yuv = root->uploaded == m_frameSerial || root->planes->upload(m_yuv, frameSize);
+        if (yuv) root->uploaded = m_frameSerial;
+    }
+    if (!yuv && !oesTex) {
+        root->planes.reset();                            /* an RGB stream: no textures kept */
+        root->uploaded = 0;
+        texture = window()->createTextureFromImage(frameRgb());
+        if (!texture) { delete root; return nullptr; }
+        texture->setFiltering(QSGTexture::Linear);
+    }
 
     /* Source rect: the view window (array-normalised) mapped into this
      * frame through the crop it was really taken with, kept inside the frame.
      * Whatever the HAL's latency in applying a new crop, the part of the
      * scene shown is the one asked for: the display magnification is derived
      * from the frame, never predicted. */
-    const QRectF sourceRect = sourceRectF(m_frame.size(), m_viewWindow, m_frameCrop);
+    const QRectF sourceRect = sourceRectF(frameSize, m_viewWindow, m_frameCrop);
     const QSizeF sourceSize = sourceRect.size();
 
     /* Fit the source into the item: 'fill' covers the item (cropping overflow),
@@ -1471,11 +2379,78 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                           target.center().y() - drawSize.height() / 2,
                           drawSize.width(), drawSize.height());
 
-    node->setRect(drawRect);
-    node->setSourceRect(sourceRect);
+    if (oesTex) {
+        QSGGeometryNode *frame = new QSGGeometryNode;
+        QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+        QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
+                QRectF(sourceRect.x() / frameSize.width(), sourceRect.y() / frameSize.height(),
+                       sourceRect.width() / frameSize.width(), sourceRect.height() / frameSize.height()));
+        frame->setGeometry(geo);
+        frame->setFlag(QSGNode::OwnsGeometry);
+        frame->setMaterial(new OesMaterial(oesTex));
+        frame->setFlag(QSGNode::OwnsMaterial);
+        root->appendChildNode(frame);
+    } else if (yuv) {
+        QSGGeometryNode *frame = new QSGGeometryNode;
+        QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+        QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
+                QRectF(sourceRect.x() / frameSize.width(), sourceRect.y() / frameSize.height(),
+                       sourceRect.width() / frameSize.width(), sourceRect.height() / frameSize.height()));
+        frame->setGeometry(geo);
+        frame->setFlag(QSGNode::OwnsGeometry);
+        frame->setMaterial(new YuvMaterial(root->planes));
+        frame->setFlag(QSGNode::OwnsMaterial);
+        root->appendChildNode(frame);
+    } else {
+        QSGSimpleTextureNode *frame = new QSGSimpleTextureNode;
+        frame->setOwnsTexture(true);
+        frame->setTexture(texture);
+        frame->setRect(drawRect);
+        frame->setSourceRect(sourceRect);
+        root->appendChildNode(frame);
+    }
 
+    /* The aids drawn by the GPU from the maps (zero copy): the maps uploaded
+     * when new, a node over the frame with the frame's mapping. */
+    AidsDraw aidsDraw;
+    if (oesTex && m_aidsGpu && !m_aidMaps.isEmpty() && !m_aidCells.isEmpty()) {
+        const int n = m_aidCells.width() * m_aidCells.height();
+        const uchar *mp = reinterpret_cast<const uchar *>(m_aidMaps.constData());
+        const uchar *lapMap = nullptr, *valMap = nullptr;
+        int off = 0;
+        for (int b = 1; b <= 8; b <<= 1) {
+            if (!(m_aidMask & b)) continue;
+            if (off + n > m_aidMaps.size()) break;
+            if (b == 1) lapMap = mp + off;
+            if (b == (m_zebraLuma ? 2 : 4)) valMap = mp + off;
+            off += n;
+        }
+        if (!root->aids) root->aids = QSharedPointer<AidTextures>::create();
+        if (root->aidsUploaded != m_aidSerial) {
+            if (lapMap) root->aids->upload(0, lapMap, m_aidCells);
+            if (valMap) root->aids->upload(1, valMap, m_aidCells);
+            root->aidsUploaded = m_aidSerial;
+        }
+        aidsDraw.peak = m_peaking && lapMap;
+        aidsDraw.zebra = m_zebra && valMap;
+        aidsDraw.edge = m_peakEdge; aidsDraw.level = m_zebraLevel;
+        aidsDraw.extra = qMax(1, (qMin(m_peakWidth, 6) + 1) / 2) - 1;
+        aidsDraw.cells = m_aidCells;
+        if (aidsDraw.peak || aidsDraw.zebra) {
+            QSGGeometryNode *ov = new QSGGeometryNode;
+            QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+            QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
+                    QRectF(sourceRect.x() / frameSize.width(), sourceRect.y() / frameSize.height(),
+                           sourceRect.width() / frameSize.width(), sourceRect.height() / frameSize.height()));
+            ov->setGeometry(geo);
+            ov->setFlag(QSGNode::OwnsGeometry);
+            ov->setMaterial(new AidsMaterial(root->aids, aidsDraw));
+            ov->setFlag(QSGNode::OwnsMaterial);
+            root->appendChildNode(ov);
+        }
+    }
     /* The aids overlay, if any, drawn over the frame with the same mapping
-     * (its pixels are the frame's at half resolution). */
+     * (its pixels are the frame's). */
     QSGTexture *ovTexShown = nullptr;                    /* for the magnifier below */
     if (!m_overlay.isNull()) {
         QSGTexture *ovTex = window()->createTextureFromImage(m_overlay);
@@ -1485,8 +2460,10 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             ov->setOwnsTexture(true);
             ov->setTexture(ovTex);
             ov->setRect(drawRect);
-            ov->setSourceRect(sourceRect);                /* same resolution as the frame */
-            node->appendChildNode(ov);
+            /* the frame's pixels, or the engine's 2x2 cells (zero copy) */
+            const qreal ks = frameSize.width() > 0 ? qreal(m_overlay.width()) / frameSize.width() : 1.0;
+            ov->setSourceRect(QRectF(sourceRect.x() * ks, sourceRect.y() * ks, sourceRect.width() * ks, sourceRect.height() * ks));
+            root->appendChildNode(ov);
             ovTexShown = ovTex;
         }
     }
@@ -1498,11 +2475,27 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const qreal mag = 2.0;
         const QPointF tc(sourceRect.x() + (m_bubbleCentre.x() - drawRect.x()) / scale,
                          sourceRect.y() + (m_bubbleCentre.y() - drawRect.y()) / scale);
-        node->appendChildNode(discNode(texture, m_frame.size(), m_bubbleCentre, m_bubbleRadius, tc, scale * mag, true));
-        if (ovTexShown)                                    /* the aids, at the same scale */
-            node->appendChildNode(discNode(ovTexShown, m_overlay.size(), m_bubbleCentre, m_bubbleRadius, tc, scale * mag, false));
+        if (oesTex)
+            root->appendChildNode(discNode(new OesMaterial(oesTex), QRectF(0, 0, 1, 1), frameSize,
+                                           m_bubbleCentre, m_bubbleRadius, tc, scale * mag));
+        else if (yuv)
+            root->appendChildNode(discNode(new YuvMaterial(root->planes), QRectF(0, 0, 1, 1), frameSize,
+                                           m_bubbleCentre, m_bubbleRadius, tc, scale * mag));
+        else
+            root->appendChildNode(discNode(textureMaterial(texture, true), texture->normalizedTextureSubRect(), frameSize,
+                                           m_bubbleCentre, m_bubbleRadius, tc, scale * mag));
+        if (aidsDraw.peak || aidsDraw.zebra) {             /* the GPU's aids, at the same scale */
+            const qreal ks = frameSize.width() > 0 ? qreal(aidsDraw.cells.width()) / frameSize.width() : 1.0;
+            root->appendChildNode(discNode(new AidsMaterial(root->aids, aidsDraw), QRectF(0, 0, 1, 1), aidsDraw.cells,
+                                           m_bubbleCentre, m_bubbleRadius, tc * ks, scale * mag / ks));
+        }
+        if (ovTexShown) {                                  /* the aids, at the same scale */
+            const qreal ks = frameSize.width() > 0 ? qreal(m_overlay.width()) / frameSize.width() : 1.0;
+            root->appendChildNode(discNode(textureMaterial(ovTexShown, false), ovTexShown->normalizedTextureSubRect(), m_overlay.size(),
+                                           m_bubbleCentre, m_bubbleRadius, tc * ks, scale * mag / ks));
+        }
     }
-    return node;
+    return root;
 }
 
 /* --- Process error handling --- */

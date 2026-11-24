@@ -262,7 +262,34 @@ int main(void)
             info.flash = 0; info.digital_zoom = 0;
         }
     }
+    {   /* a description: ImageDescription, UserComment ("ASCII" + text) and
+         * an XMP APP1 right after our Exif APP1, '<' and '&' escaped there */
+        static uint8_t out[8192];
+        rent_t ifd0[32], exif[64];
+        unsigned long next; int nn, ne; const rent_t *e;
+        const char *d = "1/24 s total (2 x 1/48 s, ISO 4428), 4 frames <tiles> & sharpen 3";
+        FILE *f; size_t n, seg, x;
+        info.description = d;
+        len = make_hal_jpeg(jpeg, 0);
+        rc = exif_write_jpeg("/tmp/indraw_exif_test.jpg", jpeg, len, &info);
+        f = fopen("/tmp/indraw_exif_test.jpg", "rb"); n = f ? fread(out, 1, sizeof out, f) : 0; if (f) fclose(f);
+        g_t = out + 12; g_tl = n > 12 ? n - 12 : 0;
+        nn = read_ifd(8, ifd0, 32, &next);
+        e = find(ifd0, nn, 0x010E);
+        CHECK(rc == 0 && e && e->type == 2 && e->val + e->count <= g_tl && !strcmp((const char *)g_t + e->val, d), "description: ImageDescription");
+        e = find(ifd0, nn, 0x8769);
+        ne = e ? read_ifd(e->val, exif, 64, &next) : 0;
+        CHECK(sorted(exif, ne), "description: Exif tags still sorted");
+        e = find(exif, ne, 0x9286);
+        CHECK(e && e->type == 7 && e->count == 8 + strlen(d) && !memcmp(g_t + e->val, "ASCII\0\0\0", 8) && !memcmp(g_t + e->val + 8, d, strlen(d)), "description: UserComment");
+        seg = ((size_t)out[4] << 8) | out[5];
+        x = 4 + seg;                                         /* the segment after our Exif APP1 */
+        CHECK(x + 40 < n && out[x] == 0xFF && out[x + 1] == 0xE1 && !memcmp(out + x + 4, "http://ns.adobe.com/xap/1.0/", 29), "description: an XMP APP1 follows the Exif");
+        CHECK(memmem(out, n, "&lt;tiles&gt; &amp; sharpen 3</rdf:li>", 38) != NULL, "description: in the XMP, escaped");
+        CHECK(out[n - 2] == 0xFF && out[n - 1] == 0xD9, "description: the image segments follow");
+        info.description = NULL;
+    }
     unlink("/tmp/indraw_exif_test.jpg");
-    printf(fails ? "exif: FAILED (%d)\n" : "exif: OK (6 passes)\n", fails);
+    printf(fails ? "exif: FAILED (%d)\n" : "exif: OK (7 passes)\n", fails);
     return fails ? 1 : 0;
 }

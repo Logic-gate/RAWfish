@@ -127,8 +127,8 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo&apos;s report the histogram the app showed and the photo&apos;s own. Takes effect at the next start of RAWfish-ir.</source>
-        <translation>À allumer avant de reproduire un problème de mise au point, d&apos;exposition ou de geste : le journal garde alors chaque commande et chaque réponse (le journal normal ne garde que les démarrages, les photos et les erreurs), et le compte rendu de chaque photo l&apos;histogramme que l&apos;app affichait et celui de la photo. Pris en compte au prochain démarrage de RAWfish-ir.</translation>
+        <source>Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo&apos;s report the histogram the app showed and the photo&apos;s own; our JPG photos carry their settings in their file names (seen in the Gallery&apos;s details). Takes effect at the next start of RAWfish-ir.</source>
+        <translation>À allumer avant de reproduire un problème de mise au point, d&apos;exposition ou de geste : le journal garde alors chaque commande et chaque réponse (le journal normal ne garde que les démarrages, les photos et les erreurs), et le compte rendu de chaque photo l&apos;histogramme que l&apos;app affichait et celui de la photo ; nos photos JPG portent leurs réglages dans leur nom de fichier (visible dans les détails de la Galerie). Pris en compte au prochain démarrage de RAWfish-ir.</translation>
     </message>
     <message>
         <location line="+5"/>
