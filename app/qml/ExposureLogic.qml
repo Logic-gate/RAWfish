@@ -64,6 +64,18 @@ Item {
     // Stacked exposures (longer than the single-exposure ceiling, Σ on the wheel).
     readonly property real shutterMaxNs: caps.shutterMaxNs ? caps.shutterMaxNs : 500000000
     function isStacked(ns) { return ns > shutterMaxNs + 1 }
+    // A Σ speed chosen (beyond the single-exposure ceiling), for the page's
+    // TYPE (forced to raw) and the bracket (off). While a fresh engine has
+    // not taken the user's exposure back yet (synced false: it shows its own
+    // automatic one for its first moments), the values kept from the engine
+    // before answer, not the new engine's: else a restart made Σ look
+    // unselected for a moment, the page set the type back to jpg, which
+    // (with a bracket chosen) changed the session's streams and restarted the
+    // engine again, and once the exposure came back Σ set raw again, and so
+    // on: the camera restarted every two seconds (Xperia 10 III, log of
+    // 24 Nov 2026).
+    readonly property bool stackChosen: synced ? (!fullAuto && isStacked(displayShutterNs))
+                                               : (kShutterManual && isStacked(kShutterNs))
     readonly property bool rawSource: imageType === "raw"
 
     // Set by the page while the loupe moves without a reference, or a focus

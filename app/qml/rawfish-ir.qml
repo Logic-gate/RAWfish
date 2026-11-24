@@ -1126,7 +1126,7 @@ ApplicationWindow {
             // A stacked exposure (Σ) is a RAW-only feature: the TYPE button is
             // forced to raw and greyed while a Σ speed is selected (a JPEG of a
             // many-frame stack is not meaningful). Remember the type to restore.
-            readonly property bool stackSelected: !exposure.fullAuto && exposure.isStacked(exposure.displayShutterNs)
+            readonly property bool stackSelected: exposure.stackChosen   // stable across an engine restart (ExposureLogic)
             property string typeBeforeStack: "jpg"
             onStackSelectedChanged: {
                 if (stackSelected) { if (imageType !== "raw") { typeBeforeStack = imageType; imageType = "raw" } }

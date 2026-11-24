@@ -15,6 +15,16 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- Σ with a bracket chosen no longer restarts the camera over and over
+  (patch 0533; Xperia 10 III, log of 24 Nov 2026). Choosing a Σ speed
+  sets the type to raw, which restarts the engine; a fresh engine shows
+  its own automatic exposure for its first moments, so Σ looked
+  unselected, the type went back to jpg, and with a bracket chosen jpg and
+  raw have different streams (since patch 0529): another restart, Σ again,
+  and so on every two seconds. Whether Σ is chosen is now read, until the
+  new engine has taken the user's exposure back, from the values kept from
+  the engine before. Without a bracket jpg and raw share one session, which
+  is why the JP2 and the XA2 did not show it.
 - The camera comes back after a bracket on the Xperia 10 III (patch 0531;
   log of 24 Nov 2026). Closing a session that held the camera's JPEG
   stream (a bracket, the HAL JPG) takes its camera driver up to 1.1 s, and
