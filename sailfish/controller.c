@@ -432,7 +432,7 @@ static int view_command(const char *line)
 }
 
 /* "sh name=N type=jpg|raw|yuv q=Q noise=M edge=M bracket=off|0|1|2|3 bracket_n=3|5|7 denoise_sigma=D
- *     frames=1|2|4|8 nr=classic|tiles split=1|2|4 colour=0..5 median=0..4 sharpen=0..5 dng=0|1"
+ *     frames=1|2|4|8 nr=classic|tiles split=1|2|4 colour=0..5 median=0..4 luma=0..3 sharpen=0..5 dng=0|1"
  *     (frames to dng for yuv; split with nr=tiles only):
  * a press of the shutter (the self-timer is the interface's). The capture
  * lines go to the queue the CLI drains. */
@@ -453,6 +453,7 @@ static int shoot_command(const char *line)
     if ((v = field(line, "colour"))) r.colour = atoi(v);
     if ((v = field(line, "median"))) r.median = atoi(v);
     if ((v = field(line, "sharpen"))) r.sharpen = atoi(v);
+    if ((v = field(line, "luma"))) { r.luma_set = 1; r.luma = atoi(v); }   /* absent: the device profile's default */
     r.dng = (v = field(line, "dng")) && atoi(v) == 1;
     r.snap = (v = field(line, "snap")) && atoi(v) == 1;
     if ((v = field(line, "q"))) r.quality = atoi(v);

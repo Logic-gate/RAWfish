@@ -517,6 +517,18 @@
         <translation>Bruit coul.</translation>
     </message>
     <message>
+        <source>Luma NR</source>
+        <translation>Bruit lum.</translation>
+    </message>
+    <message>
+        <source>Luminance noise filter off</source>
+        <translation>Filtre du bruit de luminance désactivé</translation>
+    </message>
+    <message>
+        <source>Luminance noise filter: %1 x the noise</source>
+        <translation>Filtre du bruit de luminance : %1 x le bruit</translation>
+    </message>
+    <message>
         <location line="+1" />
         <source>Colour noise filter off</source>
         <translation>Filtre du bruit de couleur désactivé</translation>

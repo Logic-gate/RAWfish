@@ -432,6 +432,7 @@ static const ov_field_t k_ov_fields[] = {
     { "touch_focus_off",         0, 1 },                        /* 1: no focus by touch on this camera */
     { "focus_max_diopters",      1, 100 },                      /* the lens' real closest stop (HAL units), below the declared one */
     { "focus_step_percent",      1, 49 },                       /* manual steps above 1 D as a % of the value */
+    { "luma_nr",                 0, 3 },                        /* our JPG's luminance noise filter when the app sends none */
     { NULL, 0, 0 }
 };
 /* Keys allowed anywhere in a camera block besides the fields above. */
@@ -1430,10 +1431,12 @@ static void usage(void)
             "                [vres=KEY,...]   (diagnosis: up to 8 vendor keys of the photo's result in the reply,\n"
             "                 \"vendor_results\"; e.g. the sensor gain the HAL applied)\n"
             "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
-            "                                [colour=0..5] [median=0..4] [sharpen=0..5]\n"
+            "                                [colour=0..5] [median=0..4] [luma=0..3] [sharpen=0..5]\n"
             "                                (colour: our colour filter, 1, 2, 3, 5, 8 x the noise (denoise=on = 2); median:\n"
             "                                 a 3x3 .. 9x9 on the colour first (false colour); with n=2..8 the frames are\n"
-            "                                 aligned and merged; sharpen: ours, 0.5 .. 4 x the fine detail, after the merge)\n"
+            "                                 aligned and merged; luma: ours on the luminance, after the merge, averaging\n"
+            "                                 what differs by less than 1, 1.5, 2.2 x the noise (none given: the device\n"
+            "                                 profile's luma_nr, else 0); sharpen: ours, 0.5 .. 4 x the fine detail, last)\n"
             "                                [nr=classic|tiles] [split=1|2|4]   (nr=tiles: each tile of a frame aligned\n"
             "                                 on its own before the merge; split=2|4: each frame 1/2 or 1/4 of the pose,\n"
             "                                 the ISO times 2 or 4: less blur, the noise averaged out by the frames)\n"
@@ -2055,6 +2058,11 @@ static int yuv_save_frame(const char *prefix, int k, const struct timespec *now,
     return fclose(fp) ? -1 : 0;
 }
 
+/* Our JPG's luminance noise filter when a yuv command gives no luma= (the
+ * app sends none until the user picks a level): the device profile's
+ * per-camera "luma_nr" (0..3), read at the stream's start; 0 without one. */
+static int g_luma_default = 0;
+
 static int cmd_yuv(void *bridge, char **save, char *out)
 {
     typedef int (*yuv_fn)(int, float, int64_t, int, int, ir_yuv_t *, char *, size_t);
@@ -2067,6 +2075,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     char file[1200];
     static char cap[OUT_SIZE];
     int quality = 95, iso = 0, focus_mode = F_KEEP, rc, n = 1, nev = 0, do_save = 0, k, saved = 0, denoise = 0, sharpen = 0, colour = -1, median = 0, want_dng = 0;
+    int luma = g_luma_default;                 /* our luminance filter, 0..3 (luma=; else the device profile's) */
+    float luma_sigma_seen = 0.0f;              /* the noise it measured after the merge (0: not run) */
+    double luma_ms = 0.0;
     int light = 0;                               /* snap: a light photo (light=1) */
     int split = 1, method = YUV_MERGE_CLASSIC;   /* split=2|4: shorter frames; nr=tiles: the merge by tiles */
     int detail_scale = 1;                        /* the filters' scale for this photo (1, or 2 for an enlarged 50 MP) */
@@ -2113,6 +2124,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         else if (!strncmp(tok, "colour=", 7)) { colour = atoi(tok + 7); if (colour < 0 || colour > 5) { emit("{\"ok\":false,\"error\":\"yuv: colour=0..5\"}"); return 1; } denoise = 1; }
         else if (!strncmp(tok, "median=", 7)) { median = atoi(tok + 7); if (median < 0 || median > 4) { emit("{\"ok\":false,\"error\":\"yuv: median=0..4\"}"); return 1; } denoise = 1; }
         else if (!strncmp(tok, "sharpen=", 8)) { sharpen = atoi(tok + 8); if (sharpen < 0 || sharpen > 5) { emit("{\"ok\":false,\"error\":\"yuv: sharpen=0..5\"}"); return 1; } }
+        else if (!strncmp(tok, "luma=", 5)) { luma = atoi(tok + 5); if (luma < 0 || luma > 3) { emit("{\"ok\":false,\"error\":\"yuv: luma=0..3\"}"); return 1; } }
         else { emit("{\"ok\":false,\"error\":\"yuv: unknown option\"}"); return 1; }
     }
     if (quality < 1 || quality > 100) { emit("{\"ok\":false,\"error\":\"yuv: bad quality\"}"); return 1; }
@@ -2171,6 +2183,17 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         yuv_set_merge_method(method);
         if (yuv_denoise(in, nin, colour, median, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"denoise failed (memory)\"}"); return 1; }
     }
+    if (luma > 0) {                                       /* ours on the luminance: after the merge, before the sharpening */
+        double tl = mono_ms();
+        if (!denoise) {                                    /* no merge asked: on the frame as it is */
+            const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
+            if (yuv_denoise(in, 1, 0, 0, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"luma filter failed (memory)\"}"); return 1; }
+            denoise = -1;                                  /* dn holds a plain copy */
+        }
+        luma_sigma_seen = yuv_luma_nr(&dn, luma);
+        if (luma_sigma_seen < 0) { yfree(&dn); if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"luma filter failed (memory)\"}"); return 1; }
+        luma_ms = mono_ms() - tl;
+    }
     if (sharpen) {                                        /* ours, on the merged frame */
         double ts = mono_ms();
         if (!denoise) {                                    /* no merge asked: sharpen the frame as it is */
@@ -2200,9 +2223,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
          * JPEG ("RAWfish-ir x.y.z (HAL JPEG)") and ours tell apart in any
          * viewer's Exif panel: frames merged, colour filter, false-colour
          * median and sharpening levels. */
-        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d%s%s, colour %d, moire %d, sharpen %d)",
+        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d%s%s, colour %d, moire %d, luma %d, sharpen %d)",
                  light ? "snap" : "JPG", (n == 1 && nev == 0) ? 1 : n, method == YUV_MERGE_TILES ? " tiles" : "",
-                 split == 2 ? " 1/2" : split == 4 ? " 1/4" : "", denoise ? colour : 0, denoise ? median : 0, sharpen);
+                 split == 2 ? " 1/2" : split == 4 ? " 1/4" : "", denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma, sharpen);
         ex.software = sw;
         /* The description: the same in words, with the exposure of each frame
          * (ImageDescription, UserComment and XMP: what desktop viewers show;
@@ -2213,12 +2236,12 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             for (k = 0; k < nm && el + 8 < sizeof evs; ++k)
                 el += (size_t)snprintf(evs + el, sizeof evs - el, "%s%+g", k ? "," : " at EV ", ev[k]);
         }
-        snprintf(desc, sizeof desc, "RAWfish-ir %s from YUV: %d frame%s of %s at ISO %d%s%s%s%s; colour NR %d, moire %d, sharpen %d",
+        snprintf(desc, sizeof desc, "RAWfish-ir %s from YUV: %d frame%s of %s at ISO %d%s%s%s%s; colour NR %d, moire %d, luma NR %d, sharpen %d",
                  light ? "snap" : "JPG", nm, nm > 1 ? "s" : "", et, f.iso, evs,
                  split > 1 ? (split == 2 ? " (each 1/2 of the pose)" : " (each 1/4 of the pose)") : "",
                  nm > 1 ? (method == YUV_MERGE_TILES ? ", merged by tiles" : ", merged whole") : "",
                  nm > 1 && nev > 0 ? " (the first frame's exposure)" : "",
-                 denoise ? colour : 0, denoise ? median : 0, sharpen);
+                 denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma, sharpen);
         ex.description = desc;
         ex.datetime = dt;
         ex.exposure_ns = f.exposure_ns; ex.iso = f.iso;
@@ -2245,8 +2268,9 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             else if (nm == 1) snprintf(kind, sizeof kind, "single%s", split == 2 ? "-half" : split == 4 ? "-quarter" : "");
             else snprintf(kind, sizeof kind, "%s%d%s", nev > 0 ? "ev" : method == YUV_MERGE_TILES ? "tiles" : "classic",
                           nm, split == 2 ? "-half" : split == 4 ? "-quarter" : "");
-            snprintf(tag, sizeof tag, "_%s_%s_iso%d_col%d_moire%d_sharp%d", kind, es, f.iso,
-                     denoise ? colour : 0, denoise ? median : 0, sharpen);
+            /* "_luma<N>" only when the filter ran: the names of before stay as they were */
+            snprintf(tag, sizeof tag, "_%s_%s_iso%d_col%d_moire%d%s%.0d_sharp%d", kind, es, f.iso,
+                     denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma > 0 ? "_luma" : "", luma, sharpen);
             {
                 char *base = strrchr(file, '/');
                 const char *pfx = name_prefix(prefix);
@@ -2301,6 +2325,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
                      rep.method == YUV_MERGE_TILES && nf > 1 ? ",\"tiles_moved_pct\":[" : "",
                      rep.method == YUV_MERGE_TILES && nf > 1 ? tm : "", rep.method == YUV_MERGE_TILES && nf > 1 ? "]" : "");
         }
+        if (luma > 0) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"luma\":{\"level\":%d,\"sigma\":%.2f,\"ms\":%.0f}", luma, luma_sigma_seen, luma_ms);
         if (sharpen) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"sharpen\":{\"level\":%d,\"ms\":%.0f}", sharpen, rep.ms_sharpen);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
     }
@@ -2955,6 +2980,19 @@ int main(int argc, char **argv)
                 set_exp_fn se = (set_exp_fn)a_dlsym(bridge, "indraw_set_exposure_max");
                 long long em = read_override_checked(argv[2], "observed_exposure_max_ns");
                 if (se && em > 0) { se((int64_t)em, out, sizeof out); emit(out); }
+            }
+            {   /* our JPG's luminance filter when the app asks none (device profile "luma_nr";
+                 * absent: 0), and told to the engine for the caps line (the menu shows it) */
+                typedef int (*set_luma_fn)(int);
+                set_luma_fn sl = (set_luma_fn)a_dlsym(bridge, "indraw_set_luma_nr_default");
+                long long ln = read_override_checked(argv[2], "luma_nr");
+                g_luma_default = ln > 0 ? (int)ln : 0;
+                if (sl) sl(g_luma_default);
+                if (g_luma_default > 0) {
+                    char m[96];
+                    snprintf(m, sizeof m, "luma_nr (device profile) for camera %s: %d", argv[2], g_luma_default);
+                    log_line("# ", m);
+                }
             }
             {   /* a pause before each capture (device profile; absent: none) */
                 typedef int (*set_delay_fn)(int);

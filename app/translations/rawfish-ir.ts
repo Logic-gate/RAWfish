@@ -518,6 +518,18 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Luma NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Luminance noise filter off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Luminance noise filter: %1 x the noise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+1"/>
         <source>Colour noise filter off</source>
         <translation type="unfinished"></translation>

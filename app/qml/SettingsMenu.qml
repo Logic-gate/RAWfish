@@ -148,6 +148,14 @@ Item {
     property int yuvColour: 2                      // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
     property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
     property int yuvSharpen: 3                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
+    // Our luminance filter (after the merge, before the sharpening): -1 =
+    // the camera's default (its device profile's luma_nr: 1 on the Xperia
+    // 10 III, 0 elsewhere), else 0 off, 1..3 (1, 1.5, 2.2 x the noise).
+    property int yuvLuma: -1
+    readonly property int yuvLumaDefault: viewfinder && viewfinder.caps.lumaNr !== undefined ? viewfinder.caps.lumaNr : 0
+    readonly property int yuvLumaEff: yuvLuma >= 0 ? yuvLuma : yuvLumaDefault
+    // The shoot command's field: none for the default (the engine applies it).
+    function yuvLumaField() { return yuvLuma >= 0 ? " luma=" + yuvLuma : "" }
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
     property bool advanced: true                   // simple = jpg only, no wheels
     // The Σ preview's target frame rate (rawfish-ir.conf, hand-edited): the ISO is
@@ -280,6 +288,7 @@ Item {
         yuvColour = num("jpgNoiseColourFilter", 2, 0, 5)
         yuvMedian = num("jpgMoireFilter", 0, 0, 4)
         yuvSharpen = num("jpgSharpen", 3, 0, 5)
+        { var lu = pick("jpgLumaNoiseFilter", "auto", ["auto", "0", "1", "2", "3"]); yuvLuma = lu === "auto" ? -1 : lu * 1 }
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         menuDiscovered = num("menuDiscovered", 0, 0, 1) === 1
         gridOn = num("gridOn", 0, 0, 1) === 1
@@ -767,6 +776,19 @@ Item {
                     labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
                     onPicked: { menu.yuvMedian = value; menu.save("jpgMoireFilter", value) } }
+                // Our luminance filter; the green ring marks this camera's
+                // default (its device profile's). Picking the default value
+                // goes back to "auto", so the next camera's default applies.
+                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
+                    defaultValue: menu.yuvLumaDefault
+                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
+                    caption: qsTr("Luma NR"); values: [0, 1, 2, 3]; current: menu.yuvLumaEff
+                    labelFor: function(v) { return v === 0 ? qsTr("Luminance noise filter off") : qsTr("Luminance noise filter: %1 x the noise").arg([0, 1, 1.5, 2.2][v]) }
+                    shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
+                    onPicked: {
+                        if (value === menu.yuvLumaDefault) { menu.yuvLuma = -1; menu.save("jpgLumaNoiseFilter", "auto") }
+                        else { menu.yuvLuma = value; menu.save("jpgLumaNoiseFilter", value) }
+                    } }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: 3
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint

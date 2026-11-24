@@ -1323,7 +1323,8 @@ ApplicationWindow {
                                        // flashed and unflashed frames would be a mess).
                                        + (isYuv ? settingsMenu.yuvMergeFields(settingsMenu.flashAuto)
                                                 + " colour=" + settingsMenu.yuvColour
-                                                  + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
+                                                  + " median=" + settingsMenu.yuvMedian + settingsMenu.yuvLumaField()
+                                                  + " sharpen=" + settingsMenu.yuvSharpen
                                                   + (outputConf.jpgWithDng && page.rawAvailable ? " dng=1" : "") : ""))
             }
 

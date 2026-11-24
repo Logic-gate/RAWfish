@@ -66,10 +66,13 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
         /* snap from our YUV: one light photo (light=1), never with a DNG */
         int nf = req->frames == 2 || req->frames == 4 || req->frames == 8 ? req->frames : 1;
         int sp = req->nr_tiles && (req->split == 2 || req->split == 4) ? req->split : 1;
-        char nr[24] = "";
+        char nr[24] = "", lu[12] = "";
         if (req->nr_tiles && nf > 1) snprintf(nr, sizeof nr, " nr=tiles%s", sp == 2 ? " split=2" : sp == 4 ? " split=4" : "");
-        if (!put(lines[0], &len, "yuv %s n=%d%s colour=%d median=%d sharpen=%d q=%d%s%s%s", req->name,
-                 nf, nr, req->colour, req->median, req->sharpen,
+        /* the luminance filter only when the interface chose one: none sent,
+         * the engine applies the device profile's (luma_nr) */
+        if (req->luma_set && req->luma >= 0 && req->luma <= 3) snprintf(lu, sizeof lu, " luma=%d", req->luma);
+        if (!put(lines[0], &len, "yuv %s n=%d%s colour=%d median=%d%s sharpen=%d q=%d%s%s%s", req->name,
+                 nf, nr, req->colour, req->median, lu, req->sharpen,
                  req->quality > 0 ? req->quality : 95, req->dng && !req->snap ? " dng=1" : "", req->snap ? " light=1" : "", farg))
             return 0;
         if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;

@@ -15,6 +15,21 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- A luminance noise filter for our JPG (patch 0535), the menu's "Luma NR"
+  (0 off, 1..3) in the JPG processing columns, rawfish-ir.conf
+  jpgLumaNoiseFilter (auto = the camera's default). Until now the grain was
+  only reduced by merging frames, never smoothed, to keep the detail: that
+  was enough on the JP2 (its 12.5 MP binned by the 50 MP sensor), not on the
+  Xperia 10 III, whose JPGs were grainy at ISO 1000 even from 4 frames. The
+  filter runs after the merge, on the grain that is left, and before the
+  sharpening: each pixel is averaged with its 5x5 neighbours that differ
+  from it by less than 1, 1.5 or 2.2 times the noise measured on the frame,
+  so that edges and textures stronger than the grain keep their pixels (not
+  the cameras' "watercolour"). Default from the device profile ("luma_nr"):
+  1 on the 10 III's four cameras, 0 elsewhere, so the JP2's and the XA2's
+  JPGs do not change. Its level is in the Exif and XMP description and, with
+  the detailed log, in the file name (_luma1); the photo's reply gives the
+  noise it measured and its time.
 - Σ with a bracket chosen no longer restarts the camera over and over
   (patch 0533; Xperia 10 III, log of 24 Nov 2026). Choosing a Σ speed
   sets the type to raw, which restarts the engine; a fresh engine shows

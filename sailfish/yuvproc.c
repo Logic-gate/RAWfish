@@ -687,6 +687,85 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
     return 0;
 }
 
+/* Luminance noise (yuv_luma_nr). Until 0.3.11 the grain was only reduced by
+ * merging frames, never smoothed: a spatial filter trades detail for
+ * smoothness (the "watercolour" of the cameras' own high-quality noise
+ * reduction). That was enough on the JP2, whose 12.5 MP comes binned from
+ * 50 MP (four pixels averaged by the sensor), not on the Xperia 10 III,
+ * whose small pixels are read one by one: its JPGs stayed grainy at ISO
+ * 1000 even from 4 frames (24 Nov 2026). This filter is gentle on purpose:
+ * a 5x5 bilateral on the luminance whose range is a small multiple of the
+ * noise measured on the frame itself (after the merge: what is left), so
+ * that only differences the size of the grain are averaged away; a contour
+ * or a texture clearly above the noise keeps its pixels. The weights come
+ * from tables (one exp per possible difference, one per position), the
+ * rows are spread over the cores. */
+typedef struct { const uint8_t *src; uint8_t *dst; int w, h, st, r; const float *rw, *sw; } luma_ctx_t;
+static void luma_rows(void *p, int y0, int y1)
+{
+    luma_ctx_t *c = p; int w = c->w, h = c->h, st = c->st, r = c->r, n = 2 * r + 1, x, y, dx, dy;
+    for (y = y0; y < y1; ++y) {
+        uint8_t *d = c->dst + (size_t)y * w;
+        const uint8_t *rows[2 * 4 + 1];
+        for (dy = -r; dy <= r; ++dy) {              /* the rows around, mirrored at the edges */
+            int yy = y + dy * st;
+            if (yy < 0) yy = -yy;
+            if (yy >= h) yy = 2 * h - 2 - yy;
+            rows[dy + r] = c->src + (size_t)yy * w;
+        }
+        for (x = 0; x < w; ++x) {
+            const int s0 = c->src[(size_t)y * w + x];
+            const int inner = x >= r * st && x < w - r * st;   /* no mirroring needed: the fast path */
+            float sum = 0.0f, wsum = 0.0f;
+            for (dx = -r; dx <= r; ++dx) {
+                int xx = x + dx * st;
+                const float *swc = c->sw + dx + r;
+                if (!inner) {
+                    if (xx < 0) xx = -xx;
+                    if (xx >= w) xx = 2 * w - 2 - xx;
+                }
+                for (dy = 0; dy < n; ++dy) {
+                    const int v = rows[dy][xx];
+                    const float wt = swc[dy * n] * c->rw[v > s0 ? v - s0 : s0 - v];
+                    sum += wt * (float)v; wsum += wt;
+                }
+            }
+            /* the centre's own weight is 1 (difference 0, position 0): wsum > 0 */
+            d[x] = (uint8_t)(sum / wsum + 0.5f);
+        }
+    }
+}
+float yuv_luma_nr(ir_yuv_t *f, int level)
+{
+    static const float k_range[4] = { 0.0f, 1.0f, 1.5f, 2.2f };    /* x the noise           */
+    static const float k_space[4] = { 0.0f, 1.0f, 1.3f, 1.7f };    /* the reach, in steps   */
+    float rw[256], sw[25], sigma, rs, ss;
+    luma_ctx_t c;
+    uint8_t *out;
+    int i, dx, dy;
+    if (!f || !f->y || level < 1) return 0.0f;
+    if (level > 3) level = 3;
+    if (f->w < 32 || f->h < 32) return 0.0f;
+    sigma = luma_sigma(f->y, f->w, f->h);           /* the grain left after the merge */
+    if (!(sigma > 0.3f)) return 0.0f;               /* next to none: nothing to do  */
+    rs = k_range[level] * sigma;
+    ss = k_space[level];
+    for (i = 0; i < 256; ++i) {                      /* weight by the difference */
+        float e = (float)(i * i) / (2.0f * rs * rs);
+        rw[i] = e < 12.0f ? expf(-e) : 0.0f;
+    }
+    for (dy = -2; dy <= 2; ++dy)                     /* weight by the position (5x5) */
+        for (dx = -2; dx <= 2; ++dx)
+            sw[(dy + 2) * 5 + dx + 2] = expf(-(float)(dx * dx + dy * dy) / (2.0f * ss * ss));
+    out = malloc((size_t)f->w * f->h);
+    if (!out) return -1.0f;
+    c.src = f->y; c.dst = out; c.w = f->w; c.h = f->h; c.st = g_scale; c.r = 2; c.rw = rw; c.sw = sw;
+    parallel_rows(luma_rows, &c, f->h);
+    memcpy(f->y, out, (size_t)f->w * f->h);
+    free(out);
+    return sigma;
+}
+
 /* Sharpening: the luminance minus its 3x3 mean is the fine detail; a
  * part of it (the strength) is added back, except where it is smaller
  * than the noise, where nothing is added: grain is not sharpened. Done

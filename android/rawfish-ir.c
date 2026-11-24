@@ -574,6 +574,7 @@ static struct {
     int override_iso_max;                   /* 0 = none; else the highest ISO found to work in manual (above the declared range) */
     float override_focus_max_d;             /* 0 = none; else the lens' real closest stop, HAL units (below the declared one) */
     int no_touch_focus;                     /* 1: the device profile says a touch cannot focus this camera */
+    int luma_nr_default;                    /* our JPG's luminance filter by default (device profile "luma_nr", 0..3): for the caps line */
     int focus_step_pct;                     /* device profile: volume steps above 1 D as a % of the value (0 = constant) */
     int64_t override_exp_max_ns;            /* 0 = none; else the longest exposure found to work (above the declared range) */
     int lim_raw_off;                        /* device profile: no RAW stream      */
@@ -7073,7 +7074,7 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d luma_nr=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus,
@@ -7084,7 +7085,9 @@ static void emit_caps(void)
              !g.no_touch_focus,                     /* 0: a focus touch is not offered on this camera (device profile) */
              g.focus_step_pct,                      /* the manual steps above 1 D, % of the value (0: constant 0.05 D) */
              g_screen_notch, cams, facing, rawcams,
-             g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
+             g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n,
+             g.luma_nr_default,                     /* our JPG's luminance filter by default (the menu's default) */
+             raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
         if (n && line[n - 1] == '\n') line[--n] = '\0';
@@ -8985,6 +8988,15 @@ IR_API int indraw_set_streams_exclusive(int on)
 }
 
 /* Device-profile pause before every capture, in ms (0..3000; 0 = none). */
+/* Device-profile value, before indraw_stream_start: the luminance filter our
+ * JPG gets by default on this camera ("luma_nr", 0..3; the CLI applies it,
+ * this only reports it in the caps line, for the app's menu). */
+IR_API int indraw_set_luma_nr_default(int level)
+{
+    g.luma_nr_default = level < 0 ? 0 : level > 3 ? 3 : level;
+    return IR_OK;
+}
+
 IR_API int indraw_set_capture_delay(int ms)
 {
     g.capture_delay_ms = ms < 0 ? 0 : ms > 3000 ? 3000 : ms;

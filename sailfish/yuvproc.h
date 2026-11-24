@@ -1,6 +1,7 @@
 /* yuvproc.h -- our own noise reduction on the engine's YUV frames: colour by
- * a cross bilateral filter, grain by merging several frames (never by
- * smoothing). */
+ * a cross bilateral filter, grain by merging several frames, and, when asked
+ * (yuv_luma_nr, off by default but on the Xperia 10 III), a gentle
+ * edge-preserving filter on the luminance for the grain the merge leaves. */
 #ifndef INDRAW_YUVPROC_H
 #define INDRAW_YUVPROC_H
 #include "../android/yuvframe.h"
@@ -33,6 +34,13 @@ int yuv_denoise(const ir_yuv_t *frames, int n, int colour, int median, ir_yuv_t 
  * and 4 times the fine detail added back), sigma the noise the detail must
  * exceed. */
 void yuv_sharpen(ir_yuv_t *f, int level, float sigma);
+/* Luminance noise, in place, after the merge and before the sharpening:
+ * each pixel averaged with its neighbours (5x5, at the detail scale) that
+ * differ from it by less than about the noise, measured here on this frame;
+ * edges and textures stronger than the grain stay. level 1..3: 1, 1.5 and
+ * 2.2 times the noise, with a slightly wider reach each step; 0 nothing.
+ * Returns the noise measured (0 when nothing was done), or -1 (memory). */
+float yuv_luma_nr(ir_yuv_t *f, int level);
 /* The detail scale of the next images: 1 (pixels are the sensor's) or 2
  * (enlarged twice from the sensor's reading, e.g. the JP2's 50 MP). Every
  * filter (noise estimates, colour filter, false-colour median, sharpening)

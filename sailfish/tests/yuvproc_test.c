@@ -258,6 +258,28 @@ int main(void)
         CHECK(edge1 > edge0 && flat1 < flat0 * 1.6f, "sharpen 2: edge %d -> %d, flat noise %.2f -> %.2f", edge0, edge1, flat0, flat1);
         free(sh.y); free(sh.u); free(sh.v);
     }
+    {   /* the luminance filter: less grain on one frame, the square's edge kept,
+         * stronger with the level; a frame without noise left alone */
+        float flat[4]; int edge[4], lv;
+        for (lv = 0; lv <= 3; lv += 1) {
+            ir_yuv_t one; yuv_denoise_report_t r4; float sg;
+            CHECK(yuv_denoise(fr, 1, 0, 0, &one, &r4) == 0, "a frame to filter (level %d)", lv);
+            sg = lv ? yuv_luma_nr(&one, lv) : 0.0f;
+            flat[lv] = noise_in(one.y, W, 100, 100, 400, 250);
+            edge[lv] = abs((int)one.y[(size_t)360 * W + 503] - (int)one.y[(size_t)360 * W + 498]);
+            if (lv) CHECK(sg > 1.0f, "luma %d measured the noise (%.2f)", lv, sg);
+            free(one.y); free(one.u); free(one.v);
+        }
+        CHECK(flat[1] < flat[0] * 0.85f && flat[2] < flat[1] && flat[3] < flat[2],
+              "luma NR lowers the grain: %.2f -> %.2f / %.2f / %.2f", flat[0], flat[1], flat[2], flat[3]);
+        CHECK(edge[3] > edge[0] * 0.8f, "luma NR keeps the square's edge: %d -> %d", edge[0], edge[3]);
+        {
+            ir_yuv_t clean = make(W, H, 0, 0, 500, 0.0f, 7u);
+            float sg = yuv_luma_nr(&clean, 2);
+            CHECK(sg >= 0.0f, "luma NR on a frame without noise runs (%.2f)", sg);
+            free(clean.y); free(clean.u); free(clean.v);
+        }
+    }
     {   /* a flat, clipped frame (a white sky at ISO 100): no noise to measure;
          * the merge must not divide by it (it gave 0/0, black-green holes) */
         ir_yuv_t flat[2], o2; yuv_denoise_report_t r3; int bad = 0; size_t i, ny = (size_t)W * H, nc = ny / 4;

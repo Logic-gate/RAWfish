@@ -31,6 +31,7 @@ typedef struct {
     int raw;                    /* 1 raw, 0 jpeg */
     int yuv;                    /* 1: our JPEG from the YUV stream (frames, colour, median, sharpen) */
     int frames, colour, median, sharpen;
+    int luma_set, luma;         /* yuv: luma_set 1 = luma (0..3) sent; 0 = none sent, the device profile's default applies */
     int nr_tiles;               /* yuv: 1 = the frames merged by tiles (each tile aligned), 0 = the classic merge */
     int split;                  /* yuv, with nr_tiles: 2|4 = each frame 1/2 or 1/4 of the pose, the ISO raised to match */
     int dng;                    /* yuv: a DNG of the same exposure too */
