@@ -149,7 +149,7 @@ Item {
     property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
     property int yuvSharpen: 3                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
     // Our luminance filter (after the merge, before the sharpening): -1 =
-    // the camera's default (its device profile's luma_nr: 1 on the Xperia
+    // the camera's default (its device profile's luma_nr: 2 on the Xperia
     // 10 III, 0 elsewhere), else 0 off, 1..3 (1, 1.5, 2.2 x the noise).
     property int yuvLuma: -1
     readonly property int yuvLumaDefault: viewfinder && viewfinder.caps.lumaNr !== undefined ? viewfinder.caps.lumaNr : 0

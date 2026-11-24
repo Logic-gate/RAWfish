@@ -15,6 +15,10 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- The Xperia 10 III's JPGs get the luminance filter at level 2 by default
+  (patch 0537), 1.5 times the noise: level 1 left too much grain at ISO
+  1000 on the phone. Its device profile's luma_nr goes from 1 to 2; a
+  level picked in the menu stays.
 - A luminance noise filter for our JPG (patch 0535), the menu's "Luma NR"
   (0 off, 1..3) in the JPG processing columns, rawfish-ir.conf
   jpgLumaNoiseFilter (auto = the camera's default). Until now the grain was

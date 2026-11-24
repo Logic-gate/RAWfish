@@ -110,7 +110,7 @@ jpgMoireFilter=0
 ; the sharpening: each pixel averaged with its neighbours that differ from it
 ; by less than 1, 1.5 or 2.2 times the noise measured (1..3), so that grain
 ; goes and edges stay; 0 off. auto: this camera's default (the device
-; profile's luma_nr: 1 on the Xperia 10 III, 0 on the other phones).
+; profile's luma_nr: 2 on the Xperia 10 III, 0 on the other phones).
 ;                                               auto, 0..3              default auto
 jpgLumaNoiseFilter=auto
 ; RAWfish-ir's sharpening of the fine detail above the noise: 0 off, 1..5 =

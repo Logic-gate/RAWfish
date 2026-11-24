@@ -309,7 +309,7 @@ cause can be looked for and a shipped profile written.
   menu's green ring shows it). 0 (the default) keeps the grain to the frame
   merge alone; 1..3 average, after the merge, the neighbours that differ by
   less than 1, 1.5 or 2.2 times the noise measured. The Xperia 10 III's
-  profile sets 1 on its four cameras: its small pixels are read one by one,
+  profile sets 2 on its four cameras: its small pixels are read one by one,
   and its JPGs were grainy at ISO 1000 even from 4 frames.
 
 The shipped profile of the Xperia 10 III used `"streams": "exclusive"` on
