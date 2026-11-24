@@ -15,6 +15,18 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- The camera comes back after a bracket on the Xperia 10 III (patch 0531;
+  log of 24 Nov 2026). Closing a session that held the camera's JPEG
+  stream (a bracket, the HAL JPG) takes its camera driver up to 1.1 s, and
+  for up to 6 s after it the camera service lists no camera: the next
+  engine failed at once ("unknown camera id"), the app's three restarts
+  went by within those seconds, and the viewfinder stayed on "engine
+  stopped" until a camera change; on the way our JPG had fallen back to
+  the camera's (two failed starts with our YUV). The engine now waits, before
+  opening, until the camera is listed again (at most 10 s, checked every
+  250 ms; the log says how long), and stops waiting as soon as the app
+  writes to it or goes away. A camera listed at once costs one lookup: the
+  JP2 and the XA2 open as before.
 - A bracket in JPG opens on the Xperia XA2, and the camera button no
   longer goes to a camera that is not there (patch 0529; log of 24 Nov
   2026). A bracket asked the camera for its JPEG stream beside our YUV and

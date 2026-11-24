@@ -599,6 +599,50 @@ static void apply_fps_max(void *bridge, const char *id)
     log_line("# ", msg);
 }
 
+/* Waits, before a session opens, until the camera service lists camera
+ * `id` again: at most 10 s, looking every 250 ms. On the Xperia 10 III,
+ * closing a session that held the camera's JPEG stream (a bracket, the HAL
+ * JPG) takes the camera driver 0.5 to 1.1 s, and for up to 6 s after it the
+ * camera service lists no camera at all: the next engine failed at once
+ * with "unknown camera id", the app's three restarts went by in those
+ * seconds, and the camera stayed on "engine stopped" (log of 24 Nov 2026).
+ * The wait ends early when the app writes to us or goes away (stdin readable
+ * or closed): it has moved on (another camera, the app closed), and an
+ * engine opening a camera behind its back would only be in the way; the
+ * open then fails as before. A camera listed at once costs one lookup. */
+static void wait_camera_listed(void *bridge, const char *id)
+{
+    typedef int (*cams_fn)(char *, size_t);
+    cams_fn cams = (cams_fn)a_dlsym(bridge, "indraw_cameras");
+    char out[512], needle[40], msg[160];
+    int waited = 0;
+    if (!cams || !id || snprintf(needle, sizeof needle, "\"%s\"", id) >= (int)sizeof needle) return;
+    for (;;) {
+        struct pollfd pf = { 0, POLLIN, 0 };
+        if (cams(out, sizeof out) == 0 && strstr(out, needle)) {
+            if (waited) {
+                snprintf(msg, sizeof msg, "camera %s listed again after %d ms (the camera service was busy)", id, waited);
+                log_line("# ", msg);
+            }
+            return;
+        }
+        if (waited == 0) {
+            snprintf(msg, sizeof msg, "camera %s not listed by the camera service: waiting for it (at most 10 s)", id);
+            log_line("# ", msg);
+        }
+        if (waited >= 10000) {
+            snprintf(msg, sizeof msg, "camera %s still not listed after 10 s", id);
+            log_line("# ", msg);
+            return;
+        }
+        if (poll(&pf, 1, 250) != 0) {           /* the app wrote or left: stop waiting */
+            log_line("# ", "the app moved on while waiting for the camera: not waiting any more");
+            return;
+        }
+        waited += 250;
+    }
+}
+
 /* The cameras the app offers and their order, from the device profile:
  * "camera_order": ["2", "0", "3", "1"] at the top level (the ids listed,
  * in that order, then any other) and "hidden": true in a camera's
@@ -2843,6 +2887,9 @@ int main(int argc, char **argv)
          * stdout contains nothing but SF2P frames. */
         if (streaming) g_streaming = 1;
 
+        /* A camera service still busy with the previous session (the
+         * Xperia 10 III after a JPEG stream): wait for the camera first. */
+        wait_camera_listed(bridge, argv[2]);
         /* The shipped device profile for this phone, and the user's override
          * checked, BEFORE open: some corrections apply to the session's setup. */
         find_shipped_profile(bridge, argv[2]);
