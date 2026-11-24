@@ -142,7 +142,15 @@ Item {
             if (caps.isoMax > 0 && iso > caps.isoMax) iso = caps.isoMax
             if (caps.expMinNs > 0 && ns < caps.expMinNs) ns = caps.expMinNs
             if (ns > 16000000000) ns = 16000000000
-            viewfinder.sendCommand("# exposure carried to camera " + viewfinder.cameraId + ": iso " + iso + " speed " + Math.round(ns) + " ns (aperture " + kAperture + " -> " + caps.aperture + ")")
+            // The log says only what is really given back below: a value is
+            // sent only in its manual mode, so an automatic ISO or speed is
+            // logged as "auto" rather than as the clamped leftover (an
+            // automatic ISO used to show as "iso <the camera's minimum>",
+            // an automatic speed as "speed 0 ns", as if they were carried).
+            var what = "iso " + (kIsoManual && iso > 0 ? iso : "auto")
+                     + ", speed " + (kShutterManual && ns > 0 ? Math.round(ns) + " ns (aperture " + kAperture + " -> " + caps.aperture + ")" : "auto")
+                     + (kEv !== 0 ? ", ev " + kEv : "")
+            viewfinder.sendCommand("# exposure carried to camera " + viewfinder.cameraId + ": " + what)
         }
         if (kIsoManual && iso > 0) send("iso " + iso)
         if (kShutterManual && ns > 0) send("speed " + Math.round(ns))

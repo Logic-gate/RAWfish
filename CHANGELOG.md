@@ -15,6 +15,10 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- The log line "exposure carried to camera N" names only what is given
+  back on the new camera (patch 0539): an automatic ISO or speed is
+  logged as "auto", no longer as the camera's minimum ISO or "speed 0 ns",
+  which looked as if a manual value had been carried. Nothing else changes.
 - The Xperia 10 III's JPGs get the luminance filter at level 2 by default
   (patch 0537), 1.5 times the noise: level 1 left too much grain at ISO
   1000 on the phone. Its device profile's luma_nr goes from 1 to 2; a
