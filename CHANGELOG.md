@@ -14,6 +14,20 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ are not yet tried there.
 
+## Unreleased -- lens distortion fix (branch lens-distortion-fix)
+- The lens distortion fix (docs/LENS-DISTORTION.md): a new menu column,
+  "Lens fix", corrects the viewfinder and every JPEG (ours before it is
+  compressed; the camera's after, its Exif kept and a new thumbnail) with
+  the camera's measured lens profile; DNGs are never touched. One file per
+  phone model and camera (`distortion_<maker>-<model>_cam<ID>.json`, shipped
+  in /usr/share/rawfish-ir/lens-distortion/, the user's in
+  device-profiles/lens-distortion/) serves every size and format. The JP2's
+  three cameras are measured. No profile: nothing corrected, a warning.
+- `scripts/lens-calibrate.py` measures a camera from chessboard photos
+  (OpenCV, on a PC) and writes that file; `rawfish-ir-cli lensfix PROFILE
+  IN OUT` corrects a JPEG offline to check it. The CLI takes `--lensfix
+  on|off|FILE` and the `lensfix` command.
+
 ## 0.3.10 (beta) — the Xperia 10 III at the sensor's full size, with its three back cameras and our JPEG; one package with everything; a black top band (patches 0448–0516)
 - The version 0.3.10 (patch 0516), the release of the builds 0.3.9-448 to
   0.3.9-513 listed below (each was installed as 0.3.9-NNN). As at every

@@ -1,0 +1,67 @@
+{
+  "format": "rawfish-ir lens distortion 1",
+  "_comment": "Lens distortion of one camera (OpenCV model, its matrix for the frame width x height, the camera's full frame). Written by scripts/lens-calibrate.py; read by the engine (android/lensdist.h). See docs/LENS-DISTORTION.md.",
+  "make": "Jolla",
+  "model": "JP2601",
+  "camera_id": "1",
+  "name": "selfie",
+  "width": 6560,
+  "height": 4928,
+  "fx": 4562.1467,
+  "fy": 4556.7286,
+  "cx": 3254.7752,
+  "cy": 2529.4283,
+  "dist": [
+    6.4998499,
+    2.4851039,
+    0.0015465219,
+    -0.0011927788,
+    0.0,
+    6.2301829,
+    2.8022002,
+    0.0
+  ],
+  "fit": {
+    "model": "rational k1,k2,k4,k5",
+    "rms_px": 4.5972,
+    "images": 32,
+    "coverage_pct": 87,
+    "samples": [
+      {
+        "folder": "samples/selfie/43",
+        "size": [
+          6560,
+          4928
+        ],
+        "images": 4,
+        "rms_px": 7.871
+      },
+      {
+        "folder": "samples/selfie/169 (3840x2160)",
+        "size": [
+          3840,
+          2160
+        ],
+        "images": 12,
+        "rms_px": 2.281
+      },
+      {
+        "folder": "samples/selfie/169 (3280x2464)",
+        "size": [
+          3280,
+          2464
+        ],
+        "images": 16,
+        "rms_px": 2.026
+      }
+    ],
+    "board": {
+      "squares": [
+        7,
+        10
+      ],
+      "square_mm": 23.0
+    }
+  },
+  "generated": "2026-11-25"
+}

@@ -20,6 +20,9 @@ typedef struct {
     int flash;                  /* Exif Flash value; 0 unknown (not written)     */
     float digital_zoom;         /* the zoom in force (1 = none)                  */
     char make[64], model[64];   /* the phone's, for the Exif                     */
+    int32_t field[4];           /* what it shows of the active array (pixels x, y, w, h:
+                                 * the zoom's crop, the frame's shape); w 0: unknown.
+                                 * For the lens correction (lensdist.h)           */
 } ir_yuv_t;
 
 #endif

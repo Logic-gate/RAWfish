@@ -245,23 +245,57 @@ int exif_read_orientation(const uint8_t *j, size_t len)
     return 0;
 }
 
-int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exif_info_t *info)
+/* Copies the APPn segments of `meta` other than its JFIF APP0, its Exif APP1
+ * and an MPF APP2 (whose offsets point into the image it came with) into f:
+ * an ICC profile, XMP, a vendor's own block, comments are kept. */
+static int copy_other_segments(FILE *f, const uint8_t *meta, size_t meta_len)
+{
+    size_t i = 2;
+    while (i + 4 <= meta_len && meta[i] == 0xFF) {
+        uint8_t m = meta[i + 1];
+        size_t seg = ((size_t)meta[i + 2] << 8) | meta[i + 3];
+        if (m == 0xDA || seg < 2 || i + 2 + seg > meta_len) break;          /* SOS, or a lying length */
+        if ((m >= 0xE0 && m <= 0xEF) || m == 0xFE) {
+            int skip = (m == 0xE0 && seg >= 7 && !memcmp(meta + i + 4, "JFIF", 4)) ||
+                       (m == 0xE1 && seg >= 8 && !memcmp(meta + i + 4, "Exif\0\0", 6)) ||
+                       (m == 0xE2 && seg >= 6 && !memcmp(meta + i + 4, "MPF", 4));
+            if (!skip && fwrite(meta + i, 1, 2 + seg, f) != 2 + seg) return -1;
+        }
+        i += 2 + seg;
+    }
+    return 0;
+}
+
+/* The writer behind exif_write_jpeg and exif_rewrite_jpeg: the image is
+ * `jpeg`; the HAL's Exif (and, when meta is not the image itself, its other
+ * metadata segments) come from `meta`. */
+static int write_impl(const char *path, const uint8_t *jpeg, size_t len,
+                      const uint8_t *meta, size_t meta_len, const exif_info_t *info)
 {
     enum { APP1_MAX = 65533 };            /* a JPEG segment's payload limit  */
     uint8_t *app1, scratch[64];
     buf_t b;
     entry_t ifd0[HAL_MAX + OURS_IFD0], exif[HAL_MAX + OURS_EXIF], ours;
     int n0 = 0, ne = 0, orient, rc = 0, have_hal = 0, k;
+    const int all = !info || !info->keep_existing;   /* our always-written tags too */
     size_t tiff0, ifd0_at, exif_at, ifd1_at = 0, thumb_at = 0, skip_from, skip_len = 0, insert_at = 2, i;
+    size_t meta_from = 0, meta_seg = 0;
+    const uint8_t *thumb;
+    size_t thumb_len;
+    entry_t ifd1[8];
+    int n1 = 0;
     uint32_t num, den;
     char tmp[64];
     hal_t hal;
     FILE *f;
 
     if (!path || !jpeg || len < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8 || !info) return EINVAL;
+    if (!meta || meta_len < 4 || meta[0] != 0xFF || meta[1] != 0xD8) return EINVAL;
     skip_from = len;                                 /* "no HAL Exif" until found  */
 
-    /* --- find the HAL's Exif APP1 and a leading JFIF APP0 --- */
+    /* --- find the HAL's Exif APP1 and a leading JFIF APP0 (in the image),
+     *     and the Exif to merge (in meta: the image itself, or the file
+     *     the image replaces) --- */
     {
         size_t app0_end = 2;                                       /* insert point   */
         i = 2;
@@ -276,9 +310,20 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
         insert_at = app0_end;
         if (skip_from < insert_at) insert_at = skip_from;          /* HAL Exif before APP0: take its place */
     }
+    if (meta == jpeg) { meta_from = skip_from; meta_seg = skip_len; }
+    else {
+        i = 2;
+        while (i + 4 <= meta_len && meta[i] == 0xFF) {
+            uint8_t m = meta[i + 1];
+            size_t seg = ((size_t)meta[i + 2] << 8) | meta[i + 3];
+            if (m == 0xDA || seg < 2 || i + 2 + seg > meta_len) break;
+            if (m == 0xE1 && seg >= 16 && !memcmp(meta + i + 4, "Exif\0\0", 6)) { meta_from = i; meta_seg = 2 + seg; break; }
+            i += 2 + seg;
+        }
+    }
     memset(&hal, 0, sizeof hal);
-    if (skip_len) have_hal = hal_read(&hal, jpeg + skip_from + 10, skip_len - 10) == 0;
-    orient = info->orientation > 0 ? info->orientation : exif_read_orientation(jpeg, len);
+    if (meta_seg) have_hal = hal_read(&hal, meta + meta_from + 10, meta_seg - 10) == 0;
+    orient = info->orientation > 0 ? info->orientation : exif_read_orientation(meta, meta_len);
 
     app1 = malloc(APP1_MAX);
     if (!app1) { hal_free(&hal); return ENOMEM; }
@@ -308,18 +353,20 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
         ent_srational(&ours, 0x9202, 2.0 * log2((double)info->f_number), scratch + 32); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);
         ent_srational(&ours, 0x9205, 2.0 * log2((double)info->f_number), scratch + 40); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);
     }
-    ent_short(&ours, 0xA402, (uint16_t)(info->exposure_manual ? 1 : 0)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);   /* ExposureMode */
+    if (all) { ent_short(&ours, 0xA402, (uint16_t)(info->exposure_manual ? 1 : 0)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }   /* ExposureMode */
     if (info->iso > 0) { ent_short(&ours, 0x8827, (uint16_t)(info->iso > 65535 ? 65535 : info->iso)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }
-    ent_undef4(&ours, 0x9000, "0231"); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);            /* ExifVersion 2.31 */
+    if (all) { ent_undef4(&ours, 0x9000, "0231"); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }            /* ExifVersion 2.31 */
     if (info->datetime) {
         snprintf(tmp, sizeof tmp, "%s", info->datetime);
         ent_ascii(&ours, 0x9003, tmp); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);   /* DateTimeOriginal  */
         ent_ascii(&ours, 0x9004, tmp); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);   /* DateTimeDigitized */
     }
     if (info->focal_mm > 0) { ent_rational(&ours, 0x920A, (uint32_t)(info->focal_mm * 100 + 0.5), 100, scratch + 16); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }
-    ent_undef4(&ours, 0xA000, "0100"); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);            /* FlashpixVersion  */
-    ent_short(&ours, 0xA001, 1); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);                  /* ColorSpace sRGB  */
-    ent_short(&ours, 0xA403, (uint16_t)(info->wb_manual ? 1 : 0)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);   /* WhiteBalance */
+    if (all) {
+        ent_undef4(&ours, 0xA000, "0100"); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);            /* FlashpixVersion  */
+        ent_short(&ours, 0xA001, 1); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);                  /* ColorSpace sRGB  */
+        ent_short(&ours, 0xA403, (uint16_t)(info->wb_manual ? 1 : 0)); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours);   /* WhiteBalance */
+    }
     if (info->focal_eq_mm > 0) { ent_short(&ours, 0xA405, (uint16_t)info->focal_eq_mm); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }
     if (info->flash > 0) { ent_short(&ours, 0x9209, (uint16_t)info->flash); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }   /* Flash (ours always has mode bits) */
     if (info->digital_zoom > 0) { ent_rational(&ours, 0xA404, (uint32_t)(info->digital_zoom * 100 + 0.5), 100, scratch + 48); ne = merge_entry(exif, ne, HAL_MAX + OURS_EXIF, &ours); }   /* DigitalZoomRatio */
@@ -332,19 +379,36 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
     put(&b, "II", 2); put16(&b, 42); put32(&b, 8);
     ifd0_at = b.n;
     exif_at = ifd0_at + ifd_size(ifd0, n0);
-    if (have_hal && hal.n1) ifd1_at = exif_at + ifd_size(exif, ne);
-    write_ifd(&b, tiff0, ifd0, n0, ifd1_at ? (uint32_t)(ifd1_at - tiff0) : 0);
-    for (k = 0; k < n0; ++k) if (ifd0[k].tag == 0x8769)      /* ExifIFDPointer -> the Exif IFD */
-        set32(b.p + ifd0_at + 2 + (size_t)k * 12 + 8, (uint32_t)(exif_at - tiff0));
-    write_ifd(&b, tiff0, exif, ne, 0);
-    if (ifd1_at) {
-        thumb_at = ifd1_at + ifd_size(hal.ifd1, hal.n1);
-        for (k = 0; k < hal.n1; ++k) {                           /* the thumbnail's new place */
-            if (hal.ifd1[k].tag == 0x0201) set32(hal.ifd1[k].inl, (uint32_t)(thumb_at - tiff0));
-            if (hal.ifd1[k].tag == 0x0202) set32(hal.ifd1[k].inl, (uint32_t)hal.thumb_len);
+    /* IFD1 and its thumbnail: the HAL's, or the one given (a new picture's:
+     * the HAL's entries kept, its bytes replaced; without a HAL IFD1, a
+     * minimal one of ours) */
+    thumb = have_hal && hal.n1 ? hal.thumb : NULL;
+    thumb_len = have_hal && hal.n1 ? hal.thumb_len : 0;
+    if (info->thumb && info->thumb_len >= 4) {
+        thumb = info->thumb; thumb_len = info->thumb_len;
+        if (!(have_hal && hal.n1)) {
+            ent_short(&ifd1[n1++], 0x0103, 6);                    /* Compression: JPEG */
+            ent_long(&ifd1[n1++], 0x0201, 0);                     /* patched below     */
+            ent_long(&ifd1[n1++], 0x0202, 0);
         }
-        write_ifd(&b, tiff0, hal.ifd1, hal.n1, 0);
-        put(&b, hal.thumb, hal.thumb_len);
+    }
+    {
+        entry_t *l1 = have_hal && hal.n1 ? hal.ifd1 : ifd1;
+        int c1 = have_hal && hal.n1 ? hal.n1 : n1;
+        if (thumb && c1) ifd1_at = exif_at + ifd_size(exif, ne);
+        write_ifd(&b, tiff0, ifd0, n0, ifd1_at ? (uint32_t)(ifd1_at - tiff0) : 0);
+        for (k = 0; k < n0; ++k) if (ifd0[k].tag == 0x8769)      /* ExifIFDPointer -> the Exif IFD */
+            set32(b.p + ifd0_at + 2 + (size_t)k * 12 + 8, (uint32_t)(exif_at - tiff0));
+        write_ifd(&b, tiff0, exif, ne, 0);
+        if (ifd1_at) {
+            thumb_at = ifd1_at + ifd_size(l1, c1);
+            for (k = 0; k < c1; ++k) {                           /* the thumbnail's new place */
+                if (l1[k].tag == 0x0201) set32(l1[k].inl, (uint32_t)(thumb_at - tiff0));
+                if (l1[k].tag == 0x0202) set32(l1[k].inl, (uint32_t)thumb_len);
+            }
+            write_ifd(&b, tiff0, l1, c1, 0);
+            put(&b, thumb, thumb_len);
+        }
     }
     if (b.over || b.n + 4 > APP1_MAX) { rc = EOVERFLOW; goto out; }   /* any put() that did not fit */
 
@@ -360,6 +424,7 @@ int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exi
         f = fopen(part, "wb");
         if (!f) { rc = errno ? errno : EIO; goto out; }
         if (fwrite(jpeg, 1, a, f) != a || fwrite(hdr, 1, 4, f) != 4 || fwrite(b.p, 1, b.n, f) != b.n ||
+            (meta != jpeg && copy_other_segments(f, meta, meta_len)) ||   /* the original's other metadata */
             (s1 > a && fwrite(jpeg + a, 1, s1 - a, f) != s1 - a) ||
             fwrite(jpeg + s2, 1, len - s2, f) != len - s2) {
             rc = errno ? errno : EIO; fclose(f); unlink(part); goto out;
@@ -372,4 +437,15 @@ out:
     free(app1);
     hal_free(&hal);
     return rc;
+}
+
+int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exif_info_t *info)
+{
+    return write_impl(path, jpeg, len, jpeg, len, info);
+}
+
+int exif_rewrite_jpeg(const char *path, const uint8_t *jpeg, size_t len,
+                      const uint8_t *orig, size_t orig_len, const exif_info_t *info)
+{
+    return write_impl(path, jpeg, len, orig, orig_len, info);
 }

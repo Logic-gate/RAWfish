@@ -25,6 +25,12 @@ typedef struct {
     int exposure_manual;                   /* ExposureMode: 1 manual pair, 0 auto */
     int flash;                             /* Exif Flash value (fired bit, mode bits); <= 0: not written, the HAL's kept */
     float digital_zoom;                    /* DigitalZoomRatio; <= 0: not written */
+    int keep_existing;                     /* 1: only the tags given above are written over
+                                            * the file's (not the ExposureMode, WhiteBalance,
+                                            * versions and colour space written otherwise) */
+    const uint8_t *thumb;                  /* a new Exif thumbnail (a JPEG), replacing the
+                                            * HAL's; NULL: the HAL's kept (or none)  */
+    size_t thumb_len;
     int *hal_dropped;                      /* out, optional: HAL entries left out for
                                             * lack of room (its IFD over 64 entries,
                                             * its data over the pool): 0 normally */
@@ -37,6 +43,14 @@ typedef struct {
  * copied as bytes. Returns 0 or an errno value. `info->orientation` 0 lets
  * the HAL's tag through unchanged. */
 int exif_write_jpeg(const char *path, const uint8_t *jpeg, size_t len, const exif_info_t *info);
+
+/* The same for a NEW image that replaces a JPEG (`orig`, the file as it
+ * was: a lens-corrected re-encoding of it): the Exif merged is orig's, and
+ * orig's other metadata segments (ICC profile, XMP, a vendor's own...)
+ * are carried over; its JFIF APP0 and MPF APP2 (offsets into the old
+ * image) are not. Give info->thumb, or the old thumbnail stays. */
+int exif_rewrite_jpeg(const char *path, const uint8_t *jpeg, size_t len,
+                      const uint8_t *orig, size_t orig_len, const exif_info_t *info);
 
 /* Reads the Orientation tag (1..8) of a JPEG's Exif APP1, 0 if none. */
 int exif_read_orientation(const uint8_t *jpeg, size_t len);

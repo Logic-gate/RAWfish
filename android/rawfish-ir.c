@@ -81,6 +81,7 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "colortemp.h"           /* the white balance as a colour temperature */
 #include "yuvsize.h"             /* the YUV stream a photo is averaged down from */
 #include "shading.h"             /* the measured lens-shading calibration     */
+#include "lensdist.h"            /* the lens distortion model and its remap   */
 #include "shading_build.h"       /* building one from flat-field captures     */
 #include "yuv.h"                 /* the preview's YUV -> RGB conversion       */
 #include "viewfield.h"           /* what a viewfinder frame shows of its crop (16:9 on 4:3) */
@@ -1056,6 +1057,64 @@ static vf_rect_t view_band(int w, int h)
     return vf_band(aw, ah, w, h);
 }
 
+/* --- Lens distortion correction of the viewfinder (lensdist.h) ------------
+ * The model is loaded for the open camera by indraw_lensdist_load (the CLI
+ * gives the folders) and switched by indraw_lensdist_set; the CLI corrects
+ * the photos with the same model (indraw_lensdist_get). Here: the frames
+ * the viewfinder SENDS are corrected, after they were measured (the
+ * viewfinder meter, the white pick: their boxes are mapped from the sensor
+ * into the uncorrected frame, which shares its geometry). A tap on the
+ * corrected picture is mapped back to the sensor in indraw_tap.
+ * have / on / gen and the model: under g.lock; the rest: the preview
+ * listener's own. */
+static struct {
+    ld_model_t m;
+    int have, on, gen;
+    char path[600];
+    ld_view_t view;                  /* listener: the last frame's correction */
+    ld_lut_t lut;
+    int lut_gen;
+    uint8_t *buf;
+    size_t cap;
+} g_ld;
+
+/* The frame to send for rgb (w x h, taken with `crop`): rgb itself when the
+ * correction is off or impossible, else the corrected copy (the listener's
+ * buffer, valid until its next call). */
+static const uint8_t *lens_fix_view(const uint8_t *rgb, int w, int h, const int32_t crop[4])
+{
+    int on, have, gen;
+    int32_t fld[4];
+    double f[4];
+    pthread_mutex_lock(&g.lock);
+    on = g_ld.on; have = g_ld.have; gen = g_ld.gen;
+    pthread_mutex_unlock(&g.lock);
+    if (!on || !have || !crop || crop[2] <= 0 || crop[3] <= 0) return rgb;
+    frame_field(crop, w, h, fld);
+    f[0] = fld[0]; f[1] = fld[1]; f[2] = fld[2]; f[3] = fld[3];
+    if (gen != g_ld.lut_gen || !g_ld.view.ok || g_ld.lut.w != w || g_ld.lut.h != h ||
+        memcmp(f, g_ld.lut.key, sizeof f)) {
+        ld_model_t m;
+        pthread_mutex_lock(&g.lock);
+        m = g_ld.m;
+        pthread_mutex_unlock(&g.lock);
+        g_ld.lut_gen = gen;
+        if (ld_view_init(&g_ld.view, &m, w, h, f) || ld_lut_build(&g_ld.view, &g_ld.lut)) {
+            g_ld.view.ok = 0;
+            memcpy(g_ld.lut.key, f, sizeof f);     /* not retried for every frame */
+            return rgb;
+        }
+    }
+    if (!g_ld.view.ok) return rgb;
+    if ((size_t)w * h * 3 > g_ld.cap) {
+        uint8_t *grown = realloc(g_ld.buf, (size_t)w * h * 3);
+        if (!grown) return rgb;
+        g_ld.buf = grown; g_ld.cap = (size_t)w * h * 3;
+    }
+    ld_lut_rgb(&g_ld.lut, rgb, g_ld.buf);
+    return g_ld.buf;
+}
+
 /* The viewfinder meter (step 2 of docs/ARCHITECTURE.md): what the app's C++
  * item used to measure on the RGB frame it received, now measured here on
  * the same frame before it leaves, and sent as one event:
@@ -1424,6 +1483,7 @@ static void on_preview_image(void *ctx, AImageReader *reader)
             double t_ours = now_ms();                   /* our share of the frame's time (vf_pace) */
             uint8_t *rgb = yuv_to_rgb(img, &w, &h);
             if (rgb) {
+                const uint8_t *sent;
                 int broke, k, found = 0;
                 int32_t crop[4];
                 int64_t ts = 0;
@@ -1476,12 +1536,14 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                 /* Only a frame whose result was found: its white balance must
                  * be the one it was rendered with, not a guess. */
                 if (vf_pick && found) wbpick_from_view(rgb, w, h, crop, f_has_wb, f_gains, f_tr);
+                /* measured as taken; shown corrected when asked (lens_fix_view) */
+                sent = lens_fix_view(rgb, w, h, found ? crop : g.sent_crop);
                 pthread_mutex_lock(&g.out_lock);        /* serialise with SF2M     */
                 fd = g.stream_fd;                       /* re-read: a stop may have landed */
                 broke = 0;
                 if (fd >= 0) {
                     if (line[0]) write_sf2m(fd, line, (int)strlen(line));
-                    broke = (write_sf2p(fd, rgb, w, h) != 0);
+                    broke = (write_sf2p(fd, sent, w, h) != 0);
                     if (broke) g.stream_fd = -1;        /* pipe broke: stop        */
                 }
                 pthread_mutex_unlock(&g.out_lock);
@@ -2668,6 +2730,10 @@ static void close_all(void)
     pthread_mutex_unlock(&g.lock);
     if (g.preview_reader) { AImageReader_delete(g.preview_reader); g.preview_reader = NULL; }
     free(g.pv_rgb); g.pv_rgb = NULL; g.pv_rgb_cap = 0;  /* the listener is gone with its reader */
+    ld_lut_free(&g_ld.lut); free(g_ld.buf); g_ld.buf = NULL; g_ld.cap = 0; g_ld.view.ok = 0;
+    pthread_mutex_lock(&g.lock);
+    g_ld.have = 0; g_ld.gen++;                         /* the model is the camera's: loaded again at the next open */
+    pthread_mutex_unlock(&g.lock);
     if (g.jpeg_reader) { AImageReader_delete(g.jpeg_reader); g.jpeg_reader = NULL; }
     if (g.raw_reader) { AImageReader_delete(g.raw_reader); g.raw_reader = NULL; }
     if (g.yuv_reader) { AImageReader_delete(g.yuv_reader); g.yuv_reader = NULL; }
@@ -5911,6 +5977,27 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
          * the middle band of a 4:3 crop, viewfield.h): (nx, ny) is a point of
          * THAT, not of the crop (0.3.8: up to 12.5 % of the height off) */
         frame_field(pc, g.preview_w, g.preview_h, pc);
+        {   /* the viewfinder shows the lens-corrected picture: the point
+             * touched is where the lens drew it (lensdist.h) */
+            ld_model_t m;
+            int on;
+            pthread_mutex_lock(&g.lock);
+            on = g_ld.on && g_ld.have;
+            if (on) m = g_ld.m;
+            pthread_mutex_unlock(&g.lock);
+            if (on && g.preview_w > 1 && g.preview_h > 1) {
+                ld_view_t v;
+                double f[4] = { pc[0], pc[1], pc[2], pc[3] }, su, sv;
+                if (!ld_view_init(&v, &m, g.preview_w, g.preview_h, f)) {
+                    ld_src(&v, nx * g.preview_w - 0.5, ny * g.preview_h - 0.5, &su, &sv);
+                    nx = (float)((su + 0.5) / g.preview_w); ny = (float)((sv + 0.5) / g.preview_h);
+                    if (nx < 0) nx = 0;
+                    if (nx > 1) nx = 1;
+                    if (ny < 0) ny = 0;
+                    if (ny > 1) ny = 1;
+                }
+            }
+        }
         cx = pc[0] + (int32_t)(nx * pc[2]);
         cy = pc[1] + (int32_t)(ny * pc[3]);
         /* The zones are sized on what the viewfinder SHOWS (the frame, cut
@@ -6448,6 +6535,16 @@ static void photo_crop(int32_t ax, int32_t ay, int32_t aw, int32_t ah, int32_t c
     crop[3] = (int32_t)(ah / z) & ~1;
     crop[0] = ax + ((aw - crop[2]) / 2 & ~1);
     crop[1] = ay + ((ah - crop[3]) / 2 & ~1);
+}
+/* What a photo of w x h shows of the active array (pixels x, y, w, h): its
+ * shape's part of the photo crop (viewfield.h). Zeros when unknown. */
+static void photo_field(int w, int h, int32_t out[4])
+{
+    int32_t ax, ay, aw, ah, pc[4];
+    memset(out, 0, sizeof(int32_t) * 4);
+    if (w <= 0 || h <= 0 || active_array(&ax, &ay, &aw, &ah, NULL)) return;
+    photo_crop(ax, ay, aw, ah, pc);
+    frame_field(pc, w, h, out);
 }
 static void preview_crop(int32_t ax, int32_t ay, int32_t aw, int32_t ah, int32_t crop[4])
 {
@@ -7712,6 +7809,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     f->flash = exif_flash_value(0);                         /* a YUV capture never fires the flash */
     f->digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
     pthread_mutex_unlock(&g.lock);
+    photo_field(f->w, f->h, f->field);                 /* for the lens correction */
     f->exposure_manual = exposure_ns > 0;
     {
         ACameraMetadata_const_entry fe;
@@ -7949,6 +8047,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         frames[k].wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
         frames[k].flash = exif_flash_value(0);              /* a YUV burst never fires the flash (a torch is a light) */
         frames[k].digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
+        photo_field(frames[k].w, frames[k].h, frames[k].field);
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, &e) == ACAMERA_OK && e.count)
             frames[k].focal_mm = e.data.f[0];
         if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_LENS_INFO_AVAILABLE_APERTURES, &e) == ACAMERA_OK && e.count)
@@ -8312,4 +8411,111 @@ IR_API int indraw_close(char *out, size_t out_size)
     jw_init(&w, out, out_size);
     jw_add(&w, "{\"ok\":true,\"ms\":{\"close\":%.1f}}", now_ms() - t0);
     return IR_OK;
+}
+
+/* --- Lens distortion: the model of the open camera ------------------------
+ * indraw_lensdist_load: file given (a path), else
+ *   distortion_<manufacturer>-<model>_cam<ID>.json
+ * in the user's folder, then in the one shipped with the engine. Parsed,
+ * bound to this camera's active array; the viewfinder corrected only after
+ * indraw_lensdist_set(1). Replies {"ok":true,"lensdist":"loaded","path":..}
+ * or {"ok":true,"lensdist":"none","looked_for":..[,"refused":..]}. */
+IR_API int indraw_lensdist_load(const char *user_dir, const char *sys_dir, const char *file, char *out, size_t out_size)
+{
+    char mk[64], md[64], name[200], path[600], err[160] = "";
+    const char *dirs[2] = { user_dir, sys_dir };
+    int32_t ax, ay, aw, ah;
+    int d, found = 0;
+    ld_model_t m;
+    jw_t w;
+    if (!out || !out_size) return IR_EARG;
+    if (!g.chars) return fail(out, out_size, IR_ESTATE, "lensdist", "camera not open", 0);
+    if (active_array(&ax, &ay, &aw, &ah, NULL)) return fail(out, out_size, IR_ESTATE, "lensdist", "no active array size", 0);
+    slug_into(g.make, mk, sizeof mk);
+    slug_into(g.model, md, sizeof md);
+    snprintf(name, sizeof name, "distortion_%s-%s_cam%s.json", mk, md, g.camera_id);
+    for (d = file && file[0] ? -1 : 0; d < 2 && !found; ++d) {
+        FILE *f;
+        long len;
+        char *text;
+        if (d >= 0 && file && file[0]) break;
+        if (d >= 0 && (!dirs[d] || !dirs[d][0])) continue;
+        if (d < 0) snprintf(path, sizeof path, "%s", file);
+        else snprintf(path, sizeof path, "%s/%s", dirs[d], name);
+        if (!(f = fopen(path, "rb"))) { if (d < 0) snprintf(err, sizeof err, "cannot open the file"); continue; }
+        fseek(f, 0, SEEK_END); len = ftell(f); fseek(f, 0, SEEK_SET);
+        if (len <= 0 || len > 1000000 || !(text = malloc((size_t)len + 1))) { fclose(f); snprintf(err, sizeof err, "unreadable"); continue; }
+        if (fread(text, 1, (size_t)len, f) != (size_t)len) { fclose(f); free(text); snprintf(err, sizeof err, "short read"); continue; }
+        fclose(f);
+        text[len] = '\0';
+        if (ld_parse(text, &m, err, sizeof err) == 0) {
+            ld_view_t v;
+            ld_bind(&m, aw, ah);
+            if (ld_view_init(&v, &m, aw, ah, NULL)) snprintf(err, sizeof err, "the model folds inside the frame: not usable");
+            else found = 1;
+        }
+        free(text);
+    }
+    pthread_mutex_lock(&g.lock);
+    if (found) { g_ld.m = m; snprintf(g_ld.path, sizeof g_ld.path, "%s", path); }
+    g_ld.have = found;
+    g_ld.gen++;
+    pthread_mutex_unlock(&g.lock);
+    jw_init(&w, out, out_size);
+    if (found) {
+        jw_add(&w, "{\"ok\":true,\"lensdist\":\"loaded\",\"path\":");
+        jw_str(&w, path);
+        jw_add(&w, ",\"active\":[%d,%d],\"on\":%d}", aw, ah, g_ld.on);
+    } else {
+        jw_add(&w, "{\"ok\":true,\"lensdist\":\"none\",\"looked_for\":");
+        jw_str(&w, file && file[0] ? file : name);
+        if (err[0]) { jw_add(&w, ",\"refused\":"); jw_str(&w, err); }
+        jw_add(&w, "}");
+    }
+    return IR_OK;
+}
+
+/* The viewfinder's correction on (1) or off (0). Returns 1 if a model is
+ * loaded (so the correction really applies), 0 if not. */
+IR_API int indraw_lensdist_set(int on)
+{
+    int have;
+    pthread_mutex_lock(&g.lock);
+    g_ld.on = on ? 1 : 0;
+    g_ld.gen++;
+    have = g_ld.have;
+    pthread_mutex_unlock(&g.lock);
+    return have;
+}
+
+/* The loaded model, bound to the active array (for the photos, in the
+ * CLI). 0 and *m filled, or -1 when none is loaded. */
+IR_API int indraw_lensdist_get(ld_model_t *m)
+{
+    int have;
+    if (!m) return -1;
+    pthread_mutex_lock(&g.lock);
+    have = g_ld.have;
+    if (have) *m = g_ld.m;
+    pthread_mutex_unlock(&g.lock);
+    return have ? 0 : -1;
+}
+
+/* What a photo of w x h taken now shows of the active array (pixels x, y,
+ * w, h; the zoom's crop, the photo's shape): for the camera's own JPEG,
+ * which the CLI corrects after the engine wrote it. 0, or -1 (unknown). */
+IR_API int indraw_photo_field(int w, int h, int32_t out[4])
+{
+    if (!out) return -1;
+    photo_field(w, h, out);
+    return out[2] > 0 ? 0 : -1;
+}
+
+/* The rotation (degrees clockwise) the camera's JPEG is asked to carry
+ * (JPEG_ORIENTATION) for a photo taken now. Some drivers turn the pixels
+ * instead of tagging the Exif (the JP2's): the CLI's lens correction turns
+ * them back to the sensor's frame first. */
+IR_API int indraw_photo_rotation(void)
+{
+    return photo_orientation_deg();
 }

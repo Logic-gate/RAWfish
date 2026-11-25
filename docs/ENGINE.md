@@ -20,6 +20,7 @@ read (`> ...`) and every result are appended to FILE with a timestamp.
 | `--log FILE` | append a timestamped transcript to FILE | none |
 | `--jpgdir DIR` | where JPEGs go (`~/` = home); created if needed, refused at start if impossible | `~/Pictures/RAWfish-ir` |
 | `--dngdir DIR` | where DNGs (and their `.previews/`) go | `~/Pictures/RAWfish-ir` |
+| `--lensfix on\|off\|FILE` | the lens distortion correction of the viewfinder and the JPEGs, with the phone's profile or FILE (`LENS-DISTORTION.md`) | off |
 
 The options may come in any order, before the command.
 
@@ -28,6 +29,7 @@ The options may come in any order, before the command.
 | `cameras` | lists the camera ids |
 | `caps ID` | what camera ID offers, as JSON (sizes, ranges, modes; see `GENERATED-HAL.md`) |
 | `probe` | writes `generated-hal.json` for every camera, and a starter `override-hal.json` if there is none (`DEVICE-PROFILES.md`) |
+| `lensfix PROFILE IN.jpg OUT.jpg [q=Q]` | a JPEG lens-corrected with a lens distortion file; no camera (works on a PC) |
 | `run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]` | opens camera ID and reads commands on stdin, one per line |
 | `stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]` | the same, and streams the viewfinder on stdout (the app's mode; SF2P frames + SF2M events, binary) |
 
@@ -109,6 +111,7 @@ closes, and writes the frames added so far with the exposure really reached.
 | `shading calibrate full cct=K lens=D1,D2,...` | measure a whole calibration: a flat field through a diffuser, RAW at each HAL lens value D (K = the light's colour temperature); progress as `cal_progress done= total=`; the file goes to device-profiles/lens-shading/ |
 | `shading calibrate light cct=K` | add a light (colour at temperature K, one position) to the existing calibration |
 | `shading balance=B strength=S maxgain=M` | the measured map's dosing (pivot, strength, maximum gain) |
+| `lensfix on\|off\|status\|file=PATH` | the lens distortion correction (viewfinder and JPEGs; never DNGs); without a profile for this camera: not corrected, a warning, event `lensfix state=unavailable` (`LENS-DISTORTION.md`) |
 | `wb fixed R,GE,GO,B` / `wb fixed off` | keep a white measured before (restored by the interface after a restart) / back to the AWB as the base |
 | `wb offset R,B` / `wb offset off` | a white measured on another camera, carried as red and blue factors on this camera's automatic white (the AWB's gains, red x R, blue x B); a `wb fixed` of this camera takes precedence |
 | `viewwin X Y W H` | the window the interface shows, normalised in the band (see below; the whole active array when the viewfinder has the sensor's shape) (the controller sends it with every view change): the histograms and the viewfinder's centre-weighted mean cover it, whatever the HAL's own frame |

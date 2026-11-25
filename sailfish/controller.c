@@ -278,6 +278,74 @@ static void note(const char *fmt, ...)
     fprintf(stderr, "rawfish-ir-cli: controller: %s\n", t);
 }
 
+/* --- "written" events held for a correction (the lens fix, lensfix.c) ---
+ * The CLI rewrites a camera JPEG after the engine wrote it; the interface
+ * must hear of the file only once it is final. Before the capture the CLI
+ * names the paths (ctl_hold_written); the engine's "written ... path=P"
+ * for one of them waits here, and goes out at ctl_release_written(P) --
+ * which may come before the event (the pipe is read on another thread):
+ * then the event, when it comes, goes straight through. */
+#define CTL_HOLD_MAX 8
+static struct { char path[1200]; char line[1300]; int state; } held_w[CTL_HOLD_MAX];   /* state: 0 free, 1 waiting, 2 event held, 3 released */
+
+static int written_path_is(const char *line, const char *path)
+{
+    const char *p = strstr(line, " path=");
+    size_t n = strlen(path);
+    if (!p) return 0;
+    p += 6;
+    return !strncmp(p, path, n) && (p[n] == '\0' || p[n] == ' ' || p[n] == '\n');
+}
+
+void ctl_hold_written(const char *path)
+{
+    int i;
+    if (!path || strlen(path) >= sizeof held_w[0].path) return;
+    ctl_lock();
+    for (i = 0; i < CTL_HOLD_MAX; ++i)
+        if (!held_w[i].state) break;
+    if (i == CTL_HOLD_MAX)                          /* full: reuse one released whose event never came */
+        for (i = 0; i < CTL_HOLD_MAX; ++i) if (held_w[i].state == 3) break;
+    if (i < CTL_HOLD_MAX) { snprintf(held_w[i].path, sizeof held_w[i].path, "%s", path); held_w[i].state = 1; }
+    ctl_unlock();
+}
+
+void ctl_release_written(const char *path)
+{
+    int i;
+    char line[1300] = "";
+    ctl_lock();
+    for (i = 0; i < CTL_HOLD_MAX; ++i)
+        if (held_w[i].state && !strcmp(held_w[i].path, path)) {
+            if (held_w[i].state == 2) { snprintf(line, sizeof line, "%s", held_w[i].line); held_w[i].state = 0; }
+            else if (held_w[i].state == 1) held_w[i].state = 3;      /* the event, when it comes, passes */
+            break;
+        }
+    ctl_unlock();
+    if (line[0] && c.emit) c.emit(line);
+}
+
+/* 1 if the event is held (not to be forwarded now). */
+static int hold_written(const char *line)
+{
+    int i, held = 0;
+    if (strncmp(line, "written ", 8)) return 0;
+    ctl_lock();
+    for (i = 0; i < CTL_HOLD_MAX; ++i)
+        if (held_w[i].state && written_path_is(line, held_w[i].path)) {
+            if (held_w[i].state == 1) {
+                size_t n = strlen(line);
+                if (n >= sizeof held_w[i].line) n = sizeof held_w[i].line - 1;   /* paths are under 1200 bytes */
+                memcpy(held_w[i].line, line, n); held_w[i].line[n] = '\0';
+                held_w[i].state = 2; held = 1;
+            }
+            else if (held_w[i].state == 3) held_w[i].state = 0;
+            break;
+        }
+    ctl_unlock();
+    return held;
+}
+
 /* One event line from the engine: read by the exposure behaviour, then
  * passed on to the interface as it is -- except a diagnostic meant for the
  * log only (vfpace: the viewfinder's frame rate and delays, with the
@@ -291,6 +359,7 @@ static void on_event(const char *line)
         if (c.log) c.log(t);
         return;
     }
+    if (hold_written(line)) return;            /* a file the CLI is still correcting */
     ctl_lock();
     if (c.exp) {
         if (!strncmp(line, "caps ", 5)) {

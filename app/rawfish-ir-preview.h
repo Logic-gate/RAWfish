@@ -390,6 +390,9 @@ signals:
     void calProgress(int done, int total);
     void calExposure(qint64 exposureNs, int iso);
     void calDone(bool ok, const QString &path, const QString &why);
+    /* The lens distortion fix (SF2M "lensfix state="): "on", "off", or
+     * "unavailable" (asked, but this camera has no lens profile). */
+    void lensFixState(const QString &state);
     void stackProgress(int frame, int n, int elapsedMs);
     /* A stack ended: frames added of n, aborted, total ms (SF2M "stack_done"). */
     void stackDone(int frames, int n, bool aborted, int ms);

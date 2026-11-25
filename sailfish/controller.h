@@ -66,6 +66,13 @@ int ctl_pop_capture(char *buf, size_t n);
  * under ctl_lock(). */
 int ctl_command(const char *line);
 
+/* A file the CLI will rewrite after the engine wrote it (the lens
+ * correction of a camera JPEG): its "written" event is held until
+ * ctl_release_written(path). Call hold before the capture, release after
+ * the rewrite (or its failure). Up to 8 at once. */
+void ctl_hold_written(const char *path);
+void ctl_release_written(const char *path);
+
 /* Detaches from the engine, stops the thread, closes the pipe. Safe to call
  * when not started. */
 void ctl_stop(void);

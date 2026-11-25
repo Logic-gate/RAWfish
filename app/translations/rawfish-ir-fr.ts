@@ -626,6 +626,26 @@
         <translation>oui</translation>
     </message>
     <message>
+        <location line="+5" />
+        <source>Lens fix</source>
+        <translation>Correction objectif</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Lens distortion fix off</source>
+        <translation>Correction de la distorsion désactivée</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Lens distortion fix on (no lens profile for this camera)</source>
+        <translation>Correction de la distorsion activée (aucun profil d'objectif pour cette caméra)</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Lens distortion fix on: viewfinder and JPEG</source>
+        <translation>Correction de la distorsion activée : viseur et JPEG</translation>
+    </message>
+    <message>
         <location line="+127" />
         <source>Focus cal.</source>
         <translation>Étal. MàP</translation>

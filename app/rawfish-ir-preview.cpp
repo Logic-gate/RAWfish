@@ -836,6 +836,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         QString why = QString::fromLatin1(f.value("why"));
         why.replace(QLatin1Char('_'), QLatin1Char(' '));   /* the engine wrote '_' for spaces */
         emit calDone(f.value("ok").toInt() != 0, QString::fromLatin1(f.value("path")), why);
+    } else if (name == "lensfix") {
+        /* The lens distortion fix as the engine applies it: on, off, or
+         * unavailable (asked, but no profile for this camera). */
+        emit lensFixState(QString::fromLatin1(f.value("state")));
     } else if (name == "stack_start") {
         /* The engine says a stack began (the controller issued it): the
          * overlay, the lock-out and the screen kept on start here. */
