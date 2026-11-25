@@ -15,6 +15,19 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- A fluid viewfinder at 1/4 s and 1/2 s, and at most 1/15 s chosen by the
+  app (patch 0545). A speed set by hand from 1/4 s is now previewed as a
+  Σ is: one frame of the same exposure (time x ISO), 1/10 s by default
+  (`sigmaPreviewFps`), the ISO raised to match -- 1/4 s at ISO 100 shows
+  as 1/10 s at ISO 250. It used to show the real time, 2 to 4 frames a
+  second. The same look, a little more noise in the viewfinder only; the
+  photo keeps the wheels' pair, and in speed priority the free ISO is
+  worked out through the same rule as for a Σ. Faster speeds are shown as
+  before. And in ISO priority the speed the app chooses goes no longer
+  than 1/15 s: in the dark (a pocket, a hand or a sleeve over the lens,
+  the phone face down) it went to 1/2 s, the viewfinder then at 2 frames
+  a second and slow to come back when the light returned. Longer speeds
+  are set on the wheel.
 - The focus can no longer move during a long exposure, and a manual
   distance waits for the lens properly (patch 0542). From 1/4 s, for
   a burst of such frames and for every Σ, a continuous autofocus is

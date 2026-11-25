@@ -62,7 +62,7 @@ The SPEED and ISO wheels decide the mode:
 | Mode | How to get there | What is automatic | With an exposure point (the sun) |
 |---|---|---|---|
 | **automatic** | no wheel touched, or the AE button | speed and ISO, by the camera; the EV wheel corrects | the app measures the point and sets the exposure from it (a few quick corrections), then **holds** it until you remove the sun |
-| **ISO priority** | touch the ISO wheel | the speed, by the app; EV corrects | the app measures the point instead of the whole image; the point's light level shows above the sun |
+| **ISO priority** | touch the ISO wheel | the speed, by the app, at most 1/15 s (longer: set it on the wheel); EV corrects | the app measures the point instead of the whole image; the point's light level shows above the sun |
 | **speed priority** | touch the SPEED wheel | the ISO, by the app; EV corrects; past 1/2 s: Σ (stacked, raw) | same |
 | **manual** | touch both | nothing; the EV wheel becomes a "+/−" number: stops brighter or darker than automatic would be | the number tells how **the point** is exposed; the same number shows above the sun |
 
@@ -159,6 +159,14 @@ ISO raised to match. Measuring, the exposure loop and the focus search all
 work one frame at a time, so a fast frame keeps them responsive. If the ISO
 this needs is beyond the sensor's maximum, the frame is made longer, just
 enough, up to 1/2 s: in dim light the viewfinder slows down.
+
+The same holds for a speed of **1/4 s or 1/2 s** set by hand: the viewfinder
+shows one 1/10 s frame of the same exposure (ISO 250 for 1/4 s at ISO 100),
+not the real 1/4 s, so it stays fluid; the photo is taken at the speed and
+ISO on the wheels. Faster than 1/4 s the viewfinder shows the real
+exposure as before. A speed left to the app (ISO priority) goes no longer
+than 1/15 s: in the dark -- a pocket, a hand over the lens -- it no longer
+sinks to 1/2 s, a viewfinder of 2 frames a second slow to come back.
 
 **What the histogram shows.** The right position and the right clipping for
 the photo, but **more noise**, so it spreads further into the shadows: one

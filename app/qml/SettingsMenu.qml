@@ -159,7 +159,9 @@ Item {
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
     property bool advanced: true                   // simple = jpg only, no wheels
     // The Σ preview's target frame rate (rawfish-ir.conf, hand-edited): the ISO is
-    // raised so that one frame this short stands for the stack.
+    // raised so that one frame this short stands for the stack -- and, from
+    // 1/4 s, for a manual speed below the sensor's ceiling (the controller's
+    // pv_equivalent).
     property int sigmaPreviewFps: 10
     property int wbShift: 0                        // steps of 5 % red/blue from the AWB; 0 = AWB
     property int tint: 0                           // percent of green, - green .. + magenta

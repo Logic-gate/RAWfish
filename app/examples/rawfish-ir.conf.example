@@ -275,7 +275,8 @@ shadingMaxGain=5
 ; --- Σ (stacked long exposures) ------------------------------------------------
 ; Target frame rate of the Σ viewfinder: one frame of the stack's exposure, as
 ; short as this allows, the ISO raised to match (slower when the maximum ISO
-; is reached).                                  range 1..30 frames/s    default 10
+; is reached). Also the viewfinder's rate for a manual speed of 1/4 s or 1/2 s,
+; shown the same way.                                  range 1..30 frames/s    default 10
 sigmaPreviewFps=10
 ; Measured by the app after each stack (time the camera adds between
 ; sub-frames); used for the time estimate under the wheel. Leave it.
