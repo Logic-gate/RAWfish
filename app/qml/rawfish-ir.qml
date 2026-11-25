@@ -1298,7 +1298,8 @@ ApplicationWindow {
                         // menu's processing columns are greyed in snap), no DNG
                         viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=yuv q=" + settingsMenu.effQuality
                                                + " noise=off_noise edge=hq_edge bracket=off denoise_sigma=1"
-                                               + " frames=1 colour=2 median=0 sharpen=3 snap=1")
+                                               + " frames=1 colour=" + settingsMenu.jpgDefault("colour") + " median=" + settingsMenu.jpgDefault("moire")
+                                               + " luma=" + settingsMenu.jpgDefault("luma") + " sharpen=" + settingsMenu.jpgDefault("sharpen") + " snap=1")
                     else
                         // the camera's JPEG, noise reduction and sharpening HQ, one shot
                         viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=jpg q=" + settingsMenu.effQuality

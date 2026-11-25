@@ -367,8 +367,11 @@ public:
      * (TIFF 1..8), and deletes the .ppm. Returns true on success. */
     Q_INVOKABLE bool convertDngPreview(const QString &ppmPath, int orientation);
     /* UI preferences, persisted in ~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf. */
+    /* rawfish-ir.conf, a key by its name (its section added: confKey in the
+     * .cpp), or "section/key" (the per-camera [camera_N] keys). */
     Q_INVOKABLE QVariant setting(const QString &key, const QVariant &def) const;
     Q_INVOKABLE void setSetting(const QString &key, const QVariant &value);
+    Q_INVOKABLE void removeSetting(const QString &key);
     /* rawfish-ir.conf back to the defaults: the file is first copied to
      * rawfish-ir.conf.bak (a previous .bak replaced), so nothing is lost,
      * then every key is set to the example's default. Returns the backup's
@@ -380,6 +383,7 @@ public:
      * Returns what was done, for the log ("" when nothing moved). */
     static QString archiveOnNewVersion();
     static QString s_archiveNote;          /* that text, written to the log once the engine runs */
+    static QString s_confNote;             /* what writeDefaultSettings did to rawfish-ir.conf, for the log ("" nothing to say) */
     /* Output settings (validated here; invalid values fall back to the
      * defaults): the prefix charset is the engine's, folders are absolute. */
     Q_INVOKABLE void setOutput(const QString &prefix, const QString &jpgDir, const QString &dngDir);
@@ -387,10 +391,11 @@ public:
     Q_INVOKABLE bool deleteFile(const QString &path);
     /* Reads a JSON object file (e.g. the simple-mode layout), {} if absent. */
     Q_INVOKABLE QVariantMap readJsonFile(const QString &path);
-    /* Copies the commented reference files (installed under
-     * /usr/share/rawfish-ir/examples) next to the real ones: rawfish-ir.conf.example
-     * in the config dir, override-hal.example.jsonc in device-profiles. The
-     * copies are refreshed at each start; the real files are never touched. */
+    /* The commented reference files, next to the real ones, refreshed at each
+     * start: rawfish-ir.conf.example in the config dir, written from the app's
+     * table (conftable.h: nothing reads it), and override-hal.example.jsonc
+     * in device-profiles, copied from /usr/share/rawfish-ir/examples. The
+     * real files are never touched here. */
     Q_INVOKABLE void installExamples();
 
 signals:

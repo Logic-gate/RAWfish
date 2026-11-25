@@ -135,27 +135,107 @@ Item {
     property string snapActualSize: ""             // the size snap uses on this camera (from the page), for the menu
     property bool logChecks: false                 // the reports carry the viewfinder-vs-photo histograms (a check)
     property string zebraJpegMode: "luma"          // JPEG zebra: luma (a pixel that comes out white) or channel (any one)
-    property int yuvFrames: 1                      // classic merge: 1, 2, 4 or 8 frames
-    property bool yuvNrTiles: false                // the denoise method: false = classic (one shift per frame), true = by tiles
-    property int yuvTileFrames: 4                  // tile merge: 2, 4 or 8 frames
-    property int yuvTileSplit: 1                   // tile merge: each frame 1, 1/2 or 1/4 of the pose (the ISO raised to match)
+    // ---- RAWfish-ir's JPG processing, per camera (0.3.11, patch 0551) ----
+    // Eight settings, each kept for each camera in rawfish-ir.conf, in its
+    // section [camera_<ID>] (camera_2/jpgSharpen=1): a value is the user's
+    // choice on that camera (the menu writes it), "default" the camera's
+    // default -- its device profile's (jpg_* keys), else the app's
+    // (jpgBuiltin) -- which the engine gives in the caps line
+    // (caps.jpgDefault). The menu's green ring marks the default; picking it
+    // writes "default" again. A camera's keys are written the first time it
+    // is seen (jpgEnsureKeys), so that the file shows every setting. Until
+    // 0.3.11-550 there was one value for every camera (the key alone, at
+    // the top of the file): carried over once, see jpgEnsureKeys.
+    readonly property var jpgSettings: [
+        { name: "method",     key: "jpgNrMethod",          values: ["classic", "tiles"] },
+        { name: "frames",     key: "jpgFrames",            values: ["1", "2", "4", "8"] },
+        { name: "tileFrames", key: "jpgTileFrames",        values: ["2", "4", "8"] },
+        { name: "tileSplit",  key: "jpgTileSplit",         values: ["1", "2", "4"] },
+        { name: "colour",     key: "jpgNoiseColourFilter", values: ["0", "1", "2", "3", "4", "5"] },
+        { name: "moire",      key: "jpgMoireFilter",       values: ["0", "1", "2", "3", "4"] },
+        { name: "luma",       key: "jpgLumaNoiseFilter",   values: ["0", "1", "2", "3"] },
+        { name: "sharpen",    key: "jpgSharpen",           values: ["0", "1", "2", "3", "4", "5"] }
+    ]
+    // The app's own defaults, in that order (the engine's JPG_DEFAULT_BUILTIN).
+    readonly property var jpgBuiltin: ["classic", "1", "4", "1", "2", "0", "0", "3"]
+    // This camera's choices: name -> value; a setting absent is at its default.
+    property var jpgChosen: ({})
+    function jpgIndex(name) {
+        for (var i = 0; i < jpgSettings.length; ++i) if (jpgSettings[i].name === name) return i
+        return -1
+    }
+    // This camera's default for one setting, as written in the file (a string).
+    function jpgDefault(name) {
+        var i = jpgIndex(name)
+        var d = viewfinder && viewfinder.caps.jpgDefault ? String(viewfinder.caps.jpgDefault).split(",") : []
+        var v = d.length === jpgSettings.length ? d[i] : jpgBuiltin[i]
+        return jpgSettings[i].values.indexOf(v) >= 0 ? v : jpgBuiltin[i]
+    }
+    // A setting's place in the file for camera `cam`: its [camera_N] section.
+    function jpgConfKey(s, cam) { return "camera_" + cam + "/" + s.key }
+    // What this camera uses: its choice, else its default.
+    function jpgValue(name) { var c = jpgChosen[name]; return c !== undefined ? c : jpgDefault(name) }
+    // A pick in the menu: this camera's choice, or "default" for its default.
+    function jpgPick(name, value) {
+        var v = String(value), d = jpgDefault(name), m = {}, k
+        for (k in jpgChosen) m[k] = jpgChosen[k]
+        if (v === d) delete m[name]; else m[name] = v
+        jpgChosen = m
+        if (currentCamera !== "") save(jpgConfKey(jpgSettings[jpgIndex(name)], currentCamera), v === d ? "default" : v)
+    }
+    // This camera's choices, from the file ("default", "auto" -- the luma's
+    // word until 0.3.11-550 -- or anything not one of the values: none).
+    function jpgLoad() {
+        var m = {}, i
+        if (currentCamera !== "")
+            for (i = 0; i < jpgSettings.length; ++i) {
+                var s = jpgSettings[i], v = String(viewfinder.setting(jpgConfKey(s, currentCamera), "default")).trim()
+                if (s.values.indexOf(v) >= 0) m[s.name] = v
+            }
+        jpgChosen = m
+    }
+    // At each caps: every camera listed gets its keys if it has none yet, at
+    // "default" -- or, once, at the value of the old key for every camera
+    // (the key alone, until 0.3.11-550), whatever it is, so that nothing the
+    // user had changes; that key is then removed. "auto" (the old luma
+    // word) is written "default".
+    function jpgEnsureKeys() {
+        var ids = viewfinder && viewfinder.caps.cameras ? viewfinder.caps.cameras : []
+        var all = [], i, j
+        for (j = 0; j < ids.length; ++j) all.push(String(ids[j]))
+        if (currentCamera !== "" && all.indexOf(currentCamera) < 0) all.push(currentCamera)
+        for (i = 0; i < jpgSettings.length; ++i) {
+            var s = jpgSettings[i], old = String(viewfinder.setting(s.key, "")).trim()
+            var carried = s.values.indexOf(old) >= 0 ? old : "default"
+            for (j = 0; j < all.length; ++j) {
+                var k = jpgConfKey(s, all[j]), v = String(viewfinder.setting(k, "")).trim()
+                if (v === "") save(k, carried)
+                else if (v === "auto") save(k, "default")
+            }
+            // the old key goes once the cameras have theirs (the caps list them all)
+            if (old !== "" && ids.length > 0) viewfinder.removeSetting(s.key)
+        }
+        jpgLoad()
+    }
+    onCurrentCameraChanged: jpgLoad()
+    Connections { target: viewfinder; onCapsChanged: menu.jpgEnsureKeys() }
+    // The settings in force on this camera (read by the page's shoot command).
+    readonly property bool yuvNrTiles: jpgValue("method") === "tiles"   // the denoise method: classic (one shift per frame) or by tiles
+    readonly property int yuvFrames: Number(jpgValue("frames"))         // classic merge: 1, 2, 4 or 8 frames
+    readonly property int yuvTileFrames: Number(jpgValue("tileFrames")) // tile merge: 2, 4 or 8 frames
+    readonly property int yuvTileSplit: Number(jpgValue("tileSplit"))   // tile merge: each frame 1, 1/2 or 1/4 of the pose (the ISO raised to match)
     // The shoot command's merge fields; a flash fires on one frame: one frame then.
     function yuvMergeFields(oneFrame) {
         if (oneFrame) return " frames=1"
         if (!yuvNrTiles) return " frames=" + yuvFrames
         return " frames=" + yuvTileFrames + " nr=tiles" + (yuvTileSplit > 1 ? " split=" + yuvTileSplit : "")
     }
-    property int yuvColour: 2                      // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
-    property int yuvMedian: 0                      // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
-    property int yuvSharpen: 3                     // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
-    // Our luminance filter (after the merge, before the sharpening): -1 =
-    // the camera's default (its device profile's luma_nr: 2 on the Xperia
-    // 10 III, 0 elsewhere), else 0 off, 1..3 (1, 1.5, 2.2 x the noise).
-    property int yuvLuma: -1
-    readonly property int yuvLumaDefault: viewfinder && viewfinder.caps.lumaNr !== undefined ? viewfinder.caps.lumaNr : 0
-    readonly property int yuvLumaEff: yuvLuma >= 0 ? yuvLuma : yuvLumaDefault
-    // The shoot command's field: none for the default (the engine applies it).
-    function yuvLumaField() { return yuvLuma >= 0 ? " luma=" + yuvLuma : "" }
+    readonly property int yuvColour: Number(jpgValue("colour"))         // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
+    readonly property int yuvMedian: Number(jpgValue("moire"))          // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
+    readonly property int yuvLuma: Number(jpgValue("luma"))             // luminance filter (after the merge): 0 off, 1..3 (1, 1.5, 2.2 x the noise)
+    readonly property int yuvSharpen: Number(jpgValue("sharpen"))       // our sharpening: 0 off, 1..5 (0.5 .. 4 x the detail)
+    // The shoot command's luminance field (always sent: this camera's value).
+    function yuvLumaField() { return " luma=" + yuvLuma }
     property int frameLatencyMs: 200               // measured HAL time between sub-frames (updated after each stack)
     property bool advanced: true                   // simple = jpg only, no wheels
     // The Σ preview's target frame rate (rawfish-ir.conf, hand-edited): the ISO is
@@ -283,14 +363,7 @@ Item {
         previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "hq", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         bracket = pick("bracket", "off", ["off", "0", "0x5", "0x7", "1", "2", "3"])
-        yuvFrames = pick("jpgFrames", "1", ["1", "2", "4", "8"]) * 1
-        yuvNrTiles = pick("jpgNrMethod", "classic", ["classic", "tiles"]) === "tiles"
-        yuvTileFrames = pick("jpgTileFrames", "4", ["2", "4", "8"]) * 1
-        yuvTileSplit = pick("jpgTileSplit", "1", ["1", "2", "4"]) * 1
-        yuvColour = num("jpgNoiseColourFilter", 2, 0, 5)
-        yuvMedian = num("jpgMoireFilter", 0, 0, 4)
-        yuvSharpen = num("jpgSharpen", 3, 0, 5)
-        { var lu = pick("jpgLumaNoiseFilter", "auto", ["auto", "0", "1", "2", "3"]); yuvLuma = lu === "auto" ? -1 : lu * 1 }
+        jpgLoad()                                  // our JPG's processing: this camera's (per camera)
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         menuDiscovered = num("menuDiscovered", 0, 0, 1) === 1
         gridOn = num("gridOn", 0, 0, 1) === 1
@@ -734,70 +807,66 @@ Item {
                 // The denoise method: it shows its own columns (classic: Frames;
                 // tiles: Frames and the pose per frame), the other's hidden.
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
-                    defaultValue: "classic"
+                    defaultValue: menu.jpgDefault("method")
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Denoise"); values: ["classic", "tiles"]; current: menu.yuvNrTiles ? "tiles" : "classic"
                     labelFor: function(v) { return v === "tiles" ? qsTr("Frames merged by tiles: each part aligned on its own")
                                                                  : qsTr("Frames merged whole: one shift per frame") }
                     shortFor: function(v) { return v === "tiles" ? qsTr("tiles") : qsTr("classic") }
-                    onPicked: { menu.yuvNrTiles = value === "tiles"; menu.save("jpgNrMethod", value) } }
+                    onPicked: menu.jpgPick("method", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     visible: !menu.yuvNrTiles
-                    defaultValue: 1
+                    defaultValue: Number(menu.jpgDefault("frames"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Frames"); values: [1, 2, 4, 8]; current: menu.yuvFrames
                     labelFor: function(v) { return v === 1 ? qsTr("One frame") : qsTr("%1 frames merged (less grain)").arg(v) }
-                    onPicked: { menu.yuvFrames = value; menu.save("jpgFrames", value) } }
+                    onPicked: menu.jpgPick("frames", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     visible: menu.yuvNrTiles
-                    defaultValue: 4
+                    defaultValue: Number(menu.jpgDefault("tileFrames"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Frames"); values: [2, 4, 8]; current: menu.yuvTileFrames
                     labelFor: function(v) { return qsTr("%1 frames merged by tiles").arg(v) }
-                    onPicked: { menu.yuvTileFrames = value; menu.save("jpgTileFrames", value) } }
+                    onPicked: menu.jpgPick("tileFrames", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     visible: menu.yuvNrTiles
-                    defaultValue: 1
+                    defaultValue: Number(menu.jpgDefault("tileSplit"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Per frame"); values: [1, 2, 4]; current: menu.yuvTileSplit
                     labelFor: function(v) { return v === 1 ? qsTr("Each frame the whole pose")
                                                            : qsTr("Each frame 1/%1 of the pose, the ISO x%1 (less blur)").arg(v) }
                     shortFor: function(v) { return v === 1 ? "1" : "1/" + v }
-                    onPicked: { menu.yuvTileSplit = value; menu.save("jpgTileSplit", value) } }
+                    onPicked: menu.jpgPick("tileSplit", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
-                    defaultValue: 2
+                    defaultValue: Number(menu.jpgDefault("colour"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Colour NR"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvColour
                     labelFor: function(v) { return v === 0 ? qsTr("Colour noise filter off") : qsTr("Colour noise filter: %1 x the noise").arg([0, 1, 2, 3, 5, 8][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                    onPicked: { menu.yuvColour = value; menu.save("jpgNoiseColourFilter", value) } }
+                    onPicked: menu.jpgPick("colour", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
-                    defaultValue: 0
+                    defaultValue: Number(menu.jpgDefault("moire"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Moiré"); values: [0, 1, 2, 3, 4]; current: menu.yuvMedian
                     labelFor: function(v) { return v === 0 ? qsTr("False colour: nothing removed") : qsTr("False colour: a %1 median on the colour").arg(["", "3×3", "5×5", "7×7", "9×9"][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : ["", "3×3", "5×5", "7×7", "9×9"][v] }
-                    onPicked: { menu.yuvMedian = value; menu.save("jpgMoireFilter", value) } }
-                // Our luminance filter; the green ring marks this camera's
-                // default (its device profile's). Picking the default value
-                // goes back to "auto", so the next camera's default applies.
+                    onPicked: menu.jpgPick("moire", value) }
+                // Our luminance filter (as the other columns: the green ring
+                // marks this camera's default, picking it writes "default").
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
-                    defaultValue: menu.yuvLumaDefault
+                    defaultValue: Number(menu.jpgDefault("luma"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                    caption: qsTr("Luma NR"); values: [0, 1, 2, 3]; current: menu.yuvLumaEff
+                    caption: qsTr("Luma NR"); values: [0, 1, 2, 3]; current: menu.yuvLuma
                     labelFor: function(v) { return v === 0 ? qsTr("Luminance noise filter off") : qsTr("Luminance noise filter: %1 x the noise").arg([0, 1, 1.5, 2.2][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                    onPicked: {
-                        if (value === menu.yuvLumaDefault) { menu.yuvLuma = -1; menu.save("jpgLumaNoiseFilter", "auto") }
-                        else { menu.yuvLuma = value; menu.save("jpgLumaNoiseFilter", value) }
-                    } }
+                    onPicked: menu.jpgPick("luma", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
-                    defaultValue: 3
+                    defaultValue: Number(menu.jpgDefault("sharpen"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
                     caption: qsTr("Sharpen"); values: [0, 1, 2, 3, 4, 5]; current: menu.yuvSharpen
                     labelFor: function(v) { return v === 0 ? qsTr("RAWfish sharpening off") : qsTr("RAWfish sharpening: %1 x the fine detail").arg([0, 0.5, 1, 1.5, 2.5, 4][v]) }
                     shortFor: function(v) { return v === 0 ? qsTr("off") : String(v) }
-                    onPicked: { menu.yuvSharpen = value; menu.save("jpgSharpen", value) } }
+                    onPicked: menu.jpgPick("sharpen", value) }
                 }
                 Label {                                      // the group's name, under its columns
                     id: jpgGroupName

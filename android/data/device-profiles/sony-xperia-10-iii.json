@@ -13,7 +13,7 @@
   "_match_note": "By model only: the Xperia 10 II has the same sensor and RAW size (4032x3016) but its RAW stream works, so it must not get this profile.",
   "_why_fps": "The camera templates ask an AE range of 15-120 fps (camera 0; 15-90 on camera 1), and the range is a session key on this HAL: it then runs the sensor in its binned high-rate mode (2016x1136; 816x612 on camera 1). A RAW16 4032x3016 held that small image in its first 568 rows, the rest zero, and the camera's JPEG was upscaled from it: soft, dull and narrower than the Jolla camera's (23 Nov 2026). \"fps_max\": 30 keeps the full-size sensor mode (vendor tag 0x802f0000 lists the modes: 4032x3016 at 30 fps, 2016x1136 at 60 and 120).",
   "_why_cameras": "With multiCameraEnable=TRUE in /vendor/etc/camera/camxoverridesettings.txt (and the camera provider restarted, or a reboot) the HAL lists seven cameras instead of two (23 Nov 2026): 0 the main one (4.05 mm f/1.8, 4032x3016), 1 the front one, 2 the ultra-wide (1.657 mm f/2.2, 3264x2448, fixed focus), 3 the telephoto (5.52 mm f/2.4, 3264x2448, AF, at most 30 fps), 4 to 6 logical multi-cameras (createCaptureSession refuses our streams). Camera 2 runs a binned mode at 90 fps like the others, and its driver died at the first frame there: \"fps_max\": 30 on 2 and 3 (both then give whole RAWs and our JPEG). The logical ones are hidden from the app, and the back cameras offered by focal length (16, 27, 54 mm), then the front one. Without that setting ids 2 to 6 do not exist and these entries do nothing.",
-  "_why_luma": "Our JPG's luminance noise filter on by default (luma_nr 2, the menu's Luma NR): the small pixels of these sensors are read one by one, and from 4 merged frames the JPGs were still grainy at ISO 1000 (24 Nov 2026), where the JP2's 12.5 MP, binned by its 50 MP sensor, is not. 2 averages what differs by less than 1.5 times the noise: level 1 left too much grain, 2 was judged right on the phone (24 Nov 2026).",
+  "_why_luma": "Our JPG's luminance noise filter on by default (jpg_luma_nr 2, the menu's Luma NR): the small pixels of these sensors are read one by one, and from 4 merged frames the JPGs were still grainy at ISO 1000 (24 Nov 2026), where the JP2's 12.5 MP, binned by its 50 MP sensor, is not. 2 averages what differs by less than 1.5 times the noise: level 1 left too much grain, 2 was judged right on the phone (24 Nov 2026).",
   "camera_order": ["2", "0", "3", "1"],
   "notch": false,
   "cameras": [
@@ -21,28 +21,28 @@
       "camera_id": "0",
       "overrides": {
         "fps_max": 30,
-        "luma_nr": 2
+        "jpg_luma_nr": 2
       }
     },
     {
       "camera_id": "1",
       "overrides": {
         "fps_max": 30,
-        "luma_nr": 2
+        "jpg_luma_nr": 2
       }
     },
     {
       "camera_id": "2",
       "overrides": {
         "fps_max": 30,
-        "luma_nr": 2
+        "jpg_luma_nr": 2
       }
     },
     {
       "camera_id": "3",
       "overrides": {
         "fps_max": 30,
-        "luma_nr": 2
+        "jpg_luma_nr": 2
       }
     },
     { "camera_id": "4", "overrides": { "hidden": true } },

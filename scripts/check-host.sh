@@ -333,10 +333,27 @@ for spec in "$root/rpm/rawfish-ir.spec"; do
 done
 echo "specs: 64-bit dependency names only in %ifarch aarch64 (OK)"
 
-# rawfish-ir.conf.example becomes the real rawfish-ir.conf on a new install:
-# QSettings takes only ';' as a comment, and a '#' line with a quote in it
-# puts the whole file in error (it is then neither read reliably nor saved).
-if grep -n '^#' "$root/app/examples/rawfish-ir.conf.example"; then
-    echo "rawfish-ir.conf.example: comments must start with ';', not '#'"; exit 1
-fi
-echo "rawfish-ir.conf.example: ';' comments only (OK)"
+# rawfish-ir.conf's keys (app/conftable.h, 0.3.11): the table coherent, its
+# defaults passing their own checks, the example written from it reading
+# back as the table, and no '#' comment in it (QSettings takes only ';').
+gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-conftable-test "$root/app/tests/conftable_test.c" \
+    || { echo "app/conftable.h: the host test does not build"; exit 1; }
+/tmp/indraw-conftable-test || { echo "app/conftable.h: the table is not coherent (see above)"; exit 1; }
+
+# Every key the interface reads or writes by name is in the table (it then
+# has a section); a key not there would be dropped from the file at the
+# next start. (The cameras' keys are named "camera_N/..." by the menu.)
+python3 - "$root" <<'PYEOF2' || exit 1
+import re, sys, glob
+root = sys.argv[1]
+tab = open(root + "/app/conftable.h").read()
+known = {k for s, k in re.findall(r'\{ "([a-z_]*)", "([A-Za-z0-9_]+)", (?:NULL|")', tab) if s and s != "camera"}
+cpp = open(root + "/app/rawfish-ir-preview.cpp").read()
+used = set()
+for f in glob.glob(root + "/app/qml/*.qml"):
+    used |= set(re.findall(r'\b(?:setting|save|num|pick|setSetting|removeSetting)\("([A-Za-z0-9_]+)"', open(f).read()))
+used |= set(re.findall(r'confKey\(QStringLiteral\("([A-Za-z0-9_]+)"\)\)', cpp))
+bad = sorted(k for k in used if k not in known)
+if bad: print("rawfish-ir.conf: keys used by the interface but not in app/conftable.h: %s" % bad); sys.exit(1)
+print("rawfish-ir.conf: every key the interface uses is in app/conftable.h (%d keys)" % len(used))
+PYEOF2

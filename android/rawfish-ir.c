@@ -89,6 +89,10 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "rawcheck.h"            /* a RAW16 frame the HAL left partly unwritten */
 #include "focal35.h"             /* the 35 mm-equivalent focal length, by the diagonal */
 
+/* Our JPG's processing when the device profile gives no default (see
+ * indraw_set_jpg_default): the app's own, the same in the CLI and the menu. */
+#define JPG_DEFAULT_BUILTIN "classic,1,4,1,2,0,0,3"
+
 static int g_screen_notch = -1;   /* the screen's top cutout, from the device profile (-1 unknown) */
 
 /* Return codes shared by every exported function. */
@@ -574,7 +578,11 @@ static struct {
     int override_iso_max;                   /* 0 = none; else the highest ISO found to work in manual (above the declared range) */
     float override_focus_max_d;             /* 0 = none; else the lens' real closest stop, HAL units (below the declared one) */
     int no_touch_focus;                     /* 1: the device profile says a touch cannot focus this camera */
-    int luma_nr_default;                    /* our JPG's luminance filter by default (device profile "luma_nr", 0..3): for the caps line */
+    /* Our JPG's processing by default on this camera, for the caps line
+     * (jpg_default=): "method,frames,tile_frames,tile_split,colour,moire,
+     * luma,sharpen", set by the CLI from the device profile (indraw_set_jpg_default);
+     * "" = the app's own defaults. The engine only reports it. */
+    char jpg_default[48];
     int focus_step_pct;                     /* device profile: volume steps above 1 D as a % of the value (0 = constant) */
     int64_t override_exp_max_ns;            /* 0 = none; else the longest exposure found to work (above the declared range) */
     int lim_raw_off;                        /* device profile: no RAW stream      */
@@ -7271,7 +7279,7 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d luma_nr=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d jpg_default=%s raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus,
@@ -7283,7 +7291,7 @@ static void emit_caps(void)
              g.focus_step_pct,                      /* the manual steps above 1 D, % of the value (0: constant 0.05 D) */
              g_screen_notch, cams, facing, rawcams,
              g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n,
-             g.luma_nr_default,                     /* our JPG's luminance filter by default (the menu's default) */
+             g.jpg_default[0] ? g.jpg_default : JPG_DEFAULT_BUILTIN,   /* our JPG's processing by default (the menu's green rings) */
              raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
@@ -9236,16 +9244,25 @@ IR_API int indraw_set_streams_exclusive(int on)
     return IR_OK;
 }
 
-/* Device-profile pause before every capture, in ms (0..3000; 0 = none). */
-/* Device-profile value, before indraw_stream_start: the luminance filter our
- * JPG gets by default on this camera ("luma_nr", 0..3; the CLI applies it,
- * this only reports it in the caps line, for the app's menu). */
-IR_API int indraw_set_luma_nr_default(int level)
+/* Device-profile values, before indraw_stream_start: our JPG's processing
+ * by default on this camera, "method,frames,tile_frames,tile_split,colour,
+ * moire,luma,sharpen" (the CLI reads them from the device profile and
+ * checks them; JPG_DEFAULT_BUILTIN when the profile says nothing). The
+ * engine only reports them in the caps line (jpg_default=), for the app:
+ * the menu's defaults, what its "default" means in rawfish-ir.conf. NULL or
+ * "" = the app's own. IR_EARG for anything but letters, digits and commas
+ * (it goes out in a space-separated line). */
+IR_API int indraw_set_jpg_default(const char *csv)
 {
-    g.luma_nr_default = level < 0 ? 0 : level > 3 ? 3 : level;
+    size_t i, n = csv ? strlen(csv) : 0;
+    if (n >= sizeof g.jpg_default) return IR_EARG;
+    for (i = 0; i < n; ++i)
+        if (!((csv[i] >= 'a' && csv[i] <= 'z') || (csv[i] >= '0' && csv[i] <= '9') || csv[i] == ',')) return IR_EARG;
+    snprintf(g.jpg_default, sizeof g.jpg_default, "%s", n ? csv : "");
     return IR_OK;
 }
 
+/* Device-profile pause before every capture, in ms (0..3000; 0 = none). */
 IR_API int indraw_set_capture_delay(int ms)
 {
     g.capture_delay_ms = ms < 0 ? 0 : ms > 3000 ? 3000 : ms;

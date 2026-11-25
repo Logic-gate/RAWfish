@@ -25,7 +25,8 @@ HEADERS += \
     hwprobe.h \
     hwframes.h \
     hwegl.h \
-    procstats.h
+    procstats.h \
+    conftable.h
 
 # The .desktop is installed by the .spec (%install), not here: the sailfishapp
 # qmake integration can shadow a .pro desktop INSTALLS rule.

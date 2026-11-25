@@ -6,6 +6,7 @@
 #include "hwframes.h"
 #include "hwegl.h"
 #include "procstats.h"
+#include "conftable.h"   /* every key of rawfish-ir.conf: section, default, values, text */
 #include <QTimer>
 #include <QFileSystemWatcher>
 #include <QElapsedTimer>
@@ -34,6 +35,8 @@
 #include <QRegularExpression>
 #include <QStorageInfo>
 static QString settingsPath();   /* defined with the settings code below */
+static QString confKey(const QString &key);   /* a key's place in rawfish-ir.conf, "section/key" (below) */
+static QString s_confFromBackup;              /* the earlier version's rawfish-ir.conf, in its backup folder (archiveOnNewVersion) */
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -322,7 +325,7 @@ void IndrawPreview::start()
         /* The YUV stream's size: the photo's (jpeg) unless rawfish-ir.conf says
          * otherwise (jpgYuvStream = jpeg | max | WxH): a 12-megapixel YUV
          * stream slows the JP2's viewfinder, a test key while this is sorted out. */
-        QString ys = QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvStream"), QStringLiteral("jpeg")).toString().trimmed();
+        QString ys = QSettings(settingsPath(), QSettings::IniFormat).value(confKey(QStringLiteral("jpgYuvStream")), QStringLiteral("jpeg")).toString().trimmed();
         static const QRegularExpression ok(QStringLiteral("^(jpeg|max|[0-9]{3,5}x[0-9]{3,5})$"));
         if (!ok.match(ys).hasMatch()) ys = QStringLiteral("jpeg");
         /* jpgYuvFromLargestStream (on by default since it was tried on the
@@ -332,7 +335,7 @@ void IndrawPreview::start()
          * it off (a key absent counts as on, as the example's default); with
          * max or WxH it means nothing. */
         if (ys == QLatin1String("jpeg") &&
-            QSettings(settingsPath(), QSettings::IniFormat).value(QStringLiteral("jpgYuvFromLargestStream"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0"))
+            QSettings(settingsPath(), QSettings::IniFormat).value(confKey(QStringLiteral("jpgYuvFromLargestStream")), QStringLiteral("1")).toString().trimmed() != QLatin1String("0"))
             ys = QStringLiteral("jpeg+largest");
         args << QStringLiteral("yuv=") + ys;
     }
@@ -358,7 +361,7 @@ void IndrawPreview::start()
         m_liveConf.clear();
         readLiveConf(false);
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-        const int nb = conf.value(QStringLiteral("vfBuffers"), 6).toInt();
+        const int nb = conf.value(confKey(QStringLiteral("vfBuffers")), 6).toInt();
         if (nb >= 4 && nb <= 10) env.insert(QStringLiteral("RAWFISH_VF_BUFFERS"), QString::number(nb));
         m_process->setProcessEnvironment(env);
         if (m_hwframes) m_hwframes->clearFailed();   /* each engine tries again */
@@ -369,7 +372,7 @@ void IndrawPreview::start()
      * GPU sampling too. Off unless asked; read at each engine start. */
     {
         QSettings conf(settingsPath(), QSettings::IniFormat);
-        m_hwpFrames = qBound(0, conf.value(QStringLiteral("hwProbe"), 0).toInt(), 20);
+        m_hwpFrames = qBound(0, conf.value(confKey(QStringLiteral("hwProbe")), 0).toInt(), 20);
         m_hwpAsked = false;
         if (m_hwpFrames > 0) {
             if (!m_hwprobe) {
@@ -378,7 +381,7 @@ void IndrawPreview::start()
                 m_hwprobe->listen(cache + QStringLiteral("/hwprobe.sock"), cache);
             }
             QProcessEnvironment env = m_process->processEnvironment();
-            if (conf.value(QStringLiteral("hwProbeGpuUsage"), 0).toInt() == 1)
+            if (conf.value(confKey(QStringLiteral("hwProbeGpuUsage")), 0).toInt() == 1)
                 env.insert(QStringLiteral("RAWFISH_PREVIEW_GPU_USAGE"), QStringLiteral("1"));
             m_process->setProcessEnvironment(env);
         }
@@ -563,7 +566,9 @@ QString IndrawPreview::capturePrefix() const { return m_prefix.isEmpty() ? QStri
  * take one back, copy it from there to where it was.
  * Moved: rawfish-ir.conf, simple.json (configuration), override-hal.json,
  * focus-calibration.json and the measured lens-shading maps (device
- * profiles). Kept: the photos, the Settings page's choices (output folders,
+ * profiles). rawfish-ir.conf is moved too, but its values are carried into
+ * the new one (writeDefaultSettings, 0.3.11-0551): the settings stay the
+ * user's, the file is the new version's. Kept: the photos, the Settings page's choices (output folders,
  * prefix: in dconf), the examples (rewritten anyway), the log.
  * "installed-version" in the configuration folder records the version
  * whose files are in use (the version only, not the package release: a new
@@ -606,7 +611,11 @@ QString IndrawPreview::archiveOnNewVersion()
             const QString from = e.dir + QLatin1Char('/') + e.name;
             if (!QFile::exists(from)) continue;
             QDir().mkpath(backup + QLatin1Char('/') + e.sub);
-            if (QFile::rename(from, backup + QLatin1Char('/') + e.sub + QLatin1Char('/') + e.name)) moved << e.sub + QLatin1Char('/') + e.name;
+            if (QFile::rename(from, backup + QLatin1Char('/') + e.sub + QLatin1Char('/') + e.name)) {
+                moved << e.sub + QLatin1Char('/') + e.name;
+                /* rawfish-ir.conf: its values go into the new file (writeDefaultSettings) */
+                if (e.name == QLatin1String("rawfish-ir.conf")) s_confFromBackup = backup + QStringLiteral("/config/rawfish-ir.conf");
+            }
         }
         /* the measured lens-shading maps: the folder as a whole */
         const QString shade = data + QStringLiteral("/lens-shading");
@@ -628,83 +637,202 @@ void IndrawPreview::installExamples()
     const QString src = QStringLiteral("/usr/share/rawfish-ir/examples/");
     const QString profiles = QDir::homePath() + QStringLiteral("/.local/share/com.rawfish/rawfish-ir/device-profiles");
     QDir().mkpath(profiles);
-    const struct { const char *name; QString dir; } ex[] = {
-        { "rawfish-ir.conf.example", configDir() },
-        { "override-hal.example.jsonc", profiles },
-    };
-    for (const auto &e : ex) {
-        const QString from = src + QLatin1String(e.name), to = e.dir + QLatin1Char('/') + QLatin1String(e.name);
-        if (!QFile::exists(from)) continue;              /* not installed (a dev build) */
-        QFile::remove(to);                               /* refreshed: the version's own */
-        QFile::copy(from, to);
+    {   /* the device profile's: copied from the package */
+        const QString from = src + QStringLiteral("override-hal.example.jsonc"), to = profiles + QStringLiteral("/override-hal.example.jsonc");
+        if (QFile::exists(from)) { QFile::remove(to); QFile::copy(from, to); }   /* refreshed: the version's own */
+    }
+    {   /* rawfish-ir.conf's: written from the app's own table (conftable.h) */
+        const QString to = configDir() + QStringLiteral("/rawfish-ir.conf.example");
+        const QByteArray tmp = QFile::encodeName(to + QStringLiteral(".new"));
+        FILE *f = fopen(tmp.constData(), "w");
+        if (!f) return;
+        const int bad = conf_write_example(f);
+        if (fclose(f) != 0 || bad) { ::remove(tmp.constData()); return; }
+        QFile::remove(to);
+        QFile::rename(QString::fromLocal8Bit(tmp), to);
     }
 }
 
-/* rawfish-ir.conf holds every setting, written out even at its default, so
- * that a user who opens it sees them all without the example:
- *  - no file (a new install): it is written from the example, every key at
- *    its default and every comment in place;
- *  - a file without some keys (one from an older version, or a key a new
- *    version adds): those keys are added at their defaults, the values
- *    already there untouched.
- * Called from main(), before the interface reads any setting: QSettings
- * keeps one cached copy of the file per process, and a file written behind
- * it after a first read would be overwritten from that copy at the next
- * save (which left a new file with three lines). The kept "last" focus and
- * exposure values are left out (absent, the start takes the automatic ones). */
-static bool keptLastValue(const QByteArray &l)
+/* ---- rawfish-ir.conf (0.3.11, patch 0551) --------------------------------
+ *
+ * Every key is written down once, in conftable.h: its section, its default,
+ * the values it takes and its text. From that table:
+ *  - confKey() places a key in its section: the interface asks for a key by
+ *    its name ("timerSec"), QSettings keeps it as "menu/timerSec", which it
+ *    writes as [menu] timerSec=...; a camera's own keys are named by the
+ *    menu itself ("camera_2/jpgSharpen");
+ *  - writeDefaultSettings() makes the file whole at each start (below);
+ *  - installExamples() writes rawfish-ir.conf.example, the user's reference
+ *    (nothing reads it).
+ * The file is written by QSettings: in alphabetical order (the sections, and
+ * the keys in each), without comments. Called from main() before the
+ * interface reads any setting: QSettings keeps one cached copy of a file per
+ * process, and a file changed behind it after a first read would be
+ * overwritten from that copy at the next save. */
+static QString confKey(const QString &key)
 {
-    return l.startsWith("lastFocusD=") || l.startsWith("lastIso=") || l.startsWith("lastShutterNs=");
+    if (key.contains(QLatin1Char('/'))) return key;
+    for (int i = 0; k_conf_keys[i].key; ++i) {
+        const conf_key_t &k = k_conf_keys[i];
+        if (!*k.section || !strcmp(k.section, "camera")) continue;   /* the top's old keys; [camera_N] named by the menu */
+        if (key == QLatin1String(k.key)) return QLatin1String(k.section) + QLatin1Char('/') + key;
+    }
+    return key;                                   /* unknown: at the top (dropped at the next start) */
 }
-static QList<QByteArray> exampleLines()
+
+/* The text of a value as written (QSettings reads an unquoted "a,b,c" as a
+ * list: joined back). */
+static QString confText(const QVariant &v)
 {
-    QFile ex(QStringLiteral("/usr/share/rawfish-ir/examples/rawfish-ir.conf.example"));
-    if (!ex.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-    return ex.readAll().split('\n');
+    return v.type() == QVariant::StringList ? v.toStringList().join(QLatin1Char(',')) : v.toString().trimmed();
 }
+
+/* Is "group/key", or a top-level "key", one of the table's? */
+static const conf_key_t *confKnown(const QString &full)
+{
+    static const QRegularExpression cam(QStringLiteral("^camera_[0-9]+$"));
+    const int slash = full.indexOf(QLatin1Char('/'));
+    const QString group = slash > 0 ? full.left(slash) : QString(), key = slash > 0 ? full.mid(slash + 1) : full;
+    const QByteArray k = key.toUtf8();
+    if (group.isEmpty()) return conf_find("", k.constData());
+    if (cam.match(group).hasMatch()) return conf_find("camera", k.constData());
+    return conf_find(group.toUtf8().constData(), k.constData());
+}
+
+/* A new rawfish-ir.conf at `path`: every key at its default, and the values
+ * of `oldPath` (the user's file of before: a new version's, kept in its
+ * backup folder, or this one before the sections, copied there first) for
+ * the keys the table still has and that pass their check -- in their
+ * section, or at the top of a file of before the sections. A key no longer
+ * in the table is left out, a value no longer allowed takes the default.
+ * The [camera_N] sections are carried the same way ("auto" becomes
+ * "default"). Written to a new file, then put in place. Returns a line for
+ * the log, "" on success with nothing to say. */
+static QString confRebuild(const QString &path, const QString &oldPath)
+{
+    static const QRegularExpression cam(QStringLiteral("^camera_[0-9]+$"));
+    const QString tmp = path + QStringLiteral(".new");
+    int carried = 0, refused = 0;
+    QStringList refusedKeys;
+    QFile::remove(tmp);
+    {
+        QSettings s(tmp, QSettings::IniFormat);
+        QScopedPointer<QSettings> old(oldPath.isEmpty() ? nullptr : new QSettings(oldPath, QSettings::IniFormat));
+        for (int i = 0; k_conf_keys[i].key; ++i) {
+            const conf_key_t &k = k_conf_keys[i];
+            if (!strcmp(k.section, "camera")) continue;          /* below, per camera */
+            const QString key = QLatin1String(k.key);
+            const QString full = *k.section ? QLatin1String(k.section) + QLatin1Char('/') + key : key;
+            QVariant v;
+            if (old && old->contains(full)) v = old->value(full);
+            else if (old && *k.section && old->contains(key)) v = old->value(key);   /* a file of before the sections */
+            if (v.isValid() && conf_value_ok(k.check, confText(v).toUtf8().constData())) {
+                s.setValue(full, v);
+                ++carried;
+            } else {
+                if (v.isValid()) { ++refused; refusedKeys << full; }
+                if (k.def) s.setValue(full, QString::fromUtf8(k.def));
+            }
+        }
+        if (old)
+            for (const QString &g : old->childGroups()) {
+                if (!cam.match(g).hasMatch()) continue;
+                for (int i = 0; k_conf_keys[i].key; ++i) {
+                    const conf_key_t &k = k_conf_keys[i];
+                    if (strcmp(k.section, "camera")) continue;
+                    const QString full = g + QLatin1Char('/') + QLatin1String(k.key);
+                    QString v = old->contains(full) ? confText(old->value(full)) : QString::fromUtf8(k.def);
+                    if (v == QLatin1String("auto")) v = QStringLiteral("default");   /* the luma's word until 0.3.11-550 */
+                    if (!conf_value_ok(k.check, v.toUtf8().constData())) { ++refused; refusedKeys << full; v = QString::fromUtf8(k.def); }
+                    else ++carried;
+                    s.setValue(full, v);
+                }
+            }
+        s.sync();
+        if (s.status() != QSettings::NoError) { QFile::remove(tmp); return QStringLiteral("rawfish-ir.conf: could not write the new file; the old one is kept"); }
+    }
+    QFile::remove(path);
+    if (!QFile::rename(tmp, path)) return QStringLiteral("rawfish-ir.conf: could not put the new file in place (%1)").arg(tmp);
+    if (oldPath.isEmpty()) return QString();
+    return QStringLiteral("rawfish-ir.conf: a new file, %1 value(s) carried from %2%3")
+            .arg(carried).arg(oldPath)
+            .arg(refused ? QStringLiteral("; %1 not allowed any more, at the default: %2").arg(refused).arg(refusedKeys.join(QStringLiteral(", "))) : QString());
+}
+
+/* Is the file at `path` of before the sections (0.3.11-550 and earlier): a
+ * key of the table that has a section, at the top or under [General]? Read
+ * as text, not through QSettings: the file is about to be replaced, and
+ * QSettings must not hold a copy of it (see above). */
+static bool confBeforeSections(const QString &path)
+{
+    QFile f(path);
+    QString section;
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    for (const QByteArray &raw : f.readAll().split('\n')) {
+        const QByteArray line = raw.trimmed();
+        if (line.startsWith('[') && line.endsWith(']')) { section = QString::fromUtf8(line.mid(1, line.size() - 2)); continue; }
+        const int eq = line.indexOf('=');
+        if (eq <= 0 || line.startsWith(';') || (!section.isEmpty() && section != QLatin1String("General"))) continue;
+        const QString key = QString::fromUtf8(line.left(eq)).trimmed();
+        if (confKey(key) != key) return true;
+    }
+    return false;
+}
+
+/* rawfish-ir.conf whole at each start:
+ *  - a new version (archiveOnNewVersion moved the old file to its backup
+ *    folder): a new file, the old one's values carried (confRebuild);
+ *  - no file (a new install, or deleted): a new file at the defaults;
+ *  - a file of before the sections: copied to a backup folder, then
+ *    rebuilt from that copy, every value kept;
+ *  - otherwise the keys the file lacks are added at their defaults, and the
+ *    keys the table does not have (an older version's, or a key put in the
+ *    wrong section) are dropped -- except the old one-for-all JPG keys at
+ *    the top, which the menu carries into [camera_N] once (it needs the
+ *    cameras' list, which only the engine gives). */
+QString IndrawPreview::s_confNote;
 void IndrawPreview::writeDefaultSettings()
 {
     const QString path = settingsPath();
-    const QList<QByteArray> lines = exampleLines();
-    if (lines.isEmpty()) return;                          /* not installed (a dev build) */
-    if (!QFile::exists(path)) {
-        QByteArray outText;
-        for (const QByteArray &line : lines) if (!keptLastValue(line)) outText += line + '\n';
-        outText.chop(1);
-        QFile out(path);
-        if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write(outText);
+    if (!s_confFromBackup.isEmpty() && QFile::exists(s_confFromBackup)) {
+        s_confNote = confRebuild(path, s_confFromBackup);
+        return;
+    }
+    if (!QFile::exists(path)) { s_confNote = confRebuild(path, QString()); return; }
+    if (confBeforeSections(path)) {
+        const QString backup = QDir::homePath() + QStringLiteral("/.config/com.rawfish/rawfish-ir/backup-before-sections-")
+                             + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")) + QStringLiteral("/config");
+        const QString copy = backup + QStringLiteral("/rawfish-ir.conf");
+        if (!QDir().mkpath(backup) || !QFile::copy(path, copy)) { s_confNote = QStringLiteral("rawfish-ir.conf: could not keep a copy before sorting it into sections: left as it is"); return; }
+        s_confNote = confRebuild(path, copy);
         return;
     }
     QSettings s(path, QSettings::IniFormat);
-    int added = 0;
-    /* Keys of earlier versions that nothing reads any more (the processing
-     * moved to the named keys in 0.2.0; the 18 mm's touch tests went in
-     * 0.3.8): dropped, so that the file only holds what the example
-     * documents. */
-    static const char *const retired[] = { "noiseIndex", "edgeIndex", "previewNoiseIndex", "previewEdgeIndex", "yuvFrames", "yuvColour", "yuvMedian", "yuvSharpen", "jpgColour", "jpgMoire", "halJpeg", "useHalJpeg", "focusTouchPrepared", "focusTouchContinuous", nullptr };
-    for (int i = 0; retired[i]; ++i) if (s.contains(QLatin1String(retired[i]))) { s.remove(QLatin1String(retired[i])); ++added; }
-    for (const QByteArray &line : lines) {
-        const int eq = line.indexOf('=');
-        if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || keptLastValue(line)) continue;
-        const QString key = QString::fromUtf8(line.left(eq)).trimmed();
-        if (s.contains(key)) continue;
-        s.setValue(key, QString::fromUtf8(line.mid(eq + 1)).trimmed());
-        ++added;
+    int changed = 0;
+    for (const QString &k : s.allKeys())
+        if (!confKnown(k)) { s.remove(k); ++changed; }
+    for (int i = 0; k_conf_keys[i].key; ++i) {
+        const conf_key_t &k = k_conf_keys[i];
+        if (!k.def || !*k.section || !strcmp(k.section, "camera")) continue;   /* the menu writes the cameras' */
+        const QString full = QLatin1String(k.section) + QLatin1Char('/') + QLatin1String(k.key);
+        if (s.contains(full)) continue;
+        s.setValue(full, QString::fromUtf8(k.def));
+        ++changed;
     }
-    if (added) s.sync();
+    if (changed) s.sync();
 }
 
 /* The reset, while the interface runs: through QSettings itself (its cached
- * copy stays right), every key of the example at its default; the comments
- * of a reset file are lost, the example keeps them. */
+ * copy stays right), every key at its default; the cameras' sections go
+ * (the menu writes them again, at "default"). */
 static void resetToDefaults(const QString &path)
 {
     QSettings s(path, QSettings::IniFormat);
     s.clear();
-    for (const QByteArray &line : exampleLines()) {
-        const int eq = line.indexOf('=');
-        if (eq <= 0 || line.startsWith(';') || line.startsWith('[') || keptLastValue(line)) continue;
-        s.setValue(QString::fromUtf8(line.left(eq)).trimmed(), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+    for (int i = 0; k_conf_keys[i].key; ++i) {
+        const conf_key_t &k = k_conf_keys[i];
+        if (k.def && *k.section && strcmp(k.section, "camera"))
+            s.setValue(QLatin1String(k.section) + QLatin1Char('/') + QLatin1String(k.key), QString::fromUtf8(k.def));
     }
     s.sync();
 }
@@ -725,13 +853,19 @@ QString IndrawPreview::resetSettingsFile()
     return bak;
 }
 
+/* A key of rawfish-ir.conf by its name, in its section (confKey). */
 QVariant IndrawPreview::setting(const QString &key, const QVariant &def) const
 {
-    return QSettings(settingsPath(), QSettings::IniFormat).value(key, def);
+    return QSettings(settingsPath(), QSettings::IniFormat).value(confKey(key), def);
 }
 void IndrawPreview::setSetting(const QString &key, const QVariant &value)
 {
-    QSettings(settingsPath(), QSettings::IniFormat).setValue(key, value);
+    QSettings(settingsPath(), QSettings::IniFormat).setValue(confKey(key), value);
+}
+/* A key taken out of rawfish-ir.conf (an old key carried into new ones). */
+void IndrawPreview::removeSetting(const QString &key)
+{
+    QSettings(settingsPath(), QSettings::IniFormat).remove(confKey(key));
 }
 
 void IndrawPreview::abortCapture()
@@ -1115,7 +1249,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
             if (!rc.isEmpty()) rawCams.append(rc.toInt());
         m_caps.insert(QStringLiteral("rawCams"), rawCams);
         m_caps.insert(QStringLiteral("focusCal"), f.value("focus_cal", "0").toInt());   /* calibration points in force */
-        m_caps.insert(QStringLiteral("lumaNr"), f.value("luma_nr", "0").toInt());     /* our JPG's luminance filter by default (device profile) */
+        /* our JPG's processing by default on this camera (device profile, else
+         * the app's): "method,frames,tile_frames,tile_split,colour,moire,luma,
+         * sharpen", the menu's defaults (SettingsMenu jpgDefault) */
+        m_caps.insert(QStringLiteral("jpgDefault"), QString::fromLatin1(f.value("jpg_default")));
         m_caps.insert(QStringLiteral("touchFocus"), f.value("touch_focus", "1").toInt());   /* 0: no focus by touch (device profile) */
         {   /* the camera's RAW capability, independent of this session's streams */
             const QList<QByteArray> rc = f.value("raw_cap", "0x0").split('x');
@@ -1153,6 +1290,10 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         if (!s_archiveNote.isEmpty()) {             /* the first start of a new version: say what was set aside */
             sendCommand(QStringLiteral("# ") + s_archiveNote);
             s_archiveNote.clear();
+        }
+        if (!s_confNote.isEmpty()) {                /* what was done to rawfish-ir.conf at this start */
+            sendCommand(QStringLiteral("# ") + s_confNote);
+            s_confNote.clear();
         }
         /* where the photos go when the memory card asked for is not there */
         if (!m_storageNote.isEmpty()) sendCommand(QStringLiteral("# ") + m_storageNote);
@@ -1639,12 +1780,12 @@ void IndrawPreview::readLiveConf(bool announce)
     if (!m_confWatch->directories().contains(dir) && QFileInfo::exists(dir)) m_confWatch->addPath(dir);
 
     QSettings conf(path, QSettings::IniFormat);
-    const bool zc = conf.value(QStringLiteral("viewfinderZeroCopy"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
-    const bool yuv = conf.value(QStringLiteral("viewfinderYuv"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
-    const int secs = qBound(0, conf.value(QStringLiteral("statsLog"), 0).toInt(), 3600);
-    const int every = qBound(1, conf.value(QStringLiteral("aidsEvery"), 2).toInt(), 4);
-    const bool gpu = conf.value(QStringLiteral("aidsGpu"), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
-    const int screenMin = qBound(0, conf.value(QStringLiteral("screenOnMinutes"), 5).toInt(), 60);
+    const bool zc = conf.value(confKey(QStringLiteral("viewfinderZeroCopy")), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
+    const bool yuv = conf.value(confKey(QStringLiteral("viewfinderYuv")), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
+    const int secs = qBound(0, conf.value(confKey(QStringLiteral("statsLog")), 0).toInt(), 3600);
+    const int every = qBound(1, conf.value(confKey(QStringLiteral("aidsEvery")), 2).toInt(), 4);
+    const bool gpu = conf.value(confKey(QStringLiteral("aidsGpu")), QStringLiteral("1")).toString().trimmed() != QLatin1String("0");
+    const int screenMin = qBound(0, conf.value(confKey(QStringLiteral("screenOnMinutes")), 5).toInt(), 60);
     const QString now = QStringLiteral("statsLog=%1 viewfinderZeroCopy=%2 viewfinderYuv=%3 aidsEvery=%4 aidsGpu=%5 screenOnMinutes=%6")
                             .arg(secs).arg(zc ? 1 : 0).arg(yuv ? 1 : 0).arg(every).arg(gpu ? 1 : 0).arg(screenMin);
     if (now == m_liveConf) return;     /* saved, but none of these changed */

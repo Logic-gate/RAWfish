@@ -15,6 +15,44 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- Our JPG's processing is kept per camera, and rawfish-ir.conf is sorted
+  into sections (patch 0551).
+  - Per camera: the denoise method, the frames merged (classic and
+    tiles), the pose per frame, Colour NR, Moiré, Luma NR and Sharpen. A
+    choice made in the menu on one camera stays on that camera; each
+    camera starts from its own defaults, its device profile's (new
+    per-camera keys `jpg_method`, `jpg_frames`, `jpg_tile_frames`,
+    `jpg_tile_split`, `jpg_colour_nr`, `jpg_moire`, `jpg_luma_nr` --
+    `luma_nr` renamed -- and `jpg_sharpen`), else the app's (classic, 1
+    frame, 2, 0, 0, 3), marked by the menu's green rings. snap takes the
+    camera's defaults (it took the app's). The caps line gives them
+    (`jpg_default=`, instead of `luma_nr=`), the log says them at each start.
+  - rawfish-ir.conf in sections: [menu], [shooting], [viewfinder],
+    [white_balance], [lens_shading], [kept], [advanced], [internal], and one
+    [camera_N] per camera with its eight JPG keys ("default", or a choice),
+    written the first time the camera is used. The file is written by the
+    app in alphabetical order, without comments, as before.
+  - Every key is written down once, in the app (app/conftable.h): its
+    section, its default, the values it takes, its text. The app no longer
+    reads any file to know them: rawfish-ir.conf.example is written from
+    that table at each start, a reference for the user that nothing reads
+    (it is no longer in the package; the device profile's example still
+    is). It says that its values are the defaults and that the real file is
+    in alphabetical order.
+  - A new version carries your settings: the earlier rawfish-ir.conf still
+    goes to the backup folder, but its values are copied into the new file
+    (a key the version no longer has is left out, a value it no longer
+    allows takes its default; the log says how many were carried). Until
+    now a new version started from the defaults.
+  - A file of before the sections is copied to a backup folder
+    (backup-before-sections-<date>/) and rebuilt from that copy, every
+    value kept; its one-for-all JPG keys become each camera's choice,
+    whatever their value ("auto", the luma's word until now, becomes
+    "default"). At each start, a key the table does not have, or one in
+    another section than its own, is dropped.
+  - check-host.sh: a host test of the table (every default passes its own
+    check, the example reads back as the table) and a check that every key
+    the interface uses is in it.
 - Review of the patches since early November (patch 0549):
   - our JPG of 8 frames takes the menu's white balance on all of its
     frames: it was written into the first four burst requests only, so on

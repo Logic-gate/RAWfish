@@ -175,7 +175,6 @@ for n in 86 108 128 172; do
     install -D -m 644 icons/rawfish-ir-$n.png %{buildroot}%{_datadir}/icons/hicolor/${n}x${n}/apps/rawfish-ir.png
 done
 # Commented reference files; the app copies them next to the real ones at start.
-install -D -m 644 examples/rawfish-ir.conf.example %{buildroot}%{_datadir}/rawfish-ir/examples/rawfish-ir.conf.example
 install -D -m 644 examples/override-hal.example.jsonc %{buildroot}%{_datadir}/rawfish-ir/examples/override-hal.example.jsonc
 # The page in the system Settings app (Settings > Apps > RAWfish-ir).
 install -D -m 644 settings/rawfish-ir.json %{buildroot}%{_datadir}/jolla-settings/entries/rawfish-ir.json

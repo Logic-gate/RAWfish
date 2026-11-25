@@ -31,11 +31,12 @@
 #include <poll.h>     /* poll: notice the app's stdin closing    */
 #include <math.h>     /* fabsf: comparing calibration distances  */
 #include <pthread.h>  /* the stdin hang-up watcher thread         */
-#include "../rawfish-ir-version.h"
+#include "../rawfish-ir-version.h"   /* IR_VERSION, shared with the library  */
 #include "controller.h"
 #include "yuvjpeg.h"
 #include "yuvproc.h"
-#include "../android/exifwrite.h"  /* IR_VERSION, shared with the library  */
+#include "../android/exifwrite.h"  /* the Exif of our JPG                   */
+#include <limits.h>   /* LLONG_MIN: a profile key absent         */
 
 #define OUT_SIZE 32768 /* room for any JSON report (caps lists per-size timings) */
 
@@ -459,7 +460,16 @@ static const ov_field_t k_ov_fields[] = {
     { "touch_focus_off",         0, 1 },                        /* 1: no focus by touch on this camera */
     { "focus_max_diopters",      1, 100 },                      /* the lens' real closest stop (HAL units), below the declared one */
     { "focus_step_percent",      1, 49 },                       /* manual steps above 1 D as a % of the value */
-    { "luma_nr",                 0, 3 },                        /* our JPG's luminance noise filter when the app sends none */
+    /* our JPG's processing by default on this camera (jpg_default_csv;
+     * jpg_method is a word, below; luma_nr is jpg_luma_nr's name until 0.3.11-550) */
+    { "jpg_frames",              1, 8 },                        /* 1, 2, 4, 8 */
+    { "jpg_tile_frames",         2, 8 },                        /* 2, 4, 8 */
+    { "jpg_tile_split",          1, 4 },                        /* 1, 2, 4 */
+    { "jpg_colour_nr",           0, 5 },
+    { "jpg_moire",               0, 4 },
+    { "jpg_luma_nr",             0, 3 },
+    { "jpg_sharpen",             0, 5 },
+    { "luma_nr",                 0, 3 },
     { NULL, 0, 0 }
 };
 /* Keys allowed anywhere in a camera block besides the fields above. */
@@ -467,7 +477,7 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "real_m", "hal_diopters", "cameras",
                                            "vendor_request", "tag", "type", "value", "on",
                                            "shading", "still_template", "session_request",
-                                           "raw_stream", "jpeg_max", "streams", "fps_max", "hidden",
+                                           "raw_stream", "jpeg_max", "streams", "fps_max", "hidden", "jpg_method",
                                            "camera_order",
                                            /* a shipped device profile's own keys */
                                            "match", "make", "models", "raw", "notch", "shading_file",
@@ -1463,7 +1473,7 @@ static void usage(void)
             "                                 a 3x3 .. 9x9 on the colour first (false colour); with n=2..8 the frames are\n"
             "                                 aligned and merged; luma: ours on the luminance, after the merge, averaging\n"
             "                                 what differs by less than 1, 1.5, 2.2 x the noise (none given: the device\n"
-            "                                 profile's luma_nr, else 0); sharpen: ours, 0.5 .. 4 x the fine detail, last)\n"
+            "                                 profile's jpg_luma_nr, else 0); sharpen: ours, 0.5 .. 4 x the fine detail, last)\n"
             "                                [nr=classic|tiles] [split=1|2|4]   (nr=tiles: each tile of a frame aligned\n"
             "                                 on its own before the merge; split=2|4: each frame 1/2 or 1/4 of the pose,\n"
             "                                 the ISO times 2 or 4: less blur, the noise averaged out by the frames)\n"
@@ -2086,9 +2096,58 @@ static int yuv_save_frame(const char *prefix, int k, const struct timespec *now,
 }
 
 /* Our JPG's luminance noise filter when a yuv command gives no luma= (the
- * app sends none until the user picks a level): the device profile's
- * per-camera "luma_nr" (0..3), read at the stream's start; 0 without one. */
+ * app always sends one; for a command typed by hand): this camera's default
+ * (jpg_default_csv: the device profile's "jpg_luma_nr", else 0), read at
+ * the stream's start. */
 static int g_luma_default = 0;
+
+/* One integer of camera `id`'s device profile (the user's override-hal.json
+ * first, then the shipped profile), when it is one of `allowed`; `def` when
+ * the key is absent, and when it is not (said in the log). */
+static int profile_choice(const char *id, const char *key, const int *allowed, int n, int def)
+{
+    long long v = read_override_i64(id, key, LLONG_MIN);
+    char msg[200];
+    int i;
+    if (v == LLONG_MIN) return def;
+    for (i = 0; i < n; ++i) if (v == allowed[i]) return (int)v;
+    snprintf(msg, sizeof msg, "device profile: %s = %lld for camera %s is not one of its values -- ignored, %d kept", key, v, id, def);
+    ov_log(msg);
+    return def;
+}
+
+/* Our JPG's processing by default on camera `id` (0.3.11, patch 0551), into
+ * csv as "method,frames,tile_frames,tile_split,colour,moire,luma,sharpen":
+ * the device profile's per-camera keys jpg_method (classic | tiles),
+ * jpg_frames (1 2 4 8), jpg_tile_frames (2 4 8), jpg_tile_split (1 2 4),
+ * jpg_colour_nr (0..5), jpg_moire (0..4), jpg_luma_nr (0..3; luma_nr until
+ * 0.3.11-550) and jpg_sharpen (0..5); each absent, or not one of its
+ * values, is the app's own default (JPG_DEFAULT_BUILTIN in the engine:
+ * classic,1,4,1,2,0,0,3). The engine reports it in the caps line: the
+ * menu's defaults, what "default" means for this camera in rawfish-ir.conf.
+ * Returns the luma level (for g_luma_default). */
+static int jpg_default_csv(const char *id, char *csv, size_t n)
+{
+    static const int k_frames[] = { 1, 2, 4, 8 }, k_tile_frames[] = { 2, 4, 8 }, k_split[] = { 1, 2, 4 };
+    static const int k_0_5[] = { 0, 1, 2, 3, 4, 5 };
+    char method[16] = "classic", msg[200];
+    int luma;
+    if (ov_string(id, "jpg_method", method, sizeof method) && strcmp(method, "classic") && strcmp(method, "tiles")) {
+        snprintf(msg, sizeof msg, "device profile: jpg_method \"%s\" for camera %s is not classic or tiles -- ignored", method, id);
+        ov_log(msg);
+        snprintf(method, sizeof method, "classic");
+    }
+    luma = profile_choice(id, "jpg_luma_nr", k_0_5, 4, profile_choice(id, "luma_nr", k_0_5, 4, 0));
+    snprintf(csv, n, "%s,%d,%d,%d,%d,%d,%d,%d", method,
+             profile_choice(id, "jpg_frames", k_frames, 4, 1),
+             profile_choice(id, "jpg_tile_frames", k_tile_frames, 3, 4),
+             profile_choice(id, "jpg_tile_split", k_split, 3, 1),
+             profile_choice(id, "jpg_colour_nr", k_0_5, 6, 2),
+             profile_choice(id, "jpg_moire", k_0_5, 5, 0),
+             luma,
+             profile_choice(id, "jpg_sharpen", k_0_5, 6, 3));
+    return luma;
+}
 
 static int cmd_yuv(void *bridge, char **save, char *out)
 {
@@ -3011,18 +3070,16 @@ int main(int argc, char **argv)
                 long long em = read_override_checked(argv[2], "observed_exposure_max_ns");
                 if (se && em > 0) { se((int64_t)em, out, sizeof out); emit(out); }
             }
-            {   /* our JPG's luminance filter when the app asks none (device profile "luma_nr";
-                 * absent: 0), and told to the engine for the caps line (the menu shows it) */
-                typedef int (*set_luma_fn)(int);
-                set_luma_fn sl = (set_luma_fn)a_dlsym(bridge, "indraw_set_luma_nr_default");
-                long long ln = read_override_checked(argv[2], "luma_nr");
-                g_luma_default = ln > 0 ? (int)ln : 0;
-                if (sl) sl(g_luma_default);
-                if (g_luma_default > 0) {
-                    char m[96];
-                    snprintf(m, sizeof m, "luma_nr (device profile) for camera %s: %d", argv[2], g_luma_default);
-                    log_line("# ", m);
-                }
+            {   /* our JPG's processing by default on this camera (device profile
+                 * jpg_*; absent: the app's own), told to the engine for the
+                 * caps line (the menu's defaults) -- jpg_default_csv */
+                typedef int (*set_jd_fn)(const char *);
+                set_jd_fn sj = (set_jd_fn)a_dlsym(bridge, "indraw_set_jpg_default");
+                char csv[48], m[200];
+                g_luma_default = jpg_default_csv(argv[2], csv, sizeof csv);
+                if (sj) sj(csv);
+                snprintf(m, sizeof m, "jpg defaults for camera %s (method,frames,tile_frames,split,colour,moire,luma,sharpen): %s", argv[2], csv);
+                log_line("# ", m);
             }
             {   /* a pause before each capture (device profile; absent: none) */
                 typedef int (*set_delay_fn)(int);

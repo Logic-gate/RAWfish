@@ -304,13 +304,28 @@ cause can be looked for and a shipped profile written.
   of its rows or more never written) is said in the photo's reply:
   `"damaged":"N of M rows unwritten"` (a stack: `"damaged_frames":N`).
 
-- `"luma_nr": 0..3` -- the luminance noise filter our JPG gets on this
-  camera while the user has not picked one in the menu ("Luma NR"; the
-  menu's green ring shows it). 0 (the default) keeps the grain to the frame
-  merge alone; 1..3 average, after the merge, the neighbours that differ by
-  less than 1, 1.5 or 2.2 times the noise measured. The Xperia 10 III's
-  profile sets 2 on its four cameras: its small pixels are read one by one,
-  and its JPGs were grainy at ISO 1000 even from 4 frames.
+- Our JPG's processing by default on this camera (0.3.11, patch 0551):
+  what "default" means for it in `rawfish-ir.conf` (its section
+  `[camera_N]`) and the value the menu's green ring marks, while the user has
+  not chosen one for this camera. Each key absent, or not one of its
+  values, is the app's own default (in brackets):
+  - `"jpg_method": "classic" | "tiles"` -- the frames merged whole, or by
+    tiles (classic);
+  - `"jpg_frames": 1 | 2 | 4 | 8` -- the classic merge's frames (1);
+  - `"jpg_tile_frames": 2 | 4 | 8` -- the tile merge's frames (4);
+  - `"jpg_tile_split": 1 | 2 | 4` -- the tile merge: each frame 1, 1/2 or
+    1/4 of the pose (1);
+  - `"jpg_colour_nr": 0..5` -- the colour noise filter (2);
+  - `"jpg_moire": 0..4` -- the false-colour filter (0);
+  - `"jpg_luma_nr": 0..3` -- the luminance noise filter (0): 1..3
+    average, after the merge, the neighbours that differ by less than 1,
+    1.5 or 2.2 times the noise measured. The Xperia 10 III's profile sets
+    2 on its four cameras: its small pixels are read one by one, and its
+    JPGs were grainy at ISO 1000 even from 4 frames. (`"luma_nr"`, its
+    name until 0.3.11-550, is still read.)
+  - `"jpg_sharpen": 0..5` -- the sharpening (3).
+  The log says the defaults in force at each start ("jpg defaults for
+  camera N").
 
 The shipped profile of the Xperia 10 III used `"streams": "exclusive"` on
 both cameras until 0.3.9-495: the driver's deaths came from the binned
