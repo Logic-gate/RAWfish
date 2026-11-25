@@ -1118,6 +1118,22 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <translation>Profil de l'appareil : JPEG ou RAW, une session chacun</translation>
     </message>
     <message>
+        <source>Photo NOT saved: storage full</source>
+        <translation>Photo NON enregistrée : mémoire pleine</translation>
+    </message>
+    <message>
+        <source>Photo NOT saved</source>
+        <translation>Photo NON enregistrée</translation>
+    </message>
+    <message>
+        <source>Storage full: %1 MB left</source>
+        <translation>Mémoire pleine : %1 Mo restants</translation>
+    </message>
+    <message>
+        <source>Storage almost full: %1 MB left</source>
+        <translation>Mémoire presque pleine : %1 Mo restants</translation>
+    </message>
+    <message>
         <location line="+14" />
         <source>RAW failed on this camera: back to JPEG</source>
         <translation>Le RAW a échoué sur cette caméra : retour en JPEG</translation>

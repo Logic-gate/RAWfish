@@ -1111,6 +1111,22 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Photo NOT saved: storage full</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Photo NOT saved</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Storage full: %1 MB left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Storage almost full: %1 MB left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+14"/>
         <source>RAW failed on this camera: back to JPEG</source>
         <translation type="unfinished"></translation>

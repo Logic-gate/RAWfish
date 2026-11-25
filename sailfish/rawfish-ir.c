@@ -237,13 +237,40 @@ static void log_reply(const char *json)
 /* Prints one JSON result on stdout and copies it to the log. */
 static int g_streaming = 0;   /* 1 in stream mode: stdout carries binary frames */
 
+/* The last reply, for shot_failed_event: a photo that failed is said to the
+ * interface, with its reason, from what its command answered. */
+static char g_last_reply[512];
 static void emit(const char *json)
 {
+    snprintf(g_last_reply, sizeof g_last_reply, "%s", json);
     if (!g_streaming) {                         /* normal: JSON on stdout   */
         puts(json);
         fflush(stdout);                         /* readers see it at once   */
     }
     log_reply(json);                            /* to the log, as its command's class says */
+}
+
+/* A photo the interface asked for failed: "shotfailed full=0|1 why=WORDS"
+ * to the interface, so that it says so on the screen (a photo silently not
+ * saved, a full memory card above all, was seen only in the log). full=1
+ * when the storage is full (ENOSPC: "No space left on device"). WORDS: the
+ * reply's error, spaces as '_' (the event's fields are split on spaces). */
+static void shot_failed_event(void *bridge)
+{
+    typedef int (*emit_fn)(const char *);
+    emit_fn em = (emit_fn)a_dlsym(bridge, "indraw_emit");
+    char why[160] = "", ev[220];
+    const char *e = strstr(g_last_reply, "\"error\":\"");
+    int full = strstr(g_last_reply, "No space left") != NULL || strstr(g_last_reply, "\"status\":28") != NULL;
+    size_t k = 0;
+    if (!em) return;
+    if (e) {
+        e += 9;
+        while (*e && *e != '"' && k + 1 < sizeof why) { why[k++] = (*e == ' ' || *e == '\t') ? '_' : *e; ++e; }
+        why[k] = '\0';
+    }
+    snprintf(ev, sizeof ev, "shotfailed full=%d why=%s\n", full, why[0] ? why : "unknown");
+    em(ev);
 }
 
 /* Resolves the device-profiles directory, honouring the Sailjail sandbox.
@@ -2290,7 +2317,10 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     free(jpg);
     free(dn.y); free(dn.u); free(dn.v);
     if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]);
-    if (rc) { snprintf(out, OUT_SIZE, "{\"ok\":false,\"stage\":\"yuv\",\"error\":\"compress or write failed\",\"status\":%d}", rc); emit(out); return 1; }
+    /* rc: an errno from the write (ENOSPC: the storage full), else a
+     * compression failure; the reason is said, shot_failed_event reads it */
+    if (rc) { snprintf(out, OUT_SIZE, "{\"ok\":false,\"stage\":\"yuv\",\"error\":\"%s\",\"status\":%d}",
+                       rc > 0 ? strerror(rc) : "compress or write failed", rc); emit(out); return 1; }
     {
         char *end = strrchr(cap, '}');
         if (end) *end = '\0';
@@ -3138,13 +3168,16 @@ int main(int argc, char **argv)
                     log_command("c> ", cap);
                     ccmd = strtok_r(cap, " \t", &csave);
                     if (!ccmd) continue;
+                    int failed;
                     ctl_engine_busy(1);
-                    if (!strcmp(ccmd, "jpeg")) failures += cmd_jpeg(jpeg, &csave, out);
-                    else if (!strcmp(ccmd, "raw")) failures += cmd_raw(bridge, raw, &csave, out);
-                    else if (!strcmp(ccmd, "stack")) failures += cmd_stack(stack, &csave, out);
-                    else if (!strcmp(ccmd, "burst")) failures += cmd_burst(bf, &csave, out);
-                    else if (!strcmp(ccmd, "yuv")) failures += cmd_yuv(bridge, &csave, out);
-                    else { log_line("# ", "controller: unknown capture line (not run)"); ++failures; }
+                    if (!strcmp(ccmd, "jpeg")) failed = cmd_jpeg(jpeg, &csave, out);
+                    else if (!strcmp(ccmd, "raw")) failed = cmd_raw(bridge, raw, &csave, out);
+                    else if (!strcmp(ccmd, "stack")) failed = cmd_stack(stack, &csave, out);
+                    else if (!strcmp(ccmd, "burst")) failed = cmd_burst(bf, &csave, out);
+                    else if (!strcmp(ccmd, "yuv")) failed = cmd_yuv(bridge, &csave, out);
+                    else { log_line("# ", "controller: unknown capture line (not run)"); failed = 1; }
+                    failures += failed;
+                    if (failed) shot_failed_event(bridge);   /* said on the screen, not only in the log */
                     ctl_engine_busy(0);
                 }
                 continue;

@@ -39,6 +39,13 @@ While the loupe is on, the menu and gallery swipes are off. After each
 touch or hold, a line recalls the rule for two seconds: "touch: focus · hold:
 exposure here".
 
+**Photo not saved.** A red box in the middle, "Photo NOT saved", says
+that a photo could not be taken or saved: with "storage full" the memory
+(phone or card) has no room left; otherwise the engine's reason is under
+it. A touch closes it. At the top, "Storage almost full: N MB left" shows
+while less than 300 MB are left where the photos go (a DNG takes about
+25 MB, a JPG 3 MB), in red under 30 MB.
+
 ### The deck
 
 | Part | What it is |
@@ -99,6 +106,9 @@ A touch on FOCUS showing a distance hands the focus back to the camera
 the frame. The distance stays after a photo, until you hand it back. On a
 camera whose profile says a touch cannot focus it (the JP2's 18 mm), only
 the volume keys take it.
+
+A touch while a search is still running starts a new one on the new
+point (the first is cancelled properly before).
 
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").

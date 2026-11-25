@@ -15,6 +15,22 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- A photo not saved is said on the screen (patch 0547): a red box in
+  the middle, "Photo NOT saved: storage full" when the memory is full,
+  otherwise "Photo NOT saved" and the engine's reason; at the top a line
+  when less than 300 MB are left where the photos go. A failed photo was
+  seen only in the log. The JPG's write error now says its reason
+  (ENOSPC: "No space left on device").
+- The white flash of our JPG of several frames comes when the sensor has
+  taken the last frame, not once the frames are copied: about 1 s sooner
+  with 8 frames on the JP2 (0.3 s of exposures, 0.9 s of copies).
+- A touch on a point while a focus search still runs works: the engine
+  now cancels the search and waits for the HAL to show it ended (at most
+  0.4 s) before starting the new one. Both sent at once, the JP2's HAL
+  started the second search and never ended it, eight times out of eight
+  (log of 25 Nov 2026).
+- The first photo of a session no longer says "lens NOT SETTLED" in the
+  log when no distance was waited for (0542).
 - A fluid viewfinder at 1/4 s and 1/2 s, and at most 1/15 s chosen by the
   app (patch 0545). A speed set by hand from 1/4 s is now previewed as a
   Σ is: one frame of the same exposure (time x ISO), 1/10 s by default

@@ -663,6 +663,11 @@ static struct {
      * continuous AF mode, put back by focus_thaw. */
     int focus_frozen;
     uint8_t frozen_af_mode;
+    /* A YUV burst: results still to come before its "captured" (the
+     * flash): sent with the LAST frame's result, when the sensor has
+     * exposed every frame, not once they are all copied (on the JP2 the
+     * copies of 8 frames take 0.9 s after a 0.3 s burst). 0: none. */
+    int burst_results_left;
     int device_error;                       /* 0, or the onError code / -1       */
     AImage *jpeg_image;                     /* latest JPEG waiting to be saved   */
     AImage *yuv_image;                      /* latest full-resolution YUV frame  */
@@ -2709,6 +2714,9 @@ static void on_capture_completed(void *ctx, ACameraCaptureSession *s,
     if (g.r_meta) ACameraMetadata_free(g.r_meta);
     g.r_meta = ACameraMetadata_copy(res);      /* whole result, for the RAW sidecar */
     g.result_ready = 1;                        /* publish                       */
+    /* a burst: its last frame's result, every frame exposed: the flash owed */
+    if (g.burst_results_left > 0 && --g.burst_results_left == 0)
+        g.captured_owed = "captured kind=yuv\n";
     pthread_cond_broadcast(&g.cond);
     pthread_mutex_unlock(&g.lock);
     captured_now();                            /* the frame is read: "you may move" */
@@ -3882,6 +3890,8 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     pthread_mutex_lock(&g.lock);                  /* reset callback-written state  */
     g.preview_frames = 0;
     g.device_error = 0;
+    g.lens_settle = -1;                          /* no wait for a distance made yet (lens_note): at 0, the
+                                                    first photo of a session said "NOT SETTLED" (25 Nov 2026) */
     pthread_mutex_unlock(&g.lock);
 
     t0 = now_ms();
@@ -7045,7 +7055,27 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
      * ignore a START while FOCUSED_LOCKED), then START. No AE precapture: with
      * AE on, the HAL re-meters its region by itself. */
     if (do_af == 1 && !continuous) {
+        /* A touch while a search still runs (two touches half a second
+         * apart): with CANCEL and START sent back to back, the JP2's HAL
+         * started the new search and never ended it -- ACTIVE_SCAN to the
+         * end, the controller giving up at 3 s (log of 25 Nov 2026, 13:26
+         * to 13:27, eight times out of eight; one touch at a time always
+         * ended). So when a search is under way, CANCEL alone first, and
+         * START only once a result shows it ended (INACTIVE), at most
+         * 400 ms. Without a search, as before. */
+        int scanning;
+        pthread_mutex_lock(&g.lock);
+        scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_ACTIVE_SCAN ||
+                   g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
+        pthread_mutex_unlock(&g.lock);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+        if (scanning) {
+            struct timespec cdl = deadline_in(400);
+            pthread_mutex_lock(&g.lock);
+            while (g.live_af != ACAMERA_CONTROL_AF_STATE_INACTIVE && !g.device_error)
+                if (pthread_cond_timedwait(&g.cond, &g.lock, &cdl) == ETIMEDOUT) break;
+            pthread_mutex_unlock(&g.lock);
+        }
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
     /* The sun removed: "meter again, now", on the whole-image zone written
@@ -8992,13 +9022,14 @@ static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, in
     g.yuv_qn = 0; g.yuv_burst_on = 1;
     g.capture_failed = 0; g.result_ready = 0;
     g.captured_owed = NULL;
+    g.burst_results_left = n;                    /* the flash at the n-th result (on_capture_completed) */
     if (with_dng && g.raw_image) { AImage_delete(g.raw_image); g.raw_image = NULL; }
     pthread_mutex_unlock(&g.lock);
     t0 = now_ms();
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, n, reqs, NULL);
     if (with_dng) ACaptureRequest_removeTarget(reqs[n - 1], g.raw_target);
     if (st != ACAMERA_OK) {
-        pthread_mutex_lock(&g.lock); g.yuv_burst_on = 0; pthread_mutex_unlock(&g.lock);
+        pthread_mutex_lock(&g.lock); g.yuv_burst_on = 0; g.burst_results_left = 0; pthread_mutex_unlock(&g.lock);
         if (with_dng) { meter_release(); g.yuv_dng_path[0] = '\0'; }
         return fail(out, out_size, IR_ECAPTURE, "yuv", "capture refused", st);
     }
@@ -9031,8 +9062,11 @@ static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, in
     g.yuv_burst_on = 0;
     for (k = 0; k < g.yuv_qn; ++k) AImage_delete(g.yuv_q[k]);
     g.yuv_qn = 0;
+    /* The flash, if the last result has not sent it already (a result lost,
+     * a frame failed): now at the latest, as before. */
+    if (g.burst_results_left > 0) { g.burst_results_left = 0; g.captured_owed = "captured kind=yuv\n"; }
     pthread_mutex_unlock(&g.lock);
-    emit_event("captured kind=yuv\n");
+    captured_now();
     if (with_dng) {
         /* The RAW of the last frame and ITS result (same timestamp): a DNG
          * without its own metadata would lie, so it is skipped instead. */

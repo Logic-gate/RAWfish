@@ -1940,6 +1940,50 @@ ApplicationWindow {
                     onTextChanged: if (text !== "") limitsTimer.restart()
                     Timer { id: limitsTimer; interval: 6000 }
                 }
+                // A photo not taken or not saved (the engine's "shotfailed"):
+                // said big and red in the middle, 8 s, so that it cannot be
+                // missed -- a full memory was seen only in the log before.
+                Rectangle {
+                    id: shotFailNotice
+                    property string why: ""
+                    property bool full: false
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 2 * Theme.horizontalPageMargin, shotFailText.implicitWidth + 2 * Theme.paddingLarge)
+                    height: shotFailText.implicitHeight + 2 * Theme.paddingLarge
+                    radius: Theme.paddingSmall
+                    color: "#c00000"
+                    visible: shotFailTimer.running
+                    z: 50
+                    Label {
+                        id: shotFailText
+                        anchors.centerIn: parent
+                        width: Math.min(implicitWidth, shotFailNotice.parent.width - 2 * Theme.horizontalPageMargin - 2 * Theme.paddingLarge)
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        color: "white"; font.bold: true; font.pixelSize: Theme.fontSizeLarge
+                        text: shotFailNotice.full ? qsTr("Photo NOT saved: storage full")
+                                                  : qsTr("Photo NOT saved") + (shotFailNotice.why !== "" ? "\n" + shotFailNotice.why : "")
+                    }
+                    Timer { id: shotFailTimer; interval: 8000 }
+                    MouseArea { anchors.fill: parent; onClicked: shotFailTimer.stop() }   // a touch dismisses it
+                    Connections {
+                        target: viewfinder
+                        onShotFailed: { shotFailNotice.why = why; shotFailNotice.full = full; shotFailTimer.restart() }
+                    }
+                }
+                // Little space left where the photos go: said at the top as long
+                // as it lasts (a DNG is about 25 MB, a JPG 3 MB).
+                Label {
+                    id: lowSpaceNotice
+                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: Theme.paddingLarge * 3 }
+                    visible: viewfinder.freeMb >= 0 && viewfinder.freeMb < 300
+                    text: viewfinder.freeMb < 30 ? qsTr("Storage full: %1 MB left").arg(viewfinder.freeMb)
+                                                 : qsTr("Storage almost full: %1 MB left").arg(viewfinder.freeMb)
+                    color: viewfinder.freeMb < 30 ? "#ff4040" : "#ffb060"
+                    font.bold: true; font.pixelSize: Theme.fontSizeMedium
+                    style: Text.Outline; styleColor: "black"
+                    z: 50
+                }
                 // Exclusive streams: the RAW session died at its first frame;
                 // the viewfinder came back as JPEG, and the type follows.
                 Label {

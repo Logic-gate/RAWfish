@@ -150,6 +150,10 @@ class IndrawPreview : public QQuickItem
     /* "" when the folders in use are the ones asked for; otherwise why not
      * (a memory card not mounted), in English, for the log. */
     Q_PROPERTY(QString storageNote READ storageNote NOTIFY outputChanged)
+    /* The space left where the photos go (the smaller of the JPG and the
+     * DNG folders), in MB; -1 unknown. Read at each engine start and after
+     * each file written: the screen warns when it runs low. */
+    Q_PROPERTY(int freeMb READ freeMb NOTIFY freeSpaceChanged)
     /* True between the stack command and its stack_done: the engine is kept
      * running through inactivity (screen off) until the stack ends. */
     Q_PROPERTY(bool stacking READ stacking NOTIFY stackingChanged)
@@ -286,6 +290,7 @@ public:
     QString jpgDir() const;
     QString dngDir() const;
     QString storageNote() const { return m_storageNote; }
+    int freeMb() const { return m_freeMb; }
     QString capturePrefix() const;
 
     QVariantMap caps() const;
@@ -408,6 +413,10 @@ signals:
     /* Emitted when the engine reports a capture finished (SF2M "captured"),
      * before the file is written -- the UI flashes on this. */
     void captureFinished();
+    /* A photo the engine could not take or save ("shotfailed"): why, in the
+     * engine's words, and full = the storage is full. */
+    void shotFailed(const QString &why, bool full);
+    void freeSpaceChanged();
     /* Emitted when the engine reports a file on disk (SF2M "written"):
      * kind = jpeg | dng | raw16 | stack, path = the file. */
     void fileWritten(const QString &kind, const QString &path);
@@ -558,6 +567,8 @@ private:
     QString m_jpgDir, m_dngDir, m_prefix;   /* output settings in force         */
     QString m_jpgWant, m_dngWant;  /* the folders asked for (setOutput), before the card check */
     QString m_storageNote;         /* see storageNote                            */
+    int m_freeMb = -1;             /* see freeMb                                 */
+    void updateFreeSpace();        /* m_freeMb from the folders in use           */
     /* m_jpgDir / m_dngDir from m_jpgWant / m_dngWant: each asked folder, or
      * the default one when it is on a memory card that is not mounted now.
      * Sets m_storageNote. True when either folder changed. */

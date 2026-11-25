@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <QSettings>
 #include <QRegularExpression>
+#include <QStorageInfo>
 static QString settingsPath();   /* defined with the settings code below */
 #include <QFile>
 #include <QJsonDocument>
@@ -1011,6 +1012,22 @@ static QVariantList intList(const QByteArray &csv)
     return l;
 }
 
+/* The space left for the photos: the smaller of the two folders' volumes
+ * (they may be on the phone and on a memory card). */
+void IndrawPreview::updateFreeSpace()
+{
+    qint64 least = -1;
+    for (const QString &dir : { m_jpgDir, m_dngDir }) {
+        if (dir.isEmpty()) continue;
+        QStorageInfo si(dir);
+        if (!si.isValid() || !si.isReady()) continue;
+        const qint64 b = si.bytesAvailable();
+        if (b >= 0 && (least < 0 || b < least)) least = b;
+    }
+    const int mb = least < 0 ? -1 : int(least / (1024 * 1024));
+    if (mb != m_freeMb) { m_freeMb = mb; emit freeSpaceChanged(); }
+}
+
 void IndrawPreview::parseEvent(const QByteArray &line)
 {
     QByteArray name;
@@ -1053,7 +1070,16 @@ void IndrawPreview::parseEvent(const QByteArray &line)
             convertDngPreview(path, f.value("orientation").toInt());
         emit fileWritten(kind, path);
         if (m_shotPending && kind != QLatin1String("preview")) m_procTimer->start(600);
+        if (kind != QLatin1String("preview")) updateFreeSpace();
+    } else if (name == "shotfailed") {
+        /* the photo is lost: said on the screen, and the busy dots stop */
+        QString why = QString::fromUtf8(f.value("why"));
+        why.replace(QLatin1Char('_'), QLatin1Char(' '));
+        updateFreeSpace();
+        emit shotFailed(why, f.value("full").toInt() != 0);
+        if (m_shotPending) m_procTimer->start(600);
     } else if (name == "caps") {
+        updateFreeSpace();
         /* The engine gives n/d for the EV step; the UI wants EV per step. */
         const QList<QByteArray> step = f.value("ev_step", "0/1").split('/');
         const double num = step.value(0).toDouble();
