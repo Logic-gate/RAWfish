@@ -236,7 +236,7 @@ Page {
 
             TextSwitch {
                 text: qsTr("JPG processing in the camera menu")
-                description: qsTr("Shows four columns in the advanced menu: Frames (1, 2 or 4 merged), Colour NR, Moiré and Sharpen, RAWfish-ir's processing of the JPG. Otherwise they are set in rawfish-ir.conf.")
+                description: qsTr("Shows RAWfish-ir's processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Per frame, Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.")
                 checked: menuGroup.processingColumns
                 onCheckedChanged: menuGroup.processingColumns = checked
             }

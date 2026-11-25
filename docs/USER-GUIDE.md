@@ -288,16 +288,19 @@ Press both volume keys at once: the screen is saved to
 
 | Setting | Meaning |
 |---|---|
+| Also save a DNG with each JPG | a DNG of the same exposure, with the same file name, in the DNG folder; not with the camera's own JPEG, a Σ (DNG only) or a phone that cannot take both at once |
 | File name prefix | the start of every file name (`photo` by default): letters, digits, `-`, `_`, not starting with `-`. Empty: no prefix, the files are named by the date alone (`YYYYMMDD_HHMMSS.jpg`). The milliseconds (`_mmm`) are added when two photos fall in the same second, and always for the photos of a bracket or a burst (x3, x5, x7) |
 | Storage | the phone's memory or a memory card: moves both folders below to `Pictures/RAWfish-ir` there. If the card is not mounted when the camera starts, the photos go to `~/Pictures/RAWfish-ir` (the log says so) and back to the card once it is there again |
 | JPEG folder, DNG folder | where the pictures go; under `~/Pictures` or on a memory card (`/run/media/<user>/<card>/...`), the only places the app may write |
 | Reset to defaults | the prefix and the two folders (back to the phone's memory) |
-| Scenes in the camera menu (not yet implemented) | shows the Scene column in the menu (off by default) |
 | Start in manual focus and exposure | at start, manual focus at the last distance and both wheels pinned at the last ISO and speed (advanced mode; off by default) |
 | Mode at start | simple, advanced, or as left (the last mode used) |
-| Viewfinder processing in the camera menu | shows the "Vf noise" and "Vf sharpen" columns |
+| JPG processing in the camera menu | shows RAWfish-ir's processing of the JPG in the advanced menu: Denoise, Frames, Per frame, Colour NR, Moiré, Luma NR and Sharpen (otherwise set in `rawfish-ir.conf`) |
 | Focus calibration in the camera menu | shows the "Focus cal." column |
+| Calibrate the lens shading | opens the lens-shading assistant at the next start (a white translucent diffuser on the lens, an even light, about a minute) |
 | Create the device profile files | RAWfish-ir writes them the next time it opens (the date is shown once done) |
+| Detailed log | the log keeps every command and reply (normally only the starts, the photos and the errors), the photos' reports carry the histograms, and our JPG photos carry their settings in their file names; for reproducing a problem |
+| Reset the camera settings | every camera setting and `rawfish-ir.conf` back to their defaults when RAWfish-ir next opens; the file is kept as `rawfish-ir.conf.bak`; the settings of this page are not changed |
 
 Changes take effect the next time the camera starts.
 

@@ -202,8 +202,8 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>Shows four columns in the advanced menu: Frames (1, 2 or 4 merged), Colour NR, Moiré and Sharpen, RAWfish-ir&apos;s processing of the JPG. Otherwise they are set in rawfish-ir.conf.</source>
-        <translation>Affiche quatre colonnes dans le menu avancé : Images (1, 2 ou 4 fusionnées), Bruit coul., Moiré et Netteté, le traitement du JPG par RAWfish-ir. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
+        <source>Shows RAWfish-ir&apos;s processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Per frame, Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.</source>
+        <translation>Affiche le traitement du JPG par RAWfish-ir dans le menu avancé : Débruitage (classique ou tuiles), Images (1 à 8 fusionnées), Pose/image, Bruit coul., Moiré, Bruit lum. et Netteté. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
     </message>
     <message>
         <location line="+40"/>

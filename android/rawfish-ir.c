@@ -1548,8 +1548,10 @@ static void vf_meter(const vf_img_t *im, const int32_t crop[4], int iso, int64_t
      * is known (looked up by timestamp), else 0 -- the reader then uses the
      * live values. Tagging the measure with its own pair lets the exposure
      * loop know at once whether a frame already shows the pair it sent. */
+    pthread_mutex_lock(&g.lock);                 /* read by a capture's report (yuv_check_json) */
     g.vf_last_mean = sum / wsum; g.vf_last_clip_hi = 100.0 * hi / n;   /* for a capture's report: viewfinder vs photo */
     memcpy(g.vf_last_hist, hist, sizeof g.vf_last_hist);
+    pthread_mutex_unlock(&g.lock);
     p += snprintf(p, (size_t)(end - p), "vfmeter mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f iso=%d exp_ns=%lld hist=",
                   sum / wsum, 100.0 * lo / n, 100.0 * hi / n,
                   m_n ? 100.0 * m_lo / m_n : 0.0, m_n ? 100.0 * m_hi / m_n : 0.0, iso, (long long)exp_ns);
@@ -2568,7 +2570,9 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     if (wsum <= 0 || n == 0) return;
     for (c = 0; c < 3; ++c) for (x = 0; x < 64; ++x) if (hist[c][x] > peak) peak = hist[c][x];
     for (c = 0; c < 3; ++c) for (x = 0; x < 64; ++x) if (shist[c][x] > speak) speak = shist[c][x];
+    pthread_mutex_lock(&g.lock);                 /* read by the RAW's report (indraw_raw_impl) */
     memcpy(g.meter_last_hist, hist, sizeof g.meter_last_hist);   /* for a DNG's report: meter vs photo */
+    pthread_mutex_unlock(&g.lock);
 
     p += snprintf(p, (size_t)(end - p),
                   "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f zclip=%.3f zlost=%.3f hist=",
@@ -5915,8 +5919,12 @@ report:
     if (vres[0]) jw_add(&w, "\"vendor_results\":{%s},", vres);
     if (chk_ok) {   /* meter vs photo (computed above, while the image was ours) */
         int c, i;
+        long mh[3][64];                          /* the meter's, copied under the lock (its thread writes it) */
+        pthread_mutex_lock(&g.lock);
+        memcpy(mh, g.meter_last_hist, sizeof mh);
+        pthread_mutex_unlock(&g.lock);
         jw_add(&w, "\"check\":{\"meter_hist\":\"");
-        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", g.meter_last_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
+        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", mh[c][i]); if (c < 2) jw_add(&w, ";"); }
         jw_add(&w, "\",\"photo_hist\":\"");
         for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", chk_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
         jw_add(&w, "\",\"black\":%.1f,\"white\":%d},", black, white);
@@ -7043,6 +7051,9 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         af_all[na++] = g.preview_request; af_all[na++] = g.trigger_request; af_all[na++] = g.still_request;
         if (g.raw_request) af_all[na++] = g.raw_request;
         if (g.meter_request) af_all[na++] = g.meter_request;
+        /* our JPG's request: a tap wrote its zone there too (above); until
+         * patch 0549 it kept the old point's zone after a clear */
+        if (g.yuv_request) af_all[na++] = g.yuv_request;
         /* the template's own zone, written explicitly, as for the exposure */
         for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 5, g.tpl_af_regions);
         zoom_af_region();                               /* cleared while zoomed: the middle third */
@@ -7660,7 +7671,7 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
     if (g.yuv_request) all[n++] = g.yuv_request;   /* our JPEG is a finished photo: it follows the zoom (a DNG does not) */
-    /* ... and so does our JPEG of 2 or 4 merged frames, taken with its own
+    /* ... and so does our JPEG of several merged frames (2 to 8), taken with its own
      * requests (one per frame, indraw_yuv_burst): they were left out, so a
      * multi-frame JPG came out unzoomed while its Exif said zoomed (found
      * by the user, 12 Nov). (Its DNG is the RAW stream: full frame anyway.) */
@@ -7686,21 +7697,25 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     return IR_OK;
 }
 
-/* Adds our JPEG's capture requests (the YUV photo, and the four of a
- * merged 2- or 4-frame JPG) to a list of requests a setting is written
- * into. They are reusable requests made once at the open, like the HAL
+/* Adds our JPEG's capture requests (the YUV photo, and the up to
+ * YUV_BURST_MAX of a JPG of several merged frames) to a list of requests
+ * a setting is written into. They are reusable requests made once at the open, like the HAL
  * JPEG's still_request: a setting written into the preview only reaches
  * them if it is written there too. Up to 0.3.10-519 the white balance was
  * not: on the JP2 (MediaTek) the photo followed the
  * viewfinder anyway, the HAL applying its current white to every capture;
  * on the Xperia 10 III (Qualcomm), which applies each request's own
  * settings, our JPG kept the automatic white whatever the menu said
- * (23 Nov 2026). `all` must have room for 5 more. */
+ * (23 Nov 2026). `all` must have room for YUV_REQS more. Until patch 0549
+ * only the first four burst requests were added: since the JPG of 8
+ * frames (0.3.11), its frames 5 to 8 kept the automatic white on the
+ * Xperia 10 III. */
+#define YUV_REQS (1 + YUV_BURST_MAX)
 static void add_yuv_requests(ACaptureRequest **all, int *n)
 {
     int i;
     if (g.yuv_request) all[(*n)++] = g.yuv_request;
-    for (i = 0; i < 4; ++i) if (g.yuv_burst_req[i]) all[(*n)++] = g.yuv_burst_req[i];
+    for (i = 0; i < YUV_BURST_MAX; ++i) if (g.yuv_burst_req[i]) all[(*n)++] = g.yuv_burst_req[i];
 }
 
 /* White balance (JPEG and preview; the RAW stays linear, its as-shot
@@ -7711,7 +7726,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size);
 static int wb_wait_awb(void);
 IR_API int indraw_wb(int mode, char *out, size_t out_size)
 {
-    ACaptureRequest *reqs[1], *all[10];   /* 5 HAL requests + our JPEG's 5 */
+    ACaptureRequest *reqs[1], *all[5 + YUV_REQS];   /* 5 HAL requests + our JPEG's (add_yuv_requests) */
     uint8_t u8;
     int n = 0, i;
     camera_status_t st;
@@ -7796,7 +7811,7 @@ IR_API int indraw_wb_manual(int shift, int tint, char *out, size_t out_size)
  * base fixed and no shift, back to the HAL's AWB. */
 static int wb_apply(int shift, int tint, char *out, size_t out_size)
 {
-    ACaptureRequest *reqs[1], *all[10];   /* 5 HAL requests + our JPEG's 5 */
+    ACaptureRequest *reqs[1], *all[5 + YUV_REQS];   /* 5 HAL requests + our JPEG's (add_yuv_requests) */
     float gains[4] = { 1, 1, 1, 1 };
     uint8_t u8, cc;
     int n = 0, i;
@@ -8738,9 +8753,17 @@ static void yuv_check_json(jw_t *w, const ir_yuv_t *f0)
             sum += pow(rgb3[1] / 255.0, 2.2); cnt++;
         }
     if (!cnt) return;
-    jw_add(w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
-           g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
-    for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", g.vf_last_hist[c][i]); if (c < 2) jw_add(w, ";"); }
+    {   /* the viewfinder's last measure, copied under the lock (the preview thread writes it) */
+        double vm, vc;
+        long vh[3][64];
+        pthread_mutex_lock(&g.lock);
+        vm = g.vf_last_mean; vc = g.vf_last_clip_hi;
+        memcpy(vh, g.vf_last_hist, sizeof vh);
+        pthread_mutex_unlock(&g.lock);
+        jw_add(w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
+               vm, vc, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
+        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", vh[c][i]); if (c < 2) jw_add(w, ";"); }
+    }
     jw_add(w, "\",\"photo_hist\":\"");
     for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", ph[c][i]); if (c < 2) jw_add(w, ";"); }
     jw_add(w, "\"");
@@ -8783,8 +8806,8 @@ static int indraw_yuv_impl(int focus_mode, float focus_diopters, int64_t exposur
      * the precapture, then the flash with the shot); with a manual pair,
      * "on" fires one flash with the shot and "auto" does not fire (no
      * metering to judge by) -- see flash_arm. Disarmed after the submit, so
-     * the request never flashes on its own. One frame only: a burst of 2 or
-     * 4 merged frames is not flashed (the interface sends 1 with a flash). */
+     * the request never flashes on its own. One frame only: a burst of
+     * merged frames is not flashed (the interface sends 1 with a flash). */
     flash_arm(g.yuv_request, exposure_ns > 0);
     pthread_mutex_lock(&g.lock);
     if (g.yuv_image) { AImage_delete(g.yuv_image); g.yuv_image = NULL; }
@@ -8829,7 +8852,10 @@ static int indraw_yuv_impl(int focus_mode, float focus_diopters, int64_t exposur
     f->exposure_ns = g.result_ready ? g.r_exposure_ns : -1;
     f->iso = g.result_ready ? g.r_iso : -1;
     f->wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
-    f->flash = exif_flash_value(0);                         /* a YUV capture never fires the flash */
+    /* Whether the flash fired, from the photo's own result: flash_arm (above)
+     * fires it on one YUV frame since 0.3.8; until patch 0549 the Exif said
+     * "not fired" whatever happened. */
+    f->flash = exif_flash_value(g.result_ready && g.r_flash_fired);
     f->digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
     pthread_mutex_unlock(&g.lock);
     f->exposure_manual = exposure_ns > 0;
@@ -9007,8 +9033,11 @@ static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, in
         double f = (ev ? pow(2.0, (double)ev[k]) : 1.0) / split;
         int64_t ex = (int64_t)(exposure_ns * f + 0.5);
         int is = iso * split;
-        if (exp_ceiling > 0 && ex > exp_ceiling) { is = (int)((double)iso * (double)ex / (double)exp_ceiling + 0.5); ex = exp_ceiling; }
-        if (exp_min > 0 && ex < exp_min) { is = (int)((double)iso * (double)ex / (double)exp_min + 0.5); ex = exp_min; }
+        /* clamped to the range: the ISO takes what the time loses, from the
+         * frame's own ISO (with a split: iso x split; from `iso` alone, as
+         * until patch 0549, a split frame clamped came out split times dark) */
+        if (exp_ceiling > 0 && ex > exp_ceiling) { is = (int)((double)is * (double)ex / (double)exp_ceiling + 0.5); ex = exp_ceiling; }
+        if (exp_min > 0 && ex < exp_min) { is = (int)((double)is * (double)ex / (double)exp_min + 0.5); ex = exp_min; }
         if (iso_max > 0 && is > iso_max) is = iso_max;
         if (iso_min > 0 && is < iso_min) is = iso_min;
         if (set_exposure(g.yuv_burst_req[k], ex, is, out, out_size)) return IR_EARG;
@@ -9133,6 +9162,10 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     if (focus_freeze_wanted(exposure_ns)) focus_freeze();
     lens_note("before");
     rc = indraw_yuv_burst_impl(n, ev, exposure_ns, iso, timeout_ms, frames, timestamps, out, out_size);
+    /* the DNG asked for this burst (indraw_yuv_dng_next) is used once: cleared
+     * here too, for the returns before the capture (no live exposure, a pair
+     * refused), which left it for the next burst until patch 0549 */
+    g.yuv_dng_path[0] = '\0';
     lens_note("after");
     focus_thaw();
     return rc;

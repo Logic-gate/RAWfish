@@ -15,6 +15,26 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- Review of the patches since early November (patch 0549):
+  - our JPG of 8 frames takes the menu's white balance on all of its
+    frames: it was written into the first four burst requests only, so on
+    the Xperia 10 III (which applies each request's own settings) frames 5
+    to 8 kept the automatic white;
+  - our JPG taken with the flash says in its Exif whether the flash fired
+    (it said "not fired" since the flash was given to our JPG, 0.3.8);
+  - with split=2|4 (nr=tiles), a frame whose time had to be clamped to the
+    sensor's range keeps its brightness (its ISO came from the photo's,
+    not the frame's: 2 or 4 times dark);
+  - a focus point removed is removed from our JPG's request too (it kept
+    the old point's zone);
+  - a DNG asked with a JPG whose burst was refused before the capture is
+    no longer written with the next JPG;
+  - the "check" histograms of the detailed log are read under the lock
+    their threads write them with;
+  - the Settings page and the user guide describe the switches as they
+    are (the JPG processing columns, the DNG with each JPG, the detailed
+    log, the reset; the scenes and viewfinder-processing switches, gone,
+    are no longer listed); comments tidied.
 - A photo not saved is said on the screen (patch 0547): a red box in
   the middle, "Photo NOT saved: storage full" when the memory is full,
   otherwise "Photo NOT saved" and the engine's reason; at the top a line

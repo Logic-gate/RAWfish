@@ -94,8 +94,8 @@ ctl_focus_t *ctl_focus_new(ctl_focus_cmd_fn cmd, ctl_focus_state_fn state,
                            ctl_focus_pause_fn pause, ctl_focus_spot_fn spot, void *ctx)
 {
     ctl_focus_t *f = calloc(1, sizeof *f);
-    if (f) f->max_d = MAX_D;
     if (!f) return NULL;
+    f->max_d = MAX_D;
     f->cmd = cmd; f->state_cb = state; f->pause = pause; f->spot = spot; f->ctx = ctx;
     f->mode = CTL_FOCUS_CONT;
     f->diopters = 1.0;
