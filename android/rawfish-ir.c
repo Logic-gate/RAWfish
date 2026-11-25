@@ -651,6 +651,18 @@ static struct {
     int live_ae, live_af;                   /* 3A states of the latest result    */
     int live_lens_state;                    /* LENS_STATE: 0 stationary, 1 moving */
     float live_focus;                       /* LENS_FOCUS_DISTANCE in the preview  */
+    float prev_live_focus;                  /* the same, one preview result earlier: a lens that
+                                             * reports the same position twice in a row has stopped */
+    /* The last wait for a manual distance (set_preview_focus_opt), for the
+     * "lens" line of the log: lens_settle -1 no wait made, 1 settled, 0 not
+     * settled when the wait ran out; lens_target the HAL value aimed at;
+     * lens_wait_ms how long it waited. */
+    int lens_settle, lens_wait_ms;
+    float lens_target;
+    /* The focus held for a long exposure (focus_freeze): the preview's own
+     * continuous AF mode, put back by focus_thaw. */
+    int focus_frozen;
+    uint8_t frozen_af_mode;
     int device_error;                       /* 0, or the onError code / -1       */
     AImage *jpeg_image;                     /* latest JPEG waiting to be saved   */
     AImage *yuv_image;                      /* latest full-resolution YUV frame  */
@@ -2820,6 +2832,7 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
     g.live_lens_state = -1;
     if (ACameraMetadata_getConstEntry(res, ACAMERA_LENS_STATE, &e) == ACAMERA_OK && e.count)
         g.live_lens_state = e.data.u8[0];           /* 0 stationary, 1 moving     */
+    g.prev_live_focus = g.live_focus;            /* to tell a lens that has stopped */
     if (ACameraMetadata_getConstEntry(res, ACAMERA_LENS_FOCUS_DISTANCE, &e) == ACAMERA_OK && e.count)
         g.live_focus = e.data.f[0];
     if (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count)
@@ -4744,6 +4757,10 @@ static int run_3a(int timeout_ms, a3_report_t *rep)
  * be triggered (AUTO/MACRO), else 0. */
 static int set_preview_focus_opt(int mode, float diopters, int wait);
 static int set_preview_focus(int mode, float diopters) { return set_preview_focus_opt(mode, diopters, 1); }
+/* The lens is settled within this of its target (HAL units; see the wait
+ * below), and "still" when two results in a row differ by less than this. */
+#define FOCUS_SETTLE_TOL 0.05f
+#define FOCUS_STILL_TOL 0.005f
 /* wait = 0: a manual distance is set and the call returns at once (the
  * controller's volume-key stepping sends one every few tens of ms; waiting
  * for the lens on each made the steps pile up and run on after the key
@@ -4766,21 +4783,129 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
     ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
     if ((mode != IR_FOCUS_MANUAL && mode != IR_FOCUS_RAW) || !wait) return want_af_scan; /* AF modes settle via 3A; HOLD is already there */
     /* Manual distance: wait for the lens to reach the (translated) target and
-     * stop moving. The HAL reports the value we sent it, so compare against the
-     * calibrated value, not the user's requested diopters. */
+     * stop moving, at most 1.2 s. The position is the HAL's (its own units),
+     * so it is compared with the calibrated value, not the user's diopters.
+     *
+     * Settled = the HAL says the lens is stationary, it reports the same
+     * position as on the result before (a lens pausing on its way does not
+     * pass), and that position is within FOCUS_SETTLE_TOL of the target.
+     * Until patch 0542 the margin was 0.5 HAL units: on the JP2 that is from
+     * infinity (2.0) to about 1.8 m (2.5), or 0.8 to 1.5 m around 1 m (its
+     * calibration table), so a lens stopping short could pass at close range.
+     * 0.05 is about 0.03 to 0.06 real dioptre, well inside the depth of field
+     * at f/1.8. A lens already in place passes at once (the same results).
+     * Not settled when the wait runs out: the photo is taken all the same, as
+     * before, and the log's "lens" line says so with the distance left. */
     {
         float target = mode == IR_FOCUS_RAW ? (diopters < 0 ? 0 : diopters) : focus_translate(diopters < 0 ? 0 : diopters);
+        double t0 = now_ms();
         dl = deadline_in(1200);
         pthread_mutex_lock(&g.lock);
+        g.lens_target = target;
+        g.lens_settle = 0;
         for (;;) {
-            int settled = g.live_lens_state == ACAMERA_LENS_STATE_STATIONARY &&
-                          fabsf(g.live_focus - target) < 0.5f;
-            if (settled || g.device_error) break;
+            int still = g.live_lens_state == ACAMERA_LENS_STATE_STATIONARY &&
+                        fabsf(g.live_focus - g.prev_live_focus) < FOCUS_STILL_TOL;
+            if (still && fabsf(g.live_focus - target) < FOCUS_SETTLE_TOL) { g.lens_settle = 1; break; }
+            if (g.device_error) break;
             if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
         }
+        g.lens_wait_ms = (int)(now_ms() - t0 + 0.5);
         pthread_mutex_unlock(&g.lock);
     }
     return 0;
+}
+
+/* ---- the focus during a long exposure, and the lens in the log ----------- */
+/* A long exposure with the continuous autofocus running: the HAL's AF works
+ * on the viewfinder's frames, which go on during the photo, and may move the
+ * lens in the middle of the exposure or as the viewfinder comes back at its
+ * end (seen on the JP2, 24 Nov 2026: a 30 s RAW taken in continuous AF). So
+ * from FOCUS_FREEZE_NS up, the focus is held where the lens
+ * is at the release, on the viewfinder and on the photo (AF off at that
+ * lens position, the HOLD rule of set_focus), and the continuous AF comes
+ * back after the photo (focus_thaw). A manual distance, a locked focus or a
+ * tap's single scan are not continuous: nothing to hold, nothing changes. */
+#define FOCUS_FREEZE_NS 250000000LL               /* 1/4 s and longer */
+static int focus_freeze_wanted(int64_t exposure_ns)
+{
+    return exposure_ns >= FOCUS_FREEZE_NS;
+}
+/* Holds the focus where the lens is, if the viewfinder is in a continuous
+ * AF mode (otherwise nothing). Not under g.lock (set_focus takes it). */
+static void focus_freeze(void)
+{
+    ACaptureRequest *reqs[1] = { g.preview_request };
+    ACameraMetadata_const_entry e;
+    uint8_t mode;
+    if (g.focus_frozen || !g.session || !g.preview_request) return;
+    if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_CONTROL_AF_MODE, &e) != ACAMERA_OK || !e.count) return;
+    mode = e.data.u8[0];
+    if (mode != ACAMERA_CONTROL_AF_MODE_CONTINUOUS_PICTURE && mode != ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO) return;
+    g.frozen_af_mode = mode;
+    g.focus_frozen = 1;
+    set_focus(g.preview_request, IR_FOCUS_HOLD, 0);     /* AF off, the lens where it is */
+    copy_preview_focus(g.meter_request);               /* the RAW meter's frames too */
+    ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
+}
+/* Puts the viewfinder's continuous AF back after a held focus (idempotent:
+ * nothing when focus_freeze held nothing). */
+static void focus_thaw(void)
+{
+    ACaptureRequest *reqs[1] = { g.preview_request };
+    if (!g.focus_frozen) return;
+    g.focus_frozen = 0;
+    if (!g.session || !g.preview_request) return;
+    ACaptureRequest_setEntry_u8(g.preview_request, ACAMERA_CONTROL_AF_MODE, 1, &g.frozen_af_mode);
+    copy_preview_focus(g.meter_request);
+    ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
+}
+/* One "lens" line in the log (the "lensdiag" event, which the controller
+ * writes to the log only): where the lens is and whether it moves, just
+ * before a photo is submitted ("before", with how the wait for a manual
+ * distance ended and whether the focus is held) and when its image is in
+ * ("after", with how far the lens went meanwhile). The position is the
+ * HAL's (its units) and, through the calibration, a distance in metres.
+ * Not under g.lock (it takes it; emit_event must not be called under it). */
+static float lens_before_at = -1.0f;
+static void lens_note(const char *when)
+{
+    char line[256], m[24];
+    float at, real;
+    int state, settle, wait_ms;
+    float target;
+    pthread_mutex_lock(&g.lock);
+    at = g.live_focus; state = g.live_lens_state;
+    settle = g.lens_settle; wait_ms = g.lens_wait_ms; target = g.lens_target;
+    pthread_mutex_unlock(&g.lock);
+    real = focus_untranslate(at);
+    if (real > 0.001f) snprintf(m, sizeof m, "%.2f m", 1.0f / real);
+    else snprintf(m, sizeof m, "infinity");
+    if (!strcmp(when, "before")) {
+        lens_before_at = at;
+        if (settle == 1)
+            snprintf(line, sizeof line, "lensdiag before: at %.3f (%s), %s; settled in %d ms, %.3f from the target; focus %s\n",
+                     at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                     wait_ms, fabsf(at - target), g.focus_frozen ? "held" : "as set");
+        else if (settle == 0)
+            snprintf(line, sizeof line, "lensdiag before: at %.3f (%s), %s; NOT SETTLED after %d ms, %.3f from the target %.3f; focus %s\n",
+                     at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                     wait_ms, fabsf(at - target), target, g.focus_frozen ? "held" : "as set");
+        else
+            snprintf(line, sizeof line, "lensdiag before: at %.3f (%s), %s; focus %s\n",
+                     at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                     g.focus_frozen ? "held" : "as set");
+    } else {
+        snprintf(line, sizeof line, "lensdiag after: at %.3f (%s), %s; moved %.3f during the photo\n",
+                 at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                 lens_before_at >= 0 ? fabsf(at - lens_before_at) : 0.0f);
+        /* the wait reported belongs to this photo only: the next "before"
+         * (a burst, a stack: no wait of their own) must not repeat it */
+        pthread_mutex_lock(&g.lock);
+        g.lens_settle = -1;
+        pthread_mutex_unlock(&g.lock);
+    }
+    emit_event(line);
 }
 
 /* Prepares focus and (optionally) exposure before a still/raw capture, keeping
@@ -4791,14 +4916,20 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
  *     fire, an AE precapture (its pre-flash metering) and up to af_wait_ms
  *     (1.5 s); without flash no precapture, only a wait of at most 0.5 s
  *     for the continuous AE to settle (0.47.29); independent of focus
+ *   - freeze: a long exposure (focus_freeze_wanted): a continuous AF is held
+ *     where the lens is, once any search in progress is over (the caller
+ *     puts it back, focus_thaw)
  * Fills `rep` with the 3A outcome. A timeout is not fatal. This replaces the old
  * all-in-one "focus" flag; the combined easy path calls run_3a directly. */
 static void prepare_capture(ACaptureRequest *req, int focus_mode, float focus_diopters,
-                            int ae_precapture, a3_report_t *rep)
+                            int ae_precapture, int freeze, a3_report_t *rep)
 {
     int want_af_scan;
     struct timespec dl;
     int ok = 0;
+    pthread_mutex_lock(&g.lock);
+    g.lens_settle = -1;                          /* no wait for a distance yet (lens_note) */
+    pthread_mutex_unlock(&g.lock);
     /* Move the lens via the preview first, then copy the same focus to the
      * capture request so the shot is taken at that focus -- including when
      * the capture KEEPS the preview's focus (no focus= from the interface:
@@ -4832,6 +4963,13 @@ static void prepare_capture(ACaptureRequest *req, int focus_mode, float focus_di
         ts.tv_sec = g.capture_delay_ms / 1000;
         ts.tv_nsec = (long)(g.capture_delay_ms % 1000) * 1000000L;
         while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {}
+    }
+    /* A long exposure: the continuous AF held here, after its search (above)
+     * is over, and the photo's request given the same held focus. */
+    if (freeze) {
+        focus_freeze();
+        if (g.focus_frozen && (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS))
+            copy_preview_focus(req);
     }
     rep->result = "skipped";
     rep->ae = rep->af = -1;
@@ -4976,12 +5114,13 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
 
     t0 = now_ms();
     /* Atomic focus + optional AE precapture, each independent. */
-    prepare_capture(g.still_request, focus_mode, focus_diopters, ae_precapture, &a3);
+    prepare_capture(g.still_request, focus_mode, focus_diopters, ae_precapture, focus_freeze_wanted(exposure_ns), &a3);
     t_3a = now_ms();
     if (variant & IR_V_PAUSE) preview_pause();
     pthread_mutex_lock(&g.lock);
     frames_before = g.preview_frames;           /* to count frames during capture */
     pthread_mutex_unlock(&g.lock);
+    lens_note("before");                         /* the lens just before the submit (log) */
     reqs[0] = g.still_request;
     flash_arm(g.still_request, exposure_ns > 0);
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL); /* one shot */
@@ -5008,6 +5147,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
     dev_err = g.device_error;
     pthread_mutex_unlock(&g.lock);
     t_image = now_ms();
+    lens_note("after");                          /* and once the image is in */
     if (variant & IR_V_PAUSE) preview_resume();  /* viewfinder back on            */
 
     if (!img) {
@@ -5542,12 +5682,13 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     pthread_mutex_unlock(&g.lock);
 
     t0 = now_ms();
-    prepare_capture(g.raw_request, focus_mode, focus_diopters, ae_precapture, &a3);
+    prepare_capture(g.raw_request, focus_mode, focus_diopters, ae_precapture, focus_freeze_wanted(exposure_ns), &a3);
     t_3a = now_ms();
     if (variant & IR_V_PAUSE) preview_pause();
     pthread_mutex_lock(&g.lock);
     frames_before = g.preview_frames;
     pthread_mutex_unlock(&g.lock);
+    lens_note("before");                         /* the lens just before the submit (log) */
     reqs[0] = g.raw_request;
     flash_arm(g.raw_request, exposure_ns > 0);
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL);
@@ -5576,6 +5717,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     if (res_ok && g.r_meta) rmeta = ACameraMetadata_copy(g.r_meta);
     pthread_mutex_unlock(&g.lock);
     t_image = now_ms();
+    lens_note("after");                          /* and once the image is in */
     if (variant & IR_V_PAUSE) preview_resume();  /* viewfinder back on            */
     if (img) captured_now();                     /* if the result has not already */
 
@@ -6618,7 +6760,12 @@ IR_API int indraw_burst(const char *const *paths, int n, int quality, int nr, in
 {
     int rc;
     meter_quiesce();
+    /* a long exposure: the continuous AF held for the whole burst (focus_freeze) */
+    if (focus_freeze_wanted(exposure_ns)) focus_freeze();
+    lens_note("before");
     rc = indraw_burst_impl(paths, n, quality, nr, edge, exposure_ns, iso, timeout_ms, out, out_size);
+    lens_note("after");
+    focus_thaw();
     meter_release();
     return rc;
 }
@@ -6631,6 +6778,7 @@ IR_API int indraw_jpeg(const char *path, int quality, int nr, int edge,
     int rc;
     meter_quiesce();
     rc = indraw_jpeg_impl(path, quality, nr, edge, focus_mode, focus_diopters, ae_precapture, exposure_ns, iso, variant, timeout_ms, out, out_size);
+    focus_thaw();                                /* a focus held for a long exposure, given back */
     meter_release();
     return rc;
 }
@@ -6642,6 +6790,7 @@ IR_API int indraw_raw(const char *path, const char *datetime, int focus_mode,
     int rc;
     meter_quiesce();
     rc = indraw_raw_impl(path, datetime, focus_mode, focus_diopters, ae_precapture, exposure_ns, iso, variant, timeout_ms, out, out_size);
+    focus_thaw();                                /* a focus held for a long exposure, given back */
     meter_release();
     return rc;
 }
@@ -6651,7 +6800,14 @@ IR_API int indraw_stack(const char *path, const char *datetime, int64_t film_ns,
 {
     int rc;
     meter_quiesce();
+    /* A stack is a long exposure: the continuous AF held from the release to
+     * the last sub-frame (the stack's own requests hold the lens already;
+     * this keeps the viewfinder's AF from moving it in between). */
+    focus_freeze();
+    lens_note("before");
     rc = indraw_stack_impl(path, datetime, film_ns, sub_ns, stk_denoise, iso, out, out_size);
+    lens_note("after");
+    focus_thaw();
     meter_release();
     return rc;
 }
@@ -8575,8 +8731,8 @@ static void yuv_check_json(jw_t *w, const ir_yuv_t *f0)
     jw_add(w, "}");
 }
 
-IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
-                      ir_yuv_t *f, char *out, size_t out_size)
+static int indraw_yuv_impl(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
+                           ir_yuv_t *f, char *out, size_t out_size)
 {
     ACaptureRequest *reqs[1];
     AImage *img = NULL;
@@ -8607,7 +8763,8 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     g.captured_owed = "captured kind=yuv\n";
     pthread_mutex_unlock(&g.lock);
     t0 = now_ms();
-    prepare_capture(g.yuv_request, focus_mode, focus_diopters, exposure_ns <= 0 && iso <= 0, &a3);
+    prepare_capture(g.yuv_request, focus_mode, focus_diopters, exposure_ns <= 0 && iso <= 0, focus_freeze_wanted(exposure_ns), &a3);
+    lens_note("before");                         /* the lens just before the submit (log) */
     reqs[0] = g.yuv_request;
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL);
     flash_disarm(g.yuv_request);                /* the request is copied at submit */
@@ -8621,6 +8778,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     failed = g.capture_failed; dev_err = g.device_error;
     pthread_mutex_unlock(&g.lock);
     t_image = now_ms();
+    lens_note("after");                          /* and once the image is in */
     if (!img) {
         if (failed) return fail(out, out_size, IR_ECAPTURE, "capture_failed", "camera reported failure", 0);
         if (dev_err) return fail(out, out_size, IR_ECAPTURE, "device", "device error", dev_err);
@@ -8670,6 +8828,16 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* One YUV frame (indraw_yuv_impl), and the focus given back after it when
+ * a long exposure held it (prepare_capture, focus_thaw). */
+IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
+                      ir_yuv_t *f, char *out, size_t out_size)
+{
+    int rc = indraw_yuv_impl(focus_mode, focus_diopters, exposure_ns, iso, timeout_ms, f, out, out_size);
+    focus_thaw();
+    return rc;
+}
+
 /* The detail scale of a photo `photo_w` wide: 2 when it is at least twice
  * as wide as the sensor's RAW reading (the JP2: 8192 against 4096, its 50 MP
  * enlarged from a 12.5 MP binned reading), else 1. The tool's filters use it
@@ -8765,8 +8933,8 @@ static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char 
     return err;
 }
 
-IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
-                            ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
+static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
+                                 ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
 {
     int with_dng = g.yuv_dng_path[0] && g.raw_target, dng_err = 0, dng_preview_err = 0;
     const char *dng_state = "none";
@@ -8920,6 +9088,20 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     jw_add(&w, "}");
     g.yuv_dng_path[0] = '\0';
     return got == n ? rc : (rc == IR_OK ? IR_ECAPTURE : rc);
+}
+
+/* A YUV burst (indraw_yuv_burst_impl): from 1/4 s a frame, the continuous
+ * AF held for the whole burst (focus_freeze), and the lens in the log. */
+IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
+                            ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
+{
+    int rc;
+    if (focus_freeze_wanted(exposure_ns)) focus_freeze();
+    lens_note("before");
+    rc = indraw_yuv_burst_impl(n, ev, exposure_ns, iso, timeout_ms, frames, timestamps, out, out_size);
+    lens_note("after");
+    focus_thaw();
+    return rc;
 }
 
 /* The next YUV bursts' split: each frame exposed 1/split as long, at split

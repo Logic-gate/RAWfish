@@ -91,7 +91,17 @@ closes, and writes the frames added so far with the exposure really reached.
 | `hold` (live only) | AF off at the lens position the HAL reports now: the focus stays exactly where it is |
 | `rawD` | AF off, the lens set to the HAL's OWN value D (LENS_FOCUS_DISTANCE), with no focus calibration: the same lens position on every phone of a model, used by the lens-shading assistant to walk positions |
 | `<metres>m nowait` / `inf nowait` (live only) | the same, returning at once instead of waiting for the lens (the controller's volume-key stepping) |
-| `<metres>m` (e.g. `0.5m`) | manual distance; mapped through the focus calibration when there is one |
+| `<metres>m` (e.g. `0.5m`) | manual distance; mapped through the focus calibration when there is one. The command (or the photo carrying it) waits, at most 1.2 s, until the lens is settled: stationary, the same position on two results in a row, and within 0.05 of the target in the HAL's units (0.5 until patch 0542, too wide at close range); not settled by then, it goes on all the same and the log's `lens` line says so |
+
+A photo from 1/4 s, a burst of such frames, and every stack are taken
+with the focus held: a continuous AF is turned off at the lens position of
+the release, on the viewfinder and on the photo, and comes back after the
+photo, so that the AF cannot move the lens during the exposure. A manual
+distance or a locked focus is left as it is. Each photo writes two `lens`
+lines in the log (engine event `lensdiag`): the lens's position (HAL value
+and metres), whether it moves, how the wait for a distance ended and
+whether the focus is held, just before the submit; its position and how far
+it went, once the image is in.
 
 | Live command | Limits |
 |---|---|

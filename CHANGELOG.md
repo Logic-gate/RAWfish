@@ -15,6 +15,19 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- The focus can no longer move during a long exposure, and a manual
+  distance waits for the lens properly (patch 0542). From 1/4 s, for
+  a burst of such frames and for every Σ, a continuous autofocus is
+  held at the lens position of the release, on the viewfinder and on the
+  photo, then given back: on the JP2 a 30 s RAW in continuous AF could
+  have its lens moved by the viewfinder's AF (log of 24 Nov 2026). The
+  wait for a manual distance now asks the lens to be stationary, at the
+  same position on two results in a row and within 0.05 of the target in
+  the HAL's units; it was 0.5, on the JP2 the whole way from infinity to
+  about 1.8 m, so a lens stopping short could pass at close range. Not
+  settled within 1.2 s, the photo is taken as before, and the log says so.
+  Each photo now writes two "lens" lines in the log: where the lens is,
+  whether it moves, and how far it went during the photo.
 - The log line "exposure carried to camera N" names only what is given
   back on the new camera (patch 0539): an automatic ISO or speed is
   logged as "auto", no longer as the camera's minimum ISO or "speed 0 ns",

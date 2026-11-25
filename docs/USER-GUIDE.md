@@ -102,6 +102,11 @@ the volume keys take it.
 
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
+From 1/4 s (and for a Σ) the camera's own focusing is stopped for the photo,
+the lens held where it is at the release, then given back: it cannot move
+during the exposure. After the photo the auto focus may search again: that
+is after, not during. The log says where the lens was before and after each
+photo (the `lens` lines).
 
 **The circle** marks the focus point: it surrounds the square zone the
 camera focuses on (15 % of the viewfinder's short side), and shows inside

@@ -291,6 +291,13 @@ static void on_event(const char *line)
         if (c.log) c.log(t);
         return;
     }
+    if (!strncmp(line, "lensdiag ", 9)) {      /* the lens before / after a photo (lens_note): the log only */
+        char t[260];
+        snprintf(t, sizeof t, "lens %.250s", line + 9);
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
     if (!strncmp(line, "vfpace ", 7)) {        /* the viewfinder's pace (detailed log, see vf_pace) */
         char t[200];
         snprintf(t, sizeof t, "viewfinder pace %.160s", line + 7);
