@@ -2051,7 +2051,16 @@ static void lensfix_apply(char *out)
     set_fn sf = g_bridge_for_vendor ? (set_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_set") : NULL;
     indraw_emit_fn em = g_bridge_for_vendor ? (indraw_emit_fn)a_dlsym(g_bridge_for_vendor, "indraw_emit") : NULL;
     if (sf) sf(g_lensfix);
-    if (em) em(!g_lensfix ? "lensfix state=off\n" : g_ldm_have ? "lensfix state=on\n" : "lensfix state=unavailable\n");   /* for the interface */
+    if (em) {   /* for the interface, which draws the viewfinder corrected: with
+                 * the model bound to the active array (lensdist.h's ld_model_t) */
+        char ev[512];
+        if (g_lensfix && g_ldm_have)
+            snprintf(ev, sizeof ev, "lensfix state=on aw=%d ah=%d fx=%.6f fy=%.6f cx=%.6f cy=%.6f k=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
+                     g_ldm.aw, g_ldm.ah, g_ldm.fx, g_ldm.fy, g_ldm.cx, g_ldm.cy,
+                     g_ldm.k[0], g_ldm.k[1], g_ldm.k[2], g_ldm.k[3], g_ldm.k[4], g_ldm.k[5], g_ldm.k[6], g_ldm.k[7]);
+        else snprintf(ev, sizeof ev, "lensfix state=%s\n", g_lensfix ? "unavailable" : "off");
+        em(ev);
+    }
     if (g_lensfix && !g_ldm_have) {
         char msg[480];
         snprintf(msg, sizeof msg, "no lens distortion profile for this camera (%s): the viewfinder and the photos are not corrected", g_ldm_looked);

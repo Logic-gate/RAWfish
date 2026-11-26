@@ -2,8 +2,9 @@
  * lensdist.h -- lens distortion correction: the lens model of a camera (as
  * scripts/lens-calibrate.py measures it with OpenCV), and the remapping of
  * a frame to what a distortion-free lens would have drawn. Pure C, no
- * Android and no OpenCV: included by the engine (the viewfinder) and the
- * CLI (the photos), tested on a PC (android/tests/lensdist_test.c).
+ * Android and no OpenCV: included by the engine (the taps), the CLI (the
+ * photos) and the interface (C++: the viewfinder, drawn corrected by the
+ * GPU), tested on a PC (android/tests/lensdist_test.c).
  *
  * The model is OpenCV's ("rational", of which the plain polynomial one is a
  * special case): for a ray (x, y) of the ideal pinhole camera, r2 = x^2+y^2,
@@ -297,8 +298,8 @@ static inline int ld_grid_build(const ld_view_t *v, int step, ld_grid_t *g)
     g->step = step;
     g->gw = (v->w - 1 + step - 1) / step + 2;
     g->gh = (v->h - 1 + step - 1) / step + 2;
-    g->x = malloc(sizeof(float) * (size_t)g->gw * g->gh);
-    g->y = malloc(sizeof(float) * (size_t)g->gw * g->gh);
+    g->x = (float *)malloc(sizeof(float) * (size_t)g->gw * g->gh);
+    g->y = (float *)malloc(sizeof(float) * (size_t)g->gw * g->gh);
     if (!g->x || !g->y) { ld_grid_free(g); return -1; }
     for (j = 0; j < g->gh; ++j)
         for (i = 0; i < g->gw; ++i) {
@@ -411,14 +412,14 @@ static inline int ld_lut_build(const ld_view_t *v, ld_lut_t *t)
     if (!v->ok || w < 2 || h < 2) return -1;
     if (t->w != w || t->h != h || !t->idx) {
         ld_lut_free(t);
-        t->idx = malloc(sizeof(uint32_t) * (size_t)w * h);
-        t->wt = malloc(sizeof(uint16_t) * 2 * (size_t)w * h);
+        t->idx = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)w * h);
+        t->wt = (uint16_t *)malloc(sizeof(uint16_t) * 2 * (size_t)w * h);
         if (!t->idx || !t->wt) { ld_lut_free(t); return -1; }
         t->w = w; t->h = h;
     }
     if (ld_grid_build(v, 8, &g)) return -1;
-    rx = malloc(sizeof(float) * (size_t)g.gw);
-    ry = malloc(sizeof(float) * (size_t)g.gw);
+    rx = (float *)malloc(sizeof(float) * (size_t)g.gw);
+    ry = (float *)malloc(sizeof(float) * (size_t)g.gw);
     if (!rx || !ry) { free(rx); free(ry); ld_grid_free(&g); return -1; }
     for (y = 0; y < h; ++y) {
         ld_grid_row(&g, y, rx, ry);

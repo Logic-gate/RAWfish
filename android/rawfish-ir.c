@@ -1443,63 +1443,19 @@ static vf_rect_t view_band(int w, int h)
     return vf_band(aw, ah, w, h);
 }
 
-/* --- Lens distortion correction of the viewfinder (lensdist.h) ------------
- * The model is loaded for the open camera by indraw_lensdist_load (the CLI
- * gives the folders) and switched by indraw_lensdist_set; the CLI corrects
- * the photos with the same model (indraw_lensdist_get). Here: the frames
- * the viewfinder SENDS are corrected, after they were measured (the
- * viewfinder meter, the white pick: their boxes are mapped from the sensor
- * into the uncorrected frame, which shares its geometry). A tap on the
- * corrected picture is mapped back to the sensor in indraw_tap.
- * have / on / gen and the model: under g.lock; the rest: the preview
- * listener's own. */
+/* --- Lens distortion: the model of the open camera (lensdist.h) ----------
+ * Loaded by indraw_lensdist_load (the CLI gives the folders), switched by
+ * indraw_lensdist_set, handed to the CLI by indraw_lensdist_get: the CLI
+ * corrects the photos and gives the model to the interface, whose GPU
+ * draws the viewfinder corrected (any transport: SF2H, SF2Y, SF2P; the
+ * frames leave here as the camera made them, and are measured so). Here,
+ * only: a tap on the corrected picture is mapped back to the lens' point
+ * (indraw_tap). have / on / gen and the model: under g.lock. */
 static struct {
     ld_model_t m;
     int have, on, gen;
     char path[600];
-    ld_view_t view;                  /* listener: the last frame's correction */
-    ld_lut_t lut;
-    int lut_gen;
-    uint8_t *buf;
-    size_t cap;
 } g_ld;
-
-/* The frame to send for rgb (w x h, taken with `crop`): rgb itself when the
- * correction is off or impossible, else the corrected copy (the listener's
- * buffer, valid until its next call). */
-static const uint8_t *lens_fix_view(const uint8_t *rgb, int w, int h, const int32_t crop[4])
-{
-    int on, have, gen;
-    int32_t fld[4];
-    double f[4];
-    pthread_mutex_lock(&g.lock);
-    on = g_ld.on; have = g_ld.have; gen = g_ld.gen;
-    pthread_mutex_unlock(&g.lock);
-    if (!on || !have || !crop || crop[2] <= 0 || crop[3] <= 0) return rgb;
-    frame_field(crop, w, h, fld);
-    f[0] = fld[0]; f[1] = fld[1]; f[2] = fld[2]; f[3] = fld[3];
-    if (gen != g_ld.lut_gen || !g_ld.view.ok || g_ld.lut.w != w || g_ld.lut.h != h ||
-        memcmp(f, g_ld.lut.key, sizeof f)) {
-        ld_model_t m;
-        pthread_mutex_lock(&g.lock);
-        m = g_ld.m;
-        pthread_mutex_unlock(&g.lock);
-        g_ld.lut_gen = gen;
-        if (ld_view_init(&g_ld.view, &m, w, h, f) || ld_lut_build(&g_ld.view, &g_ld.lut)) {
-            g_ld.view.ok = 0;
-            memcpy(g_ld.lut.key, f, sizeof f);     /* not retried for every frame */
-            return rgb;
-        }
-    }
-    if (!g_ld.view.ok) return rgb;
-    if ((size_t)w * h * 3 > g_ld.cap) {
-        uint8_t *grown = realloc(g_ld.buf, (size_t)w * h * 3);
-        if (!grown) return rgb;
-        g_ld.buf = grown; g_ld.cap = (size_t)w * h * 3;
-    }
-    ld_lut_rgb(&g_ld.lut, rgb, g_ld.buf);
-    return g_ld.buf;
-}
 
 /* The viewfinder meter (step 2 of docs/ARCHITECTURE.md): what the app's C++
  * item used to measure on the RGB frame it received, now measured here on
@@ -2217,7 +2173,6 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                 vim.rgb = as_yuv ? NULL : pix; vim.i420 = as_yuv ? pix : NULL; vim.w = w; vim.h = h;
             }
             if (pix) {
-                const uint8_t *sent;
                 int broke, k, found = 0;
                 int32_t crop[4];
                 int64_t ts = 0;
@@ -2288,8 +2243,6 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                     free(g.pv_aid_tmp); g.pv_aid_tmp = NULL; g.pv_aid_tmp_cap = 0;
                     free(g.pv_aid_src); g.pv_aid_src = NULL; g.pv_aid_src_cap = 0;
                 }
-                /* measured as taken; shown corrected when asked (lens_fix_view) */
-                sent = lens_fix_view(rgb, w, h, found ? crop : g.sent_crop);
                 pthread_mutex_lock(&g.out_lock);        /* serialise with SF2M     */
                 fd = g.stream_fd;                       /* re-read: a stop may have landed */
                 broke = 0;
@@ -2299,7 +2252,7 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                     {
                         static uint32_t hwb_seq;
                         broke = (as_hwb ? write_sf2h(fd, hwb_id, ++hwb_seq, w, h)
-                                 : as_yuv ? write_sf2y(fd, pix, w, h) : write_sf2p(fd, sent, w, h)) != 0;
+                                 : as_yuv ? write_sf2y(fd, pix, w, h) : write_sf2p(fd, pix, w, h)) != 0;
                     }
                     if (broke) g.stream_fd = -1;        /* pipe broke: stop        */
                 }
@@ -3521,7 +3474,6 @@ static void close_all(void)
     free(g.pv_aid); g.pv_aid = NULL; g.pv_aid_cap = 0;
     free(g.pv_aid_tmp); g.pv_aid_tmp = NULL; g.pv_aid_tmp_cap = 0;
     free(g.pv_aid_src); g.pv_aid_src = NULL; g.pv_aid_src_cap = 0;
-    ld_lut_free(&g_ld.lut); free(g_ld.buf); g_ld.buf = NULL; g_ld.cap = 0; g_ld.view.ok = 0;
     pthread_mutex_lock(&g.lock);
     g_ld.have = 0; g_ld.gen++;                         /* the model is the camera's: loaded again at the next open */
     pthread_mutex_unlock(&g.lock);
@@ -9776,8 +9728,8 @@ IR_API int indraw_lensdist_load(const char *user_dir, const char *sys_dir, const
     return IR_OK;
 }
 
-/* The viewfinder's correction on (1) or off (0). Returns 1 if a model is
- * loaded (so the correction really applies), 0 if not. */
+/* The correction on (1) or off (0): the taps follow it. Returns 1 if a
+ * model is loaded (so the correction really applies), 0 if not. */
 IR_API int indraw_lensdist_set(int on)
 {
     int have;
