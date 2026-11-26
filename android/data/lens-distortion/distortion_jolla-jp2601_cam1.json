@@ -28,7 +28,6 @@
     "coverage_pct": 87,
     "samples": [
       {
-        "folder": "samples/selfie/43",
         "size": [
           6560,
           4928
@@ -37,7 +36,6 @@
         "rms_px": 7.871
       },
       {
-        "folder": "samples/selfie/169 (3840x2160)",
         "size": [
           3840,
           2160
@@ -46,7 +44,6 @@
         "rms_px": 2.281
       },
       {
-        "folder": "samples/selfie/169 (3280x2464)",
         "size": [
           3280,
           2464

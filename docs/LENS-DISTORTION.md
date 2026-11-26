@@ -24,7 +24,16 @@ the photo will, and a zoom or the loupe shows the same corrected geometry.
 shading files are) so that one file serves every phone of the model. Looked
 for in the user's `device-profiles/lens-distortion/` first, then in the one
 shipped with the engine (`/usr/share/rawfish-ir/lens-distortion/`, from
-`android/data/lens-distortion/`). Without one, nothing is corrected and the
+`android/data/lens-distortion/`).
+
+A camera module sold under several model names (the XA2's H3113, H4113...,
+the 10 III's XQ-BT52, XQ-BT41) would need one file per name: instead, its
+device profile names one file for all of them, per camera, as it does for
+the lens shading (`"distortion_file"`, `DEVICE-PROFILES.md`). The order, as
+for the shading: the user's file under the phone's own name, the user's
+under the profile's name, the shipped one under the profile's name, the
+shipped one under the phone's own name. `--lensfix FILE` / `lensfix file=`
+bypass all of it. Without one, nothing is corrected and the
 CLI warns (`lensfix state=unavailable`; the menu's header says so).
 
 ONE model per camera serves every output size: the 4:3 and 16:9 formats,
@@ -55,6 +64,8 @@ A file whose radial curve folds back inside the frame, or that would need
 more than 25 % of crop, is refused (a bad fit).
 
 ## Measuring a camera (maintainers, on a PC)
+
+Step by step, with examples: [LENS-CALIBRATION.md](LENS-CALIBRATION.md). In short:
 
 `scripts/lens-calibrate.py` (Python 3, `opencv-python`, `numpy`; OpenCV is
 never needed on the phone):
@@ -112,7 +123,7 @@ saves the decode.
 | `lensfix file=PATH` | load another file now (and turn the fix on); `file=` back to the phone's |
 | `lensfix status` | `{"lensfix":"on\|off\|unavailable","profile":true\|false}` |
 | event `lensfix state=on\|off\|unavailable` | after each change; `unavailable`: asked, but no profile for this camera |
-| `rawfish-ir-cli lensfix PROFILE IN.jpg OUT.jpg [q=95]` | a JPEG corrected offline, no camera, also on a PC (the JPEG taken as the camera's full frame or a centred crop of it) |
+| `rawfish-ir-cli lensfix PROFILE IN.jpg OUT.jpg [q=95] [rot=0\|90\|180\|270]` | a JPEG corrected offline, no camera, also on a PC (the JPEG taken as the camera's full frame or a centred crop of it). `rot=`: the pixels were turned clockwise by it and carry no Exif orientation -- a camera driver's JPEG, or a photo whose Exif was stripped (sent through a forum): `rot=90` for a back camera held upright |
 
 ## Tests
 

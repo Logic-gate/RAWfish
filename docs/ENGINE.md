@@ -29,7 +29,7 @@ The options may come in any order, before the command.
 | `cameras` | lists the camera ids |
 | `caps ID` | what camera ID offers, as JSON (sizes, ranges, modes; see `GENERATED-HAL.md`) |
 | `probe` | writes `generated-hal.json` for every camera, and a starter `override-hal.json` if there is none (`DEVICE-PROFILES.md`) |
-| `lensfix PROFILE IN.jpg OUT.jpg [q=Q]` | a JPEG lens-corrected with a lens distortion file; no camera (works on a PC) |
+| `lensfix PROFILE IN.jpg OUT.jpg [q=Q] [rot=DEG]` | a JPEG lens-corrected with a lens distortion file; no camera (works on a PC). `rot=90\|180\|270`: its pixels were turned upright by that much (clockwise) with no Exif orientation (stripped Exif) |
 | `run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]` | opens camera ID and reads commands on stdin, one per line |
 | `stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH]` | the same, and streams the viewfinder on stdout (the app's mode; SF2P frames + SF2M events, binary) |
 

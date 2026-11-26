@@ -28,7 +28,6 @@
     "coverage_pct": 94,
     "samples": [
       {
-        "folder": "43",
         "size": [
           8192,
           6144
@@ -37,7 +36,6 @@
         "rms_px": 6.345
       },
       {
-        "folder": "169",
         "size": [
           4096,
           2304

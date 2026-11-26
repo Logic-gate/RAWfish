@@ -443,7 +443,7 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "raw_stream", "jpeg_max", "streams", "fps_max", "hidden",
                                            "camera_order",
                                            /* a shipped device profile's own keys */
-                                           "match", "make", "models", "raw", "notch", "shading_file",
+                                           "match", "make", "models", "raw", "notch", "shading_file", "distortion_file",
                                            "name", NULL };
 
 static void ov_log(const char *msg)
@@ -1862,6 +1862,7 @@ static char g_lensfix_file[1024];            /* a file given: it, not the phone'
 static ld_model_t g_ldm;                     /* the model, from the engine     */
 static int g_ldm_have;
 static char g_ldm_looked[300];               /* what was looked for (the warning) */
+static char g_lensfix_cam[16];               /* the open camera's id (its device profile's distortion_file) */
 
 static int lensfix_active(void) { return g_lensfix && g_ldm_have; }
 
@@ -1899,6 +1900,14 @@ static void lensfix_load_model(void)
     if (profile_dir(pdir, sizeof pdir) == 0) {
         snprintf(udir, sizeof udir, "%s/lens-distortion", pdir);
         mkdir(udir, 0755);                       /* where a user's own file goes */
+    }
+    {   /* the file name the device profile gives this camera, if any (one
+         * file for every model name of a camera module, as shading_file) */
+        typedef int (*name_fn)(const char *);
+        name_fn nf = (name_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_name");
+        char nm[200] = "";
+        if (g_lensfix_cam[0]) ov_string(g_lensfix_cam, "distortion_file", nm, sizeof nm);
+        if (nf) nf(nm);
     }
     lf(udir, "/usr/share/rawfish-ir/lens-distortion", g_lensfix_file, rep, sizeof rep);
     log_line("# lensfix: ", rep);
@@ -2610,6 +2619,12 @@ int main(int argc, char **argv)
         ld_bind(&m, 0, 0);
         t0 = mono_ms();
         if (lensfix_jpeg_file(&m, NULL, rot, argv[3], argv[4], q, err, sizeof err)) {
+            /* a JPEG turned upright with no Exif orientation (a camera
+             * driver's, or one whose Exif was stripped, e.g. by a forum):
+             * say how to give its rotation */
+            if (rot < 0 && strstr(err, "unknown rotation"))
+                snprintf(err + strlen(err), sizeof err - strlen(err),
+                         "; give its rotation: rot=90 (a back camera held upright), rot=270 (upside down or the front camera), rot=180");
             snprintf(out, sizeof out, "{\"ok\":false,\"error\":"); jw_quote_into(out, sizeof out, err); strcat(out, "}"); puts(out); return EXIT_FAILED;
         }
         snprintf(out, sizeof out, "{\"ok\":true,\"path\":"); jw_quote_into(out, sizeof out, argv[4]);
@@ -3038,6 +3053,7 @@ int main(int argc, char **argv)
             }
             /* The lens distortion model of this camera; the correction as set */
             g_bridge_for_vendor = bridge;
+            snprintf(g_lensfix_cam, sizeof g_lensfix_cam, "%s", argv[2]);
             lensfix_load_model();
             lensfix_apply(out);
             if (g_lensfix) emit(out);

@@ -397,6 +397,14 @@ def calibrate(folders, ref=None, debug_dir=None):
         ref = max(four3 or [s['size'] for s in sets], key=lambda s: s[0] * s[1])
     W, H = ref
     print(f"    reference frame: {W}x{H}")
+    # Photos whose pixels are turned against the frame (portrait pixels for
+    # a landscape sensor: the camera driver's JPEG on some phones, e.g. the
+    # JP2's bracket and burst) cannot be mapped onto it: left out.
+    turned = [s for s in sets if (s['size'][0] > s['size'][1]) != (W > H) and s['size'][0] != s['size'][1]]
+    for s in turned:
+        print(f"    skipping {s['folder']} ({s['size'][0]}x{s['size'][1]}): its pixels are turned against "
+              f"the {W}x{H} frame (take the samples as RAWfish-ir's JPG, not a bracket or burst)")
+    sets = [s for s in sets if s not in turned]
     views = []
     for s in sets:
         x0, y0, sc = field_in(ref, s['size'])
@@ -430,8 +438,9 @@ def calibrate(folders, ref=None, debug_dir=None):
         r = float(np.sqrt(np.mean(np.square(e)))) if n else 0.0
         print(f"    {s['folder']}: {n} photos, RMS {r:.2f} px of its own {s['size'][0]}x{s['size'][1]}, "
               f"reaches {100 * cov:.0f}% of the centre-to-corner distance")
-        report.append({'folder': s['folder'],
-                       'size': list(s['size']), 'images': n, 'rms_px': round(r, 3)})
+        # per photo size: what the calibration covered (no local paths: the
+        # file is shipped)
+        report.append({'size': list(s['size']), 'images': n, 'rms_px': round(r, 3)})
         # the folder alone, to check it is the frame's middle as assumed
         own = [v for v in views if v['set'] is s]
         if len(sets) > 1 and len(own) >= 5:
@@ -489,7 +498,9 @@ def main():
     ap.add_argument('folders', nargs='+', help='folders of chessboard photos (one size each: '
                     'e.g. samples/wide/43 samples/wide/169)')
     ap.add_argument('--camera-id', required=True, help="the camera's id (rawfish-ir-cli cameras)")
-    ap.add_argument('--name', default='', help='a name for people: wide, std, selfie...')
+    # --name: a label only (the report's header and the file's "name"); the
+    # engine never reads it, the file is found by make, model and camera id.
+    ap.add_argument('--name', default='', help='human readable name for sensor (optional), e.g. wide, std, selfie')
     ap.add_argument('--make', help='the phone maker (default: the photos\' Exif Make)')
     ap.add_argument('--model', help='the phone model (default: the photos\' Exif Model)')
     ap.add_argument('--board', default='7x10', help='squares along x and y (default 7x10)')

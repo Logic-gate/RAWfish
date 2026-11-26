@@ -8414,35 +8414,54 @@ IR_API int indraw_close(char *out, size_t out_size)
 }
 
 /* --- Lens distortion: the model of the open camera ------------------------
- * indraw_lensdist_load: file given (a path), else
+ * indraw_lensdist_load: the file given (a path), else
  *   distortion_<manufacturer>-<model>_cam<ID>.json
- * in the user's folder, then in the one shipped with the engine. Parsed,
- * bound to this camera's active array; the viewfinder corrected only after
+ * (the name built from this phone), and the name the device profile gives
+ * (indraw_lensdist_name: one file for every model name of a camera module,
+ * as shading_file), in the order of the lens shading's: the user's under
+ * the built name, the user's under the profile's, the shipped one under the
+ * profile's, the shipped one under the built name. Parsed, bound to this
+ * camera's active array; the viewfinder corrected only after
  * indraw_lensdist_set(1). Replies {"ok":true,"lensdist":"loaded","path":..}
  * or {"ok":true,"lensdist":"none","looked_for":..[,"refused":..]}. */
+static char g_ld_profile_name[200];
+IR_API int indraw_lensdist_name(const char *name)
+{
+    snprintf(g_ld_profile_name, sizeof g_ld_profile_name, "%s", name ? name : "");
+    return IR_OK;
+}
+
 IR_API int indraw_lensdist_load(const char *user_dir, const char *sys_dir, const char *file, char *out, size_t out_size)
 {
     char mk[64], md[64], name[200], path[600], err[160] = "";
-    const char *dirs[2] = { user_dir, sys_dir };
+    const char *dirs[4], *names[4];
     int32_t ax, ay, aw, ah;
-    int d, found = 0;
+    int d, nd = 0, found = 0;
     ld_model_t m;
     jw_t w;
     if (!out || !out_size) return IR_EARG;
     if (!g.chars) return fail(out, out_size, IR_ESTATE, "lensdist", "camera not open", 0);
     if (active_array(&ax, &ay, &aw, &ah, NULL)) return fail(out, out_size, IR_ESTATE, "lensdist", "no active array size", 0);
+    memset(&m, 0, sizeof m);
     slug_into(g.make, mk, sizeof mk);
     slug_into(g.model, md, sizeof md);
     snprintf(name, sizeof name, "distortion_%s-%s_cam%s.json", mk, md, g.camera_id);
-    for (d = file && file[0] ? -1 : 0; d < 2 && !found; ++d) {
+    if (file && file[0]) { dirs[nd] = NULL; names[nd++] = file; }      /* a path: it alone */
+    else {
+        dirs[nd] = user_dir; names[nd++] = name;
+        if (g_ld_profile_name[0]) { dirs[nd] = user_dir; names[nd++] = g_ld_profile_name; }
+        if (g_ld_profile_name[0]) { dirs[nd] = sys_dir; names[nd++] = g_ld_profile_name; }
+        dirs[nd] = sys_dir; names[nd++] = name;
+    }
+    for (d = 0; d < nd && !found; ++d) {
         FILE *f;
         long len;
         char *text;
-        if (d >= 0 && file && file[0]) break;
-        if (d >= 0 && (!dirs[d] || !dirs[d][0])) continue;
-        if (d < 0) snprintf(path, sizeof path, "%s", file);
-        else snprintf(path, sizeof path, "%s/%s", dirs[d], name);
-        if (!(f = fopen(path, "rb"))) { if (d < 0) snprintf(err, sizeof err, "cannot open the file"); continue; }
+        if (dirs[d]) {
+            if (!dirs[d][0]) continue;
+            snprintf(path, sizeof path, "%s/%s", dirs[d], names[d]);
+        } else snprintf(path, sizeof path, "%s", names[d]);
+        if (!(f = fopen(path, "rb"))) { if (!dirs[d]) snprintf(err, sizeof err, "cannot open the file"); continue; }
         fseek(f, 0, SEEK_END); len = ftell(f); fseek(f, 0, SEEK_SET);
         if (len <= 0 || len > 1000000 || !(text = malloc((size_t)len + 1))) { fclose(f); snprintf(err, sizeof err, "unreadable"); continue; }
         if (fread(text, 1, (size_t)len, f) != (size_t)len) { fclose(f); free(text); snprintf(err, sizeof err, "short read"); continue; }
@@ -8465,10 +8484,11 @@ IR_API int indraw_lensdist_load(const char *user_dir, const char *sys_dir, const
     if (found) {
         jw_add(&w, "{\"ok\":true,\"lensdist\":\"loaded\",\"path\":");
         jw_str(&w, path);
-        jw_add(&w, ",\"active\":[%d,%d],\"on\":%d}", aw, ah, g_ld.on);
+        jw_add(&w, ",\"active\":[%d,%d]}", aw, ah);
     } else {
         jw_add(&w, "{\"ok\":true,\"lensdist\":\"none\",\"looked_for\":");
         jw_str(&w, file && file[0] ? file : name);
+        if (!(file && file[0]) && g_ld_profile_name[0]) { jw_add(&w, ",\"profile_name\":"); jw_str(&w, g_ld_profile_name); }
         if (err[0]) { jw_add(&w, ",\"refused\":"); jw_str(&w, err); }
         jw_add(&w, "}");
     }
