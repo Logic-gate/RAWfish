@@ -709,13 +709,18 @@ static const conf_key_t *confKnown(const QString &full)
  * section, or at the top of a file of before the sections. A key no longer
  * in the table is left out, a value no longer allowed takes the default.
  * The [camera_N] sections are carried the same way ("auto" becomes
- * "default"). Written to a new file, then put in place. Returns a line for
- * the log, "" on success with nothing to say. */
-static QString confRebuild(const QString &path, const QString &oldPath)
+ * "default") -- except for a new version (newVersion; 0.3.11, patch 0555):
+ * there our JPG's processing of each camera (the [camera_N] keys: denoise,
+ * frames, colour NR, moire, Luma NR, sharpen) starts again at "default", and
+ * the one-for-all JPG keys of before the sections are not carried, so that
+ * the new version's defaults (its device profiles' jpg_* keys) apply; every
+ * other value is carried. Written to a new file, then put in place. Returns
+ * a line for the log, "" on success with nothing to say. */
+static QString confRebuild(const QString &path, const QString &oldPath, bool newVersion)
 {
     static const QRegularExpression cam(QStringLiteral("^camera_[0-9]+$"));
     const QString tmp = path + QStringLiteral(".new");
-    int carried = 0, refused = 0;
+    int carried = 0, refused = 0, jpgBack = 0;  /* jpgBack: JPG settings back to "default" (a new version) */
     QStringList refusedKeys;
     QFile::remove(tmp);
     {
@@ -729,6 +734,7 @@ static QString confRebuild(const QString &path, const QString &oldPath)
             QVariant v;
             if (old && old->contains(full)) v = old->value(full);
             else if (old && *k.section && old->contains(key)) v = old->value(key);   /* a file of before the sections */
+            if (newVersion && !*k.section && v.isValid()) { ++jpgBack; continue; }   /* the old one-for-all JPG keys: not carried */
             if (v.isValid() && conf_value_ok(k.check, confText(v).toUtf8().constData())) {
                 s.setValue(full, v);
                 ++carried;
@@ -746,6 +752,11 @@ static QString confRebuild(const QString &path, const QString &oldPath)
                     const QString full = g + QLatin1Char('/') + QLatin1String(k.key);
                     QString v = old->contains(full) ? confText(old->value(full)) : QString::fromUtf8(k.def);
                     if (v == QLatin1String("auto")) v = QStringLiteral("default");   /* the luma's word until 0.3.11-550 */
+                    if (newVersion && v != QLatin1String("default")) {   /* a new version: its own JPG defaults */
+                        ++jpgBack;
+                        s.setValue(full, QStringLiteral("default"));
+                        continue;
+                    }
                     if (!conf_value_ok(k.check, v.toUtf8().constData())) { ++refused; refusedKeys << full; v = QString::fromUtf8(k.def); }
                     else if (old->contains(full)) ++carried;   /* absent: its default, not carried */
                     s.setValue(full, v);
@@ -759,7 +770,8 @@ static QString confRebuild(const QString &path, const QString &oldPath)
     if (oldPath.isEmpty()) return QString();
     return QStringLiteral("rawfish-ir.conf: a new file, %1 value(s) carried from %2%3")
             .arg(carried).arg(oldPath)
-            .arg(refused ? QStringLiteral("; %1 not allowed any more, at the default: %2").arg(refused).arg(refusedKeys.join(QStringLiteral(", "))) : QString());
+            .arg(refused ? QStringLiteral("; %1 not allowed any more, at the default: %2").arg(refused).arg(refusedKeys.join(QStringLiteral(", "))) : QString())
+            + (jpgBack ? QStringLiteral("; %1 JPG setting(s) of the cameras back to \"default\" (the new version's defaults)").arg(jpgBack) : QString());
 }
 
 /* Is the file at `path` of before the sections (0.3.11-550 and earlier): a
@@ -784,7 +796,8 @@ static bool confBeforeSections(const QString &path)
 
 /* rawfish-ir.conf whole at each start:
  *  - a new version (archiveOnNewVersion moved the old file to its backup
- *    folder): a new file, the old one's values carried (confRebuild);
+ *    folder): a new file, the old one's values carried (confRebuild) --
+ *    but our JPG's processing per camera at "default", the new version's;
  *  - no file (a new install, or deleted): a new file at the defaults;
  *  - a file of before the sections: copied to a backup folder, then
  *    rebuilt from that copy, every value kept;
@@ -798,16 +811,16 @@ void IndrawPreview::writeDefaultSettings()
 {
     const QString path = settingsPath();
     if (!s_confFromBackup.isEmpty() && QFile::exists(s_confFromBackup)) {
-        s_confNote = confRebuild(path, s_confFromBackup);
+        s_confNote = confRebuild(path, s_confFromBackup, true);
         return;
     }
-    if (!QFile::exists(path)) { s_confNote = confRebuild(path, QString()); return; }
+    if (!QFile::exists(path)) { s_confNote = confRebuild(path, QString(), false); return; }
     if (confBeforeSections(path)) {
         const QString backup = QDir::homePath() + QStringLiteral("/.config/com.rawfish/rawfish-ir/backup-before-sections-")
                              + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")) + QStringLiteral("/config");
         const QString copy = backup + QStringLiteral("/rawfish-ir.conf");
         if (!QDir().mkpath(backup) || !QFile::copy(path, copy)) { s_confNote = QStringLiteral("rawfish-ir.conf: could not keep a copy before sorting it into sections: left as it is"); return; }
-        s_confNote = confRebuild(path, copy);
+        s_confNote = confRebuild(path, copy, false);
         return;
     }
     QSettings s(path, QSettings::IniFormat);

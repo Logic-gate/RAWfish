@@ -46,7 +46,9 @@ static const char *const k_conf_head =
         "- A new install writes it with every key at its default. A new version of\n"
         "  the app carries your values into a new file (keys it no longer has are left\n"
         "  out, a value no longer allowed takes its default) and keeps the earlier\n"
-        "  file in ~/.config/com.rawfish/rawfish-ir/backup-<earlier version>-<date>/.\n"
+        "  file in ~/.config/com.rawfish/rawfish-ir/backup-<earlier version>-<date>/;\n"
+        "  only our JPG's processing of each camera ([camera_N]) starts again at\n"
+        "  \"default\", the new version's defaults.\n"
         "- To edit it: CLOSE the app first (it rewrites the file when a setting\n"
         "  changes), edit, reopen. A value out of its range is clamped, a value not in\n"
         "  its list takes the default: a typo never stops the app. A key must stay in\n"
@@ -378,7 +380,7 @@ static const conf_key_t k_conf_keys[] = {
         "The luminance noise filter, after the merge and before the sharpening:\n"
         "each pixel averaged with its neighbours that differ from it by less than\n"
         "1, 1.5 or 2.2 times the noise measured (1..3), so that grain goes and\n"
-        "edges stay; 0 off.                            values: default, 0..3             app's default 0 (the Xperia 10 III's profile: 2)\n" },
+        "edges stay; 0 off.                            values: default, 0..3             app's default 0 (device profiles: 2)\n" },
     { "camera", "jpgSharpen", "default", "list:default,0,1,2,3,4,5",
         "RAWfish-ir's sharpening of the fine detail above the noise: 0 off, 1..5 =\n"
         "0.5, 1, 1.5, 2.5, 4 times the detail.        values: default, 0..5             app's default 3\n" },

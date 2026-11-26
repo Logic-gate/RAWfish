@@ -15,6 +15,18 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- New JPG defaults, judged on the phone (patch 0555; device profiles): the
+  JP2's 26 mm and every camera of the Xperia 10 III take 2 frames merged by
+  tiles, colour NR 3, no moiré filter, Luma NR 2 and sharpen 2; the JP2's
+  18 mm 4 frames merged by tiles (classic until now), colour NR 2, Luma NR 2,
+  sharpen 3; the JP2's front camera and the Xperia XA2 (slow to merge by
+  tiles) the app's own (classic of one frame, colour NR 2, sharpen 3).
+  A new version applies its own: our JPG's processing of each camera (the
+  [camera_N] sections of rawfish-ir.conf: denoise, frames, colour NR,
+  moiré, Luma NR, sharpen) is not carried into the new version's file but
+  starts again at "default" (the log says how many went back); every other
+  setting is carried, as before. A build of the same version (a patch)
+  keeps them all.
 - Tests of 26 Nov 2026 (patch 0553):
   - with "JPG +DNG" (Settings: a DNG with each JPG) a bracket gives the
     camera's JPEG series, then the same series again as DNGs; it gave the
