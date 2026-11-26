@@ -496,18 +496,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Per frame</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Each frame the whole pose</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Each frame 1/%1 of the pose, the ISO x%1 (less blur)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location line="+0"/>
         <source>%1 frames merged (less grain)</source>
         <translation type="unfinished"></translation>
@@ -908,8 +896,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+4"/>
-        <source>DNG
-(RAW)</source>
+        <source>DNG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -920,7 +907,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+1"/>
         <source>JPG
-+RAW</source>
++DNG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

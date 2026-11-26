@@ -127,8 +127,8 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo&apos;s report the histogram the app showed and the photo&apos;s own; our JPG photos carry their settings in their file names (seen in the Gallery&apos;s details). Takes effect at the next start of RAWfish-ir.</source>
-        <translation>À allumer avant de reproduire un problème de mise au point, d&apos;exposition ou de geste : le journal garde alors chaque commande et chaque réponse (le journal normal ne garde que les démarrages, les photos et les erreurs), et le compte rendu de chaque photo l&apos;histogramme que l&apos;app affichait et celui de la photo ; nos photos JPG portent leurs réglages dans leur nom de fichier (visible dans les détails de la Galerie). Pris en compte au prochain démarrage de RAWfish-ir.</translation>
+        <source>Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo&apos;s report the histogram the app showed and the photo&apos;s own; our JPG photos carry their settings in their file names (seen in the Gallery&apos;s details); the exposure&apos;s changes and a touch&apos;s focus are traced. Takes effect at the next start of RAWfish-ir.</source>
+        <translation>À allumer avant de reproduire un problème de mise au point, d&apos;exposition ou de geste : le journal garde alors chaque commande et chaque réponse (le journal normal ne garde que les démarrages, les photos et les erreurs), et le compte rendu de chaque photo l&apos;histogramme que l&apos;app affichait et celui de la photo ; nos photos JPG portent leurs réglages dans leur nom de fichier (visible dans les détails de la Galerie) ; les changements d&apos;exposition et la mise au point après une touche sont tracés. Pris en compte au prochain démarrage de RAWfish-ir.</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -157,8 +157,8 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>Same exposure, same file name. Saved in the DNG folder. Not working with the camera&apos;s own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can&apos;t do both at the same time.</source>
-        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Ne fonctionne pas avec le JPEG de l&apos;appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
+        <source>Same exposure, same file name. Saved in the DNG folder. A bracket gives the camera&apos;s JPEG series, then the same series as DNGs. Not working with the camera&apos;s own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can&apos;t do both at the same time.</source>
+        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Un bracketing donne la série de JPEG de l&apos;appareil, puis la même série en DNG. Ne fonctionne pas avec le JPEG de l&apos;appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
     </message>
     <message>
         <location line="+29"/>
@@ -202,8 +202,8 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>Shows RAWfish-ir&apos;s processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Per frame, Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.</source>
-        <translation>Affiche le traitement du JPG par RAWfish-ir dans le menu avancé : Débruitage (classique ou tuiles), Images (1 à 8 fusionnées), Pose/image, Bruit coul., Moiré, Bruit lum. et Netteté. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
+        <source>Shows RAWfish-ir&apos;s processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.</source>
+        <translation>Affiche le traitement du JPG par RAWfish-ir dans le menu avancé : Débruitage (classique ou tuiles), Images (1 à 8 fusionnées), Bruit coul., Moiré, Bruit lum. et Netteté. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
     </message>
     <message>
         <location line="+40"/>

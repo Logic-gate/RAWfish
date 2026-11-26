@@ -51,20 +51,17 @@ int main(void)
     r.dng = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && strstr(lines[0], "q=95 dng=1 focus=") != NULL, "yuv with a DNG: dng=1");
-    /* 3b''. 8 frames, the tile merge, a split pose; tiles with one frame is the classic */
-    r.dng = 0; r.frames = 8; r.nr_tiles = 1; r.split = 4;
+    /* 3b''. 8 frames, the tile merge; tiles with one frame is the classic */
+    r.dng = 0; r.frames = 8; r.nr_tiles = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
-    CHECK(n == 1 && !strncmp(lines[0], "yuv photo n=8 nr=tiles split=4 colour=2 ", 40), "yuv: 8 frames by tiles, 1/4 pose");
-    r.frames = 4; r.split = 3;
+    CHECK(n == 1 && !strncmp(lines[0], "yuv photo n=8 nr=tiles colour=2 ", 32), "yuv: 8 frames by tiles");
+    r.frames = 4; r.nr_tiles = 0;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
-    CHECK(n == 1 && strstr(lines[0], "n=4 nr=tiles colour=") != NULL, "yuv tiles: a split of 3 is no split");
-    r.nr_tiles = 0; r.split = 2;
-    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
-    CHECK(n == 1 && strstr(lines[0], "n=4 colour=") != NULL && !strstr(lines[0], "split="), "yuv classic: no split");
+    CHECK(n == 1 && strstr(lines[0], "n=4 colour=") != NULL && !strstr(lines[0], "nr="), "yuv classic: no nr=");
     r.frames = 1; r.nr_tiles = 1;
     n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
     CHECK(n == 1 && strstr(lines[0], "n=1 colour=") != NULL && !strstr(lines[0], "nr="), "yuv tiles of one frame: the classic");
-    r.frames = 4; r.nr_tiles = 0; r.split = 0;
+    r.frames = 4; r.nr_tiles = 0;
     r.yuv = 0; r.dng = 0;
     /* 3b'. a yuv request WITH a bracket is not one photo: it becomes the
      *      camera's JPEG, a burst (x3) or three exposures (EV). */
@@ -121,6 +118,22 @@ int main(void)
           "bracket +-2: 1/20, 1/5, and the ceiling 1/2");
     CHECK(strstr(lines[0], " ms=1") && strstr(lines[1], " ms=1") && strstr(lines[2], " ms=1"),
           "bracket: the milliseconds always in its names (ms=1)");
-    printf(fails ? "shoot: FAILED (%d)\n" : "shoot: OK (10 rules)\n", fails);
+    /* 6b. JPG + DNG (dng with a bracket in JPEG): the camera's JPEG series
+     * first, then the same series in raw -- x7: the burst and seven raw
+     * shots (8 lines, the most); EV steps: three jpeg then three raw. */
+    r.dng = 1; r.bracket = 0; r.bracket_n = 7; xs.shutter_ns = 16666667;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 8 && !strncmp(lines[0], "burst photo n=7 ", 16) && !strncmp(lines[1], "raw photo exp=0.0166667", 23)
+          && !strcmp(lines[1], lines[7]), "x7 JPG + DNG: the JPEG burst, then seven raw shots");
+    r.bracket = 2; xs.shutter_ns = 2e8;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 6 && !strncmp(lines[0], "jpeg ", 5) && !strncmp(lines[2], "jpeg ", 5) && !strncmp(lines[3], "raw ", 4)
+          && strstr(lines[3], "exp=0.0500000") && strstr(lines[5], "exp=0.5000000") && !strstr(lines[3], "q="),
+          "+-2 JPG + DNG: three jpeg, then three raw at the same exposures, without the JPEG's fields");
+    r.raw = 1; r.bracket = 0; r.bracket_n = 3;
+    n = ctl_shoot_lines(&r, &xs, 5e8, 1e6, &fs, lines);
+    CHECK(n == 3 && !strncmp(lines[0], "raw ", 4), "a bracket in raw: dng changes nothing");
+    r.raw = 0; r.dng = 0; r.bracket = -1;
+    printf(fails ? "shoot: FAILED (%d)\n" : "shoot: OK (11 rules)\n", fails);
     return fails ? 1 : 0;
 }

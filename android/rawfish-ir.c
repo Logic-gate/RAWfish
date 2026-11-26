@@ -91,7 +91,7 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 
 /* Our JPG's processing when the device profile gives no default (see
  * indraw_set_jpg_default): the app's own, the same in the CLI and the menu. */
-#define JPG_DEFAULT_BUILTIN "classic,1,4,1,2,0,0,3"
+#define JPG_DEFAULT_BUILTIN "classic,1,4,2,0,0,3"
 
 static int g_screen_notch = -1;   /* the screen's top cutout, from the device profile (-1 unknown) */
 
@@ -579,8 +579,8 @@ static struct {
     float override_focus_max_d;             /* 0 = none; else the lens' real closest stop, HAL units (below the declared one) */
     int no_touch_focus;                     /* 1: the device profile says a touch cannot focus this camera */
     /* Our JPG's processing by default on this camera, for the caps line
-     * (jpg_default=): "method,frames,tile_frames,tile_split,colour,moire,
-     * luma,sharpen", set by the CLI from the device profile (indraw_set_jpg_default);
+     * (jpg_default=): "method,frames,tile_frames,colour,moire,luma,sharpen",
+     * set by the CLI from the device profile (indraw_set_jpg_default);
      * "" = the app's own defaults. The engine only reports it. */
     char jpg_default[48];
     int focus_step_pct;                     /* device profile: volume steps above 1 D as a % of the value (0 = constant) */
@@ -683,7 +683,6 @@ static struct {
 #define YUV_BURST_MAX 8
     ACaptureRequest *yuv_burst_req[YUV_BURST_MAX]; /* the same, one per frame of a burst (own exposure each) */
     AImage *yuv_q[YUV_BURST_MAX]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
-    int yuv_split;                          /* each burst frame's exposure / this, its ISO x this (1, 2, 4) */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
     int yuv_light;                               /* the next captures are snap's: binned to about 2048 px wide (indraw_set_yuv_light) */
@@ -4774,8 +4773,8 @@ static int run_3a(int timeout_ms, a3_report_t *rep)
  * lens physically moves and the viewfinder reflects it -- the capture requests
  * alone are too brief to move the lens (this is why a one-shot manual distance
  * on the still request did nothing). For a manual mode it then waits (up to
- * ~1.2 s) for the lens to stop moving near the requested distance. Mirrors how
- * RAWfish drives focus on the repeating request. Returns 1 if an AF scan should
+ * FOCUS_SETTLE_MAX_MS, 2 s) for the lens to stop moving near the requested
+ * distance. Mirrors how RAWfish drives focus on the repeating request. Returns 1 if an AF scan should
  * be triggered (AUTO/MACRO), else 0. */
 static int set_preview_focus_opt(int mode, float diopters, int wait);
 static int set_preview_focus(int mode, float diopters) { return set_preview_focus_opt(mode, diopters, 1); }
@@ -4783,6 +4782,35 @@ static int set_preview_focus(int mode, float diopters) { return set_preview_focu
  * below), and "still" when two results in a row differ by less than this. */
 #define FOCUS_SETTLE_TOL 0.05f
 #define FOCUS_STILL_TOL 0.005f
+/* The longest wait for a manual distance before a photo: 2 s since 0.3.11-553
+ * (1.2 s before; the user's choice, 26 Nov 2026 -- a lens already in place
+ * costs nothing, one still on its way gets the time to arrive). */
+#define FOCUS_SETTLE_MAX_MS 2000
+
+/* Waits until the lens is settled at `target` (HAL units), at most
+ * FOCUS_SETTLE_MAX_MS: the HAL says it is stationary, it reports the same
+ * position as on the result before (a lens pausing on its way does not
+ * pass), and that position is within FOCUS_SETTLE_TOL of the target. Notes
+ * the outcome for the log's "lens" line (lens_note): lens_target,
+ * lens_settle (1 settled, 0 not when the time ran out), lens_wait_ms. Not
+ * under g.lock (it takes it). */
+static void lens_wait_settled(float target)
+{
+    double t0 = now_ms();
+    struct timespec dl = deadline_in(FOCUS_SETTLE_MAX_MS);
+    pthread_mutex_lock(&g.lock);
+    g.lens_target = target;
+    g.lens_settle = 0;
+    for (;;) {
+        int still = g.live_lens_state == ACAMERA_LENS_STATE_STATIONARY &&
+                    fabsf(g.live_focus - g.prev_live_focus) < FOCUS_STILL_TOL;
+        if (still && fabsf(g.live_focus - target) < FOCUS_SETTLE_TOL) { g.lens_settle = 1; break; }
+        if (g.device_error) break;
+        if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
+    }
+    g.lens_wait_ms = (int)(now_ms() - t0 + 0.5);
+    pthread_mutex_unlock(&g.lock);
+}
 /* wait = 0: a manual distance is set and the call returns at once (the
  * controller's volume-key stepping sends one every few tens of ms; waiting
  * for the lens on each made the steps pile up and run on after the key
@@ -4791,7 +4819,6 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
 {
     ACaptureRequest *reqs[1] = { g.preview_request };
     int want_af_scan = set_focus(g.preview_request, mode, diopters); /* on the PREVIEW */
-    struct timespec dl;
     if (mode == IR_FOCUS_KEEP) return 0;           /* leave the preview as it is   */
     /* The RAW meter's request (a frame every 200 ms when the meter is on)
      * must carry the SAME focus as the preview, as it does for the exposure:
@@ -4805,8 +4832,9 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
     ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
     if ((mode != IR_FOCUS_MANUAL && mode != IR_FOCUS_RAW) || !wait) return want_af_scan; /* AF modes settle via 3A; HOLD is already there */
     /* Manual distance: wait for the lens to reach the (translated) target and
-     * stop moving, at most 1.2 s. The position is the HAL's (its own units),
-     * so it is compared with the calibrated value, not the user's diopters.
+     * stop moving, at most FOCUS_SETTLE_MAX_MS (lens_wait_settled). The
+     * position is the HAL's (its own units), so it is compared with the
+     * calibrated value, not the user's diopters.
      *
      * Settled = the HAL says the lens is stationary, it reports the same
      * position as on the result before (a lens pausing on its way does not
@@ -4818,24 +4846,67 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
      * at f/1.8. A lens already in place passes at once (the same results).
      * Not settled when the wait runs out: the photo is taken all the same, as
      * before, and the log's "lens" line says so with the distance left. */
-    {
-        float target = mode == IR_FOCUS_RAW ? (diopters < 0 ? 0 : diopters) : focus_translate(diopters < 0 ? 0 : diopters);
-        double t0 = now_ms();
-        dl = deadline_in(1200);
-        pthread_mutex_lock(&g.lock);
-        g.lens_target = target;
-        g.lens_settle = 0;
-        for (;;) {
-            int still = g.live_lens_state == ACAMERA_LENS_STATE_STATIONARY &&
-                        fabsf(g.live_focus - g.prev_live_focus) < FOCUS_STILL_TOL;
-            if (still && fabsf(g.live_focus - target) < FOCUS_SETTLE_TOL) { g.lens_settle = 1; break; }
-            if (g.device_error) break;
-            if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
-        }
-        g.lens_wait_ms = (int)(now_ms() - t0 + 0.5);
-        pthread_mutex_unlock(&g.lock);
-    }
+    lens_wait_settled(mode == IR_FOCUS_RAW ? (diopters < 0 ? 0 : diopters) : focus_translate(diopters < 0 ? 0 : diopters));
     return 0;
+}
+
+/* A continuous autofocus caught searching (PASSIVE_SCAN): waits for the
+ * search to end, at most af_scan_wait_ms (rawfish-ir.conf focusScanWait).
+ * Returns how long it waited, or -1 when no search was running. Not under
+ * g.lock (it takes it). */
+static int af_search_wait(void)
+{
+    double t0 = now_ms();
+    int scanning;
+    pthread_mutex_lock(&g.lock);
+    scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
+    if (scanning) {
+        struct timespec sdl = deadline_in(g.af_scan_wait_ms);
+        while (g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN && !g.device_error)
+            if (pthread_cond_timedwait(&g.cond, &g.lock, &sdl) == ETIMEDOUT) break;
+    }
+    pthread_mutex_unlock(&g.lock);
+    return scanning ? (int)(now_ms() - t0 + 0.5) : -1;
+}
+
+/* Before a burst (the camera's JPEG burst, our merged JPG, a stack;
+ * 0.3.11, patch 0553). These take the viewfinder's focus as it is
+ * (copy_preview_focus: no focus of their own), and until now started at
+ * once: a burst right after a distance was set ran while the lens was still
+ * on its way (Xperia 10 III, 26 Nov 2026: a bracket x7 0.16 s after the
+ * camera's start, "moved 5.032 during the photo"). The same two waits as a
+ * single photo's (prepare_capture):
+ *  - the viewfinder's focus manual (AF off, a distance or a held lens):
+ *    until the lens is settled at that distance, at most
+ *    FOCUS_SETTLE_MAX_MS (a lens in place passes at once);
+ *  - a continuous AF caught searching: until the search ends, at most
+ *    focusScanWait (that wait is said in the log, the distance's in the
+ *    "lens before" line).
+ * Not under g.lock. */
+static void burst_focus_wait(void)
+{
+    ACameraMetadata_const_entry e;
+    int af_off = 0, have_d = 0, waited;
+    float d = 0.0f;
+    pthread_mutex_lock(&g.lock);
+    g.lens_settle = -1;                          /* no wait for a distance yet (lens_note) */
+    pthread_mutex_unlock(&g.lock);
+    if (!g.preview_request) return;
+    if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_CONTROL_AF_MODE, &e) == ACAMERA_OK && e.count)
+        af_off = e.data.u8[0] == ACAMERA_CONTROL_AF_MODE_OFF;
+    if (af_off && ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_LENS_FOCUS_DISTANCE, &e) == ACAMERA_OK &&
+        e.count && isfinite(e.data.f[0])) { d = e.data.f[0]; have_d = 1; }
+    if (af_off) {
+        if (have_d) lens_wait_settled(d);
+        return;
+    }
+    if (!g.af_continuous || g.af_scan_wait_ms <= 0) return;
+    waited = af_search_wait();
+    if (waited >= 0) {
+        char line[120];
+        snprintf(line, sizeof line, "lensdiag search: the burst waited %d ms for the continuous focus's search to end\n", waited);
+        emit_event(line);
+    }
 }
 
 /* ---- the focus during a long exposure, and the lens in the log ----------- */
@@ -4964,22 +5035,12 @@ static void prepare_capture(ACaptureRequest *req, int focus_mode, float focus_di
      * search to end, at most af_scan_wait_ms (1 s: the JP2's searches take
      * 0.4-0.95 s), and only then; a lens already settled costs nothing. (A
      * manual distance is waited for in set_preview_focus: the lens stationary
-     * and at its target, up to 1.2 s; a touch's search, below, up to 1.5 s.) */
+     * and at its target, up to FOCUS_SETTLE_MAX_MS, 2 s; a touch's search,
+     * below, up to 1.5 s. A burst does the same, burst_focus_wait.) */
     g.last_scan_wait_ms = -1;
     if (g.af_continuous && g.af_scan_wait_ms > 0 && !want_af_scan &&
-        (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS)) {
-        double t0 = now_ms();
-        int scanning;
-        pthread_mutex_lock(&g.lock);
-        scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
-        if (scanning) {
-            struct timespec sdl = deadline_in(g.af_scan_wait_ms);
-            while (g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN && !g.device_error)
-                if (pthread_cond_timedwait(&g.cond, &g.lock, &sdl) == ETIMEDOUT) break;
-        }
-        pthread_mutex_unlock(&g.lock);
-        if (scanning) g.last_scan_wait_ms = (int)(now_ms() - t0 + 0.5);
-    }
+        (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS))
+        g.last_scan_wait_ms = af_search_wait();
     if (g.capture_delay_ms > 0) {                  /* device profile: let the lens settle */
         struct timespec ts;
         ts.tv_sec = g.capture_delay_ms / 1000;
@@ -6786,6 +6847,7 @@ IR_API int indraw_burst(const char *const *paths, int n, int quality, int nr, in
 {
     int rc;
     meter_quiesce();
+    burst_focus_wait();                          /* the lens at its distance, a search over (0553) */
     /* a long exposure: the continuous AF held for the whole burst (focus_freeze) */
     if (focus_freeze_wanted(exposure_ns)) focus_freeze();
     lens_note("before");
@@ -6829,6 +6891,7 @@ IR_API int indraw_stack(const char *path, const char *datetime, int64_t film_ns,
     /* A stack is a long exposure: the continuous AF held from the release to
      * the last sub-frame (the stack's own requests hold the lens already;
      * this keeps the viewfinder's AF from moving it in between). */
+    burst_focus_wait();                          /* the lens at its distance, a search over (0553) */
     focus_freeze();
     lens_note("before");
     rc = indraw_stack_impl(path, datetime, film_ns, sub_ns, stk_denoise, iso, out, out_size);
@@ -9003,7 +9066,7 @@ static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, in
     int with_dng = g.yuv_dng_path[0] && g.raw_target, dng_err = 0, dng_preview_err = 0;
     const char *dng_state = "none";
     ACaptureRequest *reqs[YUV_BURST_MAX];
-    int k, got = 0, rc = IR_OK, split = g.yuv_split == 2 || g.yuv_split == 4 ? g.yuv_split : 1;
+    int k, got = 0, rc = IR_OK;
     double copy_ms = 0, copy_max = 0;
     int64_t exp_min = 0, exp_max = 0, exp_ceiling;
     int32_t iso_min = 0, iso_max = 0;
@@ -9035,15 +9098,10 @@ static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, in
     for (k = 0; k < n; ++k) {
         /* this frame's pair: the exposure time scaled by 2^ev, kept within the
          * sensor's range and the tested ceiling; what does not fit goes on the ISO */
-        /* split (indraw_set_yuv_split): a shorter exposure each, the same
-         * brightness by the ISO -- less motion blur per frame, the merge of
-         * more frames taking the extra grain back */
-        double f = (ev ? pow(2.0, (double)ev[k]) : 1.0) / split;
+        double f = ev ? pow(2.0, (double)ev[k]) : 1.0;
         int64_t ex = (int64_t)(exposure_ns * f + 0.5);
-        int is = iso * split;
-        /* clamped to the range: the ISO takes what the time loses, from the
-         * frame's own ISO (with a split: iso x split; from `iso` alone, as
-         * until patch 0549, a split frame clamped came out split times dark) */
+        int is = iso;
+        /* clamped to the range: the ISO takes what the time loses */
         if (exp_ceiling > 0 && ex > exp_ceiling) { is = (int)((double)is * (double)ex / (double)exp_ceiling + 0.5); ex = exp_ceiling; }
         if (exp_min > 0 && ex < exp_min) { is = (int)((double)is * (double)ex / (double)exp_min + 0.5); ex = exp_min; }
         if (iso_max > 0 && is > iso_max) is = iso_max;
@@ -9153,7 +9211,6 @@ static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, in
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
     jw_add(&w, "],\"ms\":{\"capture\":%.1f,\"copy\":%.1f,\"copy_max\":%.1f}", t_cap - t0, got ? copy_ms / got : 0.0, copy_max);
-    if (split > 1) jw_add(&w, ",\"split\":%d", split);
     yuv_check_json(&w, &frames[0]);
     if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\",\"preview_err\":%d}", dng_state, dng_preview_err); }
     jw_add(&w, "}");
@@ -9167,6 +9224,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
                             ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
 {
     int rc;
+    burst_focus_wait();                          /* the lens at its distance, a search over (0553) */
     if (focus_freeze_wanted(exposure_ns)) focus_freeze();
     lens_note("before");
     rc = indraw_yuv_burst_impl(n, ev, exposure_ns, iso, timeout_ms, frames, timestamps, out, out_size);
@@ -9177,14 +9235,6 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     lens_note("after");
     focus_thaw();
     return rc;
-}
-
-/* The next YUV bursts' split: each frame exposed 1/split as long, at split
- * times the ISO (the same brightness; the ISO capped at the sensor's
- * maximum, the frame then darker). 1, 2 or 4; anything else is 1. */
-IR_API void indraw_set_yuv_split(int split)
-{
-    g.yuv_split = split == 2 || split == 4 ? split : 1;
 }
 
 IR_API void indraw_yuv_free(ir_yuv_t *f)
@@ -9245,9 +9295,9 @@ IR_API int indraw_set_streams_exclusive(int on)
 }
 
 /* Device-profile values, before indraw_stream_start: our JPG's processing
- * by default on this camera, "method,frames,tile_frames,tile_split,colour,
- * moire,luma,sharpen" (the CLI reads them from the device profile and
- * checks them; JPG_DEFAULT_BUILTIN when the profile says nothing). The
+ * by default on this camera, "method,frames,tile_frames,colour,moire,luma,
+ * sharpen" (the CLI reads them from the device profile and checks them;
+ * JPG_DEFAULT_BUILTIN when the profile says nothing). The
  * engine only reports them in the caps line (jpg_default=), for the app:
  * the menu's defaults, what its "default" means in rawfish-ir.conf. NULL or
  * "" = the app's own. IR_EARG for anything but letters, digits and commas

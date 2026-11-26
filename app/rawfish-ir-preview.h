@@ -392,7 +392,7 @@ public:
     /* Reads a JSON object file (e.g. the simple-mode layout), {} if absent. */
     Q_INVOKABLE QVariantMap readJsonFile(const QString &path);
     /* The commented reference files, next to the real ones, refreshed at each
-     * start: rawfish-ir.conf.example in the config dir, written from the app's
+     * start: rawfish-ir.conf.readme in the config dir, written from the app's
      * table (conftable.h: nothing reads it), and override-hal.example.jsonc
      * in device-profiles, copied from /usr/share/rawfish-ir/examples. The
      * real files are never touched here. */

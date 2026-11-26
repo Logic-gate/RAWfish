@@ -15,6 +15,47 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+- Tests of 26 Nov 2026 (patch 0553):
+  - with "JPG +DNG" (Settings: a DNG with each JPG) a bracket gives the
+    camera's JPEG series, then the same series again as DNGs; it gave the
+    JPEGs alone. Two series one after the other, not each shot as both: our
+    own JPG of each shot would have spaced the shots by its processing,
+    about 1 s each (an estimate; in the logs a HAL burst x7 took 0.7 to
+    0.9 s in all);
+  - the tile merge's "Per frame" (each frame 1/2 or 1/4 of the pose, the ISO
+    raised to match) is removed, everywhere: the menu column, the
+    `jpgTileSplit` key of each `[camera_N]` (dropped from rawfish-ir.conf at
+    the next start), the device profiles' `jpg_tile_split`, the command
+    line's `split=`, the engine's. At the sensor's highest ISO the ISO could
+    not be raised: the Xperia 10 III's telephoto at ISO 1159, its maximum
+    1163, gave frames 2 and 4 times dark (log of 26 Nov 2026, 17:43); and it
+    gained nothing measured. The caps' `jpg_default=` has seven fields;
+  - a burst (the camera's JPEG burst, our JPG of several frames) and a stack
+    wait for the focus first, as a single photo does: a manual distance or
+    a held lens until the lens is settled there, a continuous focus caught
+    searching until its search ends (focusScanWait). They started at once:
+    on the Xperia 10 III a bracket x7 taken just after the camera started
+    ran while the lens went to 0.19 m ("moved 5.032 during the photo");
+  - the wait for a manual distance before a photo is 2 s at most (1.2 s);
+    a lens already in place costs nothing;
+  - the detailed log traces the exposure: an `ae trace` line at each change
+    of the HAL's pair (more than 3 %) or of its AE state, of the pair the
+    wheels show, or of the viewfinder's mean (more than 5 %), with the
+    time and the light the pair takes in, in stops -- for the JP2's 18 mm,
+    whose exposure and wheels pump (as in Jolla Camera): whether it is the
+    HAL's AE, our wheels, or the image;
+  - the JP2's 18 mm's JPG defaults (its device profile): classic, 4 frames,
+    colour NR 2, moiré off, Luma NR 2, sharpen 3;
+  - TYPE says DNG for the RAW, "JPG +DNG" with a DNG with each JPG;
+  - the bracket of three shots at the same exposure is "0x3" in
+    rawfish-ir.conf, as 0x5 and 0x7 (it was "0"; an old 0 is read as 0x3);
+  - rawfish-ir.conf.example is now rawfish-ir.conf.readme (the .example
+    removed at the start): it cannot be used as a settings file, so it is
+    plain text to read -- no ';' before every line, an empty line before
+    each key;
+  - the log's "N value(s) carried" for a new rawfish-ir.conf counts only the
+    values the old file had (a camera's key absent there, at its default,
+    was counted too).
 - Our JPG's processing is kept per camera, and rawfish-ir.conf is sorted
   into sections (patch 0551).
   - Per camera: the denoise method, the frames merged (classic and

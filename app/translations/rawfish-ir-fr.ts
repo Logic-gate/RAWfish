@@ -495,18 +495,6 @@
         <translation>%1 images fusionnées par tuiles</translation>
     </message>
     <message>
-        <source>Per frame</source>
-        <translation>Pose/image</translation>
-    </message>
-    <message>
-        <source>Each frame the whole pose</source>
-        <translation>Chaque image : la pose entière</translation>
-    </message>
-    <message>
-        <source>Each frame 1/%1 of the pose, the ISO x%1 (less blur)</source>
-        <translation>Chaque image : 1/%1 de la pose, ISO x%1 (moins de flou)</translation>
-    </message>
-    <message>
         <location line="+0" />
         <source>%1 frames merged (less grain)</source>
         <translation>%1 images fusionnées (moins de grain)</translation>
@@ -913,10 +901,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+4" />
-        <source>DNG
-(RAW)</source>
-        <translation>DNG
-(RAW)</translation>
+        <source>DNG</source>
+        <translation>DNG</translation>
     </message>
     <message>
         <location line="+1" />
@@ -926,9 +912,9 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     <message>
         <location line="+1" />
         <source>JPG
-+RAW</source>
++DNG</source>
         <translation>JPG
-+RAW</translation>
++DNG</translation>
     </message>
     <message>
         <location line="+0" />

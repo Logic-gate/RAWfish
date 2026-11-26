@@ -68,7 +68,14 @@
         "_focus_note": "The 18 mm: its autofocus searches one way only (from the lens' position towards infinity) and passes the sharp position without stopping, its sharpness changing little with distance (focal 2.37 mm): a touch cannot focus it (logs of 15 Nov 2026). So no search of ours at all: automatic is the camera's own focus, manual the volume keys (no touch, no search from the FOCUS button); the hold still sets the exposure. Its lens stops near 9 while it declares 20.",
         "touch_focus_off": 1,
         "focus_max_diopters": 9,
-        "focus_step_percent": 8
+        "focus_step_percent": 8,
+        "_jpg_note": "Our JPG's defaults on the 18 mm (the user's choice for now, 26 Nov 2026, to be measured on a series at low and high ISO): 4 frames merged whole, colour NR 2, no moire filter, the luminance filter at 2, sharpening 3.",
+        "jpg_method": "classic",
+        "jpg_frames": 4,
+        "jpg_colour_nr": 2,
+        "jpg_moire": 0,
+        "jpg_luma_nr": 2,
+        "jpg_sharpen": 3
       }
     }
   ]

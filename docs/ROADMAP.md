@@ -140,9 +140,11 @@ Each item says why, so it can be picked up later without re-deriving it.
   frames), and the sensor's heat over a minute (dark current). To measure:
   a dark Σ at both pairs, the noise per sub-frame and the sum. If it is
   the read noise, Σ could choose a higher sub-frame ISO itself (fewer,
-  shorter frames for the same light), as the tile merge's split does.
-- **The tile merge (0445/0453) against the classic one**: hand-held at
-  1/2 and 1/4 of the pose, 4 and 8 frames; the noise and the detail
+  shorter frames for the same light), as the tile merge's split did
+  (removed in 0.3.11-553: at the sensor's highest ISO it could not make up
+  for the shorter frames, and gained nothing measurable).
+- **The tile merge (0445/0453) against the classic one**: hand-held,
+  4 and 8 frames; the noise and the detail
   after the sharpening, against the same shot classic.
 - **The XA2's RAW noise and linearity**: a dark-frame and flat series as
   for the JP2 (docs/measurements).

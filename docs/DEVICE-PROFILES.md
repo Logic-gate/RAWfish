@@ -313,8 +313,6 @@ cause can be looked for and a shipped profile written.
     tiles (classic);
   - `"jpg_frames": 1 | 2 | 4 | 8` -- the classic merge's frames (1);
   - `"jpg_tile_frames": 2 | 4 | 8` -- the tile merge's frames (4);
-  - `"jpg_tile_split": 1 | 2 | 4` -- the tile merge: each frame 1, 1/2 or
-    1/4 of the pose (1);
   - `"jpg_colour_nr": 0..5` -- the colour noise filter (2);
   - `"jpg_moire": 0..4` -- the false-colour filter (0);
   - `"jpg_luma_nr": 0..3` -- the luminance noise filter (0): 1..3
@@ -374,7 +372,7 @@ Menus, toggles, display choices. These belong to the Qt app, in its own file,
 and are **never** mixed with sensor data. Changing phone must not change your UI
 preferences, and changing UI preferences must not touch the hardware data. The
 app keeps them in `~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf` (and a few in dconf,
-from its Settings page; `rawfish-ir.conf.example` describes every key); the CLI
+from its Settings page; `rawfish-ir.conf.readme` describes every key); the CLI
 tool has no UI.
 
 ## Everything asked of the HAL is atomic

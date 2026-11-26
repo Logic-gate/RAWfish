@@ -104,7 +104,7 @@ Page {
 
             TextSwitch {
                 text: qsTr("Also save a DNG with each JPG")
-                description: qsTr("Same exposure, same file name. Saved in the DNG folder. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.")
+                description: qsTr("Same exposure, same file name. Saved in the DNG folder. A bracket gives the camera's JPEG series, then the same series as DNGs. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.")
                 checked: output.jpgWithDng
                 onCheckedChanged: output.jpgWithDng = checked
             }
@@ -236,7 +236,7 @@ Page {
 
             TextSwitch {
                 text: qsTr("JPG processing in the camera menu")
-                description: qsTr("Shows RAWfish-ir's processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Per frame, Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.")
+                description: qsTr("Shows RAWfish-ir's processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.")
                 checked: menuGroup.processingColumns
                 onCheckedChanged: menuGroup.processingColumns = checked
             }
@@ -304,7 +304,7 @@ Page {
             SectionHeader { text: qsTr("Log") }
             TextSwitch {
                 text: qsTr("Detailed log")
-                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own; our JPG photos carry their settings in their file names (seen in the Gallery's details). Takes effect at the next start of RAWfish-ir.")
+                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own; our JPG photos carry their settings in their file names (seen in the Gallery's details); the exposure's changes and a touch's focus are traced. Takes effect at the next start of RAWfish-ir.")
                 checked: device.extraLog
                 onCheckedChanged: device.extraLog = checked
             }

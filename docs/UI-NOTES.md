@@ -649,7 +649,7 @@ Advanced mode only.
 
 rawfish-ir.conf cannot hold comments (QSettings rewrites it and drops them),
 and JSON has none: the app installs two commented references at each
-start, `rawfish-ir.conf.example` (every key: function, values, limits, default;
+start, `rawfish-ir.conf.readme` (every key: function, values, limits, default;
 the dconf settings listed apart) and `override-hal.example.jsonc` (real `//`
 comments, so not loadable JSON, never read; checked that it is valid JSON
 once the comments are stripped). The real override-hal.json stays plain

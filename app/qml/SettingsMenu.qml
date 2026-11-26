@@ -99,8 +99,10 @@ Item {
     property int previewEdgeIndex: 3       /* hq_edge (rawfish-ir.conf viewfinderSharpen) */
     // The mode at start (Settings page): "last" = as left, else "simple" or "advanced".
     property string startMode: "last"
-    // Bracketing: "off", "0" (three shots in a row at the same exposure, for a
-    // short moment), or "1".."3" (three shots at -N, 0, +N stops).
+    // Bracketing: "off", "0x3", "0x5", "0x7" (three, five or seven shots in a
+    // row at the same exposure, for a short moment), or "1".."3" (three shots
+    // at -N, 0, +N stops). "0x3" was "0" until 0.3.11-551: an old "0" in
+    // rawfish-ir.conf is read as 0x3 (and written so at the next pick).
     property string bracket: "off"
     // A stacked shutter (Σ) is one long exposure made of many frames: no
     // bracket with it. While Σ is chosen the bracket in force is "off" and
@@ -119,8 +121,9 @@ Item {
     // (its chosen value is kept and comes back, as with the Σ).
     readonly property bool flashAuto: (flash === "on" || flash === "auto") && !!(viewfinder && viewfinder.caps && viewfinder.caps.flash)
     readonly property string effBracket: (stackSelected || flashAuto) ? "off" : bracket
-    // The same-exposure series: "0" 3 frames, "0x5" 5, "0x7" 7; the
-    // bracket's fields for the shutter's "sh" line (sailfish/controller.c).
+    // The same-exposure series: "0x3" 3 frames, "0x5" 5, "0x7" 7; the
+    // bracket's fields for the shutter's "sh" line (sailfish/controller.c,
+    // which still says bracket=0 for the series).
     function bracketFrames(v) { return v === "0x5" ? 5 : v === "0x7" ? 7 : 3 }
     function bracketFields() {
         var v = effBracket
@@ -150,14 +153,19 @@ Item {
         { name: "method",     key: "jpgNrMethod",          values: ["classic", "tiles"] },
         { name: "frames",     key: "jpgFrames",            values: ["1", "2", "4", "8"] },
         { name: "tileFrames", key: "jpgTileFrames",        values: ["2", "4", "8"] },
-        { name: "tileSplit",  key: "jpgTileSplit",         values: ["1", "2", "4"] },
         { name: "colour",     key: "jpgNoiseColourFilter", values: ["0", "1", "2", "3", "4", "5"] },
         { name: "moire",      key: "jpgMoireFilter",       values: ["0", "1", "2", "3", "4"] },
         { name: "luma",       key: "jpgLumaNoiseFilter",   values: ["0", "1", "2", "3"] },
         { name: "sharpen",    key: "jpgSharpen",           values: ["0", "1", "2", "3", "4", "5"] }
     ]
     // The app's own defaults, in that order (the engine's JPG_DEFAULT_BUILTIN).
-    readonly property var jpgBuiltin: ["classic", "1", "4", "1", "2", "0", "0", "3"]
+    // Until 0.3.11-551 a "tileSplit" came after tileFrames (the tile merge's
+    // pose per frame, 1, 1/2 or 1/4): removed in 0553, it shortened the
+    // frames without the ISO to make up for it at the sensor's maximum (the
+    // Xperia 10 III's photos 2 or 4 times dark, 26 Nov 2026), and gained
+    // nothing measurable elsewhere. An old jpgTileSplit key is dropped from
+    // rawfish-ir.conf at the next start (not in conftable.h).
+    readonly property var jpgBuiltin: ["classic", "1", "4", "2", "0", "0", "3"]
     // This camera's choices: name -> value; a setting absent is at its default.
     property var jpgChosen: ({})
     function jpgIndex(name) {
@@ -223,12 +231,11 @@ Item {
     readonly property bool yuvNrTiles: jpgValue("method") === "tiles"   // the denoise method: classic (one shift per frame) or by tiles
     readonly property int yuvFrames: Number(jpgValue("frames"))         // classic merge: 1, 2, 4 or 8 frames
     readonly property int yuvTileFrames: Number(jpgValue("tileFrames")) // tile merge: 2, 4 or 8 frames
-    readonly property int yuvTileSplit: Number(jpgValue("tileSplit"))   // tile merge: each frame 1, 1/2 or 1/4 of the pose (the ISO raised to match)
     // The shoot command's merge fields; a flash fires on one frame: one frame then.
     function yuvMergeFields(oneFrame) {
         if (oneFrame) return " frames=1"
         if (!yuvNrTiles) return " frames=" + yuvFrames
-        return " frames=" + yuvTileFrames + " nr=tiles" + (yuvTileSplit > 1 ? " split=" + yuvTileSplit : "")
+        return " frames=" + yuvTileFrames + " nr=tiles"
     }
     readonly property int yuvColour: Number(jpgValue("colour"))         // colour filter: 0 off, 1..5 (1, 2, 3, 5, 8 x the noise)
     readonly property int yuvMedian: Number(jpgValue("moire"))          // false colour: 0 off, 1..4 (a 3x3 .. 9x9 median)
@@ -362,7 +369,8 @@ Item {
         edgeIndex = Math.max(0, edgeModes.indexOf(pick("halJpegSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
         previewNoiseIndex = Math.max(0, noiseModes.indexOf(pick("viewfinderNoise", "hq", ["default", "off", "fast", "hq", "minimal"]) + "_noise"))
         previewEdgeIndex = Math.max(0, edgeModes.indexOf(pick("viewfinderSharpen", "hq", ["default", "off", "fast", "hq"]) + "_edge"))
-        bracket = pick("bracket", "off", ["off", "0", "0x5", "0x7", "1", "2", "3"])
+        bracket = pick("bracket", "off", ["off", "0x3", "0x5", "0x7", "1", "2", "3", "0"])
+        if (bracket === "0") bracket = "0x3"           // its name until 0.3.11-551
         jpgLoad()                                  // our JPG's processing: this camera's (per camera)
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         menuDiscovered = num("menuDiscovered", 0, 0, 1) === 1
@@ -779,8 +787,8 @@ Item {
                 dimmedHint: menu.stackSelected ? qsTr("Σ: one long exposure, no bracketing")
                           : menu.flashAuto ? qsTr("Flash: no bracketing")
                           : qsTr("snap: one shot, no bracketing")
-                // "0", "0x5", "0x7": 3, 5 or 7 frames the same (bracketFields)
-                caption: qsTr("Bracket"); values: ["off", "0", "0x5", "0x7", "1", "2", "3"]; current: menu.effBracket
+                // "0x3", "0x5", "0x7": 3, 5 or 7 frames the same (bracketFields)
+                caption: qsTr("Bracket"); values: ["off", "0x3", "0x5", "0x7", "1", "2", "3"]; current: menu.effBracket
                 labelFor: function(v) { return v === "off" ? qsTr("No bracketing")
                                               : v.charAt(0) === "0" ? qsTr("%1 frames in a row, same exposure").arg(menu.bracketFrames(v))
                                               : qsTr("3 frames, ±%1 EV").arg(v) }
@@ -804,8 +812,8 @@ Item {
                 Row {
                     id: jpgRow
                     spacing: Theme.paddingMedium
-                // The denoise method: it shows its own columns (classic: Frames;
-                // tiles: Frames and the pose per frame), the other's hidden.
+                // The denoise method: it shows its own Frames column (classic:
+                // 1 to 8; tiles: 2 to 8), the other's hidden.
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: menu.jpgDefault("method")
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
@@ -828,15 +836,6 @@ Item {
                     caption: qsTr("Frames"); values: [2, 4, 8]; current: menu.yuvTileFrames
                     labelFor: function(v) { return qsTr("%1 frames merged by tiles").arg(v) }
                     onPicked: menu.jpgPick("tileFrames", value) }
-                MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
-                    visible: menu.yuvNrTiles
-                    defaultValue: Number(menu.jpgDefault("tileSplit"))
-                    dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint
-                    caption: qsTr("Per frame"); values: [1, 2, 4]; current: menu.yuvTileSplit
-                    labelFor: function(v) { return v === 1 ? qsTr("Each frame the whole pose")
-                                                           : qsTr("Each frame 1/%1 of the pose, the ISO x%1 (less blur)").arg(v) }
-                    shortFor: function(v) { return v === 1 ? "1" : "1/" + v }
-                    onPicked: menu.jpgPick("tileSplit", value) }
                 MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
                     defaultValue: Number(menu.jpgDefault("colour"))
                     dimmed: menu.yuvColumnsOff; dimmedHint: menu.yuvColumnsHint

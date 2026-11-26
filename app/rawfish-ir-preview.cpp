@@ -641,12 +641,15 @@ void IndrawPreview::installExamples()
         const QString from = src + QStringLiteral("override-hal.example.jsonc"), to = profiles + QStringLiteral("/override-hal.example.jsonc");
         if (QFile::exists(from)) { QFile::remove(to); QFile::copy(from, to); }   /* refreshed: the version's own */
     }
-    {   /* rawfish-ir.conf's: written from the app's own table (conftable.h) */
-        const QString to = configDir() + QStringLiteral("/rawfish-ir.conf.example");
+    {   /* rawfish-ir.conf's: written from the app's own table (conftable.h),
+         * as rawfish-ir.conf.readme -- a text to read, not a settings file; the
+         * rawfish-ir.conf.example of 0.3.11-551 goes */
+        QFile::remove(configDir() + QStringLiteral("/rawfish-ir.conf.example"));
+        const QString to = configDir() + QStringLiteral("/rawfish-ir.conf.readme");
         const QByteArray tmp = QFile::encodeName(to + QStringLiteral(".new"));
         FILE *f = fopen(tmp.constData(), "w");
         if (!f) return;
-        const int bad = conf_write_example(f);
+        const int bad = conf_write_readme(f);
         if (fclose(f) != 0 || bad) { ::remove(tmp.constData()); return; }
         QFile::remove(to);
         QFile::rename(QString::fromLocal8Bit(tmp), to);
@@ -662,7 +665,7 @@ void IndrawPreview::installExamples()
  *    writes as [menu] timerSec=...; a camera's own keys are named by the
  *    menu itself ("camera_2/jpgSharpen");
  *  - writeDefaultSettings() makes the file whole at each start (below);
- *  - installExamples() writes rawfish-ir.conf.example, the user's reference
+ *  - installExamples() writes rawfish-ir.conf.readme, the user's reference
  *    (nothing reads it).
  * The file is written by QSettings: in alphabetical order (the sections, and
  * the keys in each), without comments. Called from main() before the
@@ -744,7 +747,7 @@ static QString confRebuild(const QString &path, const QString &oldPath)
                     QString v = old->contains(full) ? confText(old->value(full)) : QString::fromUtf8(k.def);
                     if (v == QLatin1String("auto")) v = QStringLiteral("default");   /* the luma's word until 0.3.11-550 */
                     if (!conf_value_ok(k.check, v.toUtf8().constData())) { ++refused; refusedKeys << full; v = QString::fromUtf8(k.def); }
-                    else ++carried;
+                    else if (old->contains(full)) ++carried;   /* absent: its default, not carried */
                     s.setValue(full, v);
                 }
             }
@@ -1250,8 +1253,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         m_caps.insert(QStringLiteral("rawCams"), rawCams);
         m_caps.insert(QStringLiteral("focusCal"), f.value("focus_cal", "0").toInt());   /* calibration points in force */
         /* our JPG's processing by default on this camera (device profile, else
-         * the app's): "method,frames,tile_frames,tile_split,colour,moire,luma,
-         * sharpen", the menu's defaults (SettingsMenu jpgDefault) */
+         * the app's): "method,frames,tile_frames,colour,moire,luma,sharpen",
+         * the menu's defaults (SettingsMenu jpgDefault) */
         m_caps.insert(QStringLiteral("jpgDefault"), QString::fromLatin1(f.value("jpg_default")));
         m_caps.insert(QStringLiteral("touchFocus"), f.value("touch_focus", "1").toInt());   /* 0: no focus by touch (device profile) */
         {   /* the camera's RAW capability, independent of this session's streams */

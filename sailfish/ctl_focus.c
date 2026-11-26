@@ -69,7 +69,8 @@ static void set_paused(ctl_focus_t *f, int p) { if (f->pause) f->pause(f->ctx, p
  * of reach, its lenses going to 20). */
 static double snap(const ctl_focus_t *f, double d) { return fmax(0.0, fmin(f->max_d, round(d / STEP_D) * STEP_D)); }
 /* The manual distance, to the lens. Never waited for ("nowait"): the
- * engine's wait for the lens (up to 1.2 s, about 400 ms seen) ran on the
+ * engine's wait for the lens (up to 2 s, 1.2 s until 0.3.11-551; about
+ * 400 ms seen) ran on the
  * controller's reader thread, which then read no AF state, no meter and no
  * command meanwhile -- after a search that failed, a mode change, each
  * volume step. A photo waits for its own lens (its focus= option). */

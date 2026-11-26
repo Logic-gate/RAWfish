@@ -1,15 +1,15 @@
 /*
  * conftable.h -- every key of rawfish-ir.conf: its section, its default, the
- * values it takes and what it does (0.3.11, patch 0551).
+ * values it takes and what it does (0.3.11, patch 0551; the readme 0553).
  *
  * The one place the settings are written down. The app reads it to place a
  * key in its section (confKey), to complete the file with the keys it lacks,
  * to carry the user's values into a new file (a new version, or the file of
- * before the sections) and to write rawfish-ir.conf.example, the user's
- * reference, which nothing reads (conf_write_example). Plain C, also valid
- * C++: the app includes it, and so does a host test (check-host.sh), which
- * checks that every default passes its own check and that the example reads
- * back as the table.
+ * before the sections) and to write rawfish-ir.conf.readme, the user's
+ * reference, which nothing reads (conf_write_readme; rawfish-ir.conf.example
+ * until 0.3.11-551). Plain C, also valid C++: the app includes it, and so
+ * does a host test (check-host.sh), which checks that every default passes
+ * its own check and that the readme reads back as the table.
  *
  * check: "list:a,b,c" one of those words ("list:,4:3" admits the empty
  * value), "range:LO..HI" a number from LO to HI (whole-number ends), "re:REGEX" a POSIX extended
@@ -28,14 +28,16 @@
 typedef struct { const char *name, *doc; } conf_section_t;
 typedef struct { const char *section, *key, *def, *check, *doc; } conf_key_t;
 
-/* The example's text before its first section. */
+/* The readme's text before its first section. */
 static const char *const k_conf_head =
-        "rawfish-ir.conf.example -- a reference, for you to read: every key of\n"
+        "rawfish-ir.conf.readme -- a reference, for you to read: every key of\n"
         "~/.config/com.rawfish/rawfish-ir/rawfish-ir.conf, what it does, the values it\n"
-        "takes and, as written below each comment, its DEFAULT value.\n"
+        "takes and, on the line \"key=value\" below its text, its DEFAULT value.\n"
         "\n"
         "RAWfish-ir writes this file from its own table at each start; it never reads\n"
         "it. Deleting or editing it changes nothing (it comes back at the next start).\n"
+        "It is not a settings file and cannot be used as one: copy a line from it\n"
+        "into rawfish-ir.conf, in the same section, to change a setting.\n"
         "\n"
         "The real file, rawfish-ir.conf:\n"
         "- holds every setting, in sections; the app writes it in ALPHABETICAL order\n"
@@ -70,7 +72,7 @@ static const char *const k_conf_head =
         "profile, ~/.local/share/com.rawfish/rawfish-ir/device-profiles/override-hal.json\n"
         "for your own corrections (see override-hal.example.jsonc beside it).\n";
 
-/* The sections, in the example's order (the real file sorts them).
+/* The sections, in the readme's order (the real file sorts them).
  * "camera" stands for one [camera_N] per camera. */
 static const conf_section_t k_conf_sections[] = {
     { "menu",
@@ -95,7 +97,7 @@ static const conf_section_t k_conf_sections[] = {
         "and sharpening (its YUV stream), processed by RAWfish-ir, then compressed.\n"
         "The menu shows these with Settings > \"JPG processing in the camera menu\".\n"
         "Each camera has its own section, [camera_0], [camera_2], ..., written with\n"
-        "its eight keys the first time the camera is used. \"default\" is the\n"
+        "its seven keys the first time the camera is used. \"default\" is the\n"
         "camera's own default: its device profile's (jpg_* keys,\n"
         "docs/DEVICE-PROFILES.md), else the app's, given below. A value is your\n"
         "choice for that camera (the menu writes it; choosing the default in the\n"
@@ -124,10 +126,13 @@ static const conf_key_t k_conf_keys[] = {
         "5 daylight, 6 cloudy, 7 twilight, 8 shade (only those the camera lists).\n"
         "Back to 1 (auto) at each start of the app.\n"
         "                                              range 1..8              default 1\n" },
-    { "menu", "bracket", "off", "list:off,0,0x5,0x7,1,2,3",
-        "Bracketing: off; 0, 0x5, 0x7 = three, five or seven shots at the same\n"
-        "exposure (x3, x5, x7); 1, 2, 3 = three shots at -N, 0, +N stops.\n"
-        "                                    values: off, 0, 0x5, 0x7, 1, 2, 3   default off\n" },
+    /* "0" is 0x3's name until 0.3.11-551, still read (as 0x3) */
+    { "menu", "bracket", "off", "list:off,0x3,0x5,0x7,1,2,3,0",
+        "Bracketing: off; 0x3, 0x5, 0x7 = three, five or seven shots at the same\n"
+        "exposure (x3, x5, x7); 1, 2, 3 = three shots at -N, 0, +N stops. In JPG\n"
+        "they are the camera's own JPEGs; with a DNG with each JPG (Settings), the\n"
+        "JPEG series, then the same series as DNGs.\n"
+        "                                    values: off, 0x3, 0x5, 0x7, 1, 2, 3   default off\n" },
     { "menu", "gridOn", "0", "list:0,1",
         "Rule-of-thirds grid.                          values: 0, 1            default 0\n" },
     { "menu", "flash", "off", "list:off,auto,on,torch",
@@ -257,7 +262,7 @@ static const conf_key_t k_conf_keys[] = {
         "About 2 KB of log per photo; off for everyday use. Our JPG photos then\n"
         "carry their settings in their file names as well (the Gallery's details\n"
         "show the name, not the Exif we write):\n"
-        "photo_tiles4-half_1-48s_iso4428_col2_moire0_sharp3_..._717.jpg. The same switch is in\n"
+        "photo_tiles4_1-48s_iso4428_col2_moire0_sharp3_..._717.jpg. The same switch is in\n"
         "Settings > Apps > RAWfish-ir > Log > \"Detailed log\".\n"
         "                                              values: false, true     default false\n" },
     { "advanced", "jpgYuvStream", "jpeg", "re:^(jpeg|max|[0-9]{3,5}x[0-9]{3,5})$",
@@ -362,10 +367,6 @@ static const conf_key_t k_conf_keys[] = {
         "                                              values: default, 1, 2, 4, 8       app's default 1\n" },
     { "camera", "jpgTileFrames", "default", "list:default,2,4,8",
         "The tile merge's frames.                      values: default, 2, 4, 8          app's default 4\n" },
-    { "camera", "jpgTileSplit", "default", "list:default,1,2,4",
-        "The tile merge: each frame 1, 1/2 or 1/4 of the pose, the ISO raised to\n"
-        "match: less blur, the extra noise averaged out.\n"
-        "                                              values: default, 1, 2, 4          app's default 1\n" },
     { "camera", "jpgNoiseColourFilter", "default", "list:default,0,1,2,3,4,5",
         "Colour noise filter: 0 off, 1..5 = 1, 2, 3, 5, 8 times the measured noise\n"
         "(4 and 5 deliberately too much).             values: default, 0..5             app's default 2\n" },
@@ -388,7 +389,6 @@ static const conf_key_t k_conf_keys[] = {
     { "", "jpgNrMethod", NULL, "list:classic,tiles", "" },
     { "", "jpgFrames", NULL, "list:1,2,4,8", "" },
     { "", "jpgTileFrames", NULL, "list:2,4,8", "" },
-    { "", "jpgTileSplit", NULL, "list:1,2,4", "" },
     { "", "jpgNoiseColourFilter", NULL, "list:0,1,2,3,4,5", "" },
     { "", "jpgMoireFilter", NULL, "list:0,1,2,3,4", "" },
     { "", "jpgLumaNoiseFilter", NULL, "list:auto,0,1,2,3", "" },
@@ -445,51 +445,46 @@ static inline const conf_key_t *conf_find(const char *section, const char *key)
     return NULL;
 }
 
-/* A text's lines as comments ("; line"; ";" alone for an empty one). */
-static inline void conf_comment(FILE *f, const char *doc)
-{
-    while (doc && *doc) {
-        const char *e = strchr(doc, '\n');
-        size_t l = e ? (size_t)(e - doc) : strlen(doc);
-        if (l) fprintf(f, "; %.*s\n", (int)l, doc); else fputs(";\n", f);
-        doc = e ? e + 1 : doc + l;
-    }
-}
-
-/* Writes rawfish-ir.conf.example (the user's reference) from the table:
- * the head, then each section in its reading order with its keys, each key's
- * comment above it and the key at its default ("key=value": what the real
+/* Writes rawfish-ir.conf.readme (the user's reference) from the table, as
+ * plain text to read (no ';' before the texts, which made it hard to read:
+ * it is not a settings file): the head, then each section in its reading
+ * order -- its "[name]" and its text -- and in it each key after an empty
+ * line: its text, then the key at its default ("key=value": what the real
  * file holds when nothing was changed). A key with no default (written by
- * the app) is shown as a comment. The [camera_N] sections at the end, as a
- * commented example. Returns 0, or -1 on a write error. */
-static inline int conf_write_example(FILE *f)
+ * the app) is shown as "key=...   (written by the app; absent until then)".
+ * The [camera_N] sections at the end, as an example ([camera_2]), then the
+ * text of each of their keys. Until 0.3.11-551 this was
+ * rawfish-ir.conf.example, every text line behind a ';'. Returns 0, or -1
+ * on a write error. */
+static inline int conf_write_readme(FILE *f)
 {
     int s, i;
-    conf_comment(f, k_conf_head);
+    fputs(k_conf_head, f);
     for (s = 0; k_conf_sections[s].name; ++s) {
         const char *name = k_conf_sections[s].name;
         const int cam = !strcmp(name, "camera");
-        fputs("\n", f);
+        fputs("\n\n", f);
         if (!cam) fprintf(f, "[%s]\n", name);
-        conf_comment(f, k_conf_sections[s].doc);
-        if (cam) fputs(";\n; [camera_2]\n", f);
+        fputs(k_conf_sections[s].doc, f);
+        if (cam) fputs("\n[camera_2]\n", f);
         for (i = 0; k_conf_keys[i].key; ++i) {
             const conf_key_t *k = &k_conf_keys[i];
             if (strcmp(k->section, name)) continue;
             if (cam) {
-                fprintf(f, "; %s=%s\n", k->key, !strcmp(k->key, "jpgSharpen") ? "1" : k->def);
+                fprintf(f, "%s=%s\n", k->key, !strcmp(k->key, "jpgSharpen") ? "1" : k->def);
                 continue;
             }
-            conf_comment(f, k->doc);
+            fputs("\n", f);
+            fputs(k->doc, f);
             if (k->def) fprintf(f, "%s=%s\n", k->key, k->def);
-            else fprintf(f, "; %s=...   (written by the app; absent until then)\n", k->key);
+            else fprintf(f, "%s=...   (written by the app; absent until then)\n", k->key);
         }
         if (cam) {
-            fputs(";\n; The eight keys:\n", f);
+            fputs("\nThe seven keys:\n", f);
             for (i = 0; k_conf_keys[i].key; ++i)
                 if (!strcmp(k_conf_keys[i].section, "camera")) {
-                    fprintf(f, ";\n; %s\n", k_conf_keys[i].key);
-                    conf_comment(f, k_conf_keys[i].doc);
+                    fprintf(f, "\n%s\n", k_conf_keys[i].key);
+                    fputs(k_conf_keys[i].doc, f);
                 }
         }
     }

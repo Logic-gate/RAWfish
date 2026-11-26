@@ -1,7 +1,7 @@
 /*
  * ctl_shoot.h -- what a press of the shutter becomes, in the controller
  * (docs/ARCHITECTURE.md, step 6). Pure: the request, the exposure and focus
- * states in, the engine's capture lines out (one to three).
+ * states in, the engine's capture lines out (one to CTL_SHOOT_MAX_LINES).
  *
  * Rules (from the page's shoot(), ui 128):
  * - a pair the controller holds (a wheel pinned, or a spot held in
@@ -16,7 +16,8 @@
  *   capture call, back to back); in raw as many shots in turn; bracket N:
  *   three real exposures at
  *   -N, 0, +N stops around the pair (ISO kept), clamped to the single
- *   exposure range;
+ *   exposure range; in JPEG with dng (JPG + DNG), the JPEG series first,
+ *   then the same series in raw;
  * - JPEG lines carry the quality and the photo's processing modes; raw lines
  *   carry neither.
  */
@@ -33,8 +34,7 @@ typedef struct {
     int frames, colour, median, sharpen;
     int luma_set, luma;         /* yuv: luma_set 1 = luma (0..3) sent; 0 = none sent, the device profile's default applies */
     int nr_tiles;               /* yuv: 1 = the frames merged by tiles (each tile aligned), 0 = the classic merge */
-    int split;                  /* yuv, with nr_tiles: 2|4 = each frame 1/2 or 1/4 of the pose, the ISO raised to match */
-    int dng;                    /* yuv: a DNG of the same exposure too */
+    int dng;                    /* yuv: a DNG of the same exposure too; a bracket in JPEG: the same series in DNG after it */
     int snap;                   /* jpeg: the snap type (label=snap in the Exif) */
     int quality;                /* JPEG quality */
     char noise[24], edge[24];   /* the photo's processing modes (jpeg), "" = none */
@@ -43,7 +43,7 @@ typedef struct {
     int denoise;                /* stacks: 1, 2 or 4 */
 } ctl_shoot_req_t;
 
-#define CTL_SHOOT_MAX_LINES 7   /* x7 in raw: seven shots in turn */
+#define CTL_SHOOT_MAX_LINES 8   /* x7 in JPEG + DNG: the burst, then seven raw shots in turn */
 #define CTL_SHOOT_LINE 256
 
 /* Fills lines[] with the engine commands and returns their number (0 if the

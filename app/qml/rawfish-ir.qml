@@ -303,9 +303,9 @@ ApplicationWindow {
             // third mode, "once" (a touch searches and holds), went in 0.3.3:
             // manual does the same and lets the distance be adjusted.
             property string focusMode: "cont"
-            // The TYPE button's value: small two-line labels ("DNG" over
-            // "(RAW)", "HAL" over "JPG"); "JPG+RAW" when Settings saves a DNG
-            // with each JPG, the type then being fixed.
+            // The TYPE button's value: "DNG" (RAW until 0.3.11-551: what is
+            // saved is a DNG), "jpg", "snap"; "JPG +DNG" over two lines when
+            // Settings saves a DNG with each JPG, the type then being fixed.
             // The left column's buttons (FOCAL, TYPE, FOCUS) share its height.
             readonly property int leftButtons: 1 + (settingsMenu.simpleHides("type") ? 0 : 1) + (settingsMenu.simpleHides("focus") ? 0 : 1)
             // FOCAL in simple mode: a name for the camera instead of a focal length.
@@ -318,14 +318,15 @@ ApplicationWindow {
             }
             function imageTypeLabel(t) {
                 switch (t) {
-                case "raw":     return qsTr("DNG\n(RAW)")
+                case "raw":     return qsTr("DNG")
                 case "snap":    return qsTr("snap")
-                default:        return page.dngWithJpg ? qsTr("JPG\n+RAW") : qsTr("jpg")
+                default:        return page.dngWithJpg ? qsTr("JPG\n+DNG") : qsTr("jpg")
                 }
             }
             // Settings asks for a DNG with each JPG: RAW alone would be the same
-            // DNG without its JPG, so TYPE offers "JPG +RAW" and snap only, and a
-            // type left on RAW becomes JPG.
+            // DNG without its JPG, so TYPE offers "JPG +DNG" and snap only, and a
+            // type left on RAW becomes JPG. A bracket then gives the camera's
+            // JPEG series, then the same series as DNGs (ctl_shoot.c, 0553).
             readonly property bool dngWithJpg: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
             onDngWithJpgChanged: if (dngWithJpg && imageType === "raw") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
@@ -1318,6 +1319,8 @@ ApplicationWindow {
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
                                        + settingsMenu.bracketFields()
+                                       // JPG + DNG with a bracket: the JPEG series, then the DNGs
+                                       + (!isRaw && !isYuv && settingsMenu.effBracket !== "off" && page.dngWithJpg ? " dng=1" : "")
                                        + " denoise_sigma=" + settingsMenu.stackDenoise
                                        // A flash fires on one frame: with "on" or "auto" our JPG is
                                        // one frame, whatever the Frames column says (a merge of
