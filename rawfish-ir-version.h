@@ -6,5 +6,5 @@
  * checks that the two agree. */
 #ifndef INDRAW_VERSION_H
 #define INDRAW_VERSION_H
-#define IR_VERSION "0.3.10"
+#define IR_VERSION "0.3.11"
 #endif

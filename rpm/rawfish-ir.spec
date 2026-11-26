@@ -1,8 +1,8 @@
 Name:       rawfish-ir
 Summary:    RAWfish-ir camera: the app with its engine
 # Keep in step with rawfish-ir-version.h (scripts/build-rpm.sh checks).
-Version:    0.3.10
-# "beta" in the release, so the files say it: rawfish-ir-all-in-one-0.3.10-1.beta.<arch>.rpm.
+Version:    0.3.11
+# "beta" in the release, so the files say it: rawfish-ir-all-in-one-0.3.11-1.beta.<arch>.rpm.
 # The package's name and the version's order are untouched: the first
 # version after the beta takes a higher Version and a plain "1" here.
 # scripts/with-build-release.sh puts the build number in front.

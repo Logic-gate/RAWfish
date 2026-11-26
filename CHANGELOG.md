@@ -6,7 +6,7 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.3.10)
+## Known issues (as of 0.3.11)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
@@ -14,7 +14,14 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
-## 0.3.11 (beta, in progress) — a lighter viewfinder (patches 0431–)
+## 0.3.11 (beta) — a lighter viewfinder (patches 0431–0557)
+- The version 0.3.11 (patch 0557), the release of the builds that followed
+  0.3.10-520, the last one published: 0.3.10-524 to 0.3.10-555, listed
+  below (each was installed as 0.3.10-NNN). As at every
+  new version, the app's first start sets the earlier configuration and
+  device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...);
+  your settings are carried into the new rawfish-ir.conf, except our JPG's
+  processing of each camera, which starts again at the new defaults.
 - New JPG defaults, judged on the phone (patch 0555; device profiles): the
   JP2's 26 mm and every camera of the Xperia 10 III take 2 frames merged by
   tiles, colour NR 3, no moiré filter, Luma NR 2 and sharpen 2; the JP2's
