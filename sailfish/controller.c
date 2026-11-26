@@ -60,6 +60,19 @@ static struct {
     double trace_t0, trace_until;
     int trace_af;
     double trace_lens;
+    /* The exposure trace (detailed log; 0.3.11, patch 0553): every change of the
+     * exposure -- the pair in the HAL's results, its AE state, the pair the
+     * wheels show, the viewfinder's brightness -- with the time, to see
+     * where a pumping exposure comes from (the JP2's 18 mm, 26 Nov 2026:
+     * the image and the wheels going back and forth, as in Jolla Camera).
+     * ae_*: the values now; ael_*: as last written (ae_written 0: none yet,
+     * the next change writes all). See ae_trace. */
+    double ae_t0;
+    int ae_written;
+    int ae_iso, ae_state, ae_sh_iso;
+    double ae_exp_ns, ae_sh_ns, ae_vf;
+    int ael_iso, ael_state, ael_sh_iso;
+    double ael_exp_ns, ael_sh_ns, ael_vf;
     char capture_q[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE];
     int capture_n, capture_i;
 } c = { .rd = -1, .wr = -1,
@@ -177,10 +190,16 @@ void ctl_engine_busy(int busy)
     }
     ctl_unlock();
 }
+static void ae_trace(void);
 static void exp_state(void *ctx, const ctl_exp_state_t *s)
 {
     char line[420], ev100[16] = "nan";            /* "nan": no measure yet */
     (void)ctx;
+    /* the pair the wheels show, for the exposure trace */
+    ctl_lock();
+    c.ae_sh_iso = s->iso; c.ae_sh_ns = s->shutter_ns;
+    ae_trace();
+    ctl_unlock();
     if (!isnan(s->ev100)) snprintf(ev100, sizeof ev100, "%.2f", s->ev100);
     snprintf(line, sizeof line,
              "xpstate stops=%.2f stops_valid=%d stops_clip=%d iso=%d exp_ns=%.0f iso_manual=%d shutter_manual=%d full_auto=%d full_manual=%d "
@@ -241,7 +260,7 @@ static void view_state(void *ctx, const ctl_view_state_t *s)
 /* (The interface still draws from ae / vfmeter / meter, and its histogram
  * comes from them.) */
 void ctl_set_log(ctl_log_fn log) { c.log = log; }
-void ctl_set_detail(int on) { ctl_lock(); c.detail = !!on; if (!on) c.trace_until = 0; ctl_unlock(); }
+void ctl_set_detail(int on) { ctl_lock(); c.detail = !!on; if (!on) c.trace_until = 0; c.ae_written = 0; ctl_unlock(); }
 
 /* One "ae" line during a focus trace: written when the AF state or the lens
  * position (HAL value, 0.02 apart) changed. The states, Camera2's: 0
@@ -263,6 +282,55 @@ static void af_trace(const char *line)
     snprintf(t, sizeof t, "af trace +%4.0f ms: state %d (%s), lens %.3f", now - c.trace_t0, af,
              af >= 0 && af <= 6 ? names[af] : "?", lens);
     c.log(t);
+}
+
+/* A relative change of more than `tol` between a and b (both > 0); a value
+ * appearing or going counts as a change. */
+static int changed(double a, double b, double tol)
+{
+    if ((a > 0) != (b > 0)) return 1;
+    return a > 0 && fabs(a - b) > tol * b;
+}
+
+/* A speed as the wheel says it ("1/50 s", "0.50 s"), into t. */
+static void speed_text(double ns, char *t, size_t n)
+{
+    if (ns <= 0) snprintf(t, n, "?");
+    else if (ns < 4e8) snprintf(t, n, "1/%.0f s", 1e9 / ns);
+    else snprintf(t, n, "%.2f s", ns / 1e9);
+}
+
+/* The exposure trace (detailed log; see c.ae_*): one line when the HAL's
+ * pair (more than 3 % on the time or the ISO) or its AE state changed,
+ * when the wheels' pair did, or when the viewfinder's mean (vfmeter)
+ * moved by more than 5 % -- a steady exposure writes nothing. "t x ISO"
+ * is log2(time in s x ISO / 100), the light the pair takes in, in stops:
+ * a pumping AE shows it going up and down, a mean that pumps with a steady
+ * pair would be the image's own processing. Under the controller's lock
+ * (taken: it is recursive). */
+static void ae_trace(void)
+{
+    static const char *const st[] = { "inactive", "searching", "converged", "locked", "flash required", "precapture" };
+    char t[300], hs[24], ss[24], vf[16] = "none";
+    double now;
+    ctl_lock();
+    if (!c.detail || !c.log || c.ae_iso <= 0 || c.ae_exp_ns <= 0) { ctl_unlock(); return; }
+    if (c.ae_written && !changed(c.ae_iso, c.ael_iso, 0.03) && !changed(c.ae_exp_ns, c.ael_exp_ns, 0.03)
+        && c.ae_state == c.ael_state && c.ae_sh_iso == c.ael_sh_iso && !changed(c.ae_sh_ns, c.ael_sh_ns, 0.005)
+        && !changed(c.ae_vf, c.ael_vf, 0.05)) { ctl_unlock(); return; }
+    now = now_ms();
+    if (!c.ae_written) c.ae_t0 = now;
+    speed_text(c.ae_exp_ns, hs, sizeof hs);
+    speed_text(c.ae_sh_ns, ss, sizeof ss);
+    if (c.ae_vf >= 0) snprintf(vf, sizeof vf, "%.3f", c.ae_vf);
+    snprintf(t, sizeof t, "ae trace +%6.0f ms: HAL ISO %d %s (t x ISO %+.2f), AE %d (%s); wheels ISO %d %s; viewfinder mean %s",
+             now - c.ae_t0, c.ae_iso, hs, log2(c.ae_exp_ns / 1e9 * c.ae_iso / 100.0), c.ae_state,
+             c.ae_state >= 0 && c.ae_state <= 5 ? st[c.ae_state] : "?", c.ae_sh_iso, ss, vf);
+    c.log(t);
+    c.ae_written = 1;
+    c.ael_iso = c.ae_iso; c.ael_exp_ns = c.ae_exp_ns; c.ael_state = c.ae_state;
+    c.ael_sh_iso = c.ae_sh_iso; c.ael_sh_ns = c.ae_sh_ns; c.ael_vf = c.ae_vf;
+    ctl_unlock();
 }
 
 /* A diagnostic: to the log (ctl_set_log, "# ..." in rawfish-ir.log) and to
@@ -352,6 +420,20 @@ static int hold_written(const char *line)
  * detailed log), which goes to the log and nowhere else. */
 static void on_event(const char *line)
 {
+    if (!strncmp(line, "hwprobe ", 8)) {       /* the zero-copy probe (branch zero_copy): the log only */
+        char t[420];
+        snprintf(t, sizeof t, "%.410s", line);
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
+    if (!strncmp(line, "lensdiag ", 9)) {      /* the lens before / after a photo (lens_note): the log only */
+        char t[260];
+        snprintf(t, sizeof t, "lens %.250s", line + 9);
+        t[strcspn(t, "\n")] = '\0';
+        if (c.log) c.log(t);
+        return;
+    }
     if (!strncmp(line, "vfpace ", 7)) {        /* the viewfinder's pace (detailed log, see vf_pace) */
         char t[200];
         snprintf(t, sizeof t, "viewfinder pace %.160s", line + 7);
@@ -363,6 +445,7 @@ static void on_event(const char *line)
     ctl_lock();
     if (c.exp) {
         if (!strncmp(line, "caps ", 5)) {
+            c.ae_written = 0; c.ae_vf = -1;             /* a new session: the exposure trace starts again */
             ctl_caps_t caps;
             const char *ev = field(line, "ev_step");
             int n = 1, d = 3;
@@ -397,6 +480,8 @@ static void on_event(const char *line)
             ctl_exp_live(c.exp, c.live_iso, c.live_exp_ns, (int)fieldd(line, "ae_state", 0));
             if (c.foc) ctl_focus_live(c.foc, (int)fieldd(line, "af_state", 0), fieldd(line, "focus_real", -1), now_ms());
             af_trace(line);                              /* detailed log: the focus trace */
+            c.ae_iso = c.live_iso; c.ae_exp_ns = c.live_exp_ns; c.ae_state = (int)fieldd(line, "ae_state", -1);
+            ae_trace();                                  /* detailed log: the exposure trace */
             if (c.view) ctl_view_tick(c.view, now_ms());  /* a throttled loupe command, if any */
         } else if (!strncmp(line, "meter ", 6)) {
             ctl_exp_meter_clip(c.exp, fieldd(line, "mclip_lo", 0), fieldd(line, "mclip_hi", 0));
@@ -408,6 +493,8 @@ static void on_event(const char *line)
             if (iso <= 0 || exp_ns <= 0) { iso = c.live_iso; exp_ns = c.live_exp_ns; }
             ctl_exp_meter_clip(c.exp, fieldd(line, "mclip_lo", 0), fieldd(line, "mclip_hi", 0));
             ctl_exp_sample(c.exp, fieldd(line, "mean", 0), iso, exp_ns, now_ms());
+            c.ae_vf = fieldd(line, "mean", -1);
+            ae_trace();                                  /* detailed log: the exposure trace */
         }
     }
     ctl_unlock();
@@ -493,8 +580,9 @@ static int view_command(const char *line)
     return 1;
 }
 
-/* "sh name=N type=jpg|raw|yuv q=Q noise=M edge=M bracket=off|0|1|2|3 denoise_sigma=D
- *     frames=1|2|4 colour=0..5 median=0..4 sharpen=0..5 dng=0|1" (the last five for yuv):
+/* "sh name=N type=jpg|raw|yuv q=Q noise=M edge=M bracket=off|0|1|2|3 bracket_n=3|5|7 denoise_sigma=D
+ *     frames=1|2|4|8 nr=classic|tiles colour=0..5 median=0..4 luma=0..3 sharpen=0..5 dng=0|1"
+ *     (frames to dng for yuv):
  * a press of the shutter (the self-timer is the interface's). The capture
  * lines go to the queue the CLI drains. */
 static int shoot_command(const char *line)
@@ -509,15 +597,18 @@ static int shoot_command(const char *line)
     if ((v = field(line, "type"))) { r.raw = !strncmp(v, "raw", 3); r.yuv = !strncmp(v, "yuv", 3); }
     r.frames = 1; r.colour = 2; r.median = 0; r.sharpen = 0;
     if ((v = field(line, "frames"))) r.frames = atoi(v);
+    r.nr_tiles = (v = field(line, "nr")) && !strncmp(v, "tiles", 5);
     if ((v = field(line, "colour"))) r.colour = atoi(v);
     if ((v = field(line, "median"))) r.median = atoi(v);
     if ((v = field(line, "sharpen"))) r.sharpen = atoi(v);
+    if ((v = field(line, "luma"))) { r.luma_set = 1; r.luma = atoi(v); }   /* absent: the device profile's default */
     r.dng = (v = field(line, "dng")) && atoi(v) == 1;
     r.snap = (v = field(line, "snap")) && atoi(v) == 1;
     if ((v = field(line, "q"))) r.quality = atoi(v);
     if ((v = field(line, "noise"))) sscanf(v, "%23s", r.noise);
     if ((v = field(line, "edge"))) sscanf(v, "%23s", r.edge);
     if ((v = field(line, "bracket"))) r.bracket = !strncmp(v, "off", 3) ? -1 : atoi(v);
+    r.bracket_n = (v = field(line, "bracket_n")) ? atoi(v) : 3;   /* bracket 0: 3, 5 or 7 frames */
     /* denoise_sigma: the Σ stack's poses per frame (renamed from 'denoise',
      * which read like a noise-reduction mode; the old name still accepted) */
     if ((v = field(line, "denoise_sigma")) || (v = field(line, "denoise"))) r.denoise = atoi(v);

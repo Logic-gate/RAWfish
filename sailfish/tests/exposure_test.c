@@ -77,6 +77,16 @@ int main(void)
     CHECK(last_state.iso == 400 && last_state.iso_manual && !last_state.shutter_manual, "priority: ISO pinned at 400, speed free");
     CHECK(fabs(last_state.shutter_ns / 66666667.0 - 1) < 0.2, "priority: speed settled near 1/15 s (2 stops longer)");
     CHECK(ncmds - before < 12, "priority: converged in a few sends, no hunting (settle check)");
+    /* 2b. In the dark, the free speed stops at 1/15 s (a pocket, a hand over
+     *     the lens: no 1/2 s viewfinder to come back from), and comes back. */
+    scene_L = 0.025 / 64;                                        /* 6 stops darker still */
+    for (i = 0; i < 40; ++i) frame(e, t += 100);
+    CHECK(last_state.shutter_ns <= 66666667.0 + 1 && last_state.shutter_ns > 60000000.0, "priority: in the dark the free speed stops at 1/15 s");
+    scene_L = 0.10;                                              /* the light back, 2 stops above the first */
+    for (i = 0; i < 40; ++i) frame(e, t += 100);
+    CHECK(fabs(last_state.shutter_ns / 16666667.0 - 1) < 0.2, "priority: back near 1/60 s when the light comes back");
+    scene_L = 0.025;                                             /* as before, for what follows */
+    for (i = 0; i < 40; ++i) frame(e, t += 100);
     /* 3. Full manual: the offset reads the scene. */
     ctl_exp_touch_shutter(e);
     for (i = 0; i < 5; ++i) frame(e, t += 100);
@@ -144,6 +154,29 @@ int main(void)
               "Σ2s ISO 400: the ISO limit lengthens the frame to 1/4 s at ISO 3200");
         CHECK(last_state.pv_slow && last_state.deficit_stops == 0, "Σ2s ISO 400: slowed, no deficit");
     }
+    /* 6b. The fast viewfinder (patch 0545): from 1/4 s a manual speed is
+     *     previewed by one 1/10 s frame of the same exposure; below, the real time. */
+    ctl_exp_set_iso(e, 100);
+    ctl_exp_set_shutter(e, 0.25e9);                              /* 1/4 s ISO 100: E = 2.5e10 */
+    {
+        double sec; int iso;
+        CHECK(sscanf(last_cmd(), "exposure exp=%lf iso=%d", &sec, &iso) == 2 && fabs(sec - 0.1) < 1e-6 && iso == 250,
+              "1/4 s ISO 100: viewfinder 1/10 s at ISO 250 (same exposure)");
+        CHECK(fabs(last_state.shutter_ns - 0.25e9) < 1 && last_state.iso == 100, "1/4 s: the wheels still show 1/4 s ISO 100");
+    }
+    ctl_exp_set_shutter(e, 0.5e9);                               /* 1/2 s ISO 100 */
+    {
+        double sec; int iso;
+        CHECK(sscanf(last_cmd(), "exposure exp=%lf iso=%d", &sec, &iso) == 2 && fabs(sec - 0.1) < 1e-6 && iso == 500,
+              "1/2 s ISO 100: viewfinder 1/10 s at ISO 500");
+    }
+    ctl_exp_set_shutter(e, 0.125e9);                             /* 1/8 s: below 1/4 s, the real time */
+    {
+        double sec; int iso;
+        CHECK(sscanf(last_cmd(), "exposure exp=%lf iso=%d", &sec, &iso) == 2 && fabs(sec - 0.125) < 1e-6 && iso == 100,
+              "1/8 s ISO 100: viewfinder at the photo's own pair");
+    }
+    ctl_exp_set_iso(e, 400);
     ctl_exp_set_shutter(e, 8e9);                                 /* Σ8s at ISO 400: 2x beyond 0.5 s at 3200 */
     CHECK(fabs(last_state.deficit_stops - 1.0) < 0.02, "Σ8s ISO 400: one stop darker than the photo");
     CHECK(fabs(last_state.shutter_ns - 8e9) < 1 && last_state.shutter_manual, "Σ8s: the wheel shows 8 s");

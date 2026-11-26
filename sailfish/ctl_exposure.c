@@ -70,6 +70,28 @@ static int full_manual(const ctl_exposure_t *e) { return e->iso_manual && e->shu
 static double ev_stops(const ctl_exposure_t *e) { return e->ev_steps * (e->caps.ev_step > 0 ? e->caps.ev_step : 1.0 / 3); }
 static double shutter_max(const ctl_exposure_t *e) { return e->caps.shutter_max_ns > 0 ? e->caps.shutter_max_ns : 500000000.0; }
 static int is_stacked(const ctl_exposure_t *e, double ns) { return ns > shutter_max(e) + 1; }
+/* The fast viewfinder: from this speed of the photo up (1/4 s), the
+ * viewfinder no longer shows the photo's own exposure time but one frame of
+ * the same exposure (time x ISO), as short as the Σ preview's rate allows,
+ * the ISO raised to match (send_pair). Below the sensor's ceiling this used
+ * to show the real time, so 1/4 s and 1/2 s gave 2 to 4 frames a second. */
+#define PV_FAST_NS 250000000.0
+/* The longest speed the loop chooses by itself (ISO priority): 1/15 s. In
+ * the dark (a pocket, a hand or a sleeve over the lens, the phone face down
+ * on a table) it used to go to the sensor's ceiling, 1/2 s: the viewfinder
+ * then ran at 2 frames a second, and the loop, which waits for a frame at
+ * the new settings before each step, took seconds to come back once the
+ * light was there again. Longer is for the photographer to choose, on the
+ * speed wheel (a dark photo in priority says so: its stops are negative). */
+#define AUTO_SHUTTER_MAX_NS (1e9 / 15)
+/* The viewfinder stands for the photo by an equivalent frame: a speed set by
+ * hand (a free speed is the loop's: it needs the real time), a Σ beyond the
+ * ceiling, or a speed from 1/4 s that the target frame is shorter than. */
+static int pv_equivalent(const ctl_exposure_t *e, double ns)
+{
+    if (!e->shutter_manual) return 0;
+    return is_stacked(e, ns) || (ns >= PV_FAST_NS - 1 && ns > e->pv_target_ns * 1.05);
+}
 static int live_iso(const ctl_exposure_t *e) { return e->live_iso > 0 ? e->live_iso : e->manual_iso; }
 static double live_shutter(const ctl_exposure_t *e) { return e->live_exp_ns > 0 ? e->live_exp_ns : e->manual_shutter_ns; }
 /* "What automatic would choose", shifted by EV in the modes we drive. */
@@ -106,7 +128,9 @@ static void publish(ctl_exposure_t *e)
 
 /* ---- engine commands ------------------------------------------------------ */
 /* Sends the preview pair. A stacked (Σ) shutter cannot be previewed as such
- * -- the sensor exposes 0.5 s at most --, so ONE frame stands for the stack,
+ * -- the sensor exposes 0.5 s at most --, and a manual speed from 1/4 s
+ * would give a viewfinder of 2 to 4 frames a second (pv_equivalent), so ONE
+ * frame stands for the photo,
  * with the same exposure (time x gain): as short as the target rate wants
  * (pv_target_ns, 1/10 s by default), the ISO raised accordingly; if that
  * ISO is beyond the sensor's maximum, the frame is lengthened just enough,
@@ -123,7 +147,7 @@ static void send_pair(ctl_exposure_t *e, int iso, double shutter_ns)
     e->pv_deficit = 1.0;
     e->pv_slow = 0;
     e->pv_at_limit = 0;
-    if (is_stacked(e, ns)) {
+    if (pv_equivalent(e, ns) && ns == e->manual_shutter_ns) {
         double E = (double)iso * ns;                       /* the photo's exposure, ISO x ns */
         double target = clampd(e->pv_target_ns, e->caps.exp_min_ns, shutter_max(e));
         pv = target;
@@ -350,7 +374,7 @@ void ctl_exp_sample(ctl_exposure_t *e, double mean, int frame_iso, double frame_
      * a dark photo (manual: the +/- offset says it; priority: the loop opens
      * up), not a measure that fails (0.47.17 flagged it there too). */
     {
-        int stacked = e->shutter_manual && is_stacked(e, e->manual_shutter_ns);
+        int stacked = pv_equivalent(e, e->manual_shutter_ns);
         int dark = stacked && e->pv_at_limit && mean < 0.004;
         if (dark != e->too_dark) { e->too_dark = dark; publish(e); }
         if (dark) { if (e->stops_valid) { e->stops_valid = 0; publish(e); } return; }   /* no measure */
@@ -373,14 +397,14 @@ void ctl_exp_sample(ctl_exposure_t *e, double mean, int frame_iso, double frame_
     gain = pow(2.0, err * 0.85);
     if (e->iso_manual) {
         double base = frame_exp_ns > 0 ? frame_exp_ns : e->auto_shutter_ns;
-        e->auto_shutter_ns = clampd(base * gain, e->caps.exp_min_ns, shutter_max(e));
+        e->auto_shutter_ns = clampd(base * gain, e->caps.exp_min_ns, fmin(shutter_max(e), AUTO_SHUTTER_MAX_NS));
         send_pair(e, e->manual_iso, e->auto_shutter_ns);
     } else {
         double base_iso = frame_iso > 0 ? frame_iso : e->auto_iso;
         /* A stacked shutter previews one frame of the same exposure (send_pair):
          * the photo's ISO is the frame's exposure, times the deficit, over the
          * photo's time. */
-        if (frame_iso > 0 && frame_exp_ns > 0 && is_stacked(e, e->manual_shutter_ns))
+        if (frame_iso > 0 && frame_exp_ns > 0 && pv_equivalent(e, e->manual_shutter_ns))
             base_iso = frame_iso * frame_exp_ns * e->pv_deficit / e->manual_shutter_ns;
         e->auto_iso = (int)lround(clampd(base_iso * gain, e->caps.iso_min, e->caps.iso_max));
         send_pair(e, e->auto_iso, e->manual_shutter_ns);
@@ -460,7 +484,7 @@ void ctl_exp_set_preview_fps(ctl_exposure_t *e, double fps)
 {
     fps = clampd(fps, 1.0, 30.0);
     e->pv_target_ns = 1e9 / fps;
-    if (e->shutter_manual && is_stacked(e, e->manual_shutter_ns)) { e->last_pair[0] = '\0'; apply(e); }
+    if (e->shutter_manual) { e->last_pair[0] = '\0'; apply(e); }   /* a Σ, or a fast viewfinder whose rule may change */
 }
 
 void ctl_exp_state(const ctl_exposure_t *e, ctl_exp_state_t *out)
@@ -482,7 +506,7 @@ void ctl_exp_state(const ctl_exposure_t *e, ctl_exp_state_t *out)
     out->stops_valid = e->stops_valid && !full_auto(e);
     out->stops_clip = e->stops_clip;
     {
-        int stacked = e->shutter_manual && is_stacked(e, e->manual_shutter_ns);
+        int stacked = pv_equivalent(e, e->manual_shutter_ns);
         out->pv_ms = stacked ? e->pv_ns / 1e6 : 0;
         out->pv_slow = stacked && e->pv_slow;
         out->deficit_stops = stacked && e->pv_deficit > 1.035 ? log2d(e->pv_deficit) : 0;

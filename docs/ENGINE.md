@@ -61,7 +61,8 @@ seconds (`0.008`, `0.5`, `4`).
 | | `easy` | the one combined path: AF + AE before the shot |
 | `raw NAME` | `focus=`, `exp=SEC`, `iso=N` | as above; writes a DNG (+ its preview in `.previews/`) |
 | `raw -` | same | measure only, nothing written |
-| `jpeg` / `raw` | `ms=1` | the milliseconds (`_mmm`) always in the name: the photos of a bracket (the app sends it for its three) |
+| `jpeg` / `raw` | `ms=1` | the milliseconds (`_mmm`) always in the name: the photos of a bracket (the app sends it for each of its photos) |
+| | `vres=KEY,...` (up to 8, e.g. `vres=0x80060010,0x80060011`) | diagnosis: the photo result's own values for these keys (chipset keys that only a result carries), in `"vendor_results"`; a key the result lacks says `"absent"`. See docs/VENDOR-TESTS.md |
 | `stack NAME film=T` | `sub=T` sub-frame length | default and maximum: the single-exposure ceiling (1/2 s, or `observed_shutter_max_ns`) |
 | | `stk_denoise=1\|2\|4` extra frames divided out | 1 |
 | | `iso=N` | the sensor's range |
@@ -92,7 +93,24 @@ closes, and writes the frames added so far with the exposure really reached.
 | `hold` (live only) | AF off at the lens position the HAL reports now: the focus stays exactly where it is |
 | `rawD` | AF off, the lens set to the HAL's OWN value D (LENS_FOCUS_DISTANCE), with no focus calibration: the same lens position on every phone of a model, used by the lens-shading assistant to walk positions |
 | `<metres>m nowait` / `inf nowait` (live only) | the same, returning at once instead of waiting for the lens (the controller's volume-key stepping) |
-| `<metres>m` (e.g. `0.5m`) | manual distance; mapped through the focus calibration when there is one |
+| `<metres>m` (e.g. `0.5m`) | manual distance; mapped through the focus calibration when there is one. The command (or the photo carrying it) waits, at most 2 s (1.2 s until 0.3.11-551), until the lens is settled: stationary, the same position on two results in a row, and within 0.05 of the target in the HAL's units (0.5 until patch 0542, too wide at close range); not settled by then, it goes on all the same and the log's `lens` line says so |
+
+A photo from 1/4 s, a burst of such frames, and every stack are taken
+with the focus held: a continuous AF is turned off at the lens position of
+the release, on the viewfinder and on the photo, and comes back after the
+photo, so that the AF cannot move the lens during the exposure. A manual
+distance or a locked focus is left as it is. Each photo writes two `lens`
+lines in the log (engine event `lensdiag`): the lens's position (HAL value
+and metres), whether it moves, how the wait for a distance ended and
+whether the focus is held, just before the submit; its position and how far
+it went, once the image is in.
+
+A burst (`burst`, `yuv` of several frames) and a stack take the
+viewfinder's focus as it is, and wait for it first, as a single photo does
+(0.3.11, patch 0553; they started at once until then): a manual distance
+or a held lens until the lens is settled there (at most 2 s), a continuous
+AF caught searching until its search ends (at most `focusScanWait`, then a
+`lens search:` line in the log says how long).
 
 | Live command | Limits |
 |---|---|
@@ -148,7 +166,10 @@ stripes that share of the viewfinder's brightest pixels (the RAW zebra) --
 and `zlost=`: the share where two or three of red, green and blue reach it
 (striped fully; the rest of `zclip`, one channel alone, lightly).
 
-Besides the frames (SF2P), the stream carries one-line events (SF2M): `caps`,
+The frames are SF2P (16-byte header "SF2P", width, height, byte count, then
+RGB888), or SF2Y after the command `vf yuv` (the same header with "SF2Y",
+then I420: Y, U, V, the chroma at half resolution, (w+1)/2 by (h+1)/2;
+0.3.11); `vf rgb` goes back. Besides the frames, the stream carries one-line events (SF2M): `caps`,
 `ae` (the preview's live values; also `cct=` and `duv=`, the white balance in force as a correlated colour temperature and its Duv, estimated from the colour gains through the sensor's calibration matrix), `meter` (the RAW meter; its histogram covers the displayed window (`viewwin`), and `shist=` is the spot's own while a reference is set -- `vfmeter` likewise), `vfmeter` (the viewfinder meter: the linear
 mean -- centre-weighted, or the tap's spot --, clipping percentages, the
 pair the frame was exposed with when known (`iso=`, `exp_ns=`, else 0) and
@@ -212,7 +233,7 @@ as events.
 | `vw tap U V` | a tap at a display-window point: the controller maps it to the viewfinder frame and runs the focus sequence (as `fc ref`) |
 | `vw clear` / `vw state` | the reference point forgotten / the state once |
 
-| `sh name=N type=jpg\|raw q=Q noise=M edge=M bracket=off\|0\|1\|2\|3 denoise_sigma=D` | a press of the shutter: the controller turns it into the engine's `jpeg` / `raw` / `stack` / `burst` lines (the held pair, the manual distance, a stack for a Σ speed, a burst or three shots for a bracket), run as if typed; the self-timer is the interface's |
+| `sh name=N type=jpg\|raw q=Q noise=M edge=M bracket=off\|0\|1\|2\|3 bracket_n=3\|5\|7 denoise_sigma=D [dng=1]` | a press of the shutter: the controller turns it into the engine's `jpeg` / `raw` / `stack` / `burst` lines (the held pair, the manual distance, a stack for a Σ speed, a burst or shots in turn for a bracket: bracket 0 takes `bracket_n` frames the same, 3 by default -- the menu's x3, x5, x7; bracket N three exposures; `type=jpg` with `dng=1`: the JPEG series, then the same series in raw), run as if typed; the self-timer is the interface's |
 
 Event: `vwstate zoom= loupe= view=x,y,w,h ref=has,u,v` -- the view window to
 show (array-normalised) and the reference point in display-window

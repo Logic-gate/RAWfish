@@ -41,13 +41,38 @@ static void focus_arg(const ctl_focus_state_t *fs, char *out, size_t n)
     else snprintf(out, n, " focus=%.3fm", 1.0 / fs->diopters);
 }
 
+/* A bracket's shots in turn, from lines[at]: three real exposures at -N, 0,
+ * +N stops around the pair (bracket N), or nx at the same exposure
+ * (bracket 0, x3 / x5 / x7), each clamped to the single-exposure range;
+ * "raw" lines (raw = 1) or "jpeg" lines with the quality and processing (q).
+ * Every name carries its milliseconds (ms=1): the series is named alike.
+ * Returns the number of lines, 0 if one would not fit (in the line, or in
+ * CTL_SHOOT_MAX_LINES). */
+static int bracket_shots(const ctl_shoot_req_t *req, int raw, double ns, int iso, int nx, double smax,
+                         double exp_min_ns, const char *farg, const char *q,
+                         char lines[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE], int at)
+{
+    int stops = req->bracket, k, n = stops == 0 ? nx : 3;
+    if (at + n > CTL_SHOOT_MAX_LINES) return 0;
+    for (k = 0; k < n; ++k) {
+        double e = ns * pow(2.0, n == 3 && stops > 0 ? (k - 1) * stops : 0);
+        size_t len = 0;
+        if (e < exp_min_ns) e = exp_min_ns;
+        if (e > smax) e = smax;
+        if (!put(lines[at + k], &len, "%s %s%s%s%s exp=%.7f iso=%d ms=1", raw ? "raw" : "jpeg", req->name, farg,
+                 raw ? "" : q, !raw && req->snap ? " label=snap" : "", e / 1e9, iso))
+            return 0;
+    }
+    return n;
+}
+
 int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
                     double shutter_max_ns, double exp_min_ns,
                     const ctl_focus_state_t *fs, char lines[CTL_SHOOT_MAX_LINES][CTL_SHOOT_LINE])
 {
     char q[96] = "", farg[32];
     double ns, smax = shutter_max_ns > 0 ? shutter_max_ns : 500000000.0;
-    int iso;
+    int iso, nx;
     size_t len = 0;
     if (!req || !xs || !lines || !req->name[0]) return 0;
     ns = xs->shutter_ns; iso = xs->iso;
@@ -55,6 +80,8 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
         snprintf(q, sizeof q, " q=%d%s%s%s%s", req->quality > 0 ? req->quality : 95,
                  req->noise[0] ? " " : "", req->noise, req->edge[0] ? " " : "", req->edge);
     }
+    /* the same-exposure series: 3, 5 or 7 frames (anything else: 3) */
+    nx = req->bracket_n == 5 || req->bracket_n == 7 ? req->bracket_n : 3;
     focus_arg(fs, farg, sizeof farg);
     /* Our JPEG from the YUV stream: one command, the frames merged there.
      * It is ONE photo: a request that carries a bracket is not ours to take
@@ -62,8 +89,15 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
      * to the camera's JPEG below, burst or three exposures. */
     if (req->yuv && req->bracket < 0) {
         /* snap from our YUV: one light photo (light=1), never with a DNG */
-        if (!put(lines[0], &len, "yuv %s n=%d colour=%d median=%d sharpen=%d q=%d%s%s%s", req->name,
-                 req->frames == 2 || req->frames == 4 ? req->frames : 1, req->colour, req->median, req->sharpen,
+        int nf = req->frames == 2 || req->frames == 4 || req->frames == 8 ? req->frames : 1;
+        char nr[24] = "", lu[12] = "";
+        if (req->nr_tiles && nf > 1) snprintf(nr, sizeof nr, " nr=tiles");
+        /* the luminance filter when the interface sent one (it does, this
+         * camera's choice or default); none: the CLI's default, the device
+         * profile's (jpg_luma_nr) */
+        if (req->luma_set && req->luma >= 0 && req->luma <= 3) snprintf(lu, sizeof lu, " luma=%d", req->luma);
+        if (!put(lines[0], &len, "yuv %s n=%d%s colour=%d median=%d%s sharpen=%d q=%d%s%s%s", req->name,
+                 nf, nr, req->colour, req->median, lu, req->sharpen,
                  req->quality > 0 ? req->quality : 95, req->dng && !req->snap ? " dng=1" : "", req->snap ? " light=1" : "", farg))
             return 0;
         if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
@@ -76,32 +110,31 @@ int ctl_shoot_lines(const ctl_shoot_req_t *req, const ctl_exp_state_t *xs,
             return 0;
         return 1;
     }
-    /* x3 in JPEG: one burst; the pair goes along when held. */
-    if (req->bracket == 0 && !req->raw) {
-        if (!put(lines[0], &len, "burst %s n=3%s", req->name, q)) return 0;
-        if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
-        return 1;
-    }
-    /* The head of a jpeg / raw line, the same for the bracket's three. */
-#define HEAD(line, l) put(line, l, "%s %s%s%s%s", req->raw ? "raw" : "jpeg", req->name, farg, \
-                          req->raw ? "" : q, !req->raw && req->snap ? " label=snap" : "")
-    /* Bracket: three real exposures around the pair (x3 in raw: three the same),
-     * named with their milliseconds always (ms=1): the series is named alike. */
+    /* A bracket: the camera's JPEGs (type jpg) or DNGs (type raw) -- and
+     * with JPG + DNG (Settings, req->dng), the camera's JPEGs first, then
+     * the same series again as DNGs (0.3.11, patch 0553): two series one
+     * after the other, not one exposure for both (our own JPG of each shot
+     * would have spaced the shots by its processing, about 1 s each).
+     *  - x3 / x5 / x7 in JPEG: one burst; the pair goes along when held;
+     *  - otherwise (EV steps in JPEG, every bracket in DNG): shots in turn,
+     *    see bracket_shots. */
     if (req->bracket >= 0) {
-        int stops = req->bracket, k;
-        const int list[3] = { -stops, 0, stops };
-        for (k = 0; k < 3; ++k) {
-            double e = ns * pow(2.0, list[k]);
-            if (e < exp_min_ns) e = exp_min_ns;
-            if (e > smax) e = smax;
-            len = 0;
-            if (!HEAD(lines[k], &len) || !put(lines[k], &len, " exp=%.7f iso=%d ms=1", e / 1e9, iso)) return 0;
+        int at = 0, k;
+        if (!req->raw) {
+            if (req->bracket == 0) {
+                if (!put(lines[0], &len, "burst %s n=%d%s", req->name, nx, q)) return 0;
+                if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
+                at = 1;
+            } else if ((at = bracket_shots(req, 0, ns, iso, nx, smax, exp_min_ns, farg, q, lines, 0)) == 0) return 0;
+            if (!req->dng) return at;
         }
-        return 3;
+        if ((k = bracket_shots(req, 1, ns, iso, nx, smax, exp_min_ns, farg, q, lines, at)) == 0) return 0;
+        return at + k;
     }
     /* One photo: with the held pair, or in the camera's AE. */
-    if (!HEAD(lines[0], &len)) return 0;
+    if (!put(lines[0], &len, "%s %s%s%s%s", req->raw ? "raw" : "jpeg", req->name, farg,
+             req->raw ? "" : q, !req->raw && req->snap ? " label=snap" : ""))
+        return 0;
     if (xs->fixed_pair && !put(lines[0], &len, " exp=%.7f iso=%d", ns / 1e9, iso)) return 0;
     return 1;
-#undef HEAD
 }

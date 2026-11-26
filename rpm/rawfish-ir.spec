@@ -1,8 +1,8 @@
 Name:       rawfish-ir
 Summary:    RAWfish-ir camera: the app with its engine
 # Keep in step with rawfish-ir-version.h (scripts/build-rpm.sh checks).
-Version:    0.3.10
-# "beta" in the release, so the files say it: rawfish-ir-all-in-one-0.3.10-1.beta.<arch>.rpm.
+Version:    0.3.11
+# "beta" in the release, so the files say it: rawfish-ir-all-in-one-0.3.11-1.beta.<arch>.rpm.
 # The package's name and the version's order are untouched: the first
 # version after the beta takes a higher Version and a plain "1" here.
 # scripts/with-build-release.sh puts the build number in front.
@@ -180,7 +180,6 @@ for n in 86 108 128 172; do
     install -D -m 644 icons/rawfish-ir-$n.png %{buildroot}%{_datadir}/icons/hicolor/${n}x${n}/apps/rawfish-ir.png
 done
 # Commented reference files; the app copies them next to the real ones at start.
-install -D -m 644 examples/rawfish-ir.conf.example %{buildroot}%{_datadir}/rawfish-ir/examples/rawfish-ir.conf.example
 install -D -m 644 examples/override-hal.example.jsonc %{buildroot}%{_datadir}/rawfish-ir/examples/override-hal.example.jsonc
 # The page in the system Settings app (Settings > Apps > RAWfish-ir).
 install -D -m 644 settings/rawfish-ir.json %{buildroot}%{_datadir}/jolla-settings/entries/rawfish-ir.json

@@ -5,12 +5,18 @@
  * live in dconf under /apps/rawfish-ir/output and the app reads them at every
  * engine start (Nemo.Configuration on both sides).
  *
- * Folders must be under ~/Pictures: that is the only place the sandboxed app
- * may write; the page refuses anything else rather than let photos be lost.
+ * Folders must be under ~/Pictures or on a memory card (/run/media/<user>/
+ * <card>/...): those are the only places the sandboxed app may write
+ * (permissions Pictures and RemovableMedia); the page refuses anything else
+ * rather than let photos be lost. The "Storage" choice moves both folders at
+ * once to the phone's ~/Pictures/RAWfish-ir or to <card>/Pictures/RAWfish-ir;
+ * the two fields below it still take any folder in those places. When the
+ * card asked for is not mounted, the app saves to ~/Pictures/RAWfish-ir.
  */
 import QtQuick 2.6
 import Sailfish.Silica 1.0
 import Nemo.Configuration 1.0
+import org.nemomobile.systemsettings 1.0   // PartitionModel: the memory cards, as the system camera's page lists them
 
 Page {
     id: page
@@ -47,10 +53,37 @@ Page {
     }
 
     readonly property string picturesHome: StandardPaths.pictures     // "/home/<user>/Pictures"
+    // The user's memory cards are mounted under /run/media/<user>/ (the user
+    // name is the last part of the home folder, /home/<user>).
+    readonly property string mediaHome: "/run/media/" + StandardPaths.home.split("/").pop() + "/"
+    readonly property string defaultFolder: "~/Pictures/RAWfish-ir"
+    // The card a folder is on ("/run/media/<user>/<card>"), "" for any other
+    // folder (the app's own rule, rawfish-ir-preview.cpp cardRoot()).
+    function cardOf(f) {
+        var t = f.trim()
+        if (t.indexOf(mediaHome) !== 0) return ""
+        var name = t.substring(mediaHome.length).split("/")[0]
+        return name === "" ? "" : mediaHome + name
+    }
     function folderOk(f) {
         var t = f.trim()
         if (t.indexOf("~/Pictures") === 0) return true
+        if (cardOf(t) !== "") return true
         return t.indexOf(picturesHome) === 0
+    }
+    // Both folders to one storage: "" the phone's memory, or a card's mount
+    // folder. The fields show the new values at once.
+    function useStorage(mountPath) {
+        var f = mountPath === "" ? defaultFolder : mountPath + "/Pictures/RAWfish-ir"
+        output.jpgDir = f; output.dngDir = f
+        jpgField.text = f; dngField.text = f
+    }
+
+    // The memory cards (external partitions), mounted or not.
+    PartitionModel {
+        id: partitions
+        storageTypes: PartitionModel.External | PartitionModel.ExcludeParents
+        onExternalStoragesPopulatedChanged: storageCombo.updateCurrentIndex()
     }
     // Empty: no prefix (files named by the date alone). Not starting with
     // "-": a lone "-" is the engine's "measure only", which writes no file.
@@ -71,7 +104,7 @@ Page {
 
             TextSwitch {
                 text: qsTr("Also save a DNG with each JPG")
-                description: qsTr("Same exposure, same file name. Saved in the DNG folder. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.")
+                description: qsTr("Same exposure, same file name. Saved in the DNG folder. A bracket gives the camera's JPEG series, then the same series as DNGs. Not working with the camera's own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can't do both at the same time.")
                 checked: output.jpgWithDng
                 onCheckedChanged: output.jpgWithDng = checked
             }
@@ -93,6 +126,69 @@ Page {
                 EnterKey.onClicked: { if (page.prefixOk(text)) output.prefix = text; focus = false }
             }
 
+            // Where both folders go: the phone's memory or a memory card. The
+            // item shown is found from the JPEG folder: on a card, that card
+            // (or "not inserted" when it is not in the list); anywhere else,
+            // the phone's memory.
+            ComboBox {
+                id: storageCombo
+                width: parent.width
+                label: qsTr("Storage")
+                description: qsTr("Moves both folders below to Pictures/RAWfish-ir on the phone or on the memory card. If the card is not there when the camera starts, photos go to the phone's ~/Pictures/RAWfish-ir.")
+                readonly property string wanted: page.cardOf(output.jpgDir)   // "" = the phone's memory
+                onWantedChanged: updateCurrentIndex()
+                Component.onCompleted: updateCurrentIndex()
+                function updateCurrentIndex() {
+                    if (!partitions.externalStoragesPopulated) return
+                    for (var i = 0; i < menu.children.length; ++i) {
+                        var item = menu.children[i]
+                        if (item.hasOwnProperty("__silica_menuitem") && item.visible && item.mountPath === wanted) {
+                            currentIndex = i
+                            currentItem = item
+                            return
+                        }
+                    }
+                    currentIndex = -1
+                }
+                menu: ContextMenu {
+                    MenuItem {
+                        property string mountPath: ""
+                        text: qsTr("Phone memory")
+                        onClicked: page.useStorage("")
+                    }
+                    // The card the folders are on, when it is not in the list
+                    // (taken out): shown so the choice stays visible.
+                    MenuItem {
+                        property string mountPath: storageCombo.wanted
+                        text: qsTr("Memory card not inserted")
+                        visible: storageCombo.wanted !== "" && partitions.externalStoragesPopulated && !storageCombo.cardListed
+                        onVisibleChanged: storageCombo.updateCurrentIndex()
+                        opacity: Theme.opacityLow
+                    }
+                    Repeater {
+                        id: cardItems
+                        model: partitions
+                        delegate: MenuItem {
+                            property string mountPath: model.mountPath
+                            onMountPathChanged: storageCombo.updateCurrentIndex()
+                            enabled: model.status === PartitionModel.Mounted && model.mountPath !== ""
+                            text: model.status === PartitionModel.Mounted
+                                  ? qsTr("Memory card (%1 free)").arg(Format.formatFileSize(model.bytesAvailable))
+                                  : qsTr("Memory card not mounted")
+                            onClicked: page.useStorage(model.mountPath)
+                        }
+                    }
+                }
+                // Whether the card the folders are on is in the list.
+                readonly property bool cardListed: {
+                    for (var i = 0; i < cardItems.count; ++i) {
+                        var it = cardItems.itemAt(i)
+                        if (it && it.mountPath === wanted) return true
+                    }
+                    return false
+                }
+            }
+
             TextField {
                 id: jpgField
                 width: parent.width
@@ -101,7 +197,7 @@ Page {
                 text: output.jpgDir
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                 errorHighlight: !page.folderOk(text)
-                description: qsTr("Under ~/Pictures (the only place the app may write).")
+                description: qsTr("Under ~/Pictures or on the memory card (/run/media/…), the only places the app may write.")
                 // Saved when the edit ends (Enter, or the field left), not at
                 // every keystroke. (Silica's TextField has no editingFinished:
                 // using it made the whole page fail to load.)
@@ -131,7 +227,7 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Reset to defaults")
                 onClicked: {
-                    output.prefix = "photo"; output.jpgDir = "~/Pictures/RAWfish-ir"; output.dngDir = "~/Pictures/RAWfish-ir"
+                    output.prefix = "photo"; output.jpgDir = page.defaultFolder; output.dngDir = page.defaultFolder
                     prefixField.text = output.prefix; jpgField.text = output.jpgDir; dngField.text = output.dngDir
                 }
             }
@@ -140,7 +236,7 @@ Page {
 
             TextSwitch {
                 text: qsTr("JPG processing in the camera menu")
-                description: qsTr("Shows four columns in the advanced menu: Frames (1, 2 or 4 merged), Colour NR, Moiré and Sharpen, RAWfish-ir's processing of the JPG. Otherwise they are set in rawfish-ir.conf.")
+                description: qsTr("Shows RAWfish-ir's processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.")
                 checked: menuGroup.processingColumns
                 onCheckedChanged: menuGroup.processingColumns = checked
             }
@@ -208,7 +304,7 @@ Page {
             SectionHeader { text: qsTr("Log") }
             TextSwitch {
                 text: qsTr("Detailed log")
-                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own. Takes effect at the next start of RAWfish-ir.")
+                description: qsTr("Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo's report the histogram the app showed and the photo's own; our JPG photos carry their settings in their file names (seen in the Gallery's details); the exposure's changes and a touch's focus are traced. Takes effect at the next start of RAWfish-ir.")
                 checked: device.extraLog
                 onCheckedChanged: device.extraLog = checked
             }

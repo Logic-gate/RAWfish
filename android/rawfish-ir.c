@@ -22,8 +22,8 @@
  *   - meter_main: the RAW exposure meter's thread, when the meter is on.
  * Two mutexes. g.lock guards the session state in g (everything but the
  * output descriptors); it is NOT recursive: never taken twice on one path.
- * g.out_lock guards the output: g.stream_fd, g.event_fd, the order of the
- * SF2P frames and SF2M lines on the stream, events_dropped. The only
+ * g.out_lock guards the output: g.stream_fd, g.stream_yuv, g.event_fd, the
+ * order of the SF2P/SF2Y frames and SF2M lines on the stream, events_dropped. The only
  * nesting order is g.lock -> out_lock (emit_event may be called with g.lock
  * held); never out_lock -> g.lock. No callback blocks on the controller:
  * events go into a non-blocking pipe (state lines dropped when it is full,
@@ -50,6 +50,8 @@
 #include <pthread.h>  /* mutex + condition variable               */
 #include <dlfcn.h>    /* dlsym: NDK functions newer than the base   */
 #include <poll.h>     /* waiting for room on the event pipe       */
+#include <sys/socket.h> /* hwprobe: buffer handles to the interface  */
+#include <sys/un.h>
 #include <signal.h>   /* sig_atomic_t for the abort flag          */
 #include <sys/stat.h> /* mkdir for the previews folder             */
 #include <stdarg.h>   /* va_list for the JSON writer              */
@@ -87,6 +89,10 @@ IR_API void indraw_yuv_free(ir_yuv_t *f);
 #include "viewfield.h"           /* what a viewfinder frame shows of its crop (16:9 on 4:3) */
 #include "rawcheck.h"            /* a RAW16 frame the HAL left partly unwritten */
 #include "focal35.h"             /* the 35 mm-equivalent focal length, by the diagonal */
+
+/* Our JPG's processing when the device profile gives no default (see
+ * indraw_set_jpg_default): the app's own, the same in the CLI and the menu. */
+#define JPG_DEFAULT_BUILTIN "classic,1,4,2,0,0,3"
 
 static int g_screen_notch = -1;   /* the screen's top cutout, from the device profile (-1 unknown) */
 
@@ -545,6 +551,14 @@ static struct {
      * the preview listener only; freed at close, after its reader. */
     uint8_t *pv_rgb;
     size_t pv_rgb_cap;
+    /* The same frame packed as I420 (yuv_to_i420) when it goes out as SF2Y:
+     * the same rules (preview listener only, freed at close). */
+    uint8_t *pv_yuv;
+    size_t pv_yuv_cap;
+    /* The aids' maps (SF2A, aid_maps) and their scratch planes: the same
+     * rules; freed too while no aid asks for them. */
+    uint8_t *pv_aid, *pv_aid_tmp, *pv_aid_src;
+    size_t pv_aid_cap, pv_aid_tmp_cap, pv_aid_src_cap;
     ANativeWindow *preview_window, *jpeg_window, *raw_window, *yuv_window; /* owned by readers */
     int af_continuous;                      /* CONTINUOUS_PICTURE is available  */
     int tpl_nr, tpl_edge;                   /* STILL_CAPTURE template values    */
@@ -560,9 +574,16 @@ static struct {
     char camera_id[16];
     char make[64], model[64];               /* ro.product.manufacturer / .model  */
     int64_t override_shutter_max_ns;        /* 0 = none; else the tested ceiling */
+    uint32_t raw_vres[8];                   /* diagnosis: vendor result keys the next RAW reports (indraw_set_raw_vres) */
+    int raw_vres_n;
     int override_iso_max;                   /* 0 = none; else the highest ISO found to work in manual (above the declared range) */
     float override_focus_max_d;             /* 0 = none; else the lens' real closest stop, HAL units (below the declared one) */
     int no_touch_focus;                     /* 1: the device profile says a touch cannot focus this camera */
+    /* Our JPG's processing by default on this camera, for the caps line
+     * (jpg_default=): "method,frames,tile_frames,colour,moire,luma,sharpen",
+     * set by the CLI from the device profile (indraw_set_jpg_default);
+     * "" = the app's own defaults. The engine only reports it. */
+    char jpg_default[48];
     int focus_step_pct;                     /* device profile: volume steps above 1 D as a % of the value (0 = constant) */
     int64_t override_exp_max_ns;            /* 0 = none; else the longest exposure found to work (above the declared range) */
     int lim_raw_off;                        /* device profile: no RAW stream      */
@@ -616,6 +637,17 @@ static struct {
     int pf_w, pf_h;                         /* size it wrote                     */
     int pf_err;                             /* 0 ok, else an error occurred      */
     int stream_fd;                          /* >=0 = stream SF2P frames to this fd */
+    int stream_yuv;                         /* 1: frames go out as SF2Y (I420) instead,
+                                             * 2: as SF2H, buffer handles (zero copy) (out_lock) */
+    char hwb_path[108];                     /* SF2H: the unix socket the handles go to (out_lock) */
+    int vf_buffers;                         /* the viewfinder reader's buffers (RAWFISH_VF_BUFFERS) */
+    int aids_mask;                          /* SF2A maps asked ("vf aids N [EVERY]", AID_*), out_lock */
+    int aids_every;                         /* ... with one frame in aids_every (1-4; 0 = 1), out_lock */
+    /* hwprobe (branch zero_copy): the next hwp_left viewfinder frames' buffer
+     * handles go to the unix socket hwp_path (out_lock). */
+    char hwp_path[108];
+    int hwp_left;
+    int hwp_gpu_usage;                      /* the preview reader asked for GPU sampling */
     int state_events;                       /* the continuous "ae" line is emitted (1) */
     unsigned events_dropped;                /* event lines dropped on a full pipe (out_lock) */
     int event_fd;                           /* >=0 = state events go to the controller
@@ -628,12 +660,30 @@ static struct {
     int live_ae, live_af;                   /* 3A states of the latest result    */
     int live_lens_state;                    /* LENS_STATE: 0 stationary, 1 moving */
     float live_focus;                       /* LENS_FOCUS_DISTANCE in the preview  */
+    float prev_live_focus;                  /* the same, one preview result earlier: a lens that
+                                             * reports the same position twice in a row has stopped */
+    /* The last wait for a manual distance (set_preview_focus_opt), for the
+     * "lens" line of the log: lens_settle -1 no wait made, 1 settled, 0 not
+     * settled when the wait ran out; lens_target the HAL value aimed at;
+     * lens_wait_ms how long it waited. */
+    int lens_settle, lens_wait_ms;
+    float lens_target;
+    /* The focus held for a long exposure (focus_freeze): the preview's own
+     * continuous AF mode, put back by focus_thaw. */
+    int focus_frozen;
+    uint8_t frozen_af_mode;
+    /* A YUV burst: results still to come before its "captured" (the
+     * flash): sent with the LAST frame's result, when the sensor has
+     * exposed every frame, not once they are all copied (on the JP2 the
+     * copies of 8 frames take 0.9 s after a 0.3 s burst). 0: none. */
+    int burst_results_left;
     int device_error;                       /* 0, or the onError code / -1       */
     AImage *jpeg_image;                     /* latest JPEG waiting to be saved   */
     AImage *yuv_image;                      /* latest full-resolution YUV frame  */
     ACaptureRequest *yuv_request;           /* YUV + preview, the HAL's NR/edge off */
-    ACaptureRequest *yuv_burst_req[4];      /* the same, one per frame of a burst (own exposure each) */
-    AImage *yuv_q[4]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
+#define YUV_BURST_MAX 8
+    ACaptureRequest *yuv_burst_req[YUV_BURST_MAX]; /* the same, one per frame of a burst (own exposure each) */
+    AImage *yuv_q[YUV_BURST_MAX]; int yuv_qn, yuv_burst_on;   /* a burst's frames, in order */
     char yuv_dng_path[1100], yuv_dng_dt[24];     /* the next burst also writes this DNG ("" none) */
     int yuv_down;                                /* the YUV stream is this many times the photo's size: averaged down on copy (1 = none) */
     int yuv_light;                               /* the next captures are snap's: binned to about 2048 px wide (indraw_set_yuv_light) */
@@ -860,6 +910,24 @@ static int write_sf2p(int fd, const uint8_t *rgb, int w, int h)
     return write_all(fd, rgb, bytes);
 }
 
+/* Writes one I420 frame in the SF2Y framing: the same 16-byte header with
+ * the magic "SF2Y", then Y (w*h), U and V ((w+1)/2 * (h+1)/2 each) --
+ * i420_size(w, h) bytes. The interface converts it on its GPU (0.3.11;
+ * docs/ARCHITECTURE.md, rule 5). Returns 0, or -1 if the pipe broke. */
+static int write_sf2y(int fd, const uint8_t *i420, int w, int h)
+{
+    uint8_t hdr[16];
+    uint32_t bytes;
+    if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return -1;
+    bytes = (uint32_t)i420_size(w, h);
+    hdr[0]='S'; hdr[1]='F'; hdr[2]='2'; hdr[3]='Y';
+    hdr[4]=(uint8_t)w; hdr[5]=(uint8_t)(w>>8); hdr[6]=(uint8_t)(w>>16); hdr[7]=(uint8_t)(w>>24);
+    hdr[8]=(uint8_t)h; hdr[9]=(uint8_t)(h>>8); hdr[10]=(uint8_t)(h>>16); hdr[11]=(uint8_t)(h>>24);
+    hdr[12]=(uint8_t)bytes; hdr[13]=(uint8_t)(bytes>>8); hdr[14]=(uint8_t)(bytes>>16); hdr[15]=(uint8_t)(bytes>>24);
+    if (write_all(fd, hdr, sizeof hdr) != 0) return -1;
+    return write_all(fd, i420, bytes);
+}
+
 /* Writes one SF2M metadata/event packet: an 8-byte header "SF2M" + little-endian
  * byte count, then `len` bytes of text (one line). Same channel as the frames,
  * distinguished by the magic, so the reader never confuses the two. */
@@ -895,7 +963,8 @@ static int write_sf2m(int fd, const char *text, int len)
 static int event_is_state(const char *text)
 {
     return !strncmp(text, "ae ", 3) || !strncmp(text, "vfmeter ", 8) || !strncmp(text, "meter ", 6)
-        || !strncmp(text, "vfpace ", 7);            /* diagnostics: never worth a wait */
+        || !strncmp(text, "vfpace ", 7)             /* diagnostics: never worth a wait */
+        || !strncmp(text, "hwprobe ", 8);
 }
 static void emit_event(const char *text)
 {
@@ -1026,6 +1095,323 @@ static uint8_t *yuv_to_rgb(AImage *img, int *out_w, int *out_h)
     return rgb;
 }
 
+/* The same frame packed as I420 in g.pv_yuv (yuv420_to_i420 in yuv.h: a
+ * copy of the planes, no arithmetic), for an SF2Y stream. Same contract as
+ * yuv_to_rgb: the listener's own buffer, NULL on any error. */
+static uint8_t *yuv_to_i420(AImage *img, int *out_w, int *out_h)
+{
+    uint8_t *py = NULL, *pu = NULL, *pv = NULL;
+    int ly = 0, lu = 0, lv = 0, ry = 0, ru = 0, rv = 0, xy = 0, xu = 0, xv = 0;
+    int w = 0, h = 0, fmt = 0, planes = 0;
+    size_t need;
+    if (AImage_getWidth(img, &w) != AMEDIA_OK || AImage_getHeight(img, &h) != AMEDIA_OK ||
+        AImage_getFormat(img, &fmt) != AMEDIA_OK || fmt != AIMAGE_FORMAT_YUV_420_888 ||
+        AImage_getNumberOfPlanes(img, &planes) != AMEDIA_OK || planes < 3 ||
+        AImage_getPlaneData(img, 0, &py, &ly) != AMEDIA_OK ||
+        AImage_getPlaneData(img, 1, &pu, &lu) != AMEDIA_OK ||
+        AImage_getPlaneData(img, 2, &pv, &lv) != AMEDIA_OK ||
+        AImage_getPlaneRowStride(img, 0, &ry) != AMEDIA_OK ||
+        AImage_getPlaneRowStride(img, 1, &ru) != AMEDIA_OK ||
+        AImage_getPlaneRowStride(img, 2, &rv) != AMEDIA_OK ||
+        AImage_getPlanePixelStride(img, 0, &xy) != AMEDIA_OK ||
+        AImage_getPlanePixelStride(img, 1, &xu) != AMEDIA_OK ||
+        AImage_getPlanePixelStride(img, 2, &xv) != AMEDIA_OK || w <= 0 || h <= 0 || w > 16384 || h > 16384)
+        return NULL;
+    need = i420_size(w, h);
+    if (need > g.pv_yuv_cap) {
+        uint8_t *grown = realloc(g.pv_yuv, need);
+        if (!grown) return NULL;
+        g.pv_yuv = grown; g.pv_yuv_cap = need;
+    }
+    yuv420_to_i420(py, ly, ry, xy, pu, lu, ru, xu, pv, lv, rv, xv, w, h, g.pv_yuv);
+    *out_w = w;
+    *out_h = h;
+    return g.pv_yuv;
+}
+
+/* A viewfinder frame as the meter reads it: RGB888 or I420 (one of the
+ * two set), sampled one pixel at a time. */
+typedef struct {
+    const uint8_t *rgb, *i420; int w, h;
+    /* or the camera's own planes, read where they lie (SF2H: no copy) */
+    const uint8_t *py, *pu, *pv; int ry, ru, rv, xy, xu, xv;
+} vf_img_t;
+static inline void vf_get(const vf_img_t *im, int x, int y, uint8_t px[3])
+{
+    if (im->rgb) memcpy(px, im->rgb + ((size_t)y * im->w + x) * 3, 3);
+    else if (im->i420) i420_px(im->i420, im->w, im->h, x, y, px);
+    else {                                  /* yuv420_to_rgb's arithmetic */
+        const int Y = im->py[(size_t)y * im->ry + (size_t)x * im->xy];
+        const int U = im->pu[(size_t)(y / 2) * im->ru + (size_t)(x / 2) * im->xu] - 128;
+        const int V = im->pv[(size_t)(y / 2) * im->rv + (size_t)(x / 2) * im->xv] - 128;
+        px[0] = yuv_clip8(Y + ((91881 * V) >> 16));
+        px[1] = yuv_clip8(Y - ((22554 * U + 46802 * V) >> 16));
+        px[2] = yuv_clip8(Y + ((116130 * U) >> 16));
+    }
+}
+/* The planes of a YUV_420_888 image for vf_get, checked against the
+ * plane lengths (the corners of each plane); 0, or -1. */
+static int vf_planes(AImage *img, vf_img_t *im)
+{
+    uint8_t *py = NULL, *pu = NULL, *pv = NULL;
+    int ly = 0, lu = 0, lv = 0, w = 0, h = 0, fmt = 0;
+    memset(im, 0, sizeof *im);
+    if (AImage_getWidth(img, &w) != AMEDIA_OK || AImage_getHeight(img, &h) != AMEDIA_OK ||
+        AImage_getFormat(img, &fmt) != AMEDIA_OK || fmt != AIMAGE_FORMAT_YUV_420_888 || w < 2 || h < 2 ||
+        AImage_getPlaneData(img, 0, &py, &ly) != AMEDIA_OK || AImage_getPlaneData(img, 1, &pu, &lu) != AMEDIA_OK ||
+        AImage_getPlaneData(img, 2, &pv, &lv) != AMEDIA_OK ||
+        AImage_getPlaneRowStride(img, 0, &im->ry) != AMEDIA_OK || AImage_getPlaneRowStride(img, 1, &im->ru) != AMEDIA_OK ||
+        AImage_getPlaneRowStride(img, 2, &im->rv) != AMEDIA_OK ||
+        AImage_getPlanePixelStride(img, 0, &im->xy) != AMEDIA_OK || AImage_getPlanePixelStride(img, 1, &im->xu) != AMEDIA_OK ||
+        AImage_getPlanePixelStride(img, 2, &im->xv) != AMEDIA_OK)
+        return -1;
+    if ((long)(h - 1) * im->ry + (long)(w - 1) * im->xy >= ly ||
+        (long)((h - 1) / 2) * im->ru + (long)((w - 1) / 2) * im->xu >= lu ||
+        (long)((h - 1) / 2) * im->rv + (long)((w - 1) / 2) * im->xv >= lv)
+        return -1;
+    im->py = py; im->pu = pu; im->pv = pv; im->w = w; im->h = h;
+    return 0;
+}
+
+/* ---- SF2A: the aids' values for a zero-copy viewfinder ----
+ *
+ * With SF2H the interface never sees the pixels, yet the zebra and the
+ * peaking compare pixel values with thresholds. So the engine works those
+ * values out here, on the full frame and with the interface's own
+ * arithmetic (app/rawfish-ir-preview.cpp, overlayFrom), and sends one value
+ * per 2x2 cell -- the cell of one chroma sample -- keeping the one that
+ * decides: a cell compares with a threshold as its strongest pixel would.
+ * Exact in value, coarser in place (the user's choice, 15 Nov 2026). Only
+ * the maps asked for are computed and sent, in this order:
+ *   AID_LAP   the peaking: |Laplacian| of the 2x2-smoothed green, max of
+ *             the cell, sent as q = min(255, (a - 1) / 3) (0 for 0), so
+ *             that q >= edge exactly when a > 3 * edge (the interface's
+ *             test, edge 1-255); 0 within 2 pixels of the border
+ *   AID_YMAX  the zebra on the luma: max Y of the cell
+ *   AID_CMAX  the zebra on channels: max of R, G, B over the cell
+ *   AID_LUM   the RAW zebra: (sum of the 4 Y + 2) / 4, which is the 2x2
+ *             smoothed luma the interface sampled every other pixel
+ * Each map is cw x ch bytes, cw = (w + 1) / 2, ch = (h + 1) / 2. */
+enum { AID_LAP = 1, AID_YMAX = 2, AID_CMAX = 4, AID_LUM = 8, AID_ALL = 15 };
+
+/* The frame's planes copied, row by row and in one block each, into the
+ * listener's memory (g.pv_aid_src): Y with pixel stride 1, U and V apart.
+ * The camera's buffer is slow to read byte by byte (not cached for the
+ * CPU: the luma maximum alone took 5.5 ms a frame on the JP2, 0.7 ms on a
+ * desktop -- log of 15 Nov 2026, 13:24); a block copy reads it at full
+ * speed, then the work runs on the copy. 0, or -1 (no memory). */
+static int aid_copy(const vf_img_t *im, vf_img_t *lc)
+{
+    const int w = im->w, h = im->h, cw = (w + 1) / 2, ch = (h + 1) / 2;
+    const int inter = im->xu == 2 && im->xv == 2 && (im->pv == im->pu + 1 || im->pu == im->pv + 1);
+    const size_t row = inter ? (size_t)2 * cw : (size_t)(cw - 1) * (im->xu > im->xv ? im->xu : im->xv) + 1;
+    const size_t need = (size_t)w * h + (size_t)2 * cw * ch + row;
+    uint8_t *y, *u, *v, *t;
+    int r, x;
+    if (need > g.pv_aid_src_cap) {
+        uint8_t *grown = realloc(g.pv_aid_src, need);
+        if (!grown) return -1;
+        g.pv_aid_src = grown; g.pv_aid_src_cap = need;
+    }
+    y = g.pv_aid_src; u = y + (size_t)w * h; v = u + (size_t)cw * ch; t = v + (size_t)cw * ch;
+    for (r = 0; r < h; ++r) {
+        const uint8_t *src = im->py + (size_t)r * im->ry;
+        if (im->xy == 1) memcpy(y + (size_t)r * w, src, (size_t)w);
+        else for (x = 0; x < w; ++x) y[(size_t)r * w + x] = src[(size_t)x * im->xy];
+    }
+    for (r = 0; r < ch; ++r) {
+        uint8_t *uo = u + (size_t)r * cw, *vo = v + (size_t)r * cw;
+        if (inter) {                          /* NV12 / NV21: one span holds both */
+            const uint8_t *pu = im->pu + (size_t)r * im->ru, *pv = im->pv + (size_t)r * im->rv;
+            const uint8_t *base = pu < pv ? pu : pv;
+            const int uo1 = pu < pv ? 0 : 1;
+            memcpy(t, base, (size_t)2 * cw);
+            for (x = 0; x < cw; ++x) { uo[x] = t[2 * x + uo1]; vo[x] = t[2 * x + 1 - uo1]; }
+        } else {
+            const uint8_t *pu = im->pu + (size_t)r * im->ru, *pv = im->pv + (size_t)r * im->rv;
+            if (im->xu == 1) memcpy(uo, pu, (size_t)cw);
+            else { memcpy(t, pu, (size_t)(cw - 1) * im->xu + 1); for (x = 0; x < cw; ++x) uo[x] = t[(size_t)x * im->xu]; }
+            if (im->xv == 1) memcpy(vo, pv, (size_t)cw);
+            else { memcpy(t, pv, (size_t)(cw - 1) * im->xv + 1); for (x = 0; x < cw; ++x) vo[x] = t[(size_t)x * im->xv]; }
+        }
+    }
+    memset(lc, 0, sizeof *lc);
+    lc->w = w; lc->h = h;
+    lc->py = y; lc->ry = w; lc->xy = 1;
+    lc->pu = u; lc->ru = cw; lc->xu = 1;
+    lc->pv = v; lc->rv = cw; lc->xv = 1;
+    return 0;
+}
+
+/* The payload into g.pv_aid: 16 bytes (mask, source w, h, 0; little
+ * endian), then the maps. Returns its size, 0 on any error. */
+static size_t aid_maps(const vf_img_t *src, int mask)
+{
+    vf_img_t copy;
+    const vf_img_t *im = &copy;
+    if (!src->py || aid_copy(src, &copy) != 0) return 0;
+    const int w = im->w, h = im->h, cw = (w + 1) / 2, ch = (h + 1) / 2;
+    const size_t n = (size_t)cw * ch;
+    int k = 0, b, cx, cy, x, y;
+    size_t need;
+    uint8_t *o, *lap = NULL, *ymax = NULL, *cmax = NULL, *lum = NULL;
+    mask &= AID_ALL;
+    for (b = 1; b <= 8; b <<= 1) if (mask & b) ++k;
+    if (!k || !im->py || w < 6 || h < 6) return 0;
+    need = 16 + (size_t)k * n;
+    if (need > g.pv_aid_cap) {
+        uint8_t *grown = realloc(g.pv_aid, need);
+        if (!grown) return 0;
+        g.pv_aid = grown; g.pv_aid_cap = need;
+    }
+    o = g.pv_aid;
+    {
+        const uint32_t hd[4] = { (uint32_t)mask, (uint32_t)w, (uint32_t)h, 0 };
+        for (b = 0; b < 4; ++b) { o[4*b] = (uint8_t)hd[b]; o[4*b+1] = (uint8_t)(hd[b] >> 8); o[4*b+2] = (uint8_t)(hd[b] >> 16); o[4*b+3] = (uint8_t)(hd[b] >> 24); }
+    }
+    o += 16;
+    if (mask & AID_LAP)  { lap = o;  o += n; }
+    if (mask & AID_YMAX) { ymax = o; o += n; }
+    if (mask & AID_CMAX) { cmax = o; o += n; }
+    if (mask & AID_LUM)  { lum = o;  o += n; }
+
+#define AY(px, py_) im->py[(size_t)(py_) * im->ry + (size_t)(px) * im->xy]
+    if (ymax || cmax || lum)
+        for (cy = 0; cy < ch; ++cy) {
+            const int y0 = 2 * cy, y1 = y0 + 1 < h ? y0 + 1 : y0;
+            for (cx = 0; cx < cw; ++cx) {
+                const int x0 = 2 * cx, x1 = x0 + 1 < w ? x0 + 1 : x0;
+                const int a = AY(x0, y0), bq = AY(x1, y0), c = AY(x0, y1), d = AY(x1, y1);
+                int m = a > bq ? a : bq;
+                m = m > c ? m : c; m = m > d ? m : d;
+                if (ymax) ymax[(size_t)cy * cw + cx] = (uint8_t)m;
+                if (lum) lum[(size_t)cy * cw + cx] = (uint8_t)((a + bq + c + d + 2) >> 2);
+                if (cmax) {
+                    /* the cell shares one chroma sample: max(R,G,B) is the
+                     * brightest Y plus the largest of the three offsets */
+                    const int U = im->pu[(size_t)cy * im->ru + (size_t)cx * im->xu] - 128;
+                    const int V = im->pv[(size_t)cy * im->rv + (size_t)cx * im->xv] - 128;
+                    const int dr = (91881 * V) >> 16, dg = -((22554 * U + 46802 * V) >> 16), db = (116130 * U) >> 16;
+                    int dm = dr > dg ? dr : dg;
+                    dm = dm > db ? dm : db;
+                    cmax[(size_t)cy * cw + cx] = yuv_clip8(m + dm);
+                }
+            }
+        }
+    if (lap) {
+        /* Row by row, a few rows kept (they stay in the cache: the little
+         * cores' L2 holds a few hundred KB, not the 2.4 MB of two whole
+         * planes), in loops of plain arithmetic the compiler turns into
+         * vector code (8 to 16 pixels an instruction):
+         *   te   the chroma row's green offset t, one per pixel
+         *   g    the green of two Y rows: clamp(Y - t)
+         *   s    the 2x2 box of the green, three rows (y-1, y, y+1)
+         *   row  |Laplacian| of row y (0 at the borders), 16-bit
+         *   vm   the cell row's maxima so far
+         * The same values as the interface's arithmetic (overlayFrom), and
+         * the same as before 0441 (aid_maps' test). */
+        const int ww = w + 2;                         /* rows padded by 2 */
+        int16_t *te;
+        uint8_t *gA, *gB, *sr[3];
+        uint16_t *row, *vm;
+        int ly, have_g = -1;                          /* the Y row held in gB (-1 none) */
+        const size_t tmp = sizeof(int16_t) * (size_t)ww + 5 * (size_t)ww + sizeof(uint16_t) * ((size_t)ww + (size_t)cw + 1);
+        if (tmp > g.pv_aid_tmp_cap) {
+            uint8_t *grown = realloc(g.pv_aid_tmp, tmp);
+            if (!grown) return 0;
+            g.pv_aid_tmp = grown; g.pv_aid_tmp_cap = tmp;
+        }
+        te = (int16_t *)(void *)g.pv_aid_tmp;
+        row = (uint16_t *)(void *)(te + ww);
+        vm = row + ww;
+        gA = (uint8_t *)(void *)(vm + cw + 1);
+        gB = gA + ww; sr[0] = gB + ww; sr[1] = sr[0] + ww; sr[2] = sr[1] + ww;
+        memset(lap, 0, n);
+        memset(row, 0, sizeof *row * (size_t)ww);
+
+        /* the green of Y row yy into out (te for its chroma row) */
+#define AID_GREEN_ROW(out, yy) do {                                              \
+            const uint8_t *yr_ = im->py + (size_t)(yy) * im->ry;                  \
+            const uint8_t *ur_ = im->pu + (size_t)((yy) / 2) * im->ru;            \
+            const uint8_t *vr_ = im->pv + (size_t)((yy) / 2) * im->rv;            \
+            int x_;                                                               \
+            for (x_ = 0; x_ < cw; ++x_) {                                         \
+                const int16_t t_ = (int16_t)((22554 * (ur_[x_] - 128) + 46802 * (vr_[x_] - 128)) >> 16); \
+                te[2 * x_] = t_; te[2 * x_ + 1] = t_;                             \
+            }                                                                     \
+            for (x_ = 0; x_ < w; ++x_) {                                          \
+                int v_ = yr_[x_] - te[x_];                                        \
+                v_ = v_ < 0 ? 0 : v_; v_ = v_ > 255 ? 255 : v_;                   \
+                (out)[x_] = (uint8_t)v_;                                          \
+            }                                                                     \
+        } while (0)
+        /* s(yy): the box of green rows yy and yy+1 (the last row doubled) */
+        for (y = 0; y < h; ++y) {
+            uint8_t *s = sr[y % 3], *g0, *g1;
+            const int y1 = y + 1 < h ? y + 1 : y;
+            /* g0 = green(y): kept from the previous row's g1 */
+            if (have_g == y) { uint8_t *k = gA; gA = gB; gB = k; }
+            else AID_GREEN_ROW(gA, y);
+            g0 = gA;
+            if (y1 != y) { AID_GREEN_ROW(gB, y1); have_g = y1; g1 = gB; }
+            else g1 = gA;
+            for (x = 0; x < w - 1; ++x) s[x] = (uint8_t)((g0[x] + g0[x + 1] + g1[x] + g1[x + 1]) >> 2);
+            s[w - 1] = (uint8_t)((2 * g0[w - 1] + 2 * g1[w - 1]) >> 2);
+            /* the Laplacian of row ly = y - 1 (rows 2 .. h-3), from s(ly-1), s(ly), s(ly+1) */
+            ly = y - 1;
+            if (ly >= 2 && ly <= h - 3) {
+                const uint8_t *u = sr[(ly - 1) % 3], *c = sr[ly % 3], *d = sr[(ly + 1) % 3];
+                const int cr = ly / 2;
+                uint8_t *lo = lap + (size_t)cr * cw;
+                for (x = 2; x < w - 2; ++x) {
+                    const int v = 8 * c[x] - (u[x - 1] + u[x] + u[x + 1] + c[x - 1] + c[x + 1] + d[x - 1] + d[x] + d[x + 1]);
+                    row[x] = (uint16_t)(v < 0 ? -v : v);
+                }
+                /* row[0..1], row[w-2..w+1] stay 0 */
+                if (!(ly & 1)) {                        /* first row of the cell row */
+                    for (cx = 0; cx < cw; ++cx) {
+                        const uint16_t a0 = row[2 * cx], a1 = row[2 * cx + 1];
+                        vm[cx] = a0 > a1 ? a0 : a1;
+                    }
+                } else {
+                    for (cx = 0; cx < cw; ++cx) {
+                        const uint16_t a0 = row[2 * cx], a1 = row[2 * cx + 1];
+                        const uint16_t m = a0 > a1 ? a0 : a1;
+                        vm[cx] = vm[cx] > m ? vm[cx] : m;
+                    }
+                }
+                /* the cell row complete (its second row, or the last row):
+                 * coded, q = floor((v - 1) / 3) as (v - 1) * 21846 >> 16 --
+                 * exact for v - 1 < 2^15 / 3 * 3 (v <= 2040 here) */
+                if ((ly & 1) || ly == h - 3)
+                    for (cx = 0; cx < cw; ++cx) {
+                        const int v = vm[cx];
+                        int q = v > 0 ? ((v - 1) * 21846) >> 16 : 0;
+                        lo[cx] = (uint8_t)(q > 255 ? 255 : q);
+                    }
+            }
+        }
+#undef AID_GREEN_ROW
+    }
+#undef AY
+    return need;
+}
+
+/* The SF2A packet: the usual 16-byte header ("SF2A", cells w, h, bytes),
+ * then the payload of aid_maps. */
+static int write_sf2a(int fd, const uint8_t *payload, size_t bytes, int src_w, int src_h)
+{
+    uint8_t hdr[16];
+    const int cw = (src_w + 1) / 2, ch = (src_h + 1) / 2;
+    if (bytes < 16 || bytes > 0x7fffffff) return -1;
+    hdr[0]='S'; hdr[1]='F'; hdr[2]='2'; hdr[3]='A';
+    hdr[4]=(uint8_t)cw; hdr[5]=(uint8_t)(cw>>8); hdr[6]=(uint8_t)(cw>>16); hdr[7]=(uint8_t)(cw>>24);
+    hdr[8]=(uint8_t)ch; hdr[9]=(uint8_t)(ch>>8); hdr[10]=(uint8_t)(ch>>16); hdr[11]=(uint8_t)(ch>>24);
+    hdr[12]=(uint8_t)bytes; hdr[13]=(uint8_t)(bytes>>8); hdr[14]=(uint8_t)(bytes>>16); hdr[15]=(uint8_t)(bytes>>24);
+    if (write_all(fd, hdr, sizeof hdr) != 0) return -1;
+    return write_all(fd, payload, bytes);
+}
+
 static int photo_orientation_deg(void);     /* with indraw_orient, below */
 static int apply_session_request(ACaptureRequest *req);   /* session parameters, below */
 /* The device profile's AE frame-rate cap (g.cap_fps) on a request just made
@@ -1126,8 +1512,9 @@ static const uint8_t *lens_fix_view(const uint8_t *rgb, int w, int h, const int3
  * - histogram: 64 bins per channel over every 4th pixel, peak 1000; clipping
  *   percentages at 0 and 255.
  * At most every 100 ms. The same measure for every interface. */
-static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], int iso, int64_t exp_ns)
+static void vf_meter(const vf_img_t *im, const int32_t crop[4], int iso, int64_t exp_ns)
 {
+    const int w = im->w, h = im->h;
     static double lut[256];
     static int lut_ready = 0;
     static double last_ms = 0;
@@ -1169,7 +1556,8 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
             if (bstep < 1) bstep = 1;
             for (y = by0; y < by1; y += bstep)
                 for (x = bx0; x < bx1; x += bstep) {
-                    const uint8_t *px = rgb + (y * w + x) * 3;
+                    uint8_t px[3];
+                    vf_get(im, x, y, px);
                     sum += lut[px[1]]; wsum += 1.0;
                     m_n++; m_hi += px[1] >= 250; m_lo += px[1] <= 5;
                     for (c = 0; c < 3; ++c) shist[c][px[c] >> 2]++;
@@ -1201,10 +1589,10 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
         if (hstep < 1) hstep = 1;
     }
     for (y = hy0; y < hy1; y += hstep) {
-        const uint8_t *row = rgb + (size_t)y * w * 3;
         int cy = y >= hy0 + (hy1 - hy0) / 4 && y < hy0 + 3 * (hy1 - hy0) / 4;
         for (x = hx0; x < hx1; x += hstep) {
-            const uint8_t *px = row + x * 3;
+            uint8_t px[3];
+            vf_get(im, x, y, px);
             if (!spot_on) {
                 double weight = (cy && x >= hx0 + (hx1 - hx0) / 4 && x < hx0 + 3 * (hx1 - hx0) / 4) ? 3.0 : 1.0;
                 sum += weight * lut[px[1]];
@@ -1226,8 +1614,10 @@ static void vf_meter(const uint8_t *rgb, int w, int h, const int32_t crop[4], in
      * is known (looked up by timestamp), else 0 -- the reader then uses the
      * live values. Tagging the measure with its own pair lets the exposure
      * loop know at once whether a frame already shows the pair it sent. */
+    pthread_mutex_lock(&g.lock);                 /* read by a capture's report (yuv_check_json) */
     g.vf_last_mean = sum / wsum; g.vf_last_clip_hi = 100.0 * hi / n;   /* for a capture's report: viewfinder vs photo */
     memcpy(g.vf_last_hist, hist, sizeof g.vf_last_hist);
+    pthread_mutex_unlock(&g.lock);
     p += snprintf(p, (size_t)(end - p), "vfmeter mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f iso=%d exp_ns=%lld hist=",
                   sum / wsum, 100.0 * lo / n, 100.0 * hi / n,
                   m_n ? 100.0 * m_lo / m_n : 0.0, m_n ? 100.0 * m_hi / m_n : 0.0, iso, (long long)exp_ns);
@@ -1390,6 +1780,15 @@ static void wbpick_from_view(const uint8_t *rgb, int w, int h, const int32_t cro
  * What the interface then takes to draw the frame is not counted.
  * The line goes to the controller as "vfpace ..." (a state event: dropped,
  * never waited for) and from there to the log only. */
+static const char *hwb_pace_note(void);
+/* The aids' maps' own time (SF2A, after the frame went), for the same line. */
+static double aid_sum_ms, aid_max_ms;
+static int aid_n;
+static void vf_pace_aids(double ms)
+{
+    aid_sum_ms += ms; if (ms > aid_max_ms) aid_max_ms = ms;
+    aid_n++;
+}
 static void vf_pace(int64_t sensor_ts, double ours_ms)
 {
     static double win_start = 0, lat_sum = 0, lat_max = 0, ours_sum = 0, ours_max = 0;
@@ -1407,17 +1806,313 @@ static void vf_pace(int64_t sensor_ts, double ours_ms)
         if (lat >= 0 && lat < 10000) { lat_sum += lat; if (lat > lat_max) lat_max = lat; lat_n++; }
     }
     if (now - win_start >= 2000) {
-        char line[160];
+        char line[300], aids[80] = "";
         double secs = (now - win_start) / 1000.0;
+        if (aid_n > 0)                       /* the aids' maps: ms each, maps a second */
+            snprintf(aids, sizeof aids, " aids_ms=%.1f aids_max_ms=%.1f aids_fps=%.1f", aid_sum_ms / aid_n, aid_max_ms, aid_n / secs);
+        aid_sum_ms = aid_max_ms = 0; aid_n = 0;
         if (lat_n > 0)
-            snprintf(line, sizeof line, "vfpace fps=%.1f lat_ms=%.0f lat_max_ms=%.0f ours_ms=%.1f ours_max_ms=%.1f\n",
-                     frames / secs, lat_sum / lat_n, lat_max, ours_sum / frames, ours_max);
+            snprintf(line, sizeof line, "vfpace fps=%.1f lat_ms=%.0f lat_max_ms=%.0f ours_ms=%.1f ours_max_ms=%.1f%s%s\n",
+                     frames / secs, lat_sum / lat_n, lat_max, ours_sum / frames, ours_max, hwb_pace_note(), aids);
         else
             snprintf(line, sizeof line, "vfpace fps=%.1f lat=unknown ours_ms=%.1f ours_max_ms=%.1f\n",
                      frames / secs, ours_sum / frames, ours_max);
         emit_event(line);
         win_start = now; frames = 0; lat_n = 0; lat_sum = lat_max = ours_sum = ours_max = 0;
     }
+}
+
+/* ---- SF2H: the viewfinder without a copy (zero copy, 0.3.11 branch
+ * zero_copy) ----
+ *
+ * The frame stays in the camera's buffer. Each buffer's gralloc handle goes
+ * once over a unix socket to the interface (fds with SCM_RIGHTS: "HWB2"
+ * with the buffer's id, its size, stride, format and usage), which imports
+ * it with libhybris and keeps it; then every frame is a small SF2H packet
+ * on the stream naming the buffer (its id). The image is held here until
+ * the interface has drawn a newer one and answers "REL1" + the id; then it
+ * goes back to the camera. hwprobe (below) showed it works on the JP2
+ * (15 Nov 2026). Listener thread only, but for hwb_release_all at close
+ * (hwb_mu). Any failure: the stream falls back to SF2Y, said in the log. */
+/* AHardwareBuffer_Desc and native_handle_t, as the NDK (API 26) has them */
+typedef struct { uint32_t width, height, layers, format; uint64_t usage; uint32_t stride, rfu0; uint64_t rfu1; } hwp_desc_t;
+typedef struct { int version, numFds, numInts; int data[]; } hwp_native_handle_t;
+typedef struct {
+    char magic[4];                     /* "HWB2" */
+    uint32_t width, height, stride, format, layers;
+    uint64_t usage, id;
+    int32_t nfds, nints;
+    int32_t ints[64];
+} hwb_msg_t;
+#define HWB_HELD_MAX 12
+static pthread_mutex_t hwb_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct { uint64_t id; AImage *img; } hwb_held[HWB_HELD_MAX];
+static int hwb_nheld;
+static uint64_t hwb_known[16];         /* buffers whose handle went (this connection) */
+static int hwb_nknown;
+static int hwb_sock = -1;
+static int hwb_forced;                 /* images taken back before the interface released them */
+static void hwb_release_all_locked(int delete_images)
+{
+    int k;
+    for (k = 0; k < hwb_nheld; ++k) if (delete_images) AImage_delete(hwb_held[k].img);
+    hwb_nheld = 0;
+}
+/* At close, before the reader goes; when the stream leaves SF2H. */
+static void hwb_release_all(int close_socket)
+{
+    pthread_mutex_lock(&hwb_mu);
+    hwb_release_all_locked(1);
+    if (close_socket && hwb_sock >= 0) { close(hwb_sock); hwb_sock = -1; hwb_nknown = 0; }
+    pthread_mutex_unlock(&hwb_mu);
+}
+/* The interface's releases waiting on the socket (non-blocking). */
+static void hwb_drain_releases_locked(void)
+{
+    char m[16];
+    for (;;) {
+        ssize_t n = recv(hwb_sock, m, sizeof m, MSG_DONTWAIT | MSG_WAITALL);
+        uint64_t id;
+        int k;
+        if (n != (ssize_t)sizeof m || memcmp(m, "REL1", 4)) break;
+        memcpy(&id, m + 8, sizeof id);
+        for (k = 0; k < hwb_nheld; ++k)
+            if (hwb_held[k].id == id) {
+                AImage_delete(hwb_held[k].img);
+                memmove(&hwb_held[k], &hwb_held[k + 1], (size_t)(hwb_nheld - k - 1) * sizeof hwb_held[0]);
+                hwb_nheld--;
+                break;
+            }
+    }
+}
+/* Sends this frame's buffer (its handle the first time) and keeps the
+ * image; *id is what the SF2H packet names. 0, or -1 with `err` (the
+ * caller falls back to SF2Y; the image is then still the caller's). */
+static int hwb_take(AImage *img, const char *path, uint64_t *id, char *err, size_t errn)
+{
+    typedef media_status_t (*gethb_fn)(const AImage *, void **);
+    typedef void (*desc_fn)(const void *, hwp_desc_t *);
+    typedef const hwp_native_handle_t *(*nh_fn)(const void *);
+    static gethb_fn gethb; static desc_fn describe; static nh_fn native; static int looked;
+    void *ahb = NULL;
+    int k, known = 0, rc = -1;
+    if (!looked) {
+        void *nw = dlopen("libnativewindow.so", RTLD_NOW);
+        looked = 1;
+        gethb = (gethb_fn)dlsym(RTLD_DEFAULT, "AImage_getHardwareBuffer");
+        describe = (desc_fn)dlsym(nw ? nw : RTLD_DEFAULT, "AHardwareBuffer_describe");
+        native = (nh_fn)dlsym(nw ? nw : RTLD_DEFAULT, "AHardwareBuffer_getNativeHandle");
+    }
+    if (!gethb || !describe || !native) { snprintf(err, errn, "missing AHardwareBuffer functions"); return -1; }
+    if (gethb(img, &ahb) != AMEDIA_OK || !ahb) { snprintf(err, errn, "AImage_getHardwareBuffer"); return -1; }
+    *id = (uint64_t)(uintptr_t)ahb;
+    pthread_mutex_lock(&hwb_mu);
+    if (hwb_sock < 0) {
+        struct sockaddr_un a;
+        struct timeval tv = { 0, 300000 };
+        memset(&a, 0, sizeof a);
+        a.sun_family = AF_UNIX;
+        snprintf(a.sun_path, sizeof a.sun_path, "%s", path);
+        hwb_sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        if (hwb_sock >= 0) setsockopt(hwb_sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+        if (hwb_sock < 0 || connect(hwb_sock, (struct sockaddr *)&a, sizeof a) != 0) {
+            snprintf(err, errn, "connect errno=%d", errno);
+            if (hwb_sock >= 0) close(hwb_sock);
+            hwb_sock = -1;
+            goto out;
+        }
+        hwb_nknown = 0;
+    }
+    hwb_drain_releases_locked();
+    /* never all the buffers held: the camera needs two to fill */
+    while (hwb_nheld > 0 && hwb_nheld >= g.vf_buffers - 2) {
+        AImage_delete(hwb_held[0].img);
+        memmove(&hwb_held[0], &hwb_held[1], (size_t)(hwb_nheld - 1) * sizeof hwb_held[0]);
+        hwb_nheld--;
+        hwb_forced++;
+    }
+    for (k = 0; k < hwb_nknown; ++k) if (hwb_known[k] == *id) { known = 1; break; }
+    if (!known) {
+        hwp_desc_t d;
+        const hwp_native_handle_t *nh;
+        hwb_msg_t m;
+        struct msghdr mh;
+        struct iovec iov;
+        char cbuf[CMSG_SPACE(sizeof(int) * 16)];
+        memset(&d, 0, sizeof d);
+        describe(ahb, &d);
+        nh = native(ahb);
+        if (!nh || nh->numFds < 0 || nh->numFds > 16 || nh->numInts < 0 || nh->numInts > 64) {
+            snprintf(err, errn, "native handle"); goto out;
+        }
+        memset(&m, 0, sizeof m);
+        memcpy(m.magic, "HWB2", 4);
+        m.width = d.width; m.height = d.height; m.stride = d.stride; m.format = d.format; m.layers = d.layers;
+        m.usage = d.usage; m.id = *id; m.nfds = nh->numFds; m.nints = nh->numInts;
+        for (k = 0; k < nh->numInts; ++k) m.ints[k] = nh->data[nh->numFds + k];
+        memset(&mh, 0, sizeof mh);
+        iov.iov_base = &m; iov.iov_len = sizeof m;
+        mh.msg_iov = &iov; mh.msg_iovlen = 1;
+        if (nh->numFds > 0) {
+            struct cmsghdr *c;
+            memset(cbuf, 0, sizeof cbuf);
+            mh.msg_control = cbuf; mh.msg_controllen = CMSG_SPACE(sizeof(int) * nh->numFds);
+            c = CMSG_FIRSTHDR(&mh);
+            c->cmsg_level = SOL_SOCKET; c->cmsg_type = SCM_RIGHTS;
+            c->cmsg_len = CMSG_LEN(sizeof(int) * nh->numFds);
+            memcpy(CMSG_DATA(c), nh->data, sizeof(int) * nh->numFds);
+        }
+        if (sendmsg(hwb_sock, &mh, MSG_NOSIGNAL) != (ssize_t)sizeof m) {
+            snprintf(err, errn, "sendmsg errno=%d", errno);
+            close(hwb_sock); hwb_sock = -1; hwb_nknown = 0;
+            goto out;
+        }
+        if (hwb_nknown == 16) hwb_nknown = 0;           /* a reader changed its buffers: start again */
+        hwb_known[hwb_nknown++] = *id;
+    }
+    if (hwb_nheld < HWB_HELD_MAX) { hwb_held[hwb_nheld].id = *id; hwb_held[hwb_nheld].img = img; hwb_nheld++; }
+    else { snprintf(err, errn, "held table full"); goto out; }
+    rc = 0;
+out:
+    pthread_mutex_unlock(&hwb_mu);
+    return rc;
+}
+/* For the "viewfinder pace" line: the buffers, how many are held, how many
+ * were taken back from the interface (0 when it keeps up). */
+static const char *hwb_pace_note(void)
+{
+    static char t[64];
+    pthread_mutex_lock(&hwb_mu);
+    if (hwb_sock >= 0) snprintf(t, sizeof t, " buffers=%d held=%d forced=%d", g.vf_buffers, hwb_nheld, hwb_forced);
+    else t[0] = '\0';
+    pthread_mutex_unlock(&hwb_mu);
+    return t;
+}
+/* The SF2H packet: the usual 16-byte header ("SF2H", w, h, 16), then the
+ * buffer's id (8 bytes) and a frame counter (4) and 4 spare. */
+static int write_sf2h(int fd, uint64_t id, uint32_t seq, int w, int h)
+{
+    uint8_t b[32];
+    const uint32_t bytes = 16;
+    memcpy(b, "SF2H", 4);
+    b[4]=(uint8_t)w; b[5]=(uint8_t)(w>>8); b[6]=(uint8_t)(w>>16); b[7]=(uint8_t)(w>>24);
+    b[8]=(uint8_t)h; b[9]=(uint8_t)(h>>8); b[10]=(uint8_t)(h>>16); b[11]=(uint8_t)(h>>24);
+    b[12]=(uint8_t)bytes; b[13]=0; b[14]=0; b[15]=0;
+    memcpy(b + 16, &id, 8);
+    memcpy(b + 24, &seq, 4);
+    memset(b + 28, 0, 4);
+    return write_all(fd, b, sizeof b);
+}
+
+/* ---- hwprobe (branch zero_copy): can the viewfinder's own buffers reach
+ * the interface's GPU without a copy? ----
+ *
+ * For a few frames, each viewfinder image's AHardwareBuffer is described
+ * and its gralloc handle (fds + ints) sent over a unix socket, the fds with
+ * SCM_RIGHTS, to the interface, which imports it with libhybris
+ * (eglHybrisCreateRemoteBuffer, as a Wayland compositor does), draws it and
+ * answers one byte; the image is held until then (500 ms at most). Each step
+ * is reported ("hwprobe ..." events, the log). Nothing else changes: the
+ * frames still go out as SF2Y/SF2P. The functions are API 26 (the engine
+ * is built for 24): looked up at run time. */
+typedef struct {                       /* the message; fds ride along (SCM_RIGHTS) */
+    char magic[4];                     /* "HWB1" */
+    uint32_t seq, width, height, stride, format, layers;
+    uint64_t usage;
+    int32_t nfds, nints;
+    int32_t ints[64];
+} hwp_msg_t;
+static void hwprobe_send(AImage *img, const char *path, int seq)
+{
+    typedef media_status_t (*gethb_fn)(const AImage *, void **);
+    typedef void (*desc_fn)(const void *, hwp_desc_t *);
+    typedef const hwp_native_handle_t *(*nh_fn)(const void *);
+    static gethb_fn gethb; static desc_fn describe; static nh_fn native; static int looked;
+    static int sock = -1;
+    char ev[400];
+    void *ahb = NULL;
+    hwp_desc_t d;
+    const hwp_native_handle_t *nh;
+    hwp_msg_t m;
+    struct msghdr mh;
+    struct iovec iov;
+    char cbuf[CMSG_SPACE(sizeof(int) * 16)];
+    double t0 = now_ms(), t_sent, t_ack;
+    char ack = 0;
+    int k, rc;
+    if (!looked) {
+        void *nw = dlopen("libnativewindow.so", RTLD_NOW);
+        looked = 1;
+        gethb = (gethb_fn)dlsym(RTLD_DEFAULT, "AImage_getHardwareBuffer");
+        describe = (desc_fn)dlsym(nw ? nw : RTLD_DEFAULT, "AHardwareBuffer_describe");
+        native = (nh_fn)dlsym(nw ? nw : RTLD_DEFAULT, "AHardwareBuffer_getNativeHandle");
+    }
+    if (!gethb || !describe || !native) {
+        snprintf(ev, sizeof ev, "hwprobe seq=%d error=missing getHardwareBuffer=%d describe=%d getNativeHandle=%d\n",
+                 seq, gethb != NULL, describe != NULL, native != NULL);
+        emit_event(ev); return;
+    }
+    if (gethb(img, &ahb) != AMEDIA_OK || !ahb) {
+        snprintf(ev, sizeof ev, "hwprobe seq=%d error=AImage_getHardwareBuffer\n", seq); emit_event(ev); return;
+    }
+    memset(&d, 0, sizeof d);
+    describe(ahb, &d);
+    nh = native(ahb);
+    if (!nh || nh->numFds < 0 || nh->numFds > 16 || nh->numInts < 0 || nh->numInts > 64) {
+        snprintf(ev, sizeof ev, "hwprobe seq=%d error=native_handle fds=%d ints=%d w=%u h=%u stride=%u format=0x%x usage=0x%llx\n",
+                 seq, nh ? nh->numFds : -1, nh ? nh->numInts : -1, d.width, d.height, d.stride, d.format, (unsigned long long)d.usage);
+        emit_event(ev); return;
+    }
+    if (sock < 0) {
+        struct sockaddr_un a;
+        struct timeval tv = { 0, 500000 };
+        memset(&a, 0, sizeof a);
+        a.sun_family = AF_UNIX;
+        snprintf(a.sun_path, sizeof a.sun_path, "%s", path);
+        sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        if (sock >= 0) {
+            setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+            setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+        }
+        if (sock < 0 || connect(sock, (struct sockaddr *)&a, sizeof a) != 0) {
+            snprintf(ev, sizeof ev, "hwprobe seq=%d error=connect errno=%d path=%.80s\n", seq, errno, path);
+            emit_event(ev);
+            if (sock >= 0) close(sock);
+            sock = -1; return;
+        }
+    }
+    memset(&m, 0, sizeof m);
+    memcpy(m.magic, "HWB1", 4);
+    m.seq = (uint32_t)seq; m.width = d.width; m.height = d.height; m.stride = d.stride;
+    m.format = d.format; m.layers = d.layers; m.usage = d.usage;
+    m.nfds = nh->numFds; m.nints = nh->numInts;
+    for (k = 0; k < nh->numInts; ++k) m.ints[k] = nh->data[nh->numFds + k];
+    memset(&mh, 0, sizeof mh);
+    iov.iov_base = &m; iov.iov_len = sizeof m;
+    mh.msg_iov = &iov; mh.msg_iovlen = 1;
+    if (nh->numFds > 0) {
+        struct cmsghdr *c;
+        memset(cbuf, 0, sizeof cbuf);
+        mh.msg_control = cbuf; mh.msg_controllen = CMSG_SPACE(sizeof(int) * nh->numFds);
+        c = CMSG_FIRSTHDR(&mh);
+        c->cmsg_level = SOL_SOCKET; c->cmsg_type = SCM_RIGHTS;
+        c->cmsg_len = CMSG_LEN(sizeof(int) * nh->numFds);
+        memcpy(CMSG_DATA(c), nh->data, sizeof(int) * nh->numFds);
+    }
+    rc = (int)sendmsg(sock, &mh, MSG_NOSIGNAL);
+    t_sent = now_ms();
+    if (rc != (int)sizeof m) {
+        snprintf(ev, sizeof ev, "hwprobe seq=%d error=sendmsg rc=%d errno=%d\n", seq, rc, errno);
+        emit_event(ev); close(sock); sock = -1; return;
+    }
+    rc = (int)recv(sock, &ack, 1, 0);          /* the interface has drawn it (or 500 ms) */
+    t_ack = now_ms();
+    snprintf(ev, sizeof ev, "hwprobe seq=%d w=%u h=%u stride=%u format=0x%x layers=%u usage=0x%llx fds=%d ints=%d "
+             "gpu_usage_asked=%d sent_ms=%.1f ack=%s ack_ms=%.1f\n",
+             seq, d.width, d.height, d.stride, d.format, d.layers, (unsigned long long)d.usage, nh->numFds, nh->numInts,
+             g.hwp_gpu_usage, t_sent - t0, rc == 1 ? (ack == 'k' ? "ok" : "fail") : "none", t_ack - t_sent);
+    emit_event(ev);
+    if (rc != 1) { close(sock); sock = -1; }
 }
 
 /* The viewfinder reader's listener (a Camera2 thread), one call per frame:
@@ -1468,21 +2163,60 @@ static void on_preview_image(void *ctx, AImageReader *reader)
         pthread_mutex_unlock(&g.lock);
     }
 
-    /* Streaming on: this frame goes out as SF2P, from the very first one
+    /* Streaming on: this frame goes out as SF2P (or SF2Y), from the very first one
      * (early frames are mid-convergence, but an image at once reads better
      * than a blank viewfinder; it settles within about 1 s). Before it: its
      * fcrop when the crop changed, the viewfinder meter, a white pick
      * waiting. A broken pipe (reader gone) stops streaming. */
     {
-        int fd;
+        int fd, as_yuv, as_hwb, hwp_seq = 0, aids, aids_every;
+        static int was_hwb;
+        char hwp_path[sizeof g.hwp_path], hwb_path[sizeof g.hwb_path];
         pthread_mutex_lock(&g.out_lock);        /* stream_fd lives under out_lock */
         fd = g.stream_fd;
+        as_yuv = g.stream_yuv == 1;
+        as_hwb = g.stream_yuv == 2;
+        aids = g.aids_mask;
+        aids_every = g.aids_every > 0 ? g.aids_every : 1;
+        memcpy(hwb_path, g.hwb_path, sizeof hwb_path);
+        if (g.hwp_left > 0) { hwp_seq = g.hwp_left--; memcpy(hwp_path, g.hwp_path, sizeof hwp_path); }
         pthread_mutex_unlock(&g.out_lock);
+        if (hwp_seq > 0) hwprobe_send(img, hwp_path, hwp_seq);   /* before the frame goes: the image is ours */
+        if (was_hwb && (!as_hwb || fd < 0)) { hwb_release_all(1); as_hwb = 0; }   /* left SF2H, or stopped: the held images go back */
+        was_hwb = as_hwb;
         if (fd >= 0) {
             int w = 0, h = 0;
             double t_ours = now_ms();                   /* our share of the frame's time (vf_pace) */
-            uint8_t *rgb = yuv_to_rgb(img, &w, &h);
-            if (rgb) {
+            vf_img_t vim;
+            uint8_t *pix = NULL;
+            uint64_t hwb_id = 0;
+            /* SF2H: the frame stays in the camera's buffer, the meter reads
+             * its planes where they lie; SF2Y: the planes packed as they
+             * are, the interface's GPU converts them; SF2P: converted here,
+             * as before 0.3.11. */
+            if (as_hwb) {
+                char err[96];
+                if (vf_planes(img, &vim) == 0 && hwb_take(img, hwb_path, &hwb_id, err, sizeof err) == 0) {
+                    w = vim.w; h = vim.h;
+                    pix = (uint8_t *)vim.py;            /* non-NULL: there is a frame */
+                } else {
+                    char ev[160];
+                    if (vim.py == NULL) snprintf(err, sizeof err, "planes");
+                    snprintf(ev, sizeof ev, "hwprobe sf2h error=%s fallback=yuv\n", err);
+                    emit_event(ev);
+                    pthread_mutex_lock(&g.out_lock);
+                    if (g.stream_yuv == 2) g.stream_yuv = 1;
+                    pthread_mutex_unlock(&g.out_lock);
+                    as_hwb = 0; as_yuv = 1; was_hwb = 0;
+                    hwb_release_all(1);
+                }
+            }
+            if (!as_hwb) {
+                pix = as_yuv ? yuv_to_i420(img, &w, &h) : yuv_to_rgb(img, &w, &h);
+                memset(&vim, 0, sizeof vim);
+                vim.rgb = as_yuv ? NULL : pix; vim.i420 = as_yuv ? pix : NULL; vim.w = w; vim.h = h;
+            }
+            if (pix) {
                 const uint8_t *sent;
                 int broke, k, found = 0;
                 int32_t crop[4];
@@ -1532,10 +2266,28 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                         snprintf(line, sizeof line, "fcrop x=%.5f y=%.5f w=%.5f h=%.5f\n", f.x, f.y, f.w, f.h);
                     }
                 }
-                vf_meter(rgb, w, h, found ? crop : g.sent_crop, f_iso, f_exp);   /* the viewfinder meter */
+                vf_meter(&vim, found ? crop : g.sent_crop, f_iso, f_exp);   /* the viewfinder meter */
                 /* Only a frame whose result was found: its white balance must
-                 * be the one it was rendered with, not a guess. */
-                if (vf_pick && found) wbpick_from_view(rgb, w, h, crop, f_has_wb, f_gains, f_tr);
+                 * be the one it was rendered with, not a guess. (An SF2Y
+                 * stream: this one frame converted to RGB for it; a pick is
+                 * rare, the RGB buffer is the listener's own.) */
+                if (vf_pick && found) {
+                    int rw = 0, rh = 0;
+                    const uint8_t *rgb = (as_yuv || as_hwb) ? yuv_to_rgb(img, &rw, &rh) : pix;
+                    if (rgb) wbpick_from_view(rgb, w, h, crop, f_has_wb, f_gains, f_tr);
+                }
+                /* An SF2Y stream keeps no RGB buffer: the first frames went
+                 * out as SF2P (before the interface asked for YUV) and left
+                 * 3.7 MB allocated beside the I420 one -- 1.8 MB more than
+                 * an RGB stream (VmRSS, 15 Nov 2026). A later pick converts
+                 * its frame again (yuv_to_rgb grows it back). */
+                if ((as_yuv || as_hwb) && g.pv_rgb && !vf_pick) { free(g.pv_rgb); g.pv_rgb = NULL; g.pv_rgb_cap = 0; }
+                /* SF2A's buffers go while no aid asks */
+                if (!(as_hwb && aids) && g.pv_aid) {
+                    free(g.pv_aid); g.pv_aid = NULL; g.pv_aid_cap = 0;
+                    free(g.pv_aid_tmp); g.pv_aid_tmp = NULL; g.pv_aid_tmp_cap = 0;
+                    free(g.pv_aid_src); g.pv_aid_src = NULL; g.pv_aid_src_cap = 0;
+                }
                 /* measured as taken; shown corrected when asked (lens_fix_view) */
                 sent = lens_fix_view(rgb, w, h, found ? crop : g.sent_crop);
                 pthread_mutex_lock(&g.out_lock);        /* serialise with SF2M     */
@@ -1543,16 +2295,44 @@ static void on_preview_image(void *ctx, AImageReader *reader)
                 broke = 0;
                 if (fd >= 0) {
                     if (line[0]) write_sf2m(fd, line, (int)strlen(line));
-                    broke = (write_sf2p(fd, sent, w, h) != 0);
+                    /* the format read above: a switch in between takes the next frame */
+                    {
+                        static uint32_t hwb_seq;
+                        broke = (as_hwb ? write_sf2h(fd, hwb_id, ++hwb_seq, w, h)
+                                 : as_yuv ? write_sf2y(fd, pix, w, h) : write_sf2p(fd, sent, w, h)) != 0;
+                    }
                     if (broke) g.stream_fd = -1;        /* pipe broke: stop        */
                 }
                 pthread_mutex_unlock(&g.out_lock);
                 vf_pace(ts, now_ms() - t_ours);         /* detailed log only */
+                /* SF2A: the aids' values, for a zero-copy frame only (the
+                 * other streams carry the pixels), one frame in aids_every;
+                 * worked out AFTER the frame went (it no longer waits for
+                 * them: +17 ms of latency with both aids, log of 15 Nov,
+                 * 13:26) -- the interface draws them over the frame they
+                 * belong to, a few ms later. The image is held for the
+                 * interface meanwhile (hwb_take); only this thread lets it
+                 * go. */
+                if (as_hwb && aids && !broke) {
+                    static unsigned aid_tick;
+                    if (aid_tick++ % (unsigned)aids_every == 0) {
+                        const double t_aid = now_ms();
+                        const size_t aid_bytes = aid_maps(&vim, aids);
+                        if (aid_bytes) {
+                            pthread_mutex_lock(&g.out_lock);
+                            fd = g.stream_fd;
+                            if (fd >= 0 && write_sf2a(fd, g.pv_aid, aid_bytes, w, h) != 0) g.stream_fd = -1;
+                            pthread_mutex_unlock(&g.out_lock);
+                        }
+                        vf_pace_aids(now_ms() - t_aid);
+                    }
+                }
+                if (as_hwb) img = NULL;                 /* held until the interface releases it */
             }
         }
     }
 
-    AImage_delete(img);                  /* done with this frame             */
+    if (img) AImage_delete(img);         /* done with this frame             */
     pthread_mutex_lock(&g.lock);
     g.preview_frames++;                  /* proves the stream is alive       */
     pthread_cond_broadcast(&g.cond);     /* indraw_open waits for the first one  */
@@ -1569,7 +2349,7 @@ static void on_yuv_image(void *ctx, AImageReader *reader)
     if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img) return;
     pthread_mutex_lock(&g.lock);
     if (g.yuv_burst_on) {                          /* a burst: keep every frame, in order */
-        if (g.yuv_qn < 4) g.yuv_q[g.yuv_qn++] = img; else AImage_delete(img);
+        if (g.yuv_qn < YUV_BURST_MAX) g.yuv_q[g.yuv_qn++] = img; else AImage_delete(img);
         pthread_cond_broadcast(&g.cond);
         pthread_mutex_unlock(&g.lock);
         return;
@@ -1859,7 +2639,9 @@ static void meter_frame(AImage *img, int64_t ts, int iso, int64_t exposure_ns)
     if (wsum <= 0 || n == 0) return;
     for (c = 0; c < 3; ++c) for (x = 0; x < 64; ++x) if (hist[c][x] > peak) peak = hist[c][x];
     for (c = 0; c < 3; ++c) for (x = 0; x < 64; ++x) if (shist[c][x] > speak) speak = shist[c][x];
+    pthread_mutex_lock(&g.lock);                 /* read by the RAW's report (indraw_raw_impl) */
     memcpy(g.meter_last_hist, hist, sizeof g.meter_last_hist);   /* for a DNG's report: meter vs photo */
+    pthread_mutex_unlock(&g.lock);
 
     p += snprintf(p, (size_t)(end - p),
                   "meter ts=%lld iso=%d exp_ns=%lld mean=%.5f clip_lo=%.3f clip_hi=%.3f mclip_lo=%.1f mclip_hi=%.1f zclip=%.3f zlost=%.3f hist=",
@@ -2005,6 +2787,9 @@ static void on_capture_completed(void *ctx, ACameraCaptureSession *s,
     if (g.r_meta) ACameraMetadata_free(g.r_meta);
     g.r_meta = ACameraMetadata_copy(res);      /* whole result, for the RAW sidecar */
     g.result_ready = 1;                        /* publish                       */
+    /* a burst: its last frame's result, every frame exposed: the flash owed */
+    if (g.burst_results_left > 0 && --g.burst_results_left == 0)
+        g.captured_owed = "captured kind=yuv\n";
     pthread_cond_broadcast(&g.cond);
     pthread_mutex_unlock(&g.lock);
     captured_now();                            /* the frame is read: "you may move" */
@@ -2128,6 +2913,7 @@ static void on_preview_result(void *ctx, ACameraCaptureSession *s,
     g.live_lens_state = -1;
     if (ACameraMetadata_getConstEntry(res, ACAMERA_LENS_STATE, &e) == ACAMERA_OK && e.count)
         g.live_lens_state = e.data.u8[0];           /* 0 stationary, 1 moving     */
+    g.prev_live_focus = g.live_focus;            /* to tell a lens that has stopped */
     if (ACameraMetadata_getConstEntry(res, ACAMERA_LENS_FOCUS_DISTANCE, &e) == ACAMERA_OK && e.count)
         g.live_focus = e.data.f[0];
     if (ACameraMetadata_getConstEntry(res, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count)
@@ -2707,7 +3493,7 @@ static void close_all(void)
     if (g.yuv_request) { ACaptureRequest_free(g.yuv_request); g.yuv_request = NULL; }
     {
         int qk;
-        for (qk = 0; qk < 4; ++qk)
+        for (qk = 0; qk < YUV_BURST_MAX; ++qk)
             if (g.yuv_burst_req[qk]) { ACaptureRequest_free(g.yuv_burst_req[qk]); g.yuv_burst_req[qk] = NULL; }
         for (qk = 0; qk < g.yuv_qn; ++qk) AImage_delete(g.yuv_q[qk]);
         g.yuv_qn = 0; g.yuv_burst_on = 0;
@@ -2728,8 +3514,13 @@ static void close_all(void)
     if (g.yuv_image) { AImage_delete(g.yuv_image); g.yuv_image = NULL; }
     if (g.r_meta) { ACameraMetadata_free(g.r_meta); g.r_meta = NULL; }
     pthread_mutex_unlock(&g.lock);
+    hwb_release_all(1);                  /* SF2H's held images, before their reader */
     if (g.preview_reader) { AImageReader_delete(g.preview_reader); g.preview_reader = NULL; }
     free(g.pv_rgb); g.pv_rgb = NULL; g.pv_rgb_cap = 0;  /* the listener is gone with its reader */
+    free(g.pv_yuv); g.pv_yuv = NULL; g.pv_yuv_cap = 0;
+    free(g.pv_aid); g.pv_aid = NULL; g.pv_aid_cap = 0;
+    free(g.pv_aid_tmp); g.pv_aid_tmp = NULL; g.pv_aid_tmp_cap = 0;
+    free(g.pv_aid_src); g.pv_aid_src = NULL; g.pv_aid_src_cap = 0;
     ld_lut_free(&g_ld.lut); free(g_ld.buf); g_ld.buf = NULL; g_ld.cap = 0; g_ld.view.ok = 0;
     pthread_mutex_lock(&g.lock);
     g_ld.have = 0; g_ld.gen++;                         /* the model is the camera's: loaded again at the next open */
@@ -3176,6 +3967,8 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
     pthread_mutex_lock(&g.lock);                  /* reset callback-written state  */
     g.preview_frames = 0;
     g.device_error = 0;
+    g.lens_settle = -1;                          /* no wait for a distance made yet (lens_note): at 0, the
+                                                    first photo of a session said "NOT SETTLED" (25 Nov 2026) */
     pthread_mutex_unlock(&g.lock);
 
     t0 = now_ms();
@@ -3315,7 +4108,35 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         g.sensor_orientation = e.data.i32[0];
 
     /* Image readers: 4 preview buffers (drained at once), 2 JPEG buffers. */
-    ms = AImageReader_new(pw, ph, AIMAGE_FORMAT_YUV_420_888, 4, &g.preview_reader);
+    /* hwprobe (branch zero_copy): RAWFISH_PREVIEW_GPU_USAGE=1 asks the
+     * viewfinder's buffers for GPU sampling as well (AImageReader_newWithUsage,
+     * API 26, looked up at run time: the engine is built for API 24). */
+    g.hwp_gpu_usage = 0;
+    ms = AMEDIA_ERROR_UNKNOWN;
+    /* The viewfinder's buffers: 6 by default (zero copy holds the one shown
+     * and the one on its way while the camera fills others), 4 to 10 from
+     * RAWFISH_VF_BUFFERS (rawfish-ir.conf vfBuffers, passed by the app);
+     * refused, 4 as before. */
+    g.vf_buffers = 6;
+    if (getenv("RAWFISH_VF_BUFFERS")) {
+        int nb = atoi(getenv("RAWFISH_VF_BUFFERS"));
+        if (nb >= 4 && nb <= 10) g.vf_buffers = nb;
+    }
+    if (getenv("RAWFISH_PREVIEW_GPU_USAGE") && !strcmp(getenv("RAWFISH_PREVIEW_GPU_USAGE"), "1")) {
+        typedef media_status_t (*newu_fn)(int32_t, int32_t, int32_t, uint64_t, int32_t, AImageReader **);
+        newu_fn newu = (newu_fn)dlsym(RTLD_DEFAULT, "AImageReader_newWithUsage");
+        if (newu) {
+            /* AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN (3) | GPU_SAMPLED_IMAGE (1 << 8) */
+            ms = newu(pw, ph, AIMAGE_FORMAT_YUV_420_888, 3ull | (1ull << 8), g.vf_buffers, &g.preview_reader);
+            if (ms == AMEDIA_OK) g.hwp_gpu_usage = 1;
+        }
+    }
+    if (ms != AMEDIA_OK)
+        ms = AImageReader_new(pw, ph, AIMAGE_FORMAT_YUV_420_888, g.vf_buffers, &g.preview_reader);
+    if (ms != AMEDIA_OK && g.vf_buffers != 4) {
+        g.vf_buffers = 4;
+        ms = AImageReader_new(pw, ph, AIMAGE_FORMAT_YUV_420_888, 4, &g.preview_reader);
+    }
     if (ms != AMEDIA_OK) SETUP_FAIL("preview_reader", "AImageReader_new", ms);
     AImageReader_setImageListener(g.preview_reader, &prev_l);  /* drain + count     */
     ms = AImageReader_getWindow(g.preview_reader, &g.preview_window); /* its surface */
@@ -3518,7 +4339,7 @@ IR_API int indraw_open(const char *id, int jw, int jh, int pw, int ph, int rw, i
         }
         {
             int bk;
-            for (bk = 0; bk < 4; ++bk) {
+            for (bk = 0; bk < YUV_BURST_MAX; ++bk) {
                 st = ACameraDevice_createCaptureRequest(g.device, TEMPLATE_STILL_CAPTURE, &g.yuv_burst_req[bk]);
                 if (st != ACAMERA_OK) SETUP_FAIL("yuv_burst_request", "createCaptureRequest", st);
                 apply_fps_cap(g.yuv_burst_req[bk]);
@@ -4018,11 +4839,44 @@ static int run_3a(int timeout_ms, a3_report_t *rep)
  * lens physically moves and the viewfinder reflects it -- the capture requests
  * alone are too brief to move the lens (this is why a one-shot manual distance
  * on the still request did nothing). For a manual mode it then waits (up to
- * ~1.2 s) for the lens to stop moving near the requested distance. Mirrors how
- * RAWfish drives focus on the repeating request. Returns 1 if an AF scan should
+ * FOCUS_SETTLE_MAX_MS, 2 s) for the lens to stop moving near the requested
+ * distance. Mirrors how RAWfish drives focus on the repeating request. Returns 1 if an AF scan should
  * be triggered (AUTO/MACRO), else 0. */
 static int set_preview_focus_opt(int mode, float diopters, int wait);
 static int set_preview_focus(int mode, float diopters) { return set_preview_focus_opt(mode, diopters, 1); }
+/* The lens is settled within this of its target (HAL units; see the wait
+ * below), and "still" when two results in a row differ by less than this. */
+#define FOCUS_SETTLE_TOL 0.05f
+#define FOCUS_STILL_TOL 0.005f
+/* The longest wait for a manual distance before a photo: 2 s since 0.3.11-553
+ * (1.2 s before; the user's choice, 26 Nov 2026 -- a lens already in place
+ * costs nothing, one still on its way gets the time to arrive). */
+#define FOCUS_SETTLE_MAX_MS 2000
+
+/* Waits until the lens is settled at `target` (HAL units), at most
+ * FOCUS_SETTLE_MAX_MS: the HAL says it is stationary, it reports the same
+ * position as on the result before (a lens pausing on its way does not
+ * pass), and that position is within FOCUS_SETTLE_TOL of the target. Notes
+ * the outcome for the log's "lens" line (lens_note): lens_target,
+ * lens_settle (1 settled, 0 not when the time ran out), lens_wait_ms. Not
+ * under g.lock (it takes it). */
+static void lens_wait_settled(float target)
+{
+    double t0 = now_ms();
+    struct timespec dl = deadline_in(FOCUS_SETTLE_MAX_MS);
+    pthread_mutex_lock(&g.lock);
+    g.lens_target = target;
+    g.lens_settle = 0;
+    for (;;) {
+        int still = g.live_lens_state == ACAMERA_LENS_STATE_STATIONARY &&
+                    fabsf(g.live_focus - g.prev_live_focus) < FOCUS_STILL_TOL;
+        if (still && fabsf(g.live_focus - target) < FOCUS_SETTLE_TOL) { g.lens_settle = 1; break; }
+        if (g.device_error) break;
+        if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
+    }
+    g.lens_wait_ms = (int)(now_ms() - t0 + 0.5);
+    pthread_mutex_unlock(&g.lock);
+}
 /* wait = 0: a manual distance is set and the call returns at once (the
  * controller's volume-key stepping sends one every few tens of ms; waiting
  * for the lens on each made the steps pile up and run on after the key
@@ -4031,7 +4885,6 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
 {
     ACaptureRequest *reqs[1] = { g.preview_request };
     int want_af_scan = set_focus(g.preview_request, mode, diopters); /* on the PREVIEW */
-    struct timespec dl;
     if (mode == IR_FOCUS_KEEP) return 0;           /* leave the preview as it is   */
     /* The RAW meter's request (a frame every 200 ms when the meter is on)
      * must carry the SAME focus as the preview, as it does for the exposure:
@@ -4045,21 +4898,173 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
     ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
     if ((mode != IR_FOCUS_MANUAL && mode != IR_FOCUS_RAW) || !wait) return want_af_scan; /* AF modes settle via 3A; HOLD is already there */
     /* Manual distance: wait for the lens to reach the (translated) target and
-     * stop moving. The HAL reports the value we sent it, so compare against the
-     * calibrated value, not the user's requested diopters. */
-    {
-        float target = mode == IR_FOCUS_RAW ? (diopters < 0 ? 0 : diopters) : focus_translate(diopters < 0 ? 0 : diopters);
-        dl = deadline_in(1200);
+     * stop moving, at most FOCUS_SETTLE_MAX_MS (lens_wait_settled). The
+     * position is the HAL's (its own units), so it is compared with the
+     * calibrated value, not the user's diopters.
+     *
+     * Settled = the HAL says the lens is stationary, it reports the same
+     * position as on the result before (a lens pausing on its way does not
+     * pass), and that position is within FOCUS_SETTLE_TOL of the target.
+     * Until patch 0542 the margin was 0.5 HAL units: on the JP2 that is from
+     * infinity (2.0) to about 1.8 m (2.5), or 0.8 to 1.5 m around 1 m (its
+     * calibration table), so a lens stopping short could pass at close range.
+     * 0.05 is about 0.03 to 0.06 real dioptre, well inside the depth of field
+     * at f/1.8. A lens already in place passes at once (the same results).
+     * Not settled when the wait runs out: the photo is taken all the same, as
+     * before, and the log's "lens" line says so with the distance left. */
+    lens_wait_settled(mode == IR_FOCUS_RAW ? (diopters < 0 ? 0 : diopters) : focus_translate(diopters < 0 ? 0 : diopters));
+    return 0;
+}
+
+/* A continuous autofocus caught searching (PASSIVE_SCAN): waits for the
+ * search to end, at most af_scan_wait_ms (rawfish-ir.conf focusScanWait).
+ * Returns how long it waited, or -1 when no search was running. Not under
+ * g.lock (it takes it). */
+static int af_search_wait(void)
+{
+    double t0 = now_ms();
+    int scanning;
+    pthread_mutex_lock(&g.lock);
+    scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
+    if (scanning) {
+        struct timespec sdl = deadline_in(g.af_scan_wait_ms);
+        while (g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN && !g.device_error)
+            if (pthread_cond_timedwait(&g.cond, &g.lock, &sdl) == ETIMEDOUT) break;
+    }
+    pthread_mutex_unlock(&g.lock);
+    return scanning ? (int)(now_ms() - t0 + 0.5) : -1;
+}
+
+/* Before a burst (the camera's JPEG burst, our merged JPG, a stack;
+ * 0.3.11, patch 0553). These take the viewfinder's focus as it is
+ * (copy_preview_focus: no focus of their own), and until now started at
+ * once: a burst right after a distance was set ran while the lens was still
+ * on its way (Xperia 10 III, 26 Nov 2026: a bracket x7 0.16 s after the
+ * camera's start, "moved 5.032 during the photo"). The same two waits as a
+ * single photo's (prepare_capture):
+ *  - the viewfinder's focus manual (AF off, a distance or a held lens):
+ *    until the lens is settled at that distance, at most
+ *    FOCUS_SETTLE_MAX_MS (a lens in place passes at once);
+ *  - a continuous AF caught searching: until the search ends, at most
+ *    focusScanWait (that wait is said in the log, the distance's in the
+ *    "lens before" line).
+ * Not under g.lock. */
+static void burst_focus_wait(void)
+{
+    ACameraMetadata_const_entry e;
+    int af_off = 0, have_d = 0, waited;
+    float d = 0.0f;
+    pthread_mutex_lock(&g.lock);
+    g.lens_settle = -1;                          /* no wait for a distance yet (lens_note) */
+    pthread_mutex_unlock(&g.lock);
+    if (!g.preview_request) return;
+    if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_CONTROL_AF_MODE, &e) == ACAMERA_OK && e.count)
+        af_off = e.data.u8[0] == ACAMERA_CONTROL_AF_MODE_OFF;
+    if (af_off && ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_LENS_FOCUS_DISTANCE, &e) == ACAMERA_OK &&
+        e.count && isfinite(e.data.f[0])) { d = e.data.f[0]; have_d = 1; }
+    if (af_off) {
+        if (have_d) lens_wait_settled(d);
+        return;
+    }
+    if (!g.af_continuous || g.af_scan_wait_ms <= 0) return;
+    waited = af_search_wait();
+    if (waited >= 0) {
+        char line[120];
+        snprintf(line, sizeof line, "lensdiag search: the burst waited %d ms for the continuous focus's search to end\n", waited);
+        emit_event(line);
+    }
+}
+
+/* ---- the focus during a long exposure, and the lens in the log ----------- */
+/* A long exposure with the continuous autofocus running: the HAL's AF works
+ * on the viewfinder's frames, which go on during the photo, and may move the
+ * lens in the middle of the exposure or as the viewfinder comes back at its
+ * end (seen on the JP2, 24 Nov 2026: a 30 s RAW taken in continuous AF). So
+ * from FOCUS_FREEZE_NS up, the focus is held where the lens
+ * is at the release, on the viewfinder and on the photo (AF off at that
+ * lens position, the HOLD rule of set_focus), and the continuous AF comes
+ * back after the photo (focus_thaw). A manual distance, a locked focus or a
+ * tap's single scan are not continuous: nothing to hold, nothing changes. */
+#define FOCUS_FREEZE_NS 250000000LL               /* 1/4 s and longer */
+static int focus_freeze_wanted(int64_t exposure_ns)
+{
+    return exposure_ns >= FOCUS_FREEZE_NS;
+}
+/* Holds the focus where the lens is, if the viewfinder is in a continuous
+ * AF mode (otherwise nothing). Not under g.lock (set_focus takes it). */
+static void focus_freeze(void)
+{
+    ACaptureRequest *reqs[1] = { g.preview_request };
+    ACameraMetadata_const_entry e;
+    uint8_t mode;
+    if (g.focus_frozen || !g.session || !g.preview_request) return;
+    if (ACaptureRequest_getConstEntry(g.preview_request, ACAMERA_CONTROL_AF_MODE, &e) != ACAMERA_OK || !e.count) return;
+    mode = e.data.u8[0];
+    if (mode != ACAMERA_CONTROL_AF_MODE_CONTINUOUS_PICTURE && mode != ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO) return;
+    g.frozen_af_mode = mode;
+    g.focus_frozen = 1;
+    set_focus(g.preview_request, IR_FOCUS_HOLD, 0);     /* AF off, the lens where it is */
+    copy_preview_focus(g.meter_request);               /* the RAW meter's frames too */
+    ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
+}
+/* Puts the viewfinder's continuous AF back after a held focus (idempotent:
+ * nothing when focus_freeze held nothing). */
+static void focus_thaw(void)
+{
+    ACaptureRequest *reqs[1] = { g.preview_request };
+    if (!g.focus_frozen) return;
+    g.focus_frozen = 0;
+    if (!g.session || !g.preview_request) return;
+    ACaptureRequest_setEntry_u8(g.preview_request, ACAMERA_CONTROL_AF_MODE, 1, &g.frozen_af_mode);
+    copy_preview_focus(g.meter_request);
+    ACameraCaptureSession_setRepeatingRequest(g.session, &g_preview_cbs, 1, reqs, NULL);
+}
+/* One "lens" line in the log (the "lensdiag" event, which the controller
+ * writes to the log only): where the lens is and whether it moves, just
+ * before a photo is submitted ("before", with how the wait for a manual
+ * distance ended and whether the focus is held) and when its image is in
+ * ("after", with how far the lens went meanwhile). The position is the
+ * HAL's (its units) and, through the calibration, a distance in metres.
+ * Not under g.lock (it takes it; emit_event must not be called under it). */
+static float lens_before_at = -1.0f;
+static void lens_note(const char *when)
+{
+    char line[256], m[24];
+    float at, real;
+    int state, settle, wait_ms;
+    float target;
+    pthread_mutex_lock(&g.lock);
+    at = g.live_focus; state = g.live_lens_state;
+    settle = g.lens_settle; wait_ms = g.lens_wait_ms; target = g.lens_target;
+    pthread_mutex_unlock(&g.lock);
+    real = focus_untranslate(at);
+    if (real > 0.001f) snprintf(m, sizeof m, "%.2f m", 1.0f / real);
+    else snprintf(m, sizeof m, "infinity");
+    if (!strcmp(when, "before")) {
+        lens_before_at = at;
+        if (settle == 1)
+            snprintf(line, sizeof line, "lensdiag before: at %.3f (%s), %s; settled in %d ms, %.3f from the target; focus %s\n",
+                     at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                     wait_ms, fabsf(at - target), g.focus_frozen ? "held" : "as set");
+        else if (settle == 0)
+            snprintf(line, sizeof line, "lensdiag before: at %.3f (%s), %s; NOT SETTLED after %d ms, %.3f from the target %.3f; focus %s\n",
+                     at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                     wait_ms, fabsf(at - target), target, g.focus_frozen ? "held" : "as set");
+        else
+            snprintf(line, sizeof line, "lensdiag before: at %.3f (%s), %s; focus %s\n",
+                     at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                     g.focus_frozen ? "held" : "as set");
+    } else {
+        snprintf(line, sizeof line, "lensdiag after: at %.3f (%s), %s; moved %.3f during the photo\n",
+                 at, m, state == ACAMERA_LENS_STATE_STATIONARY ? "stationary" : state == 1 ? "MOVING" : "state unknown",
+                 lens_before_at >= 0 ? fabsf(at - lens_before_at) : 0.0f);
+        /* the wait reported belongs to this photo only: the next "before"
+         * (a burst, a stack: no wait of their own) must not repeat it */
         pthread_mutex_lock(&g.lock);
-        for (;;) {
-            int settled = g.live_lens_state == ACAMERA_LENS_STATE_STATIONARY &&
-                          fabsf(g.live_focus - target) < 0.5f;
-            if (settled || g.device_error) break;
-            if (pthread_cond_timedwait(&g.cond, &g.lock, &dl) == ETIMEDOUT) break;
-        }
+        g.lens_settle = -1;
         pthread_mutex_unlock(&g.lock);
     }
-    return 0;
+    emit_event(line);
 }
 
 /* Prepares focus and (optionally) exposure before a still/raw capture, keeping
@@ -4070,14 +5075,20 @@ static int set_preview_focus_opt(int mode, float diopters, int wait)
  *     fire, an AE precapture (its pre-flash metering) and up to af_wait_ms
  *     (1.5 s); without flash no precapture, only a wait of at most 0.5 s
  *     for the continuous AE to settle (0.47.29); independent of focus
+ *   - freeze: a long exposure (focus_freeze_wanted): a continuous AF is held
+ *     where the lens is, once any search in progress is over (the caller
+ *     puts it back, focus_thaw)
  * Fills `rep` with the 3A outcome. A timeout is not fatal. This replaces the old
  * all-in-one "focus" flag; the combined easy path calls run_3a directly. */
 static void prepare_capture(ACaptureRequest *req, int focus_mode, float focus_diopters,
-                            int ae_precapture, a3_report_t *rep)
+                            int ae_precapture, int freeze, a3_report_t *rep)
 {
     int want_af_scan;
     struct timespec dl;
     int ok = 0;
+    pthread_mutex_lock(&g.lock);
+    g.lens_settle = -1;                          /* no wait for a distance yet (lens_note) */
+    pthread_mutex_unlock(&g.lock);
     /* Move the lens via the preview first, then copy the same focus to the
      * capture request so the shot is taken at that focus -- including when
      * the capture KEEPS the preview's focus (no focus= from the interface:
@@ -4090,27 +5101,24 @@ static void prepare_capture(ACaptureRequest *req, int focus_mode, float focus_di
      * search to end, at most af_scan_wait_ms (1 s: the JP2's searches take
      * 0.4-0.95 s), and only then; a lens already settled costs nothing. (A
      * manual distance is waited for in set_preview_focus: the lens stationary
-     * and at its target, up to 1.2 s; a touch's search, below, up to 1.5 s.) */
+     * and at its target, up to FOCUS_SETTLE_MAX_MS, 2 s; a touch's search,
+     * below, up to 1.5 s. A burst does the same, burst_focus_wait.) */
     g.last_scan_wait_ms = -1;
     if (g.af_continuous && g.af_scan_wait_ms > 0 && !want_af_scan &&
-        (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS)) {
-        double t0 = now_ms();
-        int scanning;
-        pthread_mutex_lock(&g.lock);
-        scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
-        if (scanning) {
-            struct timespec sdl = deadline_in(g.af_scan_wait_ms);
-            while (g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN && !g.device_error)
-                if (pthread_cond_timedwait(&g.cond, &g.lock, &sdl) == ETIMEDOUT) break;
-        }
-        pthread_mutex_unlock(&g.lock);
-        if (scanning) g.last_scan_wait_ms = (int)(now_ms() - t0 + 0.5);
-    }
+        (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS))
+        g.last_scan_wait_ms = af_search_wait();
     if (g.capture_delay_ms > 0) {                  /* device profile: let the lens settle */
         struct timespec ts;
         ts.tv_sec = g.capture_delay_ms / 1000;
         ts.tv_nsec = (long)(g.capture_delay_ms % 1000) * 1000000L;
         while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {}
+    }
+    /* A long exposure: the continuous AF held here, after its search (above)
+     * is over, and the photo's request given the same held focus. */
+    if (freeze) {
+        focus_freeze();
+        if (g.focus_frozen && (focus_mode == IR_FOCUS_KEEP || focus_mode == IR_FOCUS_CONTINUOUS))
+            copy_preview_focus(req);
     }
     rep->result = "skipped";
     rep->ae = rep->af = -1;
@@ -4255,12 +5263,13 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
 
     t0 = now_ms();
     /* Atomic focus + optional AE precapture, each independent. */
-    prepare_capture(g.still_request, focus_mode, focus_diopters, ae_precapture, &a3);
+    prepare_capture(g.still_request, focus_mode, focus_diopters, ae_precapture, focus_freeze_wanted(exposure_ns), &a3);
     t_3a = now_ms();
     if (variant & IR_V_PAUSE) preview_pause();
     pthread_mutex_lock(&g.lock);
     frames_before = g.preview_frames;           /* to count frames during capture */
     pthread_mutex_unlock(&g.lock);
+    lens_note("before");                         /* the lens just before the submit (log) */
     reqs[0] = g.still_request;
     flash_arm(g.still_request, exposure_ns > 0);
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL); /* one shot */
@@ -4287,6 +5296,7 @@ static int indraw_jpeg_impl(const char *path, int quality, int nr, int edge,
     dev_err = g.device_error;
     pthread_mutex_unlock(&g.lock);
     t_image = now_ms();
+    lens_note("after");                          /* and once the image is in */
     if (variant & IR_V_PAUSE) preview_resume();  /* viewfinder back on            */
 
     if (!img) {
@@ -4717,6 +5727,61 @@ static float *copy_shading(const ACameraMetadata *res, int *cols, int *rows)
  * The report always includes "measured": the black-subtracted mean of the
  * central quarter of the frame, so the real exposure can be checked
  * without copying 25 MB around. */
+/* Diagnosis (raw ... vres=KEY,...): the photo's own result, for vendor keys
+ * that only a result carries (the gains the sensor applied, the shutter the
+ * HAL chose...), so that what the camera really did can be told from what it
+ * reports in the standard keys. On: the CLI sets the keys for one "raw" and
+ * clears them after. Values printed by their type, at most 16 each; a key
+ * the result lacks is "absent". */
+IR_API void indraw_set_raw_vres(const uint32_t *tags, int n)
+{
+    int i;
+    if (n < 0 || !tags) n = 0;
+    if (n > (int)(sizeof g.raw_vres / sizeof g.raw_vres[0])) n = (int)(sizeof g.raw_vres / sizeof g.raw_vres[0]);
+    for (i = 0; i < n; ++i) g.raw_vres[i] = tags[i];
+    g.raw_vres_n = n;
+}
+
+/* "\"0x80060010\":[..],..." for the keys set above, from one result. */
+static void vendor_results_json(const ACameraMetadata *meta, char *buf, size_t size)
+{
+    size_t len = 0;
+    int k;
+    buf[0] = '\0';
+    for (k = 0; k < g.raw_vres_n && len + 64 < size; ++k) {
+        ACameraMetadata_const_entry e;
+        uint32_t i, n;
+        int r;
+        r = snprintf(buf + len, size - len, "%s\"0x%08x\":", k ? "," : "", (unsigned)g.raw_vres[k]);
+        if (r < 0 || (size_t)r >= size - len) break;
+        len += (size_t)r;
+        if (ACameraMetadata_getConstEntry(meta, g.raw_vres[k], &e) != ACAMERA_OK) {
+            r = snprintf(buf + len, size - len, "\"absent\"");
+            if (r > 0 && (size_t)r < size - len) len += (size_t)r;
+            continue;
+        }
+        n = e.count < 16 ? e.count : 16;
+        if (len + 2 < size) buf[len++] = '[';
+        for (i = 0; i < n && len + 32 < size; ++i) {
+            const char *sep = i ? "," : "";
+            switch (e.type) {
+            case ACAMERA_TYPE_BYTE:     r = snprintf(buf + len, size - len, "%s%u", sep, e.data.u8[i]); break;
+            case ACAMERA_TYPE_INT32:    r = snprintf(buf + len, size - len, "%s%d", sep, e.data.i32[i]); break;
+            case ACAMERA_TYPE_FLOAT:    r = snprintf(buf + len, size - len, "%s%g", sep, e.data.f[i]); break;
+            case ACAMERA_TYPE_INT64:    r = snprintf(buf + len, size - len, "%s%lld", sep, (long long)e.data.i64[i]); break;
+            case ACAMERA_TYPE_DOUBLE:   r = snprintf(buf + len, size - len, "%s%g", sep, e.data.d[i]); break;
+            case ACAMERA_TYPE_RATIONAL: r = snprintf(buf + len, size - len, "%s\"%d/%d\"", sep,
+                                                     e.data.r[i].numerator, e.data.r[i].denominator); break;
+            default:                    r = snprintf(buf + len, size - len, "%s\"?\"", sep); break;
+            }
+            if (r < 0 || (size_t)r >= size - len) break;
+            len += (size_t)r;
+        }
+        r = snprintf(buf + len, size - len, "%s]", e.count > n ? ",\"...\"" : "");
+        if (r > 0 && (size_t)r < size - len) len += (size_t)r;
+    }
+}
+
 static int indraw_raw_impl(const char *path, const char *datetime, int focus_mode,
                   float focus_diopters, int ae_precapture, int64_t exposure_ns,
                   int iso, int variant, int timeout_ms, char *out, size_t out_size)
@@ -4733,6 +5798,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     int white = 1023, save = strcmp(path ? path : "-", "-") != 0;
     int want_dng = save && path_is_dng(path);    /* .dng -> DNG, else raw16+json */
     ACameraMetadata *rmeta = NULL;                /* owned copy of this result    */
+    char vres[1024] = "";                         /* raw ... vres=: their values, JSON */
     int64_t a_exposure = -1, a_frame = -1;        /* applied values, read from     */
     int a_iso = -1, a_fps0 = -1, a_fps1 = -1, a_control = -1; /* rmeta (not globals) */
     float a_focus = -1.0f;
@@ -4765,12 +5831,13 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     pthread_mutex_unlock(&g.lock);
 
     t0 = now_ms();
-    prepare_capture(g.raw_request, focus_mode, focus_diopters, ae_precapture, &a3);
+    prepare_capture(g.raw_request, focus_mode, focus_diopters, ae_precapture, focus_freeze_wanted(exposure_ns), &a3);
     t_3a = now_ms();
     if (variant & IR_V_PAUSE) preview_pause();
     pthread_mutex_lock(&g.lock);
     frames_before = g.preview_frames;
     pthread_mutex_unlock(&g.lock);
+    lens_note("before");                         /* the lens just before the submit (log) */
     reqs[0] = g.raw_request;
     flash_arm(g.raw_request, exposure_ns > 0);
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL);
@@ -4799,6 +5866,7 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
     if (res_ok && g.r_meta) rmeta = ACameraMetadata_copy(g.r_meta);
     pthread_mutex_unlock(&g.lock);
     t_image = now_ms();
+    lens_note("after");                          /* and once the image is in */
     if (variant & IR_V_PAUSE) preview_resume();  /* viewfinder back on            */
     if (img) captured_now();                     /* if the result has not already */
 
@@ -4833,6 +5901,8 @@ static int indraw_raw_impl(const char *path, const char *datetime, int focus_mod
             a_control = e.data.u8[0];
         if (ACameraMetadata_getConstEntry(rmeta, ACAMERA_LENS_FOCUS_DISTANCE, &e) == ACAMERA_OK && e.count)
             a_focus = isfinite(e.data.f[0]) ? e.data.f[0] : -1.0f;
+        if (g.raw_vres_n > 0)                    /* raw ... vres=: while rmeta lives */
+            vendor_results_json(rmeta, vres, sizeof vres);
     }
     if (save && res_ts != img_ts) {              /* measure-only may skip this    */
         AImage_delete(img);
@@ -4981,10 +6051,15 @@ report:
            n_px ? sum / n_px - black : -1.0, n_px ? 100.0 * n_clip / n_px : -1.0, frames_during);
     if (raw_damaged(unwritten, h_px))
         jw_add(&w, "\"damaged\":\"%d of %d rows unwritten\",", unwritten, h_px);
+    if (vres[0]) jw_add(&w, "\"vendor_results\":{%s},", vres);
     if (chk_ok) {   /* meter vs photo (computed above, while the image was ours) */
         int c, i;
+        long mh[3][64];                          /* the meter's, copied under the lock (its thread writes it) */
+        pthread_mutex_lock(&g.lock);
+        memcpy(mh, g.meter_last_hist, sizeof mh);
+        pthread_mutex_unlock(&g.lock);
         jw_add(&w, "\"check\":{\"meter_hist\":\"");
-        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", g.meter_last_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
+        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", mh[c][i]); if (c < 2) jw_add(&w, ";"); }
         jw_add(&w, "\",\"photo_hist\":\"");
         for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(&w, "%s%ld", i ? "," : "", chk_hist[c][i]); if (c < 2) jw_add(&w, ";"); }
         jw_add(&w, "\",\"black\":%.1f,\"white\":%d},", black, white);
@@ -5838,7 +6913,13 @@ IR_API int indraw_burst(const char *const *paths, int n, int quality, int nr, in
 {
     int rc;
     meter_quiesce();
+    burst_focus_wait();                          /* the lens at its distance, a search over (0553) */
+    /* a long exposure: the continuous AF held for the whole burst (focus_freeze) */
+    if (focus_freeze_wanted(exposure_ns)) focus_freeze();
+    lens_note("before");
     rc = indraw_burst_impl(paths, n, quality, nr, edge, exposure_ns, iso, timeout_ms, out, out_size);
+    lens_note("after");
+    focus_thaw();
     meter_release();
     return rc;
 }
@@ -5851,6 +6932,7 @@ IR_API int indraw_jpeg(const char *path, int quality, int nr, int edge,
     int rc;
     meter_quiesce();
     rc = indraw_jpeg_impl(path, quality, nr, edge, focus_mode, focus_diopters, ae_precapture, exposure_ns, iso, variant, timeout_ms, out, out_size);
+    focus_thaw();                                /* a focus held for a long exposure, given back */
     meter_release();
     return rc;
 }
@@ -5862,6 +6944,7 @@ IR_API int indraw_raw(const char *path, const char *datetime, int focus_mode,
     int rc;
     meter_quiesce();
     rc = indraw_raw_impl(path, datetime, focus_mode, focus_diopters, ae_precapture, exposure_ns, iso, variant, timeout_ms, out, out_size);
+    focus_thaw();                                /* a focus held for a long exposure, given back */
     meter_release();
     return rc;
 }
@@ -5871,7 +6954,15 @@ IR_API int indraw_stack(const char *path, const char *datetime, int64_t film_ns,
 {
     int rc;
     meter_quiesce();
+    /* A stack is a long exposure: the continuous AF held from the release to
+     * the last sub-frame (the stack's own requests hold the lens already;
+     * this keeps the viewfinder's AF from moving it in between). */
+    burst_focus_wait();                          /* the lens at its distance, a search over (0553) */
+    focus_freeze();
+    lens_note("before");
     rc = indraw_stack_impl(path, datetime, film_ns, sub_ns, stk_denoise, iso, out, out_size);
+    lens_note("after");
+    focus_thaw();
     meter_release();
     return rc;
 }
@@ -6118,6 +7209,9 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
         af_all[na++] = g.preview_request; af_all[na++] = g.trigger_request; af_all[na++] = g.still_request;
         if (g.raw_request) af_all[na++] = g.raw_request;
         if (g.meter_request) af_all[na++] = g.meter_request;
+        /* our JPG's request: a tap wrote its zone there too (above); until
+         * patch 0549 it kept the old point's zone after a clear */
+        if (g.yuv_request) af_all[na++] = g.yuv_request;
         /* the template's own zone, written explicitly, as for the exposure */
         for (k = 0; k < na; ++k) if (af_all[k]) ACaptureRequest_setEntry_i32(af_all[k], ACAMERA_CONTROL_AF_REGIONS, 5, g.tpl_af_regions);
         zoom_af_region();                               /* cleared while zoomed: the middle third */
@@ -6130,7 +7224,27 @@ IR_API int indraw_tap(float nx, float ny, int do_ae, int do_af, char *out, size_
      * ignore a START while FOCUSED_LOCKED), then START. No AE precapture: with
      * AE on, the HAL re-meters its region by itself. */
     if (do_af == 1 && !continuous) {
+        /* A touch while a search still runs (two touches half a second
+         * apart): with CANCEL and START sent back to back, the JP2's HAL
+         * started the new search and never ended it -- ACTIVE_SCAN to the
+         * end, the controller giving up at 3 s (log of 25 Nov 2026, 13:26
+         * to 13:27, eight times out of eight; one touch at a time always
+         * ended). So when a search is under way, CANCEL alone first, and
+         * START only once a result shows it ended (INACTIVE), at most
+         * 400 ms. Without a search, as before. */
+        int scanning;
+        pthread_mutex_lock(&g.lock);
+        scanning = g.live_af == ACAMERA_CONTROL_AF_STATE_ACTIVE_SCAN ||
+                   g.live_af == ACAMERA_CONTROL_AF_STATE_PASSIVE_SCAN;
+        pthread_mutex_unlock(&g.lock);
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_CANCEL, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+        if (scanning) {
+            struct timespec cdl = deadline_in(400);
+            pthread_mutex_lock(&g.lock);
+            while (g.live_af != ACAMERA_CONTROL_AF_STATE_INACTIVE && !g.device_error)
+                if (pthread_cond_timedwait(&g.cond, &g.lock, &cdl) == ETIMEDOUT) break;
+            pthread_mutex_unlock(&g.lock);
+        }
         send_trigger(ACAMERA_CONTROL_AF_TRIGGER_START, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
     }
     /* The sun removed: "meter again, now", on the whole-image zone written
@@ -6315,7 +7429,7 @@ static void emit_caps(void)
              "caps proto=1 iso_min=%lld iso_max=%lld iso_analog_max=%lld exp_min_ns=%lld exp_max_ns=%lld "
              "shutter_max_ns=%lld ev_min=%d ev_max=%d ev_step=%d/%d orientation=%d black=%d white=%d "
              "raw=%d,%d jpeg=%d,%d zoom_max=%.2f focal_mm=%.2f focal_eq=%.1f "
-             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
+             "peak_edge=%lld zebra_jpeg=%lld zebra_raw=%lld peak_width=%lld flash=%d crop_free=%d aperture=%.2f min_focus=%.2f min_focus_real=%.2f touch_focus=%d focus_step_pct=%d notch=%d cameras=%s facing=%s raw_cams=%s yuv_stream=%dx%d/%d focus_cal=%d jpg_default=%s raw_cap=%dx%d jpeg_sizes=%s awb_modes=%s scene_modes=%s\n",
              iso_min, iso_max, iso_analog, exp_min, exp_max, shutter_max, ev_min, ev_max, ev_n, ev_d,
              g.sensor_orientation, black, white, g.raw_w, g.raw_h, g.jpeg_w, g.jpeg_h, zoom_max,
              focal, focal_eq, peak_edge, zebra_jpeg, zebra_raw, peak_width, has_flash, crop_free, aperture, min_focus,
@@ -6326,7 +7440,9 @@ static void emit_caps(void)
              !g.no_touch_focus,                     /* 0: a focus touch is not offered on this camera (device profile) */
              g.focus_step_pct,                      /* the manual steps above 1 D, % of the value (0: constant 0.05 D) */
              g_screen_notch, cams, facing, rawcams,
-             g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n, raw_cap_w, raw_cap_h, sizes, awb, scenes);
+             g.yuv_w > 0 ? g.yuv_w : 0, g.yuv_w > 0 ? g.yuv_h : 0, g.yuv_down > 0 ? g.yuv_down : 1, g.focus_cal_n,
+             g.jpg_default[0] ? g.jpg_default : JPG_DEFAULT_BUILTIN,   /* our JPG's processing by default (the menu's green rings) */
+             raw_cap_w, raw_cap_h, sizes, awb, scenes);
     if (g.lim_raw_off || g.lim_jw > 0 || g.lim_exclusive) {   /* a limited phone says so (the app shows it) */
         size_t n = strlen(line);
         if (n && line[n - 1] == '\n') line[--n] = '\0';
@@ -6352,8 +7468,92 @@ IR_API int indraw_stream_start(int fd, char *out, size_t out_size)
     pthread_mutex_unlock(&g.out_lock);
     emit_caps();                                    /* first SF2M line: the limits */
     jw_init(&w, out, out_size);
-    jw_add(&w, "{\"ok\":true,\"streaming\":true,\"size\":[%d,%d],\"format\":\"SF2P_rgb888\"}",
-           g.preview_w, g.preview_h);
+    jw_add(&w, "{\"ok\":true,\"streaming\":true,\"size\":[%d,%d],\"format\":\"%s\"}",
+           g.preview_w, g.preview_h, g.stream_yuv == 2 ? "SF2H_handles" : g.stream_yuv ? "SF2Y_i420" : "SF2P_rgb888");
+    return IR_OK;
+}
+
+/* The viewfinder frames' format on the stream: "rgb" (SF2P, RGB888
+ * converted here: the default, what every interface reads) or "yuv" (SF2Y,
+ * I420, converted by the interface's GPU: half the bytes and no conversion
+ * on the camera thread; 0.3.11). Asked by the interface once it is
+ * running ("vf yuv"), so an interface that never asks keeps SF2P. Takes
+ * effect from the next frame; may be called before or while streaming. */
+/* hwprobe (branch zero_copy): sends the next `n` viewfinder frames'
+ * buffer handles to the unix socket `path` (the interface listens there),
+ * see hwprobe_send. Answers what the engine can look up. */
+IR_API int indraw_hwprobe(const char *path, int n, char *out, size_t out_size)
+{
+    jw_t w;
+    void *nw;
+    if (!out || !out_size) return IR_EARG;
+    if (!path || !path[0] || strlen(path) >= sizeof g.hwp_path || n < 1 || n > 20)
+        return fail(out, out_size, IR_EARG, "hwprobe", "hwprobe PATH N (1-20)", 0);
+    nw = dlopen("libnativewindow.so", RTLD_NOW);
+    pthread_mutex_lock(&g.out_lock);
+    snprintf(g.hwp_path, sizeof g.hwp_path, "%s", path);
+    g.hwp_left = n;
+    pthread_mutex_unlock(&g.out_lock);
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"hwprobe\":%d,\"getHardwareBuffer\":%s,\"newWithUsage\":%s,\"nativewindow\":%s,"
+           "\"describe\":%s,\"getNativeHandle\":%s,\"preview_gpu_usage\":%s}",
+           n, dlsym(RTLD_DEFAULT, "AImage_getHardwareBuffer") ? "true" : "false",
+           dlsym(RTLD_DEFAULT, "AImageReader_newWithUsage") ? "true" : "false", nw ? "true" : "false",
+           dlsym(nw ? nw : RTLD_DEFAULT, "AHardwareBuffer_describe") ? "true" : "false",
+           dlsym(nw ? nw : RTLD_DEFAULT, "AHardwareBuffer_getNativeHandle") ? "true" : "false",
+           g.hwp_gpu_usage ? "true" : "false");
+    return IR_OK;
+}
+
+/* SF2H (zero copy): the viewfinder's frames as handles of the camera's own
+ * buffers, sent to the unix socket `path` the interface listens on
+ * ("vf hwb PATH"); see hwb_take. Falls back to SF2Y by itself on failure. */
+IR_API int indraw_stream_hwb(const char *path, char *out, size_t out_size)
+{
+    jw_t w;
+    if (!out || !out_size) return IR_EARG;
+    if (!path || !path[0] || strlen(path) >= sizeof g.hwb_path)
+        return fail(out, out_size, IR_EARG, "vf", "vf hwb PATH", 0);
+    pthread_mutex_lock(&g.out_lock);
+    snprintf(g.hwb_path, sizeof g.hwb_path, "%s", path);
+    g.stream_yuv = 2;
+    pthread_mutex_unlock(&g.out_lock);
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"vf\":\"hwb\",\"buffers\":%d}", g.vf_buffers);
+    return IR_OK;
+}
+
+/* SF2A: which of the aids' maps go out after the zero-copy frames (AID_*,
+ * 0-15; 0: none), with one frame in `every` (1-4: 30, 15, 10 or 7.5 maps
+ * a second at 30 fps). "vf aids N [EVERY]". */
+IR_API int indraw_stream_aids(int mask, int every, char *out, size_t out_size)
+{
+    jw_t w;
+    if (!out || !out_size) return IR_EARG;
+    if (mask < 0 || mask > AID_ALL || every < 1 || every > 4)
+        return fail(out, out_size, IR_EARG, "vf", "vf aids 0-15 [1-4]", 0);
+    pthread_mutex_lock(&g.out_lock);
+    g.aids_mask = mask;
+    g.aids_every = every;
+    pthread_mutex_unlock(&g.out_lock);
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"vf_aids\":%d,\"every\":%d}", mask, every);
+    return IR_OK;
+}
+
+IR_API int indraw_stream_format(const char *fmt, char *out, size_t out_size)
+{
+    jw_t w;
+    int yuv;
+    if (!out || !out_size) return IR_EARG;
+    if (!fmt || (strcmp(fmt, "yuv") && strcmp(fmt, "rgb")))
+        return fail(out, out_size, IR_EARG, "vf", "format: yuv or rgb", 0);
+    yuv = !strcmp(fmt, "yuv");
+    pthread_mutex_lock(&g.out_lock);
+    g.stream_yuv = yuv;
+    pthread_mutex_unlock(&g.out_lock);
+    jw_init(&w, out, out_size);
+    jw_add(&w, "{\"ok\":true,\"vf\":\"%s\"}", yuv ? "yuv" : "rgb");
     return IR_OK;
 }
 
@@ -6615,7 +7815,7 @@ IR_API int indraw_loupe(float factor, float cx, float cy, char *out, size_t out_
 IR_API int indraw_zoom(float factor, char *out, size_t out_size)
 {
     ACameraMetadata_const_entry e;
-    ACaptureRequest *reqs[1], *all[9];
+    ACaptureRequest *reqs[1], *all[5 + YUV_BURST_MAX];
     int32_t crop[4], ax = 0, ay = 0, aw = 0, ah = 0, n = 0, i;
     float max_zoom = 1.0f;
     camera_status_t st;
@@ -6639,11 +7839,11 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     all[n++] = g.trigger_request;
     if (g.raw_request) all[n++] = g.raw_request;
     if (g.yuv_request) all[n++] = g.yuv_request;   /* our JPEG is a finished photo: it follows the zoom (a DNG does not) */
-    /* ... and so does our JPEG of 2 or 4 merged frames, taken with its own
+    /* ... and so does our JPEG of several merged frames (2 to 8), taken with its own
      * requests (one per frame, indraw_yuv_burst): they were left out, so a
      * multi-frame JPG came out unzoomed while its Exif said zoomed (found
      * by the user, 12 Nov). (Its DNG is the RAW stream: full frame anyway.) */
-    for (i = 0; i < 4; ++i) if (g.yuv_burst_req[i]) all[n++] = g.yuv_burst_req[i];
+    for (i = 0; i < YUV_BURST_MAX; ++i) if (g.yuv_burst_req[i]) all[n++] = g.yuv_burst_req[i];
     for (i = 0; i < n; ++i)
         if (all[i]) ACaptureRequest_setEntry_i32(all[i], ACAMERA_SCALER_CROP_REGION, 4, crop);
     {   /* the preview: the zoom window, and the loupe inside it if one is open.
@@ -6665,21 +7865,25 @@ IR_API int indraw_zoom(float factor, char *out, size_t out_size)
     return IR_OK;
 }
 
-/* Adds our JPEG's capture requests (the YUV photo, and the four of a
- * merged 2- or 4-frame JPG) to a list of requests a setting is written
- * into. They are reusable requests made once at the open, like the HAL
+/* Adds our JPEG's capture requests (the YUV photo, and the up to
+ * YUV_BURST_MAX of a JPG of several merged frames) to a list of requests
+ * a setting is written into. They are reusable requests made once at the open, like the HAL
  * JPEG's still_request: a setting written into the preview only reaches
  * them if it is written there too. Up to 0.3.10-519 the white balance was
  * not: on the JP2 (MediaTek) the photo followed the
  * viewfinder anyway, the HAL applying its current white to every capture;
  * on the Xperia 10 III (Qualcomm), which applies each request's own
  * settings, our JPG kept the automatic white whatever the menu said
- * (23 Nov 2026). `all` must have room for 5 more. */
+ * (23 Nov 2026). `all` must have room for YUV_REQS more. Until patch 0549
+ * only the first four burst requests were added: since the JPG of 8
+ * frames (0.3.11), its frames 5 to 8 kept the automatic white on the
+ * Xperia 10 III. */
+#define YUV_REQS (1 + YUV_BURST_MAX)
 static void add_yuv_requests(ACaptureRequest **all, int *n)
 {
     int i;
     if (g.yuv_request) all[(*n)++] = g.yuv_request;
-    for (i = 0; i < 4; ++i) if (g.yuv_burst_req[i]) all[(*n)++] = g.yuv_burst_req[i];
+    for (i = 0; i < YUV_BURST_MAX; ++i) if (g.yuv_burst_req[i]) all[(*n)++] = g.yuv_burst_req[i];
 }
 
 /* White balance (JPEG and preview; the RAW stays linear, its as-shot
@@ -6690,7 +7894,7 @@ static int wb_apply(int shift, int tint, char *out, size_t out_size);
 static int wb_wait_awb(void);
 IR_API int indraw_wb(int mode, char *out, size_t out_size)
 {
-    ACaptureRequest *reqs[1], *all[10];   /* 5 HAL requests + our JPEG's 5 */
+    ACaptureRequest *reqs[1], *all[5 + YUV_REQS];   /* 5 HAL requests + our JPEG's (add_yuv_requests) */
     uint8_t u8;
     int n = 0, i;
     camera_status_t st;
@@ -6775,7 +7979,7 @@ IR_API int indraw_wb_manual(int shift, int tint, char *out, size_t out_size)
  * base fixed and no shift, back to the HAL's AWB. */
 static int wb_apply(int shift, int tint, char *out, size_t out_size)
 {
-    ACaptureRequest *reqs[1], *all[10];   /* 5 HAL requests + our JPEG's 5 */
+    ACaptureRequest *reqs[1], *all[5 + YUV_REQS];   /* 5 HAL requests + our JPEG's (add_yuv_requests) */
     float gains[4] = { 1, 1, 1, 1 };
     uint8_t u8, cc;
     int n = 0, i;
@@ -7717,9 +8921,17 @@ static void yuv_check_json(jw_t *w, const ir_yuv_t *f0)
             sum += pow(rgb3[1] / 255.0, 2.2); cnt++;
         }
     if (!cnt) return;
-    jw_add(w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
-           g.vf_last_mean, g.vf_last_clip_hi, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
-    for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", g.vf_last_hist[c][i]); if (c < 2) jw_add(w, ";"); }
+    {   /* the viewfinder's last measure, copied under the lock (the preview thread writes it) */
+        double vm, vc;
+        long vh[3][64];
+        pthread_mutex_lock(&g.lock);
+        vm = g.vf_last_mean; vc = g.vf_last_clip_hi;
+        memcpy(vh, g.vf_last_hist, sizeof vh);
+        pthread_mutex_unlock(&g.lock);
+        jw_add(w, ",\"check\":{\"vf_mean\":%.4f,\"vf_clip_hi\":%.3f,\"photo_mean\":%.4f,\"photo_clip_255\":%.3f,\"photo_clip_250\":%.3f,\"vf_hist\":\"",
+               vm, vc, sum / cnt, 100.0 * hi255 / cnt, 100.0 * hi250 / cnt);
+        for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", vh[c][i]); if (c < 2) jw_add(w, ";"); }
+    }
     jw_add(w, "\",\"photo_hist\":\"");
     for (c = 0; c < 3; ++c) { for (i = 0; i < 64; ++i) jw_add(w, "%s%ld", i ? "," : "", ph[c][i]); if (c < 2) jw_add(w, ";"); }
     jw_add(w, "\"");
@@ -7740,8 +8952,8 @@ static void yuv_check_json(jw_t *w, const ir_yuv_t *f0)
     jw_add(w, "}");
 }
 
-IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
-                      ir_yuv_t *f, char *out, size_t out_size)
+static int indraw_yuv_impl(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
+                           ir_yuv_t *f, char *out, size_t out_size)
 {
     ACaptureRequest *reqs[1];
     AImage *img = NULL;
@@ -7762,8 +8974,8 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
      * the precapture, then the flash with the shot); with a manual pair,
      * "on" fires one flash with the shot and "auto" does not fire (no
      * metering to judge by) -- see flash_arm. Disarmed after the submit, so
-     * the request never flashes on its own. One frame only: a burst of 2 or
-     * 4 merged frames is not flashed (the interface sends 1 with a flash). */
+     * the request never flashes on its own. One frame only: a burst of
+     * merged frames is not flashed (the interface sends 1 with a flash). */
     flash_arm(g.yuv_request, exposure_ns > 0);
     pthread_mutex_lock(&g.lock);
     if (g.yuv_image) { AImage_delete(g.yuv_image); g.yuv_image = NULL; }
@@ -7772,7 +8984,8 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     g.captured_owed = "captured kind=yuv\n";
     pthread_mutex_unlock(&g.lock);
     t0 = now_ms();
-    prepare_capture(g.yuv_request, focus_mode, focus_diopters, exposure_ns <= 0 && iso <= 0, &a3);
+    prepare_capture(g.yuv_request, focus_mode, focus_diopters, exposure_ns <= 0 && iso <= 0, focus_freeze_wanted(exposure_ns), &a3);
+    lens_note("before");                         /* the lens just before the submit (log) */
     reqs[0] = g.yuv_request;
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, 1, reqs, NULL);
     flash_disarm(g.yuv_request);                /* the request is copied at submit */
@@ -7786,6 +8999,7 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     failed = g.capture_failed; dev_err = g.device_error;
     pthread_mutex_unlock(&g.lock);
     t_image = now_ms();
+    lens_note("after");                          /* and once the image is in */
     if (!img) {
         if (failed) return fail(out, out_size, IR_ECAPTURE, "capture_failed", "camera reported failure", 0);
         if (dev_err) return fail(out, out_size, IR_ECAPTURE, "device", "device error", dev_err);
@@ -7806,7 +9020,10 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
     f->exposure_ns = g.result_ready ? g.r_exposure_ns : -1;
     f->iso = g.result_ready ? g.r_iso : -1;
     f->wb_manual = g.wb_fixed || g.wb_offset_on || g.wb_shift || g.wb_tint;
-    f->flash = exif_flash_value(0);                         /* a YUV capture never fires the flash */
+    /* Whether the flash fired, from the photo's own result: flash_arm (above)
+     * fires it on one YUV frame since 0.3.8; until patch 0549 the Exif said
+     * "not fired" whatever happened. */
+    f->flash = exif_flash_value(g.result_ready && g.r_flash_fired);
     f->digital_zoom = g.zoom > 1.01f ? g.zoom : 0;
     pthread_mutex_unlock(&g.lock);
     photo_field(f->w, f->h, f->field);                 /* for the lens correction */
@@ -7836,6 +9053,16 @@ IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns,
  * so the camera takes them back to back (33-41 ms apart on the JP2).
  * With ev=, each request carries its own manual exposure, derived from
  * the automatic one frozen at the first frame, as for the bracket. */
+/* One YUV frame (indraw_yuv_impl), and the focus given back after it when
+ * a long exposure held it (prepare_capture, focus_thaw). */
+IR_API int indraw_yuv(int focus_mode, float focus_diopters, int64_t exposure_ns, int iso, int timeout_ms,
+                      ir_yuv_t *f, char *out, size_t out_size)
+{
+    int rc = indraw_yuv_impl(focus_mode, focus_diopters, exposure_ns, iso, timeout_ms, f, out, out_size);
+    focus_thaw();
+    return rc;
+}
+
 /* The detail scale of a photo `photo_w` wide: 2 when it is at least twice
  * as wide as the sensor's RAW reading (the JP2: 8192 against 4096, its 50 MP
  * enlarged from a 12.5 MP binned reading), else 1. The tool's filters use it
@@ -7931,13 +9158,14 @@ static int write_dng_pair(AImage *img, const ACameraMetadata *rmeta, const char 
     return err;
 }
 
-IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
-                            ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
+static int indraw_yuv_burst_impl(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
+                                 ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
 {
     int with_dng = g.yuv_dng_path[0] && g.raw_target, dng_err = 0, dng_preview_err = 0;
     const char *dng_state = "none";
-    ACaptureRequest *reqs[4];
+    ACaptureRequest *reqs[YUV_BURST_MAX];
     int k, got = 0, rc = IR_OK;
+    double copy_ms = 0, copy_max = 0;
     int64_t exp_min = 0, exp_max = 0, exp_ceiling;
     int32_t iso_min = 0, iso_max = 0;
     ACameraMetadata_const_entry e;
@@ -7945,7 +9173,7 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     struct timespec dl;
     camera_status_t st;
     jw_t w;
-    if (n < 1 || n > 4 || !frames || !timestamps || !out || !out_size || timeout_ms <= 0) return IR_EARG;
+    if (n < 1 || n > YUV_BURST_MAX || !frames || !timestamps || !out || !out_size || timeout_ms <= 0) return IR_EARG;
     for (k = 0; k < n; ++k) { memset(&frames[k], 0, sizeof frames[k]); timestamps[k] = -1; }
     if (!g.session) return fail(out, out_size, IR_ESTATE, "yuv", "camera not open", 0);
     if (!g.yuv_burst_req[0]) return fail(out, out_size, IR_ESTATE, "yuv", "no yuv stream (open with yuv=WxH|max)", 0);
@@ -7958,6 +9186,12 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE, &e) == ACAMERA_OK && e.count >= 2) { exp_min = e.data.i64[0]; exp_max = e.data.i64[1]; }
     if (ACameraMetadata_getConstEntry(g.chars, ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE, &e) == ACAMERA_OK && e.count >= 2) { iso_min = e.data.i32[0]; iso_max = e.data.i32[1]; }
     if (exp_max > 0 && g.override_exp_max_ns > exp_max) exp_max = g.override_exp_max_ns;
+    /* observed_iso_max: the same ceiling set_exposure takes. Without it a
+     * burst was clamped to the declared range while the live pair it
+     * freezes came from the camera's own AE above it: the 18 mm (declares
+     * 2400, its AE at ISO 9125 in dim light) shot its burst at 2400, two
+     * stops dark (log of 15 Nov 2026, 08:19:23). */
+    if (iso_max > 0 && g.override_iso_max > iso_max) iso_max = g.override_iso_max;
     exp_ceiling = g.override_shutter_max_ns > 0 && (exp_max <= 0 || g.override_shutter_max_ns < exp_max) ? g.override_shutter_max_ns : exp_max;
     for (k = 0; k < n; ++k) {
         /* this frame's pair: the exposure time scaled by 2^ev, kept within the
@@ -7965,8 +9199,9 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         double f = ev ? pow(2.0, (double)ev[k]) : 1.0;
         int64_t ex = (int64_t)(exposure_ns * f + 0.5);
         int is = iso;
-        if (exp_ceiling > 0 && ex > exp_ceiling) { is = (int)((double)iso * (double)ex / (double)exp_ceiling + 0.5); ex = exp_ceiling; }
-        if (exp_min > 0 && ex < exp_min) { is = (int)((double)iso * (double)ex / (double)exp_min + 0.5); ex = exp_min; }
+        /* clamped to the range: the ISO takes what the time loses */
+        if (exp_ceiling > 0 && ex > exp_ceiling) { is = (int)((double)is * (double)ex / (double)exp_ceiling + 0.5); ex = exp_ceiling; }
+        if (exp_min > 0 && ex < exp_min) { is = (int)((double)is * (double)ex / (double)exp_min + 0.5); ex = exp_min; }
         if (iso_max > 0 && is > iso_max) is = iso_max;
         if (iso_min > 0 && is < iso_min) is = iso_min;
         if (set_exposure(g.yuv_burst_req[k], ex, is, out, out_size)) return IR_EARG;
@@ -7980,13 +9215,14 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     g.yuv_qn = 0; g.yuv_burst_on = 1;
     g.capture_failed = 0; g.result_ready = 0;
     g.captured_owed = NULL;
+    g.burst_results_left = n;                    /* the flash at the n-th result (on_capture_completed) */
     if (with_dng && g.raw_image) { AImage_delete(g.raw_image); g.raw_image = NULL; }
     pthread_mutex_unlock(&g.lock);
     t0 = now_ms();
     st = ACameraCaptureSession_capture(g.session, &g_still_cbs, n, reqs, NULL);
     if (with_dng) ACaptureRequest_removeTarget(reqs[n - 1], g.raw_target);
     if (st != ACAMERA_OK) {
-        pthread_mutex_lock(&g.lock); g.yuv_burst_on = 0; pthread_mutex_unlock(&g.lock);
+        pthread_mutex_lock(&g.lock); g.yuv_burst_on = 0; g.burst_results_left = 0; pthread_mutex_unlock(&g.lock);
         if (with_dng) { meter_release(); g.yuv_dng_path[0] = '\0'; }
         return fail(out, out_size, IR_ECAPTURE, "yuv", "capture refused", st);
     }
@@ -8005,7 +9241,12 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
         pthread_mutex_unlock(&g.lock);
         if (!img) break;
         AImage_getTimestamp(img, &timestamps[got]);
-        if (yuv_copy(img, &frames[got])) { AImage_delete(img); rc = IR_ECAPTURE; break; }
+        {
+            const double tc = now_ms();             /* each copy is timed: the reader's 5 buffers last while it beats the frame rate */
+            if (yuv_copy(img, &frames[got])) { AImage_delete(img); rc = IR_ECAPTURE; break; }
+            const double dc = now_ms() - tc;
+            copy_ms += dc; if (dc > copy_max) copy_max = dc;
+        }
         AImage_delete(img);
         got++;
     }
@@ -8014,8 +9255,11 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     g.yuv_burst_on = 0;
     for (k = 0; k < g.yuv_qn; ++k) AImage_delete(g.yuv_q[k]);
     g.yuv_qn = 0;
+    /* The flash, if the last result has not sent it already (a result lost,
+     * a frame failed): now at the latest, as before. */
+    if (g.burst_results_left > 0) { g.burst_results_left = 0; g.captured_owed = "captured kind=yuv\n"; }
     pthread_mutex_unlock(&g.lock);
-    emit_event("captured kind=yuv\n");
+    captured_now();
     if (with_dng) {
         /* The RAW of the last frame and ITS result (same timestamp): a DNG
          * without its own metadata would lie, so it is skipped instead. */
@@ -8065,12 +9309,31 @@ IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso
     for (k = 0; k < got; ++k)
         jw_add(&w, "%s{\"exposure_ns\":%lld,\"iso\":%d,\"ms_after_first\":%.1f}", k ? "," : "",
                (long long)frames[k].exposure_ns, frames[k].iso, (double)(timestamps[k] - timestamps[0]) / 1e6);
-    jw_add(&w, "],\"ms\":{\"capture\":%.1f}", t_cap - t0);
+    jw_add(&w, "],\"ms\":{\"capture\":%.1f,\"copy\":%.1f,\"copy_max\":%.1f}", t_cap - t0, got ? copy_ms / got : 0.0, copy_max);
     yuv_check_json(&w, &frames[0]);
     if (with_dng) { jw_add(&w, ",\"dng\":{\"path\":"); jw_str(&w, g.yuv_dng_path); jw_add(&w, ",\"state\":\"%s\",\"preview_err\":%d}", dng_state, dng_preview_err); }
     jw_add(&w, "}");
     g.yuv_dng_path[0] = '\0';
     return got == n ? rc : (rc == IR_OK ? IR_ECAPTURE : rc);
+}
+
+/* A YUV burst (indraw_yuv_burst_impl): from 1/4 s a frame, the continuous
+ * AF held for the whole burst (focus_freeze), and the lens in the log. */
+IR_API int indraw_yuv_burst(int n, const float *ev, int64_t exposure_ns, int iso, int timeout_ms,
+                            ir_yuv_t *frames, int64_t *timestamps, char *out, size_t out_size)
+{
+    int rc;
+    burst_focus_wait();                          /* the lens at its distance, a search over (0553) */
+    if (focus_freeze_wanted(exposure_ns)) focus_freeze();
+    lens_note("before");
+    rc = indraw_yuv_burst_impl(n, ev, exposure_ns, iso, timeout_ms, frames, timestamps, out, out_size);
+    /* the DNG asked for this burst (indraw_yuv_dng_next) is used once: cleared
+     * here too, for the returns before the capture (no live exposure, a pair
+     * refused), which left it for the next burst until patch 0549 */
+    g.yuv_dng_path[0] = '\0';
+    lens_note("after");
+    focus_thaw();
+    return rc;
 }
 
 IR_API void indraw_yuv_free(ir_yuv_t *f)
@@ -8127,6 +9390,24 @@ IR_API int indraw_set_camera_list(const char *ids)
 IR_API int indraw_set_streams_exclusive(int on)
 {
     g.lim_exclusive = on ? 1 : 0;
+    return IR_OK;
+}
+
+/* Device-profile values, before indraw_stream_start: our JPG's processing
+ * by default on this camera, "method,frames,tile_frames,colour,moire,luma,
+ * sharpen" (the CLI reads them from the device profile and checks them;
+ * JPG_DEFAULT_BUILTIN when the profile says nothing). The
+ * engine only reports them in the caps line (jpg_default=), for the app:
+ * the menu's defaults, what its "default" means in rawfish-ir.conf. NULL or
+ * "" = the app's own. IR_EARG for anything but letters, digits and commas
+ * (it goes out in a space-separated line). */
+IR_API int indraw_set_jpg_default(const char *csv)
+{
+    size_t i, n = csv ? strlen(csv) : 0;
+    if (n >= sizeof g.jpg_default) return IR_EARG;
+    for (i = 0; i < n; ++i)
+        if (!((csv[i] >= 'a' && csv[i] <= 'z') || (csv[i] >= '0' && csv[i] <= '9') || csv[i] == ',')) return IR_EARG;
+    snprintf(g.jpg_default, sizeof g.jpg_default, "%s", n ? csv : "");
     return IR_OK;
 }
 

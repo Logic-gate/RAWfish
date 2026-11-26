@@ -6,13 +6,453 @@ engine's, with the app's and its "ui NN" badge alongside. Patch numbers
 refer to the patch series the changes were delivered as (kept outside the
 repository). Newest first.
 
-## Known issues (as of 0.3.10)
+## Known issues (as of 0.3.11)
 - At high ISO the viewfinder can show a fine "maze" pattern. Not the
   MediaTek 3DNR (tested 21 October 2026: the setting is applied and
   changes nothing visible, docs/VENDOR-TESTS.md); the viewfinder's own
   noise reduction is the next candidate. Photos are not affected.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
-  sensor); RAW and Σ are not yet tried there.
+  sensor); RAW and Σ work there (tried 24 Nov 2026).
+
+## 0.3.11 (beta) — a lighter viewfinder (patches 0431–0557)
+- The version 0.3.11 (patch 0557), the release of the builds that followed
+  0.3.10-520, the last one published: 0.3.10-524 to 0.3.10-555, listed
+  below (each was installed as 0.3.10-NNN). As at every
+  new version, the app's first start sets the earlier configuration and
+  device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...);
+  your settings are carried into the new rawfish-ir.conf, except our JPG's
+  processing of each camera, which starts again at the new defaults.
+- New JPG defaults, judged on the phone (patch 0555; device profiles): the
+  JP2's 26 mm and every camera of the Xperia 10 III take 2 frames merged by
+  tiles, colour NR 3, no moiré filter, Luma NR 2 and sharpen 2; the JP2's
+  18 mm 4 frames merged by tiles (classic until now), colour NR 2, Luma NR 2,
+  sharpen 3; the JP2's front camera and the Xperia XA2 (slow to merge by
+  tiles) the app's own (classic of one frame, colour NR 2, sharpen 3).
+  A new version applies its own: our JPG's processing of each camera (the
+  [camera_N] sections of rawfish-ir.conf: denoise, frames, colour NR,
+  moiré, Luma NR, sharpen) is not carried into the new version's file but
+  starts again at "default" (the log says how many went back); every other
+  setting is carried, as before. A build of the same version (a patch)
+  keeps them all.
+- Tests of 26 Nov 2026 (patch 0553):
+  - with "JPG +DNG" (Settings: a DNG with each JPG) a bracket gives the
+    camera's JPEG series, then the same series again as DNGs; it gave the
+    JPEGs alone. Two series one after the other, not each shot as both: our
+    own JPG of each shot would have spaced the shots by its processing,
+    about 1 s each (an estimate; in the logs a HAL burst x7 took 0.7 to
+    0.9 s in all);
+  - the tile merge's "Per frame" (each frame 1/2 or 1/4 of the pose, the ISO
+    raised to match) is removed, everywhere: the menu column, the
+    `jpgTileSplit` key of each `[camera_N]` (dropped from rawfish-ir.conf at
+    the next start), the device profiles' `jpg_tile_split`, the command
+    line's `split=`, the engine's. At the sensor's highest ISO the ISO could
+    not be raised: the Xperia 10 III's telephoto at ISO 1159, its maximum
+    1163, gave frames 2 and 4 times dark (log of 26 Nov 2026, 17:43); and it
+    gained nothing measured. The caps' `jpg_default=` has seven fields;
+  - a burst (the camera's JPEG burst, our JPG of several frames) and a stack
+    wait for the focus first, as a single photo does: a manual distance or
+    a held lens until the lens is settled there, a continuous focus caught
+    searching until its search ends (focusScanWait). They started at once:
+    on the Xperia 10 III a bracket x7 taken just after the camera started
+    ran while the lens went to 0.19 m ("moved 5.032 during the photo");
+  - the wait for a manual distance before a photo is 2 s at most (1.2 s);
+    a lens already in place costs nothing;
+  - the detailed log traces the exposure: an `ae trace` line at each change
+    of the HAL's pair (more than 3 %) or of its AE state, of the pair the
+    wheels show, or of the viewfinder's mean (more than 5 %), with the
+    time and the light the pair takes in, in stops -- for the JP2's 18 mm,
+    whose exposure and wheels pump (as in Jolla Camera): whether it is the
+    HAL's AE, our wheels, or the image;
+  - the JP2's 18 mm's JPG defaults (its device profile): classic, 4 frames,
+    colour NR 2, moiré off, Luma NR 2, sharpen 3;
+  - TYPE says DNG for the RAW, "JPG +DNG" with a DNG with each JPG;
+  - the bracket of three shots at the same exposure is "0x3" in
+    rawfish-ir.conf, as 0x5 and 0x7 (it was "0"; an old 0 is read as 0x3);
+  - rawfish-ir.conf.example is now rawfish-ir.conf.readme (the .example
+    removed at the start): it cannot be used as a settings file, so it is
+    plain text to read -- no ';' before every line, an empty line before
+    each key;
+  - the log's "N value(s) carried" for a new rawfish-ir.conf counts only the
+    values the old file had (a camera's key absent there, at its default,
+    was counted too).
+- Our JPG's processing is kept per camera, and rawfish-ir.conf is sorted
+  into sections (patch 0551).
+  - Per camera: the denoise method, the frames merged (classic and
+    tiles), the pose per frame, Colour NR, Moiré, Luma NR and Sharpen. A
+    choice made in the menu on one camera stays on that camera; each
+    camera starts from its own defaults, its device profile's (new
+    per-camera keys `jpg_method`, `jpg_frames`, `jpg_tile_frames`,
+    `jpg_tile_split`, `jpg_colour_nr`, `jpg_moire`, `jpg_luma_nr` --
+    `luma_nr` renamed -- and `jpg_sharpen`), else the app's (classic, 1
+    frame, 2, 0, 0, 3), marked by the menu's green rings. snap takes the
+    camera's defaults (it took the app's). The caps line gives them
+    (`jpg_default=`, instead of `luma_nr=`), the log says them at each start.
+  - rawfish-ir.conf in sections: [menu], [shooting], [viewfinder],
+    [white_balance], [lens_shading], [kept], [advanced], [internal], and one
+    [camera_N] per camera with its eight JPG keys ("default", or a choice),
+    written the first time the camera is used. The file is written by the
+    app in alphabetical order, without comments, as before.
+  - Every key is written down once, in the app (app/conftable.h): its
+    section, its default, the values it takes, its text. The app no longer
+    reads any file to know them: rawfish-ir.conf.example is written from
+    that table at each start, a reference for the user that nothing reads
+    (it is no longer in the package; the device profile's example still
+    is). It says that its values are the defaults and that the real file is
+    in alphabetical order.
+  - A new version carries your settings: the earlier rawfish-ir.conf still
+    goes to the backup folder, but its values are copied into the new file
+    (a key the version no longer has is left out, a value it no longer
+    allows takes its default; the log says how many were carried). Until
+    now a new version started from the defaults.
+  - A file of before the sections is copied to a backup folder
+    (backup-before-sections-<date>/) and rebuilt from that copy, every
+    value kept; its one-for-all JPG keys become each camera's choice,
+    whatever their value ("auto", the luma's word until now, becomes
+    "default"). At each start, a key the table does not have, or one in
+    another section than its own, is dropped.
+  - check-host.sh: a host test of the table (every default passes its own
+    check, the example reads back as the table) and a check that every key
+    the interface uses is in it.
+- Review of the patches since early November (patch 0549):
+  - our JPG of 8 frames takes the menu's white balance on all of its
+    frames: it was written into the first four burst requests only, so on
+    the Xperia 10 III (which applies each request's own settings) frames 5
+    to 8 kept the automatic white;
+  - our JPG taken with the flash says in its Exif whether the flash fired
+    (it said "not fired" since the flash was given to our JPG, 0.3.8);
+  - with split=2|4 (nr=tiles), a frame whose time had to be clamped to the
+    sensor's range keeps its brightness (its ISO came from the photo's,
+    not the frame's: 2 or 4 times dark);
+  - a focus point removed is removed from our JPG's request too (it kept
+    the old point's zone);
+  - a DNG asked with a JPG whose burst was refused before the capture is
+    no longer written with the next JPG;
+  - the "check" histograms of the detailed log are read under the lock
+    their threads write them with;
+  - the Settings page and the user guide describe the switches as they
+    are (the JPG processing columns, the DNG with each JPG, the detailed
+    log, the reset; the scenes and viewfinder-processing switches, gone,
+    are no longer listed); comments tidied.
+- A photo not saved is said on the screen (patch 0547): a red box in
+  the middle, "Photo NOT saved: storage full" when the memory is full,
+  otherwise "Photo NOT saved" and the engine's reason; at the top a line
+  when less than 300 MB are left where the photos go. A failed photo was
+  seen only in the log. The JPG's write error now says its reason
+  (ENOSPC: "No space left on device").
+- The white flash of our JPG of several frames comes when the sensor has
+  taken the last frame, not once the frames are copied: about 1 s sooner
+  with 8 frames on the JP2 (0.3 s of exposures, 0.9 s of copies).
+- A touch on a point while a focus search still runs works: the engine
+  now cancels the search and waits for the HAL to show it ended (at most
+  0.4 s) before starting the new one. Both sent at once, the JP2's HAL
+  started the second search and never ended it, eight times out of eight
+  (log of 25 Nov 2026).
+- The first photo of a session no longer says "lens NOT SETTLED" in the
+  log when no distance was waited for (0542).
+- A fluid viewfinder at 1/4 s and 1/2 s, and at most 1/15 s chosen by the
+  app (patch 0545). A speed set by hand from 1/4 s is now previewed as a
+  Σ is: one frame of the same exposure (time x ISO), 1/10 s by default
+  (`sigmaPreviewFps`), the ISO raised to match -- 1/4 s at ISO 100 shows
+  as 1/10 s at ISO 250. It used to show the real time, 2 to 4 frames a
+  second. The same look, a little more noise in the viewfinder only; the
+  photo keeps the wheels' pair, and in speed priority the free ISO is
+  worked out through the same rule as for a Σ. Faster speeds are shown as
+  before. And in ISO priority the speed the app chooses goes no longer
+  than 1/15 s: in the dark (a pocket, a hand or a sleeve over the lens,
+  the phone face down) it went to 1/2 s, the viewfinder then at 2 frames
+  a second and slow to come back when the light returned. Longer speeds
+  are set on the wheel.
+- The focus can no longer move during a long exposure, and a manual
+  distance waits for the lens properly (patch 0542). From 1/4 s, for
+  a burst of such frames and for every Σ, a continuous autofocus is
+  held at the lens position of the release, on the viewfinder and on the
+  photo, then given back: on the JP2 a 30 s RAW in continuous AF could
+  have its lens moved by the viewfinder's AF (log of 24 Nov 2026). The
+  wait for a manual distance now asks the lens to be stationary, at the
+  same position on two results in a row and within 0.05 of the target in
+  the HAL's units; it was 0.5, on the JP2 the whole way from infinity to
+  about 1.8 m, so a lens stopping short could pass at close range. Not
+  settled within 1.2 s, the photo is taken as before, and the log says so.
+  Each photo now writes two "lens" lines in the log: where the lens is,
+  whether it moves, and how far it went during the photo.
+- The log line "exposure carried to camera N" names only what is given
+  back on the new camera (patch 0539): an automatic ISO or speed is
+  logged as "auto", no longer as the camera's minimum ISO or "speed 0 ns",
+  which looked as if a manual value had been carried. Nothing else changes.
+- The Xperia 10 III's JPGs get the luminance filter at level 2 by default
+  (patch 0537), 1.5 times the noise: level 1 left too much grain at ISO
+  1000 on the phone. Its device profile's luma_nr goes from 1 to 2; a
+  level picked in the menu stays.
+- A luminance noise filter for our JPG (patch 0535), the menu's "Luma NR"
+  (0 off, 1..3) in the JPG processing columns, rawfish-ir.conf
+  jpgLumaNoiseFilter (auto = the camera's default). Until now the grain was
+  only reduced by merging frames, never smoothed, to keep the detail: that
+  was enough on the JP2 (its 12.5 MP binned by the 50 MP sensor), not on the
+  Xperia 10 III, whose JPGs were grainy at ISO 1000 even from 4 frames. The
+  filter runs after the merge, on the grain that is left, and before the
+  sharpening: each pixel is averaged with its 5x5 neighbours that differ
+  from it by less than 1, 1.5 or 2.2 times the noise measured on the frame,
+  so that edges and textures stronger than the grain keep their pixels (not
+  the cameras' "watercolour"). Default from the device profile ("luma_nr"):
+  1 on the 10 III's four cameras, 0 elsewhere, so the JP2's and the XA2's
+  JPGs do not change. Its level is in the Exif and XMP description and, with
+  the detailed log, in the file name (_luma1); the photo's reply gives the
+  noise it measured and its time.
+- Σ with a bracket chosen no longer restarts the camera over and over
+  (patch 0533; Xperia 10 III, log of 24 Nov 2026). Choosing a Σ speed
+  sets the type to raw, which restarts the engine; a fresh engine shows
+  its own automatic exposure for its first moments, so Σ looked
+  unselected, the type went back to jpg, and with a bracket chosen jpg and
+  raw have different streams (since patch 0529): another restart, Σ again,
+  and so on every two seconds. Whether Σ is chosen is now read, until the
+  new engine has taken the user's exposure back, from the values kept from
+  the engine before. Without a bracket jpg and raw share one session, which
+  is why the JP2 and the XA2 did not show it.
+- The camera comes back after a bracket on the Xperia 10 III (patch 0531;
+  log of 24 Nov 2026). Closing a session that held the camera's JPEG
+  stream (a bracket, the HAL JPG) takes its camera driver up to 1.1 s, and
+  for up to 6 s after it the camera service lists no camera: the next
+  engine failed at once ("unknown camera id"), the app's three restarts
+  went by within those seconds, and the viewfinder stayed on "engine
+  stopped" until a camera change; on the way our JPG had fallen back to
+  the camera's (two failed starts with our YUV). The engine now waits, before
+  opening, until the camera is listed again (at most 10 s, checked every
+  250 ms; the log says how long), and stops waiting as soon as the app
+  writes to it or goes away. A camera listed at once costs one lookup: the
+  JP2 and the XA2 open as before.
+- A bracket in JPG opens on the Xperia XA2, and the camera button no
+  longer goes to a camera that is not there (patch 0529; log of 24 Nov
+  2026). A bracket asked the camera for its JPEG stream beside our YUV and
+  the RAW, four streams with the viewfinder, which the XA2's camera
+  refuses: the engine failed twice, then our JPG fell back to the camera's
+  until the next camera change. A bracket now takes the camera's JPEG in
+  place of our YUV (it never used the YUV: a bracket's photos are the
+  camera's JPEGs), three streams as for the camera's JPG; the JP2's
+  brackets are the same photos. And while no session had opened, the
+  camera button guessed the ids 0, 1, 2 and went to a camera 2 the XA2
+  does not have; it now takes the list the last session gave (kept in
+  rawfish-ir.conf, knownCameras and knownFacing), or 0 and 1 before any.
+- The img_transport branch is now main (patch 0528). Its work since 0.3.9
+  comes in, listed below with that branch's patch numbers: the viewfinder
+  without copies (the camera's buffers drawn by the GPU as they are; any
+  failure falls back to the YUV pipe, and rawfish-ir.conf
+  `viewfinderZeroCopy=0` turns it off), the viewfinder's YUV converted on
+  the GPU, the zebra and the peaking drawn by the GPU, the tile denoise for
+  hand-held JPGs, brackets of five and seven frames, the photo's settings
+  in its Exif and XMP, the display kept on while the viewfinder is used,
+  and the figures for comparisons in the log (statsLog). Everything main
+  had since (up to its patch 0524) was already in the branch. Tried on the
+  JP2, the Xperia 10 III and the Xperia XA2 (the viewfinder without copies
+  works on the three).
+- Command line: `raw ... vres=KEY,...` (patch 0470), a diagnosis. The
+  reply gives the photo result's own values for up to 8 chipset keys that
+  only a result carries, such as the gain the sensor really applied: to
+  learn whether the JP2's frames from 0.6 s are twice as bright by a
+  hidden gain (docs/measurements/jp2-shutter-ceiling.csv).
+- Black icons, and now text in white blocks, after the app was in the
+  background (patch 0462). The scene graph can lose its GL context there
+  and make a new one; the zero-copy imports kept their texture names from
+  the old one, and the next engine restart deleted those names -- by then
+  Qt's own textures in the new context (the icon atlas, the glyph cache).
+  The imports now belong to their context: dropped with it, and only
+  forgotten (never deleted) when another context is current. The YUV
+  planes' and the aid maps' textures likewise. 0459's unbinding of the
+  camera buffer after its draw is taken out again: it was not the cause.
+- The photos with the detailed log on are seen again (patch 0454): 0446
+  put the settings at the end of the file name, after the milliseconds,
+  and the app's gallery and cover look for names ending in `_<ms>.jpg`:
+  the photos were on the disk and in no gallery. The settings now follow
+  the prefix: `photo_tiles4-half_1-48s_iso2920_col2_moire0_sharp3_20261115_175005_717.jpg`.
+- The tile merge aligns by tiles (patch 0453): "Denoise: tiles" now does
+  what it says. Each frame is cut into tiles of 64 pixels (128 on an
+  enlarged 50 MP frame), each aligned on its own around the frame's
+  global shift -- reduced 4 times (8) within +-4 steps, then down a
+  pyramid to full size; a tile with too little detail, or no clearly
+  better match than the global shift, keeps it, and a 3x3 median removes
+  a stray tile. The shift is interpolated between tile centres and
+  rounded per pixel (no seams, no resampling blur); the classic merge's
+  rejection of what moved follows. On frames turned 0.4-0.8 degrees (3-7
+  pixels at the corners) the corner's error against the clean scene goes
+  from 6.3 (classic: worse than one frame, 4.7, the corners blurred in)
+  to 2.6, the middle from 3.1 to 2.6; frames only shifted give the
+  classic image exactly. Cost on a 2-core host, 12.5 MP: 4 frames +0.34 s
+  aligning and +0.14 s merging (8 frames +1.1 s and +0.4 s). The report
+  gives each frame's share of tiles moved (`tiles_moved_pct`).
+- The photo's settings written out (patch 0446). Our JPGs carry a
+  sentence -- "4 frames of 1/48 s at ISO 4428 (each 1/2 of the pose),
+  merged by tiles; colour NR 2, moire 0, sharpen 3" -- in ImageDescription,
+  UserComment and an XMP dc:description, which desktop viewers show (the
+  Sailfish Gallery shows none of them, nor the ISO: checked, the indexer
+  has `nmm:isoSpeed`, the Gallery's details do not list it). ExposureMode
+  says auto unless the pair was set by hand (a burst set "manual" on
+  every frame). With the detailed log on, the file name carries the
+  settings too: `photo_tiles4-half_1-48s_iso4428_col2_moire0_sharp3_..._717.jpg`,
+  the only free text the Gallery shows.
+- Two denoise methods for our JPG, chosen in the menu (patch 0445): a
+  Denoise column, classic or tiles, shows the chosen method's columns.
+  Classic: 1, 2, 4 or now 8 frames. Tiles: 2, 4 or 8 frames and the pose
+  per frame (1, 1/2, 1/4: each frame shorter, the ISO raised to match).
+  In this patch the tile method still merges as the classic one (the tile
+  alignment came in 0453); the split and the 8 frames work already. The
+  engine: a YUV burst of up to 8 frames, `indraw_set_yuv_split`, the copy
+  time in the report (`ms.copy`, `ms.copy_max`). The CLI: `yuv n=1..8
+  nr=classic|tiles split=1|2|4`, the method and split in the report and
+  the Exif Software line. The controller: `sh ... frames=1|2|4|8 nr=tiles
+  split=N`. Settings keys `jpgNrMethod`, `jpgTileFrames`, `jpgTileSplit`;
+  `jpgFrames` takes 8. docs/ROADMAP.md: the noisy Σ at a low ISO, to
+  measure.
+- The same-exposure bracket in five or seven frames as well as three
+  (patch 0444). The Bracket column offers x3, x5 and x7: in JPEG one
+  burst of 3, 5 or 7 frames (the engine took up to 8 already), in raw as
+  many shots in turn. The interface sends `bracket=0 bracket_n=5|7` (an
+  older interface: three, as before); the ±N EV bracket stays three
+  exposures. Settings key `bracket`: "0x5", "0x7" added.
+- The display stays on while the viewfinder is used (patch 0443): it
+  went to sleep after the system's delay with the viewfinder running (only
+  a Σ kept it on). Now kept on until 5 minutes without a touch --
+  rawfish-ir.conf `screenOnMinutes` (0-60, 0 = the system's delay;
+  applied when the file is saved). docs/ROADMAP.md: the measurements of
+  0441 and 0442, and the branches: `main` stays as released for now,
+  `img_transport` (with `zero_copy` merged into it) is the development
+  branch.
+- Branch `zero_copy`: with zero copy, the zebra and the peaking are drawn
+  by the GPU straight from the engine's values (patch 0442): the two maps
+  go up as small textures when they change and a shader draws the
+  stripes and the marks -- the app no longer builds and uploads an image
+  each time (~20 points of CPU at 15 a second, measured). The same
+  picture as before, pixel for pixel; the RAW zebra keeps the former way.
+  rawfish-ir.conf `aidsGpu=0` brings the former way back, to compare
+  (applied when the file is saved).
+- Branch `zero_copy`: the peaking's maps faster in the engine (patch
+  0441). Measured with 0440, a set of the aids' maps took ~14 ms on the
+  phone whatever the copy: the work itself. The Laplacian is now worked
+  out a few rows at a time (they stay in the cache) in loops the
+  compiler turns into vector code: 2.4 times faster on a desktop with
+  the NDK's compiler, the same values (checked against the interface's
+  arithmetic, every cell). docs/ROADMAP.md: 0440's measurements
+  (`aidsEvery=2`: app + engine 75 % against 111 % for the YUV pipe, the
+  battery -20 %; kept as the default).
+- Branch `zero_copy`: the aids with zero copy, lighter (patch 0440).
+  Measured with 0439, both aids cost the engine 31 points of CPU and the
+  frame 17 ms of latency: it read the camera's buffer byte by byte, slow
+  memory for the CPU. Now it copies the planes in one block per row
+  first, sends the frame before working out the aids' maps (the overlay
+  follows a few ms later), and works them out on one frame in N:
+  rawfish-ir.conf `aidsEvery` (1-4, default 2: 15 a second at 30 fps,
+  applied when the file is saved), the app redrawing the overlay at that
+  pace. The "viewfinder pace" line gains `aids_ms`, `aids_max_ms` and
+  `aids_fps`. Engine command `vf aids N [EVERY]`.
+- Branch `zero_copy`: the zebra and the peaking keep the viewfinder in
+  zero copy (patch 0439). They used to switch it to the YUV pipe (+18
+  points of CPU in the app, +10 in the engine, measured); now the engine
+  sends, with each frame, the values the aids compare with their
+  thresholds, worked out on the full frame and kept per 2x2 cell (new
+  SF2A packet, engine command `vf aids N`): the same decisions, on cells
+  of 2x2 pixels -- the peaking and the zebra a little blockier, never
+  more or less sensitive. Only the maps of the aids switched on are sent
+  (~0.3 MB a frame each). An engine without them: the YUV pipe, as
+  before. rawfish-ir.conf is now read 300 ms after the last change: kate
+  saving over sshfs empties the file first, and that empty file was read
+  as the defaults (viewfinderZeroCopy=1) for a moment. docs/ROADMAP.md:
+  the zero-copy measurements (CPU -44 % in the app, -41 % in the engine
+  at the same frame rate) and the larger viewfinder put later.
+- Figures for comparisons in the log (patch 0438): rawfish-ir.conf
+  `statsLog=N` writes a "# stats" line every N seconds with the
+  viewfinder's mode and frame rate, the CPU (100 % = one core, as top),
+  RSS, peak RSS and threads of the app and of the engine, the system's
+  CPU, and the battery's current, voltage and charge when readable
+  (app/procstats.cpp). `statsLog`, `viewfinderZeroCopy` and
+  `viewfinderYuv` now apply as soon as rawfish-ir.conf is saved, without
+  restarting the camera; the log says "# conf changed: ..." at that
+  moment, so one run can compare two settings.
+- Branch `zero_copy`: the viewfinder without copies (patch 0437). The
+  engine sends, for each viewfinder frame, only the id of the camera
+  buffer it is in (new SF2H packet, 16 bytes); each buffer's gralloc handle
+  goes once over a unix socket (`vf hwb PATH`, the app's cache folder
+  hwframes.sock), the app imports it with libhybris as an external texture
+  and the GPU draws it as it is (app/hwframes.cpp). The app gives each
+  buffer back once a newer picture is drawn (or skipped); the engine keeps
+  two of the reader's buffers free and takes back the oldest one held if
+  the app is late ("forced" in the "viewfinder pace" log line, with
+  "buffers=" and "held="). The viewfinder's buffers go from 4 to 6,
+  rawfish-ir.conf `vfBuffers` (4-10). The zebra and the peaking need the
+  pixels: while either is on, the YUV pipe serves the viewfinder. Any
+  failure (the engine's or the app's import, logged "# zero copy: ...")
+  falls back to the YUV pipe for that engine. `viewfinderZeroCopy=0` turns
+  it off. Not run on the phone yet.
+- Branch `zero_copy`: a probe for a viewfinder without copies (patch
+  0436). rawfish-ir.conf `hwProbe=N` has the engine send the gralloc
+  handles of its next N viewfinder buffers to the app (new engine command
+  `hwprobe PATH N`, a unix socket in the app's cache folder), which tries
+  to import each with libhybris, draw it off screen and read it back,
+  reporting each step in the log and saving the first picture that came
+  through (app/hwprobe.cpp). `hwProbeGpuUsage=1` allocates the viewfinder's
+  buffers for GPU sampling too. Off by default; the viewfinder is
+  unchanged. docs/ROADMAP.md (viewfinder transport, step 2) says how to
+  read the result. Not run on the phone yet.
+- A YUV viewfinder no longer keeps the RGB buffer its first frames (sent
+  as RGB, before the app asks for YUV) allocated: the engine held 1.8 MB
+  more in YUV than in RGB (VmRSS 50.7-51.2 MB against 48.8-49.4); now
+  about 1.9 MB less. docs/ROADMAP.md: the measurement of the YUV
+  viewfinder restated (its CPU gain was not confirmed, the first figure
+  mixed two frame rates), and the branch `img_transport` noted as waiting
+  to be merged.
+- Installing a new patch build no longer resets the app: its first start
+  set the settings (rawfish-ir.conf, simple.json), the device-profile
+  overrides and the measured lens-shading maps aside whenever the package's
+  version-release changed, and since the RPMs carry their patch number as
+  the release (0.3.9-433.beta, patch 0425) that was every build -- the app
+  came back in simple mode, with its defaults, after each install. Now
+  only a new version (0.3.9 -> 0.3.10) does it, as intended. The files set
+  aside by the earlier builds are still in
+  ~/.config/com.rawfish/rawfish-ir/backup-*.
+- A change of camera, type or size during a capture no longer cuts it:
+  the new engine opens the camera only once the one before has ended
+  (its "quit" waits behind a bracket, a burst or a DNG being written).
+  Started together, the new engine took the camera while the old one's
+  RAW bracket ran, and the bracket's last frame was refused (log of
+  15 Nov 2026, 08:59:53). An engine still running 10 s after "quit" is
+  killed (3 s before: a long bracket could be cut). On a plain change the
+  wait is the camera's close, ~150 ms.
+- A burst (our JPEG, frames > 1) on the 18 mm in dim light was two stops
+  dark: it froze the camera's own exposure (ISO 9125 at 1/17 s) but
+  clamped the ISO to the 2400 the camera declares, ignoring the device
+  profile's observed_iso_max (16000) that every other manual exposure
+  takes (log of 15 Nov 2026, 08:19:23: frames at ISO 2400, photo mean
+  0.04 for a viewfinder at 0.19). Camera 0 declares enough for its AE, so
+  its bursts were right.
+- The zebra and the peaking read the YUV frame where it lies, instead of
+  a whole RGB copy of it made on their worker thread (0431): the zebra on
+  luminance and the RAW zebra take the Y plane as it is (the Rec.601 luma
+  they computed from RGB), the zebra on channels and the peaking (on the
+  green, as it was tuned) work out a pixel's colour only where they read
+  it. The same marks: identical for the peaking and the zebra on channels,
+  0.2-0.3 % of the pixels for the luma zebras (Y against a luma
+  recomputed from rounded RGB), on two test frames; 15-30 % less time per
+  frame with both aids on (on a PC), and no 3.7 MB copy per frame.
+  Measured on the phone with 0431 (rawfish-ir.log, 15 Nov 2026): the
+  engine's own time per viewfinder frame fell from 19-20 ms to 12-13 ms
+  at 19.5 frames a second (15-16 to 10.5-12 at 24), the latency by about
+  5 ms; the frame rate, set by the exposure, unchanged.
+- The viewfinder's frames come from the engine as YUV and the phone's GPU
+  turns them into colour (a shader in the viewfinder item), instead of the
+  engine converting each one to RGB on the camera thread. Through the pipe
+  go 1.5 bytes a pixel instead of 3 (1.8 MB a frame instead of 3.7 at
+  1280x960, ~55 MB/s instead of ~110 at 30 frames a second), and the app no
+  longer converts each frame to 32 bits for its upload: the three planes go
+  into textures reused from frame to frame. Nothing changes on the screen
+  (the same BT.601 arithmetic; the chroma is now filtered rather than
+  doubled). The engine's viewfinder meter samples the YUV frame directly
+  (~80 000 pixels at most every 100 ms, the same values); a white pick on
+  the viewfinder (cameras without RAW) converts its one frame. The zebra and
+  peaking still read RGB: with one of them on, the frame is converted on
+  their own worker thread, off the interface's. The app asks for YUV once
+  the engine runs ("vf yuv", a new engine command); an older engine keeps
+  sending RGB, drawn as before. rawfish-ir.conf `viewfinderYuv=0` keeps
+  RGB, to compare the two on the phone. Not measured on the phone yet.
+  New frame type SF2Y (docs/ENGINE.md); docs/ARCHITECTURE.md rule 5 and the
+  ROADMAP's viewfinder transport updated; android/tests/yuv_test.c checks
+  the I420 packing.
 
 ## Unreleased -- lens distortion fix (branch lens-distortion-fix)
 - The lens distortion fix (docs/LENS-DISTORTION.md): a new menu column,
@@ -35,6 +475,16 @@ repository). Newest first.
   device-profile files aside (~/.config/com.rawfish/rawfish-ir/backup-...).
   The package is now rawfish-ir-all-in-one (rawfish-ir up to 0.3.9-50x):
   installed over the earlier one, it replaces it.
+- Photos on the memory card (patch 0524): Settings > Apps > RAWfish-ir has
+  a "Storage" choice, the phone's memory or a memory card (as listed by the
+  system, with its free space), which moves the JPEG and DNG folders to
+  Pictures/RAWfish-ir there; the two folder fields also take a folder on a
+  card. The app declares Sailjail's RemovableMedia permission (asked once,
+  at the first start). A card that is not mounted when the camera starts
+  is not written to (an empty folder left behind would hold the photos in
+  the phone's memory-backed /run, lost at the next boot): the photos go to
+  ~/Pictures/RAWfish-ir, the log says so, and the gallery shows that folder;
+  the card is used again at the next start once it is back.
 - The white balance on our JPG (patch 0520): the white balance reaches our JPG: the menu's
   white (a preset, the warmth and tint steps, a measured or carried white)
   was written into the viewfinder's and the HAL JPEG's

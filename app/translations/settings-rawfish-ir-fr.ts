@@ -4,7 +4,7 @@
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../settings/SettingsPage.qml" line="+68"/>
+        <location filename="../settings/SettingsPage.qml" line="+103"/>
         <source>Captures</source>
         <translation>Photos</translation>
     </message>
@@ -16,24 +16,20 @@
     <message>
         <location line="+5"/>
         <source>Letters, digits, - and _ (up to 32; not starting with -). Files are named PREFIX_YYYYMMDD_HHMMSS.EXT, or YYYYMMDD_HHMMSS.EXT with the field empty; the milliseconds (_mmm) are added when two photos fall in the same second, and always for a bracket or a burst.</source>
-        <translation>Lettres, chiffres, - et _ (32 au plus ; pas de - au début). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS.EXT, ou AAAAMMJJ_HHMMSS.EXT si le champ est vide ; les millisecondes (_mmm) s'ajoutent si deux photos tombent dans la même seconde, et toujours pour un bracketing ou une rafale.</translation>
+        <translation>Lettres, chiffres, - et _ (32 au plus ; pas de - au début). Les fichiers sont nommés PRÉFIXE_AAAAMMJJ_HHMMSS.EXT, ou AAAAMMJJ_HHMMSS.EXT si le champ est vide ; les millisecondes (_mmm) s&apos;ajoutent si deux photos tombent dans la même seconde, et toujours pour un bracketing ou une rafale.</translation>
     </message>
     <message>
+        <location line="-4"/>
         <source>No prefix</source>
         <translation>Aucun préfixe</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+79"/>
         <source>JPEG folder</source>
         <translation>Dossier des JPEG</translation>
     </message>
     <message>
-        <location line="+5"/>
-        <source>Under ~/Pictures (the only place the app may write).</source>
-        <translation>Dans ~/Pictures (le seul endroit où l&apos;app peut écrire).</translation>
-    </message>
-    <message>
-        <location line="+12"/>
+        <location line="+17"/>
         <source>DNG folder</source>
         <translation>Dossier des DNG</translation>
     </message>
@@ -131,8 +127,8 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo&apos;s report the histogram the app showed and the photo&apos;s own. Takes effect at the next start of RAWfish-ir.</source>
-        <translation>À allumer avant de reproduire un problème de mise au point, d&apos;exposition ou de geste : le journal garde alors chaque commande et chaque réponse (le journal normal ne garde que les démarrages, les photos et les erreurs), et le compte rendu de chaque photo l&apos;histogramme que l&apos;app affichait et celui de la photo. Pris en compte au prochain démarrage de RAWfish-ir.</translation>
+        <source>Turn it on before reproducing a problem of focus, exposure or gestures: the log then keeps every command and reply (the normal log keeps only the starts, the photos and the errors), and each photo&apos;s report the histogram the app showed and the photo&apos;s own; our JPG photos carry their settings in their file names (seen in the Gallery&apos;s details); the exposure&apos;s changes and a touch&apos;s focus are traced. Takes effect at the next start of RAWfish-ir.</source>
+        <translation>À allumer avant de reproduire un problème de mise au point, d&apos;exposition ou de geste : le journal garde alors chaque commande et chaque réponse (le journal normal ne garde que les démarrages, les photos et les erreurs), et le compte rendu de chaque photo l&apos;histogramme que l&apos;app affichait et celui de la photo ; nos photos JPG portent leurs réglages dans leur nom de fichier (visible dans les détails de la Galerie) ; les changements d&apos;exposition et la mise au point après une touche sont tracés. Pris en compte au prochain démarrage de RAWfish-ir.</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -155,24 +151,59 @@
         <translation>Ombrage de l&apos;objectif (vignetage)</translation>
     </message>
     <message>
-        <location line="-103"/>
+        <location line="-166"/>
         <source>Also save a DNG with each JPG</source>
         <translation>Enregistrer aussi un DNG avec chaque JPG</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Same exposure, same file name. Saved in the DNG folder. Not working with the camera&apos;s own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can&apos;t do both at the same time.</source>
-        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Ne fonctionne pas avec le JPEG de l&apos;appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
+        <source>Same exposure, same file name. Saved in the DNG folder. A bracket gives the camera&apos;s JPEG series, then the same series as DNGs. Not working with the camera&apos;s own JPEG (HAL JPG), on long exposures (Σ = DNG only) or on phones which can&apos;t do both at the same time.</source>
+        <translation>Même exposition, même nom de fichier. Enregistré dans le dossier des DNG. Un bracketing donne la série de JPEG de l&apos;appareil, puis la même série en DNG. Ne fonctionne pas avec le JPEG de l&apos;appareil (HAL JPG), en pose longue (Σ = DNG seulement) ni sur les téléphones qui ne peuvent pas faire les deux en même temps.</translation>
     </message>
     <message>
-        <location line="+68"/>
+        <location line="+29"/>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Moves both folders below to Pictures/RAWfish-ir on the phone or on the memory card. If the card is not there when the camera starts, photos go to the phone&apos;s ~/Pictures/RAWfish-ir.</source>
+        <translation>Place les deux dossiers ci-dessous dans Pictures/RAWfish-ir, sur le téléphone ou sur la carte mémoire. Si la carte n&apos;est pas là au démarrage de l&apos;appareil photo, les photos vont dans ~/Pictures/RAWfish-ir du téléphone.</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Phone memory</source>
+        <translation>Mémoire du téléphone</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Memory card not inserted</source>
+        <translation>Carte mémoire absente</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Memory card (%1 free)</source>
+        <translation>Carte mémoire (%1 libres)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Memory card not mounted</source>
+        <translation>Carte mémoire non montée</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Under ~/Pictures or on the memory card (/run/media/…), the only places the app may write.</source>
+        <translation>Dans ~/Pictures ou sur la carte mémoire (/run/media/…), les seuls endroits où l&apos;app peut écrire.</translation>
+    </message>
+    <message>
+        <location line="+38"/>
         <source>JPG processing in the camera menu</source>
         <translation>Traitement du JPG dans le menu</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Shows four columns in the advanced menu: Frames (1, 2 or 4 merged), Colour NR, Moiré and Sharpen, RAWfish-ir&apos;s processing of the JPG. Otherwise they are set in rawfish-ir.conf.</source>
-        <translation>Affiche quatre colonnes dans le menu avancé : Images (1, 2 ou 4 fusionnées), Bruit coul., Moiré et Netteté, le traitement du JPG par RAWfish-ir. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
+        <source>Shows RAWfish-ir&apos;s processing of the JPG in the advanced menu: Denoise (classic or tiles), Frames (1 to 8 merged), Colour NR, Moiré, Luma NR and Sharpen. Otherwise they are set in rawfish-ir.conf.</source>
+        <translation>Affiche le traitement du JPG par RAWfish-ir dans le menu avancé : Débruitage (classique ou tuiles), Images (1 à 8 fusionnées), Bruit coul., Moiré, Bruit lum. et Netteté. Sinon, ils se règlent dans rawfish-ir.conf.</translation>
     </message>
     <message>
         <location line="+40"/>

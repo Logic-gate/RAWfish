@@ -471,6 +471,30 @@
         <translation>Une image</translation>
     </message>
     <message>
+        <source>Denoise</source>
+        <translation>Débruitage</translation>
+    </message>
+    <message>
+        <source>Frames merged by tiles: each part aligned on its own</source>
+        <translation>Images fusionnées par tuiles : chaque partie alignée séparément</translation>
+    </message>
+    <message>
+        <source>Frames merged whole: one shift per frame</source>
+        <translation>Images fusionnées entières : un décalage par image</translation>
+    </message>
+    <message>
+        <source>tiles</source>
+        <translation>tuiles</translation>
+    </message>
+    <message>
+        <source>classic</source>
+        <translation>classique</translation>
+    </message>
+    <message>
+        <source>%1 frames merged by tiles</source>
+        <translation>%1 images fusionnées par tuiles</translation>
+    </message>
+    <message>
         <location line="+0" />
         <source>%1 frames merged (less grain)</source>
         <translation>%1 images fusionnées (moins de grain)</translation>
@@ -479,6 +503,18 @@
         <location line="+5" />
         <source>Colour NR</source>
         <translation>Bruit coul.</translation>
+    </message>
+    <message>
+        <source>Luma NR</source>
+        <translation>Bruit lum.</translation>
+    </message>
+    <message>
+        <source>Luminance noise filter off</source>
+        <translation>Filtre du bruit de luminance désactivé</translation>
+    </message>
+    <message>
+        <source>Luminance noise filter: %1 x the noise</source>
+        <translation>Filtre du bruit de luminance : %1 x le bruit</translation>
     </message>
     <message>
         <location line="+1" />
@@ -567,8 +603,8 @@
     </message>
     <message>
         <location line="+1" />
-        <source>3 frames in a row, same exposure</source>
-        <translation>3 images d'affilée, même exposition</translation>
+        <source>%1 frames in a row, same exposure</source>
+        <translation>%1 images d'affilée, même exposition</translation>
     </message>
     <message>
         <location line="+1" />
@@ -885,10 +921,8 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     </message>
     <message>
         <location line="+4" />
-        <source>DNG
-(RAW)</source>
-        <translation>DNG
-(RAW)</translation>
+        <source>DNG</source>
+        <translation>DNG</translation>
     </message>
     <message>
         <location line="+1" />
@@ -898,9 +932,9 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
     <message>
         <location line="+1" />
         <source>JPG
-+RAW</source>
++DNG</source>
         <translation>JPG
-+RAW</translation>
++DNG</translation>
     </message>
     <message>
         <location line="+0" />
@@ -1088,6 +1122,22 @@ L'étalonnage précédent, s'il y en avait un, est conservé dans le dossier pre
         <location line="+1" />
         <source>Device profile: JPEG or RAW, one session each</source>
         <translation>Profil de l'appareil : JPEG ou RAW, une session chacun</translation>
+    </message>
+    <message>
+        <source>Photo NOT saved: storage full</source>
+        <translation>Photo NON enregistrée : mémoire pleine</translation>
+    </message>
+    <message>
+        <source>Photo NOT saved</source>
+        <translation>Photo NON enregistrée</translation>
+    </message>
+    <message>
+        <source>Storage full: %1 MB left</source>
+        <translation>Mémoire pleine : %1 Mo restants</translation>
+    </message>
+    <message>
+        <source>Storage almost full: %1 MB left</source>
+        <translation>Mémoire presque pleine : %1 Mo restants</translation>
     </message>
     <message>
         <location line="+14" />

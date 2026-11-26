@@ -2,7 +2,8 @@
  * per-pixel conversion it replaced (bounds checked per pixel), over random
  * planes with every stride layout Camera2 uses (planar: pixel stride 1;
  * semi-planar NV12/NV21: pixel stride 2, interleaved U/V; padded rows), odd
- * widths included; and a truncated plane leaves rows black.
+ * widths included; and a truncated plane leaves rows black. The I420 packing
+ * (yuv420_to_i420) read back with i420_px gives the same pixels (0.3.11).
  * Host build: gcc -std=c11 -Wall -Wextra -Werror -o yuv_test android/tests/yuv_test.c */
 #include "../yuv.h"
 #include <stdio.h>
@@ -60,8 +61,23 @@ int main(void)
             yuv420_to_rgb(py, short_ly, ry, xy, pu, lu, ru, xu, pv, lv, rv, xv, w, h, b);
             CHECK(memcmp(a, b, (size_t)w * h * 3) == 0, "   luma plane 2 rows short: the last rows black, both alike");
         }
+        /* packed as I420, then read pixel by pixel: the same RGB */
+        {
+            uint8_t *q = malloc(i420_size(w, h));
+            int x, y, same = 1;
+            yuv420_to_i420(py, ly, ry, xy, pu, lu, ru, xu, pv, lv, rv, xv, w, h, q);
+            yuv420_to_rgb(py, ly, ry, xy, pu, lu, ru, xu, pv, lv, rv, xv, w, h, a);
+            for (y = 0; y < h && same; ++y)
+                for (x = 0; x < w; ++x) {
+                    uint8_t px[3];
+                    i420_px(q, w, h, x, y, px);
+                    if (memcmp(px, a + ((size_t)y * w + x) * 3, 3)) { same = 0; break; }
+                }
+            CHECK(same, "   packed as I420 (%zu bytes), read back: pixel-exact", i420_size(w, h));
+            free(q);
+        }
         free(py); free(pu); if (!semi) free(pv); free(a); free(b);
     }
-    printf(fails ? "yuv: FAILED (%d)\n" : "yuv: OK (80 cases)\n", fails);
+    printf(fails ? "yuv: FAILED (%d)\n" : "yuv: OK (120 cases)\n", fails);
     return fails ? 1 : 0;
 }

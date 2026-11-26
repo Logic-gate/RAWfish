@@ -35,7 +35,7 @@ ApplicationWindow {
     readonly property color uiTextColor: Theme.secondaryHighlightColor   // notch buttons
     readonly property color captionColor: Theme.highlightColor           // headers
     readonly property color deckTextColor: "white"                       // deck controls
-    readonly property string uiVersion: "209"                             // shown in the deck
+    readonly property string uiVersion: "208"                             // shown in the deck
 
     // Where captures go and how they are named: dconf keys edited in the
     // system Settings app (Settings > Apps > RAWfish-ir), applied to the engine
@@ -231,8 +231,8 @@ ApplicationWindow {
             readonly property bool ownJpeg: !page.exclusiveStreams && !viewfinder.yuvFellBack
             // The session holds only the streams the type and the settings need
             // (every stream costs the HAL): RAW for raw; our YUV for jpg, with
-            // RAW too when a DNG is asked with it, and the JPEG one when a
-            // bracket needs it; the JPEG one for haljpg (or jpg without YUV).
+            // RAW too when a DNG is asked with it; the JPEG one instead of our
+            // YUV for a bracket; the JPEG one for haljpg (or jpg without YUV).
             readonly property string sessionStreams: {
                 // What the engine opens beside the viewfinder (streams=):
                 //  - RAW in every session where the camera has it: the white-
@@ -240,8 +240,13 @@ ApplicationWindow {
                 //    without RAW: the pick measures on the viewfinder instead);
                 //  - jpg, raw and snap share ONE session (our YUV stream + RAW),
                 //    so TYPE never restarts the engine (snap is our YUV, binned
-                //    finer); a bracket adds the camera's JPEG stream (brackets
-                //    are HAL JPEGs: one restart when it is chosen, a rare case);
+                //    finer); a bracket in jpg takes the camera's JPEG stream IN
+                //    PLACE of our YUV (brackets are HAL JPEGs, the YUV would not
+                //    be used: one restart when it is chosen, a rare case). It
+                //    used to be added beside the YUV, four streams with the
+                //    viewfinder, which the Xperia XA2's camera refuses (log of
+                //    24 Nov 2026: the session failed twice, then our JPG fell
+                //    back to the camera's until the next camera change);
                 //  - where our YUV is not possible (exclusive streams, or a
                 //    session that refused it): the camera's JPEG stream, at the
                 //    snap size for snap (see jpegOverride).
@@ -257,9 +262,8 @@ ApplicationWindow {
                 // of 13 Nov 2026).
                 var raw = ",raw"
                 if (!page.ownJpeg) return "jpeg" + raw
-                var s = "yuv" + raw                                   // jpg and raw alike
-                if (page.imageType === "jpg" && settingsMenu.effBracket !== "off") s += ",jpeg"
-                return s
+                if (page.imageType === "jpg" && settingsMenu.effBracket !== "off") return "jpeg" + raw   // a bracket: the camera's JPEGs
+                return "yuv" + raw                                    // jpg and raw alike
             }
             onSessionStreamsChanged: viewfinder.sessionStreams = sessionStreams
             Component.onCompleted: viewfinder.sessionStreams = sessionStreams
@@ -299,9 +303,9 @@ ApplicationWindow {
             // third mode, "once" (a touch searches and holds), went in 0.3.3:
             // manual does the same and lets the distance be adjusted.
             property string focusMode: "cont"
-            // The TYPE button's value: small two-line labels ("DNG" over
-            // "(RAW)", "HAL" over "JPG"); "JPG+RAW" when Settings saves a DNG
-            // with each JPG, the type then being fixed.
+            // The TYPE button's value: "DNG" (RAW until 0.3.11-551: what is
+            // saved is a DNG), "jpg", "snap"; "JPG +DNG" over two lines when
+            // Settings saves a DNG with each JPG, the type then being fixed.
             // The left column's buttons (FOCAL, TYPE, FOCUS) share its height.
             readonly property int leftButtons: 1 + (settingsMenu.simpleHides("type") ? 0 : 1) + (settingsMenu.simpleHides("focus") ? 0 : 1)
             // FOCAL in simple mode: a name for the camera instead of a focal length.
@@ -314,14 +318,15 @@ ApplicationWindow {
             }
             function imageTypeLabel(t) {
                 switch (t) {
-                case "raw":     return qsTr("DNG\n(RAW)")
+                case "raw":     return qsTr("DNG")
                 case "snap":    return qsTr("snap")
-                default:        return page.dngWithJpg ? qsTr("JPG\n+RAW") : qsTr("jpg")
+                default:        return page.dngWithJpg ? qsTr("JPG\n+DNG") : qsTr("jpg")
                 }
             }
             // Settings asks for a DNG with each JPG: RAW alone would be the same
-            // DNG without its JPG, so TYPE offers "JPG +RAW" and snap only, and a
-            // type left on RAW becomes JPG.
+            // DNG without its JPG, so TYPE offers "JPG +DNG" and snap only, and a
+            // type left on RAW becomes JPG. A bracket then gives the camera's
+            // JPEG series, then the same series as DNGs (ctl_shoot.c, 0553).
             readonly property bool dngWithJpg: outputConf.jpgWithDng && page.rawAvailable && page.ownJpeg
             onDngWithJpgChanged: if (dngWithJpg && imageType === "raw") imageType = "jpg"
             // Labels (UI only; the engine keeps its Camera2 names):
@@ -1122,7 +1127,7 @@ ApplicationWindow {
             // A stacked exposure (Σ) is a RAW-only feature: the TYPE button is
             // forced to raw and greyed while a Σ speed is selected (a JPEG of a
             // many-frame stack is not meaningful). Remember the type to restore.
-            readonly property bool stackSelected: !exposure.fullAuto && exposure.isStacked(exposure.displayShutterNs)
+            readonly property bool stackSelected: exposure.stackChosen   // stable across an engine restart (ExposureLogic)
             property string typeBeforeStack: "jpg"
             onStackSelectedChanged: {
                 if (stackSelected) { if (imageType !== "raw") { typeBeforeStack = imageType; imageType = "raw" } }
@@ -1131,11 +1136,33 @@ ApplicationWindow {
             // The HAL's camera ids, remembered from the first caps line (a
             // restart on another camera reports the same list), with their
             // facings; and the last back camera, to return to from the front.
+            // The list is also kept in rawfish-ir.conf (knownCameras,
+            // knownFacing): when no session has opened yet (a camera that
+            // refuses its streams), a switch takes the list of an earlier
+            // start instead of guessing ids. It guessed "0","1","2" and went
+            // to a camera the Xperia XA2 does not have ("unknown camera id",
+            // log of 24 Nov 2026).
             property var cameraIds: []
             property var cameraFacing: []
             property string lastBackCamera: ""
+            function loadKnownCameras() {
+                if (page.cameraIds.length > 0) return
+                var ids = String(viewfinder.setting("knownCameras", "")).trim()
+                var fc = String(viewfinder.setting("knownFacing", "")).trim()
+                if (ids === "") return
+                page.cameraIds = ids.split(" ")
+                page.cameraFacing = fc !== "" ? fc.split(" ") : []
+            }
+            function saveKnownCameras() {
+                var ids = page.cameraIds.join(" "), fc = page.cameraFacing.join(" ")
+                if (String(viewfinder.setting("knownCameras", "")) !== ids) viewfinder.setSetting("knownCameras", ids)
+                if (String(viewfinder.setting("knownFacing", "")) !== fc) viewfinder.setSetting("knownFacing", fc)
+            }
             function switchCamera(longPress) {
-                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1","2"]
+                page.loadKnownCameras()
+                // no list at all (the first start, before any session opened):
+                // the back and the front camera, the two every phone has
+                var ids = page.cameraIds.length > 0 ? page.cameraIds : ["0","1"]
                 var fc = page.cameraFacing
                 if (fc.length !== ids.length) {                       // no facings: cycle all
                     viewfinder.cameraId = ids[(ids.indexOf(viewfinder.cameraId)+1) % ids.length]
@@ -1163,6 +1190,7 @@ ApplicationWindow {
                     if (viewfinder.caps.cameras && viewfinder.caps.cameras.length > 0) {
                         page.cameraIds = viewfinder.caps.cameras
                         page.cameraFacing = viewfinder.caps.facing ? viewfinder.caps.facing : []
+                        page.saveKnownCameras()
                     }
                     page.applyAidThresholds()
                     if (page.pendingRestore && viewfinder.running) page.restoreAtCaps()
@@ -1234,7 +1262,9 @@ ApplicationWindow {
             // this for video): the display is black with the progress, which
             // costs little on an OLED, and the user always sees the shot is
             // still running instead of a dark phone that might be touched.
-            DisplayBlanking { preventBlanking: page.stacking }
+            // The viewfinder too, while used: until rawfish-ir.conf
+            // screenOnMinutes (default 5) without a touch.
+            DisplayBlanking { preventBlanking: page.stacking || viewfinder.keepScreenOn }
 
             // A running stack: frames done / total, for the overlay.
             property int stackFrame: 0
@@ -1269,7 +1299,8 @@ ApplicationWindow {
                         // menu's processing columns are greyed in snap), no DNG
                         viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=yuv q=" + settingsMenu.effQuality
                                                + " noise=off_noise edge=hq_edge bracket=off denoise_sigma=1"
-                                               + " frames=1 colour=2 median=0 sharpen=3 snap=1")
+                                               + " frames=1 colour=" + settingsMenu.jpgDefault("colour") + " median=" + settingsMenu.jpgDefault("moire")
+                                               + " luma=" + settingsMenu.jpgDefault("luma") + " sharpen=" + settingsMenu.jpgDefault("sharpen") + " snap=1")
                     else
                         // the camera's JPEG, noise reduction and sharpening HQ, one shot
                         viewfinder.sendCommand("sh name=" + viewfinder.capturePrefix + " type=jpg q=" + settingsMenu.effQuality
@@ -1287,14 +1318,17 @@ ApplicationWindow {
                                        + " type=" + (isRaw ? "raw" : isYuv ? "yuv" : "jpg")
                                        + " q=" + settingsMenu.effQuality
                                        + settingsMenu.photoProcessingFields()
-                                       + " bracket=" + settingsMenu.effBracket
+                                       + settingsMenu.bracketFields()
+                                       // JPG + DNG with a bracket: the JPEG series, then the DNGs
+                                       + (!isRaw && !isYuv && settingsMenu.effBracket !== "off" && page.dngWithJpg ? " dng=1" : "")
                                        + " denoise_sigma=" + settingsMenu.stackDenoise
                                        // A flash fires on one frame: with "on" or "auto" our JPG is
                                        // one frame, whatever the Frames column says (a merge of
                                        // flashed and unflashed frames would be a mess).
-                                       + (isYuv ? " frames=" + (settingsMenu.flashAuto ? 1 : settingsMenu.yuvFrames)
+                                       + (isYuv ? settingsMenu.yuvMergeFields(settingsMenu.flashAuto)
                                                 + " colour=" + settingsMenu.yuvColour
-                                                  + " median=" + settingsMenu.yuvMedian + " sharpen=" + settingsMenu.yuvSharpen
+                                                  + " median=" + settingsMenu.yuvMedian + settingsMenu.yuvLumaField()
+                                                  + " sharpen=" + settingsMenu.yuvSharpen
                                                   + (outputConf.jpgWithDng && page.rawAvailable ? " dng=1" : "") : ""))
             }
 
@@ -1909,6 +1943,50 @@ ApplicationWindow {
                     style: Text.Outline; styleColor: "black"
                     onTextChanged: if (text !== "") limitsTimer.restart()
                     Timer { id: limitsTimer; interval: 6000 }
+                }
+                // A photo not taken or not saved (the engine's "shotfailed"):
+                // said big and red in the middle, 8 s, so that it cannot be
+                // missed -- a full memory was seen only in the log before.
+                Rectangle {
+                    id: shotFailNotice
+                    property string why: ""
+                    property bool full: false
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 2 * Theme.horizontalPageMargin, shotFailText.implicitWidth + 2 * Theme.paddingLarge)
+                    height: shotFailText.implicitHeight + 2 * Theme.paddingLarge
+                    radius: Theme.paddingSmall
+                    color: "#c00000"
+                    visible: shotFailTimer.running
+                    z: 50
+                    Label {
+                        id: shotFailText
+                        anchors.centerIn: parent
+                        width: Math.min(implicitWidth, shotFailNotice.parent.width - 2 * Theme.horizontalPageMargin - 2 * Theme.paddingLarge)
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        color: "white"; font.bold: true; font.pixelSize: Theme.fontSizeLarge
+                        text: shotFailNotice.full ? qsTr("Photo NOT saved: storage full")
+                                                  : qsTr("Photo NOT saved") + (shotFailNotice.why !== "" ? "\n" + shotFailNotice.why : "")
+                    }
+                    Timer { id: shotFailTimer; interval: 8000 }
+                    MouseArea { anchors.fill: parent; onClicked: shotFailTimer.stop() }   // a touch dismisses it
+                    Connections {
+                        target: viewfinder
+                        onShotFailed: { shotFailNotice.why = why; shotFailNotice.full = full; shotFailTimer.restart() }
+                    }
+                }
+                // Little space left where the photos go: said at the top as long
+                // as it lasts (a DNG is about 25 MB, a JPG 3 MB).
+                Label {
+                    id: lowSpaceNotice
+                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: Theme.paddingLarge * 3 }
+                    visible: viewfinder.freeMb >= 0 && viewfinder.freeMb < 300
+                    text: viewfinder.freeMb < 30 ? qsTr("Storage full: %1 MB left").arg(viewfinder.freeMb)
+                                                 : qsTr("Storage almost full: %1 MB left").arg(viewfinder.freeMb)
+                    color: viewfinder.freeMb < 30 ? "#ff4040" : "#ffb060"
+                    font.bold: true; font.pixelSize: Theme.fontSizeMedium
+                    style: Text.Outline; styleColor: "black"
+                    z: 50
                 }
                 // Exclusive streams: the RAW session died at its first frame;
                 // the viewfinder came back as JPEG, and the type follows.

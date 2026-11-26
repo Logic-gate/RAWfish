@@ -472,6 +472,30 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Denoise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Frames merged by tiles: each part aligned on its own</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Frames merged whole: one shift per frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>tiles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>classic</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 frames merged by tiles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+0"/>
         <source>%1 frames merged (less grain)</source>
         <translation type="unfinished"></translation>
@@ -479,6 +503,18 @@
     <message>
         <location line="+5"/>
         <source>Colour NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Luma NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Luminance noise filter off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Luminance noise filter: %1 x the noise</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -568,7 +604,7 @@
     </message>
     <message>
         <location line="+1"/>
-        <source>3 frames in a row, same exposure</source>
+        <source>%1 frames in a row, same exposure</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -880,8 +916,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     </message>
     <message>
         <location line="+4"/>
-        <source>DNG
-(RAW)</source>
+        <source>DNG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -892,7 +927,7 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+1"/>
         <source>JPG
-+RAW</source>
++DNG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1080,6 +1115,22 @@ A previous calibration, if any, was kept in the previous/ folder.</source>
     <message>
         <location line="+1"/>
         <source>Device profile: JPEG or RAW, one session each</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Photo NOT saved: storage full</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Photo NOT saved</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Storage full: %1 MB left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Storage almost full: %1 MB left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

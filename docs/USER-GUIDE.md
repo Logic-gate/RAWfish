@@ -39,12 +39,19 @@ While the loupe is on, the menu and gallery swipes are off. After each
 touch or hold, a line recalls the rule for two seconds: "touch: focus · hold:
 exposure here".
 
+**Photo not saved.** A red box in the middle, "Photo NOT saved", says
+that a photo could not be taken or saved: with "storage full" the memory
+(phone or card) has no room left; otherwise the engine's reason is under
+it. A touch closes it. At the top, "Storage almost full: N MB left" shows
+while less than 300 MB are left where the photos go (a DNG takes about
+25 MB, a JPG 3 MB), in red under 30 MB.
+
 ### The deck
 
 | Part | What it is |
 |---|---|
 | **FOCAL** | the camera, shown by its 35 mm-equivalent focal length; tap to switch camera |
-| **TYPE** | **DNG (RAW)**; **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +RAW" when Settings saves a DNG with each JPG); **snap**, a light photo for utility shots such as a receipt or a sign: our own processing at its defaults, the image averaged down to about 2048 px wide (2048 × 1536, 3 MP, on the JP2), marked SNAP on the viewfinder. TYPE never restarts the camera between these three |
+| **TYPE** | **DNG** (the RAW); **jpg**, RAWfish-ir's JPEG, made from the camera's image before its noise reduction and sharpening ("JPG +DNG" when Settings saves a DNG with each JPG); **snap**, a light photo for utility shots such as a receipt or a sign: our own processing at its defaults, the image averaged down to about 2048 px wide (2048 × 1536, 3 MP, on the JP2), marked SNAP on the viewfinder. TYPE never restarts the camera between these three |
 
 | **FOCUS** | auto, or the distance held; a touch on a distance gives the focus back to auto (see "Focus") |
 | histogram | the tones of **what the viewfinder shows** (zoomed or in the loupe: that area), per colour, with clipping bars at each end. In **jpg** it is measured on the processed image; in **raw** on the sensor data itself, so it sits further left and narrower (no tone curve lifting the shadows), and its left bar is bigger: it counts photosites at or below black, where noise puts about half of the truly dark ones -- shadows with no information, as the DNG will hold them. With a reference circle, the circle's own tones are drawn as bright outlines over it |
@@ -62,7 +69,7 @@ The SPEED and ISO wheels decide the mode:
 | Mode | How to get there | What is automatic | With an exposure point (the sun) |
 |---|---|---|---|
 | **automatic** | no wheel touched, or the AE button | speed and ISO, by the camera; the EV wheel corrects | the app measures the point and sets the exposure from it (a few quick corrections), then **holds** it until you remove the sun |
-| **ISO priority** | touch the ISO wheel | the speed, by the app; EV corrects | the app measures the point instead of the whole image; the point's light level shows above the sun |
+| **ISO priority** | touch the ISO wheel | the speed, by the app, at most 1/15 s (longer: set it on the wheel); EV corrects | the app measures the point instead of the whole image; the point's light level shows above the sun |
 | **speed priority** | touch the SPEED wheel | the ISO, by the app; EV corrects; past 1/2 s: Σ (stacked, raw) | same |
 | **manual** | touch both | nothing; the EV wheel becomes a "+/−" number: stops brighter or darker than automatic would be | the number tells how **the point** is exposed; the same number shows above the sun |
 
@@ -100,8 +107,16 @@ the frame. The distance stays after a photo, until you hand it back. On a
 camera whose profile says a touch cannot focus it (the JP2's 18 mm), only
 the volume keys take it.
 
+A touch while a search is still running starts a new one on the new
+point (the first is cancelled properly before).
+
 A photo never starts a new search: it is taken where the focus is. A touch
 never changes the exposure: that is the held touch's work (see "Exposure").
+From 1/4 s (and for a Σ) the camera's own focusing is stopped for the photo,
+the lens held where it is at the release, then given back: it cannot move
+during the exposure. After the photo the auto focus may search again: that
+is after, not during. The log says where the lens was before and after each
+photo (the `lens` lines).
 
 **The circle** marks the focus point: it surrounds the square zone the
 camera focuses on (15 % of the viewfinder's short side), and shows inside
@@ -154,6 +169,14 @@ ISO raised to match. Measuring, the exposure loop and the focus search all
 work one frame at a time, so a fast frame keeps them responsive. If the ISO
 this needs is beyond the sensor's maximum, the frame is made longer, just
 enough, up to 1/2 s: in dim light the viewfinder slows down.
+
+The same holds for a speed of **1/4 s or 1/2 s** set by hand: the viewfinder
+shows one 1/10 s frame of the same exposure (ISO 250 for 1/4 s at ISO 100),
+not the real 1/4 s, so it stays fluid; the photo is taken at the speed and
+ISO on the wheels. Faster than 1/4 s the viewfinder shows the real
+exposure as before. A speed left to the app (ISO priority) goes no longer
+than 1/15 s: in the dark -- a pocket, a hand over the lens -- it no longer
+sinks to 1/2 s, a viewfinder of 2 frames a second slow to come back.
 
 **What the histogram shows.** The right position and the right clipping for
 the photo, but **more noise**, so it spreads further into the shadows: one
@@ -211,8 +234,8 @@ columns or swipe up to close.
 | Resolution | the JPEG sizes this camera offers; greyed in RAW (the sensor's size) and in snap (its own small size, shown) |
 | Quality | JPEG quality: 20, 40, 60, 80, 90, 95 (default) or 100 |
 | White bal. | automatic or a preset (daylight, cloudy, tungsten...) |
-| Bracket | (not in snap, not with a Σ shutter: there it shows "off", greyed, and the chosen bracket comes back when the shutter leaves Σ; in jpg the three photos are the camera's own JPEG, as a line in the viewfinder says when the bracket is chosen) off; **x3**: three shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other); or three shots at −N, 0, +N stops |
-| JPG processing: Frames, Colour NR, Moiré, Sharpen | four columns framed together, named under them: RAWfish-ir's processing of the **jpg**, shown when Settings > Camera menu > "JPG processing in the camera menu" is on (else set in `rawfish-ir.conf`): frames merged (1, 2, 4), the colour noise filter, the false-colour filter and the sharpening; the default of each has a green ring. Greyed together outside our jpg (raw, snap, Σ, a bracket) |
+| Bracket | (not in snap, not with a Σ shutter: there it shows "off", greyed, and the chosen bracket comes back when the shutter leaves Σ; in jpg the photos are the camera's own JPEG, as a line in the viewfinder says when the bracket is chosen) off; **x3**, **x5**, **x7**: three, five or seven shots as fast as the sensor allows, same exposure and focus (in JPEG a real burst, a few hundredths of a second apart; in raw one after the other) -- to merge afterwards (noise, or a stack in another program); or three shots at −N, 0, +N stops. With "JPG +DNG" (Settings: a DNG with each JPG) a bracket gives the camera's JPEG series first, then the same series again as DNGs: two series one after the other, not each shot as both |
+| JPG processing: Denoise, Frames, Colour NR, Moiré, Luma NR, Sharpen | columns framed together, named under them: RAWfish-ir's processing of the **jpg**, shown when Settings > Camera menu > "JPG processing in the camera menu" is on (else set in `rawfish-ir.conf`). **Each camera keeps its own**: a choice made on one camera does not change the others, and each camera starts from its own defaults (the green rings; a choice of the default is "default" in `rawfish-ir.conf`, in the camera's section `[camera_N]`). The denoise method (classic: each frame shifted whole; tiles: each part aligned on its own, for hand-held shots), which shows its own Frames column: classic, frames merged (1, 2, 4, 8); tiles, frames merged (2, 4, 8); then the colour noise filter, the false-colour filter, the luminance noise filter (Luma NR: after the merge, the grain left averaged away where it is no larger than 1, 1.5 or 2.2 times the noise, edges kept; off by default) and the sharpening; the default of each has a green ring. The defaults come from the camera's device profile, else the app's: on the JP2's 26 mm and every camera of the Xperia 10 III, tiles of 2 frames, colour NR 3, Luma NR 2, sharpen 2; on the JP2's 18 mm, tiles of 4 frames, colour NR 2, Luma NR 2, sharpen 3; elsewhere (the JP2's front camera, the Xperia XA2, whose merge by tiles is slow), the app's: classic of one frame, colour NR 2, Luma NR off, sharpen 3. Greyed together outside our jpg (raw, snap, Σ, a bracket) |
 | Level | the level's zero: "factory" (the sensor's) or "zeroed" (recorded by holding "level" with the phone upright) |
 | Focus cal. | the focus calibration assistant (when enabled in Settings) |
 
@@ -265,15 +288,19 @@ Press both volume keys at once: the screen is saved to
 
 | Setting | Meaning |
 |---|---|
-| File name prefix | the start of every file name (`photo` by default): letters, digits, `-`, `_`, not starting with `-`. Empty: no prefix, the files are named by the date alone (`YYYYMMDD_HHMMSS.jpg`). The milliseconds (`_mmm`) are added when two photos fall in the same second, and always for the photos of a bracket or a burst (x3) |
-| JPEG folder, DNG folder | where the pictures go; under `~/Pictures` (the only place the app may write) |
-| Reset to defaults | the three above |
-| Scenes in the camera menu (not yet implemented) | shows the Scene column in the menu (off by default) |
+| Also save a DNG with each JPG | a DNG of the same exposure, with the same file name, in the DNG folder; not with the camera's own JPEG, a Σ (DNG only) or a phone that cannot take both at once |
+| File name prefix | the start of every file name (`photo` by default): letters, digits, `-`, `_`, not starting with `-`. Empty: no prefix, the files are named by the date alone (`YYYYMMDD_HHMMSS.jpg`). The milliseconds (`_mmm`) are added when two photos fall in the same second, and always for the photos of a bracket or a burst (x3, x5, x7) |
+| Storage | the phone's memory or a memory card: moves both folders below to `Pictures/RAWfish-ir` there. If the card is not mounted when the camera starts, the photos go to `~/Pictures/RAWfish-ir` (the log says so) and back to the card once it is there again |
+| JPEG folder, DNG folder | where the pictures go; under `~/Pictures` or on a memory card (`/run/media/<user>/<card>/...`), the only places the app may write |
+| Reset to defaults | the prefix and the two folders (back to the phone's memory) |
 | Start in manual focus and exposure | at start, manual focus at the last distance and both wheels pinned at the last ISO and speed (advanced mode; off by default) |
 | Mode at start | simple, advanced, or as left (the last mode used) |
-| Viewfinder processing in the camera menu | shows the "Vf noise" and "Vf sharpen" columns |
+| JPG processing in the camera menu | shows RAWfish-ir's processing of the JPG in the advanced menu: Denoise, Frames, Colour NR, Moiré, Luma NR and Sharpen, each kept per camera (otherwise set in `rawfish-ir.conf`, a section `[camera_N]` per camera) |
 | Focus calibration in the camera menu | shows the "Focus cal." column |
+| Calibrate the lens shading | opens the lens-shading assistant at the next start (a white translucent diffuser on the lens, an even light, about a minute) |
 | Create the device profile files | RAWfish-ir writes them the next time it opens (the date is shown once done) |
+| Detailed log | the log keeps every command and reply (normally only the starts, the photos and the errors), the photos' reports carry the histograms, our JPG photos carry their settings in their file names, and the exposure and the focus are traced (`ae trace` and `af trace` lines); for reproducing a problem |
+| Reset the camera settings | every camera setting and `rawfish-ir.conf` back to their defaults when RAWfish-ir next opens; the file is kept as `rawfish-ir.conf.bak`; the settings of this page are not changed |
 
 Changes take effect the next time the camera starts.
 
@@ -300,8 +327,9 @@ Changes take effect the next time the camera starts.
 |---|---|
 | photos | `~/Pictures/RAWfish-ir/` (or the folders set above) |
 | DNG quick previews | `.previews/` inside the DNG folder (hidden, not in the system gallery) |
-| a new version | at its first start, a newly installed version moves the earlier `rawfish-ir.conf`, `simple.json`, `override-hal.json`, `focus-calibration.json` and measured lens-shading maps to `~/.config/com.rawfish/rawfish-ir/backup-<earlier version>-<date>/`, and starts from its own defaults and device profile. Nothing is deleted: to take a file back, copy it from there to where it was. The photos and the Settings page's choices (folders, prefix) stay |
-| commented references | `rawfish-ir.conf.example` next to `rawfish-ir.conf`, and `override-hal.example.jsonc` next to `override-hal.json` in `device-profiles/`: every key, what it does, its values and limits, as real comments. Rewritten at each start of the app. `rawfish-ir.conf` itself is written at the first start with every key at its default (and its comments); keys a new version adds are added, keys nothing reads any more are dropped, your values stay. Edit it with the app closed: the app rewrites it when a setting changes, and its comments are then lost (the example keeps them). Settings > "Reset the camera settings" puts every key back to its default (the previous file is kept as `rawfish-ir.conf.bak`) |
-| app settings | `~/.config/com.rawfish/rawfish-ir/` -- `rawfish-ir.conf` also holds hand-edited keys, among them `fineWarmthStep` (the warmth button's step, in 5 % units, 1..4), `fineTintStep` (the tint button's step in % of green, 1..25), `sigmaPreviewFps` (the Σ viewfinder's target frame rate, 1..30, 10 by default), `peakTweak` and `zebraTweak`; every key is described in `rawfish-ir.conf.example` next to it |
+| a new version | at its first start, a newly installed version moves the earlier `rawfish-ir.conf`, `simple.json`, `override-hal.json`, `focus-calibration.json` and measured lens-shading maps to `~/.config/com.rawfish/rawfish-ir/backup-<earlier version>-<date>/`, and starts from its own defaults and device profile -- except your settings: the values of the earlier `rawfish-ir.conf` are carried into the new one (a key the new version no longer has is left out, a value it no longer allows takes its default; the log says how many were carried), all but our JPG's processing of each camera (denoise, frames, colour NR, moiré, Luma NR, sharpen), which starts again from the new version's defaults. Nothing is deleted: to take a file back, copy it from there to where it was. The photos and the Settings page's choices (folders, prefix) stay |
+| commented references | `rawfish-ir.conf.readme` next to `rawfish-ir.conf`, and `override-hal.example.jsonc` next to `override-hal.json` in `device-profiles/`: every key, what it does, its values and limits; in `rawfish-ir.conf.readme` (plain text to read, not a settings file) each key is written after its text, at its default. They are references for you to read: the app never reads them, and writes them again at each start (deleting one changes nothing). `rawfish-ir.conf` itself is written by the app with every key (at its default on a new install), in sections, in alphabetical order, without comments: look in the readme for what a key means. Keys a new version adds are added, keys nothing reads any more -- or put in another section than their own -- are dropped, your values stay. Edit it with the app closed: the app rewrites it when a setting changes. Settings > "Reset the camera settings" puts every key back to its default (the previous file is kept as `rawfish-ir.conf.bak`) |
+| app settings | `~/.config/com.rawfish/rawfish-ir/` -- `rawfish-ir.conf`, in sections (`[menu]`, `[shooting]`, `[viewfinder]`, `[white_balance]`, `[lens_shading]`, `[kept]`, `[advanced]`, `[internal]`, and one `[camera_N]` per camera for our JPG's processing; a key is read in its own section only), also holds hand-edited keys, among them `fineWarmthStep` (the warmth button's step, in 5 % units, 1..4), `fineTintStep` (the tint button's step in % of green, 1..25), `sigmaPreviewFps` (the Σ viewfinder's target frame rate, 1..30, 10 by default), `peakTweak` and `zebraTweak`; every key is described in `rawfish-ir.conf.example` next to it |
 | device profile | `~/.local/share/com.rawfish/rawfish-ir/device-profiles/` |
-| the engine's log | `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log` -- the first thing to send when something goes wrong. It keeps each start (device, settings), each photo and every error with the command that caused it. For a problem of focus, exposure or gestures, turn on Settings > Log > "Detailed log" and reproduce it: the log then keeps every command and reply, and for each photo the histogram the app showed and the photo's own (on the command line: `checks on`) |
+| the engine's log | `~/.cache/com.rawfish/rawfish-ir/rawfish-ir.log` -- the first thing to send when something goes wrong. It keeps each start (device, settings), each photo and every error with the command that caused it. For a problem of focus, exposure or gestures, turn on Settings > Log > "Detailed log" and reproduce it: the log then keeps every command and reply, and for each photo the histogram the app showed and the photo's own (on the command line: `checks on`). With it, our JPG photos also carry their settings in their file names, the one place the Gallery's details show them: `photo_tiles4_1-48s_iso4428_col2_moire0_sharp3_..._717.jpg` (method and frames, each frame's exposure and ISO, colour NR, moiré, sharpen). It also traces the exposure: an `ae trace` line at each change of the pair the camera uses (more than 3 %), of its AE state, of the pair the wheels show, or of the viewfinder's brightness (more than 5 %), with the time -- for an exposure that pumps -- and the focus for 4 s after a touch (`af trace`) |
+| the photo's settings | in every JPG of ours: the Exif's exposure and ISO (each frame's), the Software tag, and a sentence in ImageDescription, UserComment and XMP ("4 frames of 1/48 s at ISO 4428, merged by tiles; colour NR 2, moire 0, sharpen 3"), which desktop viewers show; the Sailfish Gallery shows the exposure but not the ISO nor the text |

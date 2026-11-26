@@ -112,7 +112,10 @@ first argument is a name prefix (`+`: none, the file name starts with the date),
 and the extension (`.jpg`, `.dng`), with the milliseconds (`_mmm`) when another shot already has
 that name (two photos in the same second), and always for the photos of a burst or a bracket. DNGs carry the capture time in
 EXIF (`DateTimeOriginal`). (`~/Pictures` is outside the Sailjail auto-whitelist: the app declares
-the Pictures permission.) **The command-line tool is not sandboxed**: run from a terminal,
+the Pictures permission, and RemovableMedia for the memory cards, `/run/media/<user>/<card>`.)
+The Settings page's "Storage" puts both folders on a memory card (`<card>/Pictures/RAWfish-ir`);
+a folder on a card that is not mounted when the camera starts is replaced by
+`~/Pictures/RAWfish-ir`, with a `# storage: ...` line in the log. **The command-line tool is not sandboxed**: run from a terminal,
 `rawfish-ir-cli` has the user's rights, and `--jpgdir` / `--dngdir` take any folder the user can
 write. Only the app (and the engine it launches) runs inside Sailjail.
 

@@ -64,6 +64,18 @@ Item {
     // Stacked exposures (longer than the single-exposure ceiling, Σ on the wheel).
     readonly property real shutterMaxNs: caps.shutterMaxNs ? caps.shutterMaxNs : 500000000
     function isStacked(ns) { return ns > shutterMaxNs + 1 }
+    // A Σ speed chosen (beyond the single-exposure ceiling), for the page's
+    // TYPE (forced to raw) and the bracket (off). While a fresh engine has
+    // not taken the user's exposure back yet (synced false: it shows its own
+    // automatic one for its first moments), the values kept from the engine
+    // before answer, not the new engine's: else a restart made Σ look
+    // unselected for a moment, the page set the type back to jpg, which
+    // (with a bracket chosen) changed the session's streams and restarted the
+    // engine again, and once the exposure came back Σ set raw again, and so
+    // on: the camera restarted every two seconds (Xperia 10 III, log of
+    // 24 Nov 2026).
+    readonly property bool stackChosen: synced ? (!fullAuto && isStacked(displayShutterNs))
+                                               : (kShutterManual && isStacked(kShutterNs))
     readonly property bool rawSource: imageType === "raw"
 
     // Set by the page while the loupe moves without a reference, or a focus
@@ -130,7 +142,15 @@ Item {
             if (caps.isoMax > 0 && iso > caps.isoMax) iso = caps.isoMax
             if (caps.expMinNs > 0 && ns < caps.expMinNs) ns = caps.expMinNs
             if (ns > 16000000000) ns = 16000000000
-            viewfinder.sendCommand("# exposure carried to camera " + viewfinder.cameraId + ": iso " + iso + " speed " + Math.round(ns) + " ns (aperture " + kAperture + " -> " + caps.aperture + ")")
+            // The log says only what is really given back below: a value is
+            // sent only in its manual mode, so an automatic ISO or speed is
+            // logged as "auto" rather than as the clamped leftover (an
+            // automatic ISO used to show as "iso <the camera's minimum>",
+            // an automatic speed as "speed 0 ns", as if they were carried).
+            var what = "iso " + (kIsoManual && iso > 0 ? iso : "auto")
+                     + ", speed " + (kShutterManual && ns > 0 ? Math.round(ns) + " ns (aperture " + kAperture + " -> " + caps.aperture + ")" : "auto")
+                     + (kEv !== 0 ? ", ev " + kEv : "")
+            viewfinder.sendCommand("# exposure carried to camera " + viewfinder.cameraId + ": " + what)
         }
         if (kIsoManual && iso > 0) send("iso " + iso)
         if (kShutterManual && ns > 0) send("speed " + Math.round(ns))
