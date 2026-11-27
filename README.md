@@ -9,7 +9,7 @@ Transitional version meant to be reviewed and merged with some RAWfish parts, on
 Coded by AI under the supervision of and at the request of the creators.\
 Supervision and all the tests made by humans.\
 No human code review yet. Audits by other sessions and other AI models.\
-Tested on: JP2, Xperia XA2, 10iii, 10 iv, 10 v.
+Tested on: JP2, Xperia XA2, 10iii, 10 iv, 10 v.\
 Needs testers on the 10ii.
 
 ### Architecture
@@ -31,10 +31,10 @@ Built on Android's Camera2 through libhybris.
 - Manual controls (focus, exposure, white balance, noise, sharpening...)
 - Histogram, spot measurement
 - Loupe for exposure and focus
-- Bracketing (3x, 5x, 7x same EV, and 3x at: +/-1 stop, +/-2 stops, +3 stops)
+- Bracketing (3x, 5x, 7x same EV, and 3x at: +/-1 stop, +/-2 stops, +/-3 stops)
 - User lens shading calibration tool: colour, luminance, focus adapted (DNG Exif)
 - User focus calibration tool (factory uncalibrated)
-- Lens barrel distortion correction (JPGs)
+- Lens barrel distortion correction (JPGs + vierwfinder)
 - User white balance (on a gray/white reference surface)
 - Zoom (digital)
 - Flash
