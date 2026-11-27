@@ -15,6 +15,43 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## Since 0.3.11-557 (patches 0559–)
+- The lens distortion fix, by Matko Jun (GitHub PR #43, patch 0561).
+  Straight lines stay straight (docs/LENS-DISTORTION.md): a new column of
+  the pull-down menu, "Lens fix" (off by default), corrects the lens
+  distortion in the viewfinder and in every JPG, with the camera's measured
+  lens profile. It shows most on the JP2's 18 mm, whose edges and corners
+  bend strongly; the 26 mm and the front camera bend less. The three
+  cameras of the JP2 are measured; on a camera without a profile nothing
+  is corrected, and the menu says so; on a phone with none (the Xperia
+  XA2 and 10 III today) the column is not shown. DNGs are never
+  touched. The picture is cropped by 1 to 2 % (no empty corners), the
+  viewfinder showing exactly what the photo will; a touch on the corrected
+  viewfinder focuses where the finger is.
+- How each photo is corrected: our JPG after the merge and the noise
+  filters, before the sharpening, compressed once (its Exif Software says
+  "lens corrected"); the camera's JPEG (bursts, brackets, the camera's JPG)
+  decoded after it was written, corrected and compressed again, its Exif
+  kept and a new thumbnail made -- the gallery sees the file once it is
+  final. In a series (a bracket, JPG + DNG above all) the camera's JPEGs
+  are corrected after the last shot, so the shots stay as close together
+  as without the fix; a JPEG the driver turned upright is corrected as it
+  is (the remap turned along, no rotated copies: some five times faster
+  on 50 MP). The viewfinder is drawn corrected by the GPU (a grid of 32 x 24
+  cells, the zebra, the peaking and the magnifier along), with the zero
+  copy kept.
+- One profile per camera serves every format and size (4:3, 16:9, 12 and
+  50 MP, the viewfinder at any zoom): distortion_<maker>-<model>_cam<ID>.json,
+  shipped in /usr/share/rawfish-ir/lens-distortion/, a user's own in
+  device-profiles/lens-distortion/; a device profile may name one file for
+  every model name of a camera module ("distortion_file", as
+  "shading_file").
+- For maintainers: `scripts/lens-calibrate.py` measures a camera from
+  photos of a printed chessboard (OpenCV, on a PC) and writes its profile,
+  with the error of the fit and how precisely the corners were found;
+  docs/LENS-CALIBRATION.md says how, step by step. `rawfish-ir-cli lensfix
+  PROFILE IN.jpg OUT.jpg [rot=..]` corrects a JPEG without a camera, on the
+  phone or a PC. The CLI takes `--lensfix on|off|FILE` and the `lensfix`
+  command.
 - A session that fails to start (e.g. a RAW size the camera does not list)
   ends the engine at once, with no thread left running: the stdin watcher
   now starts only once the camera is open. Such a failed start with --log

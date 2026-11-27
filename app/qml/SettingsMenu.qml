@@ -6,7 +6,7 @@
  * with dots. Everything atomic: one column = one control.
  *
  * Columns, in this order (November 2026): mode, flash (if the camera has
- * one), self-timer, grid, format, resolution, JPEG quality, white balance
+ * one), self-timer, grid, lens fix, format, resolution, JPEG quality, white balance
  * presets, bracketing, the JPG processing group (frames, colour noise,
  * moiré, sharpening: framed together, if the Settings page asks), level;
  * then, hidden unless the Settings page's switches are on, the focus
@@ -25,6 +25,15 @@ Item {
     id: menu
     property var viewfinder
     property bool gridOn: false
+    // The lens distortion fix (docs/LENS-DISTORTION.md): the viewfinder and
+    // the JPEGs corrected with the camera's measured lens profile (DNGs
+    // never). lensFixState: the engine's word, "unavailable" when this
+    // camera has no profile.
+    // lensFixAny: this phone has a profile for some camera (the CLI says;
+    // false on the phones without any: the column is hidden there).
+    property bool lensFix: false
+    property string lensFixState: ""
+    property bool lensFixAny: true
     // The level's zero (ui 175): the roll and pitch the sensor reports when
     // the phone is truly upright, recorded by a long press on "level" with
     // the phone held straight; subtracted from every reading.
@@ -375,6 +384,7 @@ Item {
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         menuDiscovered = num("menuDiscovered", 0, 0, 1) === 1
         gridOn = num("gridOn", 0, 0, 1) === 1
+        lensFix = num("lensFix", 0, 0, 1) === 1
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)
         advanced = startMode === "simple" ? false : startMode === "advanced" ? true : num("advanced", 0, 0, 1) === 1   /* a new install opens in simple mode */
@@ -534,6 +544,7 @@ Item {
         // photoProcessing()).
         viewfinder.sendCommand("preview " + noiseModes[previewNoiseIndex] + " " + edgeModes[previewEdgeIndex])
         viewfinder.sendCommand("shading balance=" + shadingPivot + " strength=" + shadingStrength + " maxgain=" + shadingMaxGain)
+        viewfinder.sendCommand("lensfix " + (lensFix ? "on" : "off"))
         // A measured white first: it is the base the mode and the shifts keep.
         // This camera's own if it has one, else the offset of a white measured
         // on another camera (see wbFixedMap). A new session starts with
@@ -551,6 +562,7 @@ Item {
     }
     onAdvancedChanged: applyLive()
     Connections { target: viewfinder; onRunningChanged: if (viewfinder.running) menu.applyLive() }
+    Connections { target: viewfinder; onLensFixState: { menu.lensFixState = state; menu.lensFixAny = anyProfile } }
 
     function mp(sz) { if (sz === "") return qsTr("max"); var p = sz.split("x"); return qsTr("%1 MP").arg(Math.round(p[0] * p[1] / 1e5) / 10) }
     // Listed JPEG sizes of a ratio, largest first.
@@ -741,6 +753,22 @@ Item {
                 // settings file used to break a binding, so a second tap on "off"
                 // was taken for no change and the grid stayed on.
                 onPicked: { menu.gridOn = value; menu.save("gridOn", value ? 1 : 0) } }
+            // Lens distortion fix: straight lines stay straight (the wide
+            // camera above all), in the viewfinder and the JPEGs; DNGs are
+            // never touched. A camera without a lens profile is not corrected
+            // (the header says so); a phone with none for any camera does not
+            // show the column.
+            MenuColumn { visible: menu.lensFixAny; colW: band.colW; maxRows: band.maxRows; header: header
+                caption: qsTr("Lens fix"); values: [false, true]; current: menu.lensFix
+                labelFor: function(v) { return !v ? qsTr("Lens distortion fix off")
+                                              : menu.lensFixState === "unavailable" ? qsTr("Lens distortion fix on (no lens profile for this camera)")
+                                              : qsTr("Lens distortion fix on: viewfinder and JPEG") }
+                shortFor: function(v) { return v ? qsTr("on") : qsTr("off") }
+                iconComponent: Component { LensFixIcon {} }   // a checkerboard: barrel-bent off, straight on
+                onPicked: {
+                    menu.lensFix = value; menu.save("lensFix", value ? 1 : 0)
+                    if (viewfinder.running) viewfinder.sendCommand("lensfix " + (value ? "on" : "off"))
+                } }
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).
             MenuColumn { visible: menu.simpleMenuHas("format"); colW: band.colW; maxRows: band.maxRows; header: header

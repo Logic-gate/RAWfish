@@ -60,11 +60,21 @@ void ctl_engine_busy(int busy);
  * controller told busy), after ctl_command() returned. Returns 1 and copies
  * the next line into buf, 0 when there is none. */
 int ctl_pop_capture(char *buf, size_t n);
+/* How many capture lines the shutter press queued in all (a series: more
+ * than one). */
+int ctl_capture_count(void);
 
 /* An interface command for the controller (step 3: "xp ..."). Returns 1 if
  * it was one (handled), 0 if the line is not a controller command. Call
  * under ctl_lock(). */
 int ctl_command(const char *line);
+
+/* A file the CLI will rewrite after the engine wrote it (the lens
+ * correction of a camera JPEG): its "written" event is held until
+ * ctl_release_written(path). Call hold before the capture, release after
+ * the rewrite (or its failure). Up to 8 at once. */
+void ctl_hold_written(const char *path);
+void ctl_release_written(const char *path);
 
 /* Detaches from the engine, stops the thread, closes the pipe. Safe to call
  * when not started. */

@@ -156,6 +156,11 @@ install -D -m 644 build/android/librawfish-ir.so %{buildroot}%{_libexecdir}/droi
 # In the app's /usr/share/rawfish-ir: the part of /usr/share its sandbox shows.
 install -d %{buildroot}%{_datadir}/rawfish-ir/lens-shading
 install -m 644 android/data/lens-shading/*.json %{buildroot}%{_datadir}/rawfish-ir/lens-shading/
+# Lens distortion models shipped with the engine (one per phone model and
+# camera, scripts/lens-calibrate.py); a user's own file in
+# device-profiles/lens-distortion/ wins.
+install -d %{buildroot}%{_datadir}/rawfish-ir/lens-distortion
+install -m 644 android/data/lens-distortion/*.json %{buildroot}%{_datadir}/rawfish-ir/lens-distortion/
 # Device profiles shipped per camera module (matched by make and model, or by
 # the RAW size); the user's override-hal.json replaces any key it repeats.
 install -d %{buildroot}%{_datadir}/rawfish-ir/device-profiles
@@ -204,4 +209,5 @@ cd ..
 %{_libexecdir}/droid-hybris/system/%{hybrislib}/librawfish-ir.so
 %dir %{_datadir}/rawfish-ir
 %{_datadir}/rawfish-ir/lens-shading
+%{_datadir}/rawfish-ir/lens-distortion
 %{_datadir}/rawfish-ir/device-profiles

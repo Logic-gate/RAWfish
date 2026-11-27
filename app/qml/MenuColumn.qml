@@ -19,6 +19,10 @@ Column {
     property var labelFor: function(v) { return String(v) }      // header text
     property var shortFor: function(v) { return String(v) }      // text in the disc
     property var iconFor: function(v) { return "" }              // theme icon or ""
+    // A drawn icon instead (the theme has none for it): a component whose
+    // parent gives `value` (the item's) and `tint` (its colour), e.g.
+    // LensFixIcon. null: the theme icon, else the text.
+    property Component iconComponent: null
     property Item header                // MenuHeader, shows the pressed value
     property real colW: Theme.iconSizeMedium + 2 * Theme.paddingMedium   // one column's width
     property int maxRows: 99            // values stacked at most, then another column
@@ -110,9 +114,17 @@ Column {
                             (item.pressed || item.selected ? Theme.highlightColor : Theme.lightPrimaryColor) : ""
                     visible: status === Image.Ready
                 }
+                Loader {                                      // a drawn icon (iconComponent)
+                    id: drawn
+                    anchors.centerIn: parent
+                    active: col.iconComponent !== null
+                    sourceComponent: col.iconComponent
+                    property var value: modelData
+                    property color tint: item.pressed || item.selected ? Theme.highlightColor : Theme.lightPrimaryColor
+                }
                 Label {                                       // text when there is no icon
                     anchors.centerIn: parent
-                    visible: !icon.visible
+                    visible: !icon.visible && !drawn.active
                     text: col.shortFor(modelData)
                     color: item.pressed || item.selected ? Theme.highlightColor : Theme.lightPrimaryColor
                     font { pixelSize: Theme.fontSizeTiny; bold: item.selected }

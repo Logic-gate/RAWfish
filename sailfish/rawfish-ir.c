@@ -35,6 +35,7 @@
 #include "controller.h"
 #include "yuvjpeg.h"
 #include "yuvproc.h"
+#include "lensfix.h"   /* the lens distortion correction of the photos */
 #include "../android/exifwrite.h"  /* the Exif of our JPG                   */
 #include <limits.h>   /* LLONG_MIN: a profile key absent         */
 
@@ -479,7 +480,7 @@ static const char *const k_ov_struct[] = { "camera_id", "overrides", "focus_cali
                                            "raw_stream", "jpeg_max", "streams", "fps_max", "hidden", "jpg_method",
                                            "camera_order",
                                            /* a shipped device profile's own keys */
-                                           "match", "make", "models", "raw", "notch", "shading_file",
+                                           "match", "make", "models", "raw", "notch", "shading_file", "distortion_file",
                                            "name", NULL };
 
 static void ov_log(const char *msg)
@@ -1450,11 +1451,15 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
+            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; jpeg+largest: and, where no stream is a multiple of it, the largest stream averaged down; streams=: only these beside the viewfinder)\n"
-            "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
+            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
+            "       rawfish-ir-cli lensfix PROFILE.json IN.jpg OUT.jpg [q=95] [rot=0|90|180|270]   (a JPEG lens-corrected, no camera:\n"
+            "         also on a PC; rot=: its pixels were turned clockwise by that, with no Exif orientation)\n"
+            "  --lensfix on|off|FILE: the lens distortion correction of the viewfinder and the JPEGs, with this phone's\n"
+            "  profile (/usr/share/rawfish-ir/lens-distortion/) or FILE; default off (the app sends \"lensfix on|off\")\n"
             "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS.EXT\n"
             "  (NAME: letters, digits, - and _; NAME + = no prefix: YYYYMMDD_HHMMSS.EXT; _mmm, the milliseconds,\n"
             "  added when another shot already has that name, a second photo in the same second; always for a\n"
@@ -1466,6 +1471,7 @@ static void usage(void)
             "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N] [ms=1]   (- = measure only)\n"
             "                [vres=KEY,...]   (diagnosis: up to 8 vendor keys of the photo's result in the reply,\n"
             "                 \"vendor_results\"; e.g. the sensor gain the HAL applied)\n"
+            "         lensfix on|off|status|file=PATH   (lens distortion correction of the viewfinder and the JPEGs)\n"
             "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
             "                                [colour=0..5] [median=0..4] [luma=0..3] [sharpen=0..5]\n"
             "                                (colour: our colour filter, 1, 2, 3, 5, 8 x the noise (denoise=on = 2); median:\n"
@@ -1966,6 +1972,206 @@ static int cmd_raw(void *bridge, indraw_raw_fn raw, char **save, char *out)
     return 0;
 }
 
+/* --- Lens distortion correction ("lensfix", docs/LENS-DISTORTION.md) -----
+ * The setting (--lensfix on|off|FILE, the "lensfix" command) corrects the
+ * viewfinder (drawn by the interface's GPU, from the model sent with the
+ * "lensfix" event; the engine maps the taps back) and every JPEG: ours from the YUV stream
+ * before it is compressed, the camera's after the engine wrote it
+ * (decoded, corrected, compressed again, its metadata kept and a new Exif
+ * thumbnail). The model is the phone's and camera's own file
+ * (distortion_<maker>-<model>_cam<ID>.json: the user's device-profiles/
+ * lens-distortion/, then /usr/share/rawfish-ir/lens-distortion/), or the
+ * file given. None: nothing is corrected, and a warning says so. DNGs are
+ * never touched. */
+static double mono_ms(void);
+static void jw_quote_into(char *buf, size_t n, const char *s);
+static int g_lensfix;                        /* the setting: 1 on              */
+static char g_lensfix_file[1024];            /* a file given: it, not the phone's */
+static ld_model_t g_ldm;                     /* the model, from the engine     */
+static int g_ldm_have;
+static char g_ldm_looked[300];               /* what was looked for (the warning) */
+static int g_ldm_any = 1;                    /* a profile for some camera of this phone (the menu shows the column) */
+static char g_lensfix_cam[16];               /* the open camera's id (its device profile's distortion_file) */
+
+static int lensfix_active(void) { return g_lensfix && g_ldm_have; }
+
+/* The engine's photo field (indraw_photo_field), or NULL with an older one. */
+static lensfix_field_fn lensfix_field(void)
+{
+    return g_bridge_for_vendor ? (lensfix_field_fn)a_dlsym(g_bridge_for_vendor, "indraw_photo_field") : NULL;
+}
+
+/* Appends `,"key":value` (value raw JSON) to the JSON object in out. */
+static void json_append(char *out, size_t n, const char *key, const char *value)
+{
+    char *end = strrchr(out, '}');
+    size_t k;
+    if (!end) return;
+    k = (size_t)(end - out);
+    snprintf(out + k, n - k, ",\"%s\":%s}", key, value);
+}
+
+/* Loads the model for the open camera (the file given, else the phone's)
+ * and applies the setting. Said in the log; a warning in the output when
+ * the correction is asked and no model is found. */
+static void lensfix_load_model(void)
+{
+    typedef int (*load_fn)(const char *, const char *, const char *, char *, size_t);
+    typedef int (*get_fn)(ld_model_t *);
+    static char rep[OUT_SIZE];
+    load_fn lf = g_bridge_for_vendor ? (load_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_load") : NULL;
+    get_fn gf = g_bridge_for_vendor ? (get_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_get") : NULL;
+    char pdir[1024], udir[1100] = "";
+    const char *lk;
+    g_ldm_have = 0;
+    g_ldm_looked[0] = '\0';
+    if (!lf || !gf) { snprintf(g_ldm_looked, sizeof g_ldm_looked, "(this engine has no lens correction)"); return; }
+    if (profile_dir(pdir, sizeof pdir) == 0) {
+        snprintf(udir, sizeof udir, "%s/lens-distortion", pdir);
+        mkdir(udir, 0755);                       /* where a user's own file goes */
+    }
+    {   /* the file name the device profile gives this camera, if any (one
+         * file for every model name of a camera module, as shading_file) */
+        typedef int (*name_fn)(const char *);
+        name_fn nf = (name_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_name");
+        char nm[200] = "";
+        if (g_lensfix_cam[0]) ov_string(g_lensfix_cam, "distortion_file", nm, sizeof nm);
+        if (nf) nf(nm);
+    }
+    lf(udir, "/usr/share/rawfish-ir/lens-distortion", g_lensfix_file, rep, sizeof rep);
+    log_line("# lensfix: ", rep);
+    g_ldm_have = gf(&g_ldm) == 0;
+    {   /* a profile for any camera of this phone: the built names in either
+         * folder, or a distortion_file of any camera in the device profiles */
+        typedef int (*any_fn)(const char *, const char *, const char *);
+        any_fn af = (any_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_any");
+        char names[1024] = "";
+        int which;
+        for (which = 0; which < 2; ++which) {
+            const char *t = ov_source(which), *p = t;
+            while (p && (p = strstr(p, "\"distortion_file\"")) != NULL) {
+                const char *a = strchr(p + 17, ':'), *q1 = a ? strchr(a, '"') : NULL, *q2 = q1 ? strchr(q1 + 1, '"') : NULL;
+                p += 17;
+                if (q2 && q2 - q1 - 1 > 0 && q2 - q1 < 200 && strlen(names) + (size_t)(q2 - q1) + 1 < sizeof names)
+                    snprintf(names + strlen(names), sizeof names - strlen(names), "%.*s\n", (int)(q2 - q1 - 1), q1 + 1);
+            }
+        }
+        g_ldm_any = g_ldm_have || g_lensfix_file[0] || !af || af(udir, "/usr/share/rawfish-ir/lens-distortion", names);
+    }
+    if ((lk = strstr(rep, "\"looked_for\":\"")) != NULL) {
+        snprintf(g_ldm_looked, sizeof g_ldm_looked, "%s", lk + 14);
+        g_ldm_looked[strcspn(g_ldm_looked, "\"")] = '\0';
+    }
+}
+
+/* The setting to the engine (the viewfinder); the reply in out. */
+static void lensfix_apply(char *out)
+{
+    typedef int (*set_fn)(int);
+    set_fn sf = g_bridge_for_vendor ? (set_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_set") : NULL;
+    indraw_emit_fn em = g_bridge_for_vendor ? (indraw_emit_fn)a_dlsym(g_bridge_for_vendor, "indraw_emit") : NULL;
+    if (sf) sf(g_lensfix);
+    if (em) {   /* for the interface, which draws the viewfinder corrected: with
+                 * the model bound to the active array (lensdist.h's ld_model_t) */
+        char ev[512];
+        if (g_lensfix && g_ldm_have)
+            snprintf(ev, sizeof ev, "lensfix state=on any=1 aw=%d ah=%d fx=%.6f fy=%.6f cx=%.6f cy=%.6f k=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
+                     g_ldm.aw, g_ldm.ah, g_ldm.fx, g_ldm.fy, g_ldm.cx, g_ldm.cy,
+                     g_ldm.k[0], g_ldm.k[1], g_ldm.k[2], g_ldm.k[3], g_ldm.k[4], g_ldm.k[5], g_ldm.k[6], g_ldm.k[7]);
+        else snprintf(ev, sizeof ev, "lensfix state=%s any=%d\n", g_lensfix ? "unavailable" : "off", g_ldm_any);
+        em(ev);
+    }
+    if (g_lensfix && !g_ldm_have) {
+        char msg[480];
+        snprintf(msg, sizeof msg, "no lens distortion profile for this camera (%s): the viewfinder and the photos are not corrected", g_ldm_looked);
+        log_line("# lensfix: WARNING ", msg);
+        fprintf(stderr, "rawfish-ir-cli: warning: %s\n", msg);
+        snprintf(out, OUT_SIZE, "{\"ok\":true,\"lensfix\":\"unavailable\",\"warning\":");
+        jw_quote_into(out, OUT_SIZE, msg);
+        snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
+    } else
+        snprintf(out, OUT_SIZE, "{\"ok\":true,\"lensfix\":\"%s\"}", g_lensfix ? "on" : "off");
+}
+
+/* "lensfix on|off|status|file=PATH|file=" */
+static int cmd_lensfix(char **save, char *out)
+{
+    char *a = strtok_r(NULL, " \t\r\n", save);
+    if (!a || !strcmp(a, "status")) {
+        snprintf(out, OUT_SIZE, "{\"ok\":true,\"lensfix\":\"%s\",\"profile\":%s}", g_lensfix ? (g_ldm_have ? "on" : "unavailable") : "off",
+                 g_ldm_have ? "true" : "false");
+        emit(out);
+        return 0;
+    }
+    if (!strcmp(a, "on") || !strcmp(a, "off")) g_lensfix = !strcmp(a, "on");
+    else if (!strncmp(a, "file=", 5)) {
+        snprintf(g_lensfix_file, sizeof g_lensfix_file, "%s", a + 5);
+        lensfix_load_model();
+        if (a[5]) g_lensfix = 1;
+    } else { emit("{\"ok\":false,\"error\":\"lensfix: on, off, status or file=PATH\"}"); return 1; }
+    lensfix_apply(out);
+    emit(out);
+    return 0;
+}
+
+/* After the engine wrote a camera JPEG: corrected in place, when on. Adds
+ * "lensfix" to the reply in out; the file's "written" event, held, goes. */
+static void lensfix_camera_jpeg_now(const char *path, int quality, char *out, int ok)
+{
+    char msg[300];
+    if (ok && lensfix_active()) {
+        double t0 = mono_ms();
+        typedef int (*rot_fn)(void);
+        rot_fn rf = g_bridge_for_vendor ? (rot_fn)a_dlsym(g_bridge_for_vendor, "indraw_photo_rotation") : NULL;
+        if (lensfix_jpeg_file(&g_ldm, lensfix_field(), rf ? rf() : -1, path, path, quality, msg, sizeof msg) == 0) {
+            char v[64];
+            snprintf(v, sizeof v, "{\"ms\":%.0f}", mono_ms() - t0);
+            if (out) json_append(out, OUT_SIZE, "lensfix", v);
+        } else {
+            char line[1600], q[400] = "";
+            snprintf(line, sizeof line, "%s not corrected: %s", path, msg);
+            log_line("# lensfix: ", line);
+            jw_quote_into(q, sizeof q, msg);
+            if (out) { char v[440]; snprintf(v, sizeof v, "{\"error\":%s}", q); json_append(out, OUT_SIZE, "lensfix", v); }
+        }
+    }
+    ctl_release_written(path);
+}
+
+/* A series from one shutter press (a bracket, JPG + DNG above all): its
+ * camera JPEGs corrected once the whole series is taken, not between the
+ * shots (about 0.2 s to 1 s each, which spaced the shots and delayed the
+ * DNG series). Their "written" events stay held until then. */
+#define LF_LATER_MAX 8
+static struct { char path[1200]; int quality; } g_lf_later[LF_LATER_MAX];
+static int g_lf_defer, g_lf_nlater;
+
+static void lensfix_camera_jpeg(const char *path, int quality, char *out, int ok)
+{
+    if (ok && lensfix_active() && g_lf_defer && g_lf_nlater < LF_LATER_MAX && strlen(path) < sizeof g_lf_later[0].path) {
+        snprintf(g_lf_later[g_lf_nlater].path, sizeof g_lf_later[0].path, "%s", path);
+        g_lf_later[g_lf_nlater++].quality = quality;
+        if (out) json_append(out, OUT_SIZE, "lensfix", "{\"later\":true}");
+        return;
+    }
+    lensfix_camera_jpeg_now(path, quality, out, ok);
+}
+
+/* The series' JPEGs, corrected now (the end of the series). */
+static void lensfix_later_flush(void)
+{
+    int k, n = g_lf_nlater;
+    double t0 = mono_ms();
+    g_lf_defer = 0;
+    g_lf_nlater = 0;
+    for (k = 0; k < n; ++k) lensfix_camera_jpeg_now(g_lf_later[k].path, g_lf_later[k].quality, NULL, access(g_lf_later[k].path, F_OK) == 0);
+    if (n) {
+        char line[96];
+        snprintf(line, sizeof line, "%d JPEG(s) of the series corrected after it, %.0f ms", n, mono_ms() - t0);
+        log_line("# lensfix: ", line);
+    }
+}
+
 /* Handles one "jpeg ..." line (tokens after "jpeg" come from strtok_r). */
 static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
 {
@@ -2032,12 +2238,15 @@ static int cmd_jpeg(indraw_jpeg_fn jpeg, char **save, char *out)
     {
         int fmode = easy ? F_AUTO : focus_mode;
         int ae_precapture = easy || (exposure_ns <= 0 && iso <= 0);
+        if (lensfix_active()) ctl_hold_written(file);   /* told once corrected */
         if (jpeg(file, quality, nr, edge, fmode, focus_diopters, ae_precapture,
                  exposure_ns, iso, variant, timeout_for(exposure_ns), out, OUT_SIZE)) {
+            lensfix_camera_jpeg(file, quality, NULL, 0);
             emit(out);
             return 1;
         }
     }
+    lensfix_camera_jpeg(file, quality, out, 1);
     emit(out);
     return 0;
 }
@@ -2166,8 +2375,10 @@ static int cmd_yuv(void *bridge, char **save, char *out)
     int method = YUV_MERGE_CLASSIC;              /* nr=tiles: the merge by tiles */
     int detail_scale = 1;                        /* the filters' scale for this photo (1, or 2 for an enlarged 50 MP) */
     char dngfile[1200] = "";
-    ir_yuv_t dn; yuv_denoise_report_t rep;
-    memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep);
+    ir_yuv_t dn, lfx; yuv_denoise_report_t rep;
+    int lensfixed = 0;                           /* the lens correction applied */
+    double lens_ms = 0;
+    memset(&dn, 0, sizeof dn); memset(&rep, 0, sizeof rep); memset(&lfx, 0, sizeof lfx);
     float focus_diopters = 0.0f, ev[YUV_MERGE_MAX] = { 0 };
     int64_t exposure_ns = 0, ts[YUV_MERGE_MAX] = { -1, -1, -1, -1, -1, -1, -1, -1 };
     struct timespec now;
@@ -2271,19 +2482,31 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         if (luma_sigma_seen < 0) { yfree(&dn); if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"luma filter failed (memory)\"}"); return 1; }
         luma_ms = mono_ms() - tl;
     }
-    if (sharpen) {                                        /* ours, on the merged frame */
+    if (sharpen && !denoise) {                            /* no merge asked: a plain copy to sharpen, */
+        const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;   /* the noise measured on it (rep.sigma) */
+        if (yuv_denoise(in, 1, 0, 0, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"sharpen failed (memory)\"}"); return 1; }
+        denoise = -1;                                      /* dn holds a plain copy */
+    }
+    /* The lens correction after the merge and the noise filters, BEFORE the
+     * sharpening: the resampling softens a little, the sharpening then works
+     * on the final geometry (the noise it must exceed was measured above,
+     * on the frame as the sensor gave it). */
+    if (lensfix_active()) {
+        double fld[4] = { f.field[0], f.field[1], f.field[2], f.field[3] }, tl = mono_ms();
+        int lr = lensfix_yuv(&g_ldm, f.field[2] > 0 ? fld : NULL, denoise ? &dn : &f, &lfx);
+        if (lr == 0) lensfixed = 1;
+        else log_line("# lensfix: ", lr == -2 ? "the lens model cannot correct this frame: not corrected" : "out of memory: not corrected");
+        lens_ms = mono_ms() - tl;
+    }
+    if (sharpen) {                                        /* ours, on the merged (and corrected) frame */
         double ts = mono_ms();
-        if (!denoise) {                                    /* no merge asked: sharpen the frame as it is */
-            const ir_yuv_t *in = (n == 1 && nev == 0) ? &f : frames;
-            if (yuv_denoise(in, 1, 0, 0, &dn, &rep)) { if (n == 1 && nev == 0) yfree(&f); else for (k = 0; k < n; ++k) yfree(&frames[k]); emit("{\"ok\":false,\"stage\":\"yuv\",\"error\":\"sharpen failed (memory)\"}"); return 1; }
-            denoise = -1;                                  /* dn holds a plain copy */
-        }
-        yuv_sharpen(&dn, sharpen, rep.sigma);
+        yuv_sharpen(lensfixed ? &lfx : &dn, sharpen, rep.sigma);
         rep.ms_sharpen = mono_ms() - ts;
     }
     t0 = mono_ms();
-    rc = yuv_encode_jpeg(denoise ? &dn : &f, quality, &jpg, &jlen);
+    rc = yuv_encode_jpeg(lensfixed ? &lfx : denoise ? &dn : &f, quality, &jpg, &jlen);
     t1 = mono_ms();
+    free(lfx.y); free(lfx.u); free(lfx.v);
     if (rc == 0) {
         exif_info_t ex;
         char dt[24];
@@ -2300,9 +2523,10 @@ static int cmd_yuv(void *bridge, char **save, char *out)
          * JPEG ("RAWfish-ir x.y.z (HAL JPEG)") and ours tell apart in any
          * viewer's Exif panel: frames merged, colour filter, false-colour
          * median and sharpening levels. */
-        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d%s, colour %d, moire %d, luma %d, sharpen %d)",
+        snprintf(sw, sizeof sw, "RAWfish-ir " IR_VERSION " (%s from YUV: frames %d%s, colour %d, moire %d, luma %d, sharpen %d%s)",
                  light ? "snap" : "JPG", (n == 1 && nev == 0) ? 1 : n, method == YUV_MERGE_TILES ? " tiles" : "",
-                 denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma, sharpen);
+                 denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma, sharpen,
+                 lensfixed ? ", lens corrected" : "");
         ex.software = sw;
         /* The description: the same in words, with the exposure of each frame
          * (ImageDescription, UserComment and XMP: what desktop viewers show;
@@ -2405,6 +2629,7 @@ static int cmd_yuv(void *bridge, char **save, char *out)
         }
         if (luma > 0) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"luma\":{\"level\":%d,\"sigma\":%.2f,\"ms\":%.0f}", luma, luma_sigma_seen, luma_ms);
         if (sharpen) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"sharpen\":{\"level\":%d,\"ms\":%.0f}", sharpen, rep.ms_sharpen);
+        if (lensfixed) snprintf(out + strlen(out), OUT_SIZE - strlen(out), ",\"lensfix\":{\"ms\":%.0f}", lens_ms);
         snprintf(out + strlen(out), OUT_SIZE - strlen(out), "}");
     }
     emit(out);
@@ -2452,7 +2677,13 @@ static int cmd_burst(indraw_burst_fn bf, char **save, char *out)
         paths[k] = files[k];
     }
     if (!bf) { emit("{\"ok\":false,\"error\":\"burst: bridge has no indraw_burst\"}"); return 1; }
-    if (bf(paths, n, quality, nr, edge, exposure_ns, iso, timeout_for(exposure_ns), out, OUT_SIZE)) { emit(out); return 1; }
+    if (lensfix_active()) for (k = 0; k < n; ++k) ctl_hold_written(paths[k]);
+    {
+        int failed = bf(paths, n, quality, nr, edge, exposure_ns, iso, timeout_for(exposure_ns), out, OUT_SIZE) != 0;
+        /* each file that is there is corrected (a failed burst may have written some) */
+        for (k = 0; k < n; ++k) lensfix_camera_jpeg(paths[k], quality, k == 0 ? out : NULL, access(paths[k], F_OK) == 0);
+        if (failed) { emit(out); return 1; }
+    }
     emit(out);
     return 0;
 }
@@ -2661,6 +2892,9 @@ int main(int argc, char **argv)
         if (!strcmp(argv[1], "--log")) {
             g_log = fopen(argv[2], "a");
             if (!g_log) { perror(argv[2]); return EXIT_USAGE; }
+        } else if (!strcmp(argv[1], "--lensfix")) {     /* on | off | a lens distortion file */
+            if (!strcmp(argv[2], "on") || !strcmp(argv[2], "off")) g_lensfix = !strcmp(argv[2], "on");
+            else { snprintf(g_lensfix_file, sizeof g_lensfix_file, "%s", argv[2]); g_lensfix = 1; }
         } else if (!strcmp(argv[1], "--jpgdir") || !strcmp(argv[1], "--dngdir")) {
             char *dst = argv[1][2] == 'j' ? g_jpgdir : g_dngdir;
             if (expand_home(argv[2], dst, 1024) != 0 || mkdir_p(dst) != 0) {
@@ -2685,6 +2919,41 @@ int main(int argc, char **argv)
         cmdline[len + 1] = '\0';               /* keep it a valid string        */
     }
     log_line("$ rawfish-ir-cli ", cmdline);
+
+    /* "lensfix PROFILE IN OUT [q=Q]": a JPEG file corrected with a lens
+     * distortion file, no camera (and no phone: a PC will do). The JPEG is
+     * taken as the profile's camera's full frame, or a centred crop of it
+     * (a 16:9 photo, zoom 1). */
+    if (!strcmp(argv[1], "lensfix")) {
+        ld_model_t m;
+        char err[300];
+        int q = 95;
+        double t0;
+        if (argc < 5) { usage(); return EXIT_USAGE; }
+        int rot = -1;
+        for (i = 5; i < argc; ++i) {
+            if (!strncmp(argv[i], "q=", 2)) q = atoi(argv[i] + 2);
+            else if (!strncmp(argv[i], "rot=", 4)) rot = atoi(argv[i] + 4);   /* the driver turned the pixels by it */
+            else { usage(); return EXIT_USAGE; }
+        }
+        if (q < 1 || q > 100 || (rot != -1 && (rot < 0 || rot > 270 || rot % 90))) { usage(); return EXIT_USAGE; }
+        if (lensfix_load(argv[2], &m, err, sizeof err)) { snprintf(out, sizeof out, "{\"ok\":false,\"error\":"); jw_quote_into(out, sizeof out, err); strcat(out, "}"); puts(out); return EXIT_FAILED; }
+        ld_bind(&m, 0, 0);
+        t0 = mono_ms();
+        if (lensfix_jpeg_file(&m, NULL, rot, argv[3], argv[4], q, err, sizeof err)) {
+            /* a JPEG turned upright with no Exif orientation (a camera
+             * driver's, or one whose Exif was stripped, e.g. by a forum):
+             * say how to give its rotation */
+            if (rot < 0 && strstr(err, "unknown rotation"))
+                snprintf(err + strlen(err), sizeof err - strlen(err),
+                         "; give its rotation: rot=90 (a back camera held upright), rot=270 (upside down or the front camera), rot=180");
+            snprintf(out, sizeof out, "{\"ok\":false,\"error\":"); jw_quote_into(out, sizeof out, err); strcat(out, "}"); puts(out); return EXIT_FAILED;
+        }
+        snprintf(out, sizeof out, "{\"ok\":true,\"path\":"); jw_quote_into(out, sizeof out, argv[4]);
+        snprintf(out + strlen(out), sizeof out - strlen(out), ",\"ms\":%.0f}", mono_ms() - t0);
+        puts(out);
+        return 0;
+    }
 
     if (!lib) lib = "librawfish-ir.so";
     if (!load_hybris()) return EXIT_HYBRIS;
@@ -3139,6 +3408,12 @@ int main(int argc, char **argv)
                     log_line("# shading: ", out);
                 }
             }
+            /* The lens distortion model of this camera; the correction as set */
+            g_bridge_for_vendor = bridge;
+            snprintf(g_lensfix_cam, sizeof g_lensfix_cam, "%s", argv[2]);
+            lensfix_load_model();
+            lensfix_apply(out);
+            if (g_lensfix) emit(out);
             {   /* the camera's zones, one line at each start (see indraw_region_report) */
                 typedef int (*rr_fn)(char *, size_t);
                 rr_fn rr = (rr_fn)a_dlsym(bridge, "indraw_region_report");
@@ -3228,6 +3503,8 @@ int main(int argc, char **argv)
                 !strncmp(line, "sh ", 3)) {       /* the controller's own commands */
                 char cap[256];
                 ctl_lock(); ctl_command(line); ctl_unlock();
+                /* a series: its camera JPEGs lens-corrected after it */
+                g_lf_defer = ctl_capture_count() > 1;
                 /* a shutter press: the capture lines the controller decided, run
                  * here like typed ones (long: without the lock) */
                 while (ctl_pop_capture(cap, sizeof cap)) {
@@ -3247,6 +3524,8 @@ int main(int argc, char **argv)
                     if (failed) shot_failed_event(bridge);   /* said on the screen, not only in the log */
                     ctl_engine_busy(0);
                 }
+                if (g_lf_nlater) { ctl_engine_busy(1); lensfix_later_flush(); ctl_engine_busy(0); }
+                g_lf_defer = 0;
                 continue;
             }
             cmd = strtok_r(line, " \t", &save); /* first word                    */
@@ -3354,6 +3633,7 @@ int main(int argc, char **argv)
                 else if (!vff) { emit("{\"ok\":false,\"error\":\"vf: not in this engine (frames stay SF2P)\"}"); failures++; }
                 else { failures += vff(a, out, OUT_SIZE) != 0; emit(out); }
             }
+            else if (!strcmp(cmd, "lensfix")) failures += cmd_lensfix(&save, out);
             else emit("{\"ok\":false,\"error\":\"unknown command\"}");
             ctl_unlock();
         }

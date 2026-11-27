@@ -14,6 +14,7 @@
 #ifndef INDRAWPREVIEW_H
 #define INDRAWPREVIEW_H
 
+#include "../android/lensdist.h"   /* the lens distortion fix: the viewfinder drawn corrected */
 #include <QImage>
 #include <QProcess>
 #include <QPointer>
@@ -439,6 +440,11 @@ signals:
     void calProgress(int done, int total);
     void calExposure(qint64 exposureNs, int iso);
     void calDone(bool ok, const QString &path, const QString &why);
+    /* The lens distortion fix (SF2M "lensfix state="): "on", "off", or
+     * "unavailable" (asked, but this camera has no lens profile).
+     * anyProfile: this phone has a lens profile for some camera (false:
+     * none, the menu hides the column). */
+    void lensFixState(const QString &state, bool anyProfile);
     void stackProgress(int frame, int n, int elapsedMs);
     /* A stack ended: frames added of n, aborted, total ms (SF2M "stack_done"). */
     void stackDone(int frames, int n, bool aborted, int ms);
@@ -536,6 +542,20 @@ private:
     bool m_fill = true;
     QRectF m_viewWindow{0, 0, 1, 1};   /* what to show, array-normalised         */
     QRectF m_frameCrop{0, 0, 1, 1};    /* the next frames' real crop ("fcrop")    */
+    /* The lens distortion fix (docs/LENS-DISTORTION.md): the frames are drawn
+     * corrected by the GPU (a grid whose texture coordinates are where the
+     * lens drew each point), from the model the CLI sends ("lensfix
+     * state=on ..."); m_lensView: the correction of the frames now shown
+     * (render thread, cached per frame size, crop and model). */
+    bool m_lensOn = false;
+    ld_model_t m_lensModel;
+    int m_lensGen = 0;
+    ld_view_t m_lensView;
+    bool m_lensViewOk = false;
+    QSize m_lensViewSize;
+    QRectF m_lensViewCrop;
+    int m_lensViewGen = -1;
+    const ld_view_t *lensViewFor(const QSize &frameSize);
     int m_sensorOrientation = 90;  /* JP2 default; see the property doc above   */
     int m_displayRotation = 0;     /* QML item rotation, for fit math           */
     QString m_errorString;

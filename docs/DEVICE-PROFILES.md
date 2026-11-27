@@ -201,7 +201,11 @@ module in `/usr/share/rawfish-ir/device-profiles/` (source:
   it guesses from the screen's proportions);
 - per camera, `"shading_file"`: the lens-shading calibration's file name for
   every variant of the module (looked for after the name built from this
-  phone's make and model).
+  phone's make and model);
+- per camera, `"distortion_file"`: the same for the lens distortion profile
+  (`docs/LENS-DISTORTION.md`): one file for every model name of the module,
+  e.g. `"distortion_sony-xperia-xa2_cam0.json"`. Not needed when the module
+  has one model name (the JP2's: the name built from the phone is found).
 Every key is read from the user's `override-hal.json` first, then from the
 shipped profile, then the built-in default: the user's file only needs what
 differs. The log says which profile was matched ('# device profile: ...').

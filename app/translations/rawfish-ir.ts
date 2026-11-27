@@ -663,6 +663,26 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+5"/>
+        <source>Lens fix</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Lens distortion fix off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Lens distortion fix on (no lens profile for this camera)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Lens distortion fix on: viewfinder and JPEG</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+127"/>
         <source>Focus cal.</source>
         <translation type="unfinished"></translation>

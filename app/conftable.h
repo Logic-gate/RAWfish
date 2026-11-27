@@ -137,6 +137,11 @@ static const conf_key_t k_conf_keys[] = {
         "                                    values: off, 0x3, 0x5, 0x7, 1, 2, 3   default off\n" },
     { "menu", "gridOn", "0", "list:0,1",
         "Rule-of-thirds grid.                          values: 0, 1            default 0\n" },
+    { "menu", "lensFix", "0", "list:0,1",
+        "Lens distortion fix: the viewfinder and the JPGs corrected with the\n"
+        "camera's measured lens profile (straight lines stay straight); DNGs are\n"
+        "never touched. A camera without a profile is not corrected.\n"
+        "                                              values: 0, 1            default 0\n" },
     { "menu", "flash", "off", "list:off,auto,on,torch",
         "Flash.                                        values: off, auto, on, torch   default off\n" },
     { "menu", "sceneMode", "0", "range:0..18",

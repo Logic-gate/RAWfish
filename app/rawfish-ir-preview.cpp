@@ -1201,6 +1201,28 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         QString why = QString::fromLatin1(f.value("why"));
         why.replace(QLatin1Char('_'), QLatin1Char(' '));   /* the engine wrote '_' for spaces */
         emit calDone(f.value("ok").toInt() != 0, QString::fromLatin1(f.value("path")), why);
+    } else if (name == "lensfix") {
+        /* The lens distortion fix as the engine applies it: on (with the
+         * camera's model, bound to the active array: the viewfinder is
+         * drawn corrected), off, or unavailable (asked, but no profile for
+         * this camera). */
+        const QString state = QString::fromLatin1(f.value("state"));
+        ld_model_t m;
+        memset(&m, 0, sizeof m);
+        bool on = state == QLatin1String("on");
+        if (on) {
+            const QList<QByteArray> k = f.value("k").split(',');
+            m.aw = f.value("aw").toInt(); m.ah = f.value("ah").toInt();
+            m.fx = f.value("fx").toDouble(); m.fy = f.value("fy").toDouble();
+            m.cx = f.value("cx").toDouble(); m.cy = f.value("cy").toDouble();
+            for (int i = 0; i < 8 && i < k.size(); ++i) m.k[i] = k.at(i).toDouble();
+            on = m.aw > 0 && m.ah > 0 && m.fx > 0 && m.fy > 0 && k.size() == 8;
+            if (on) { m.r_fold = ld_fold_radius(&m); m.ok = 1; m_lensModel = m; }
+        }
+        if (on || on != m_lensOn) { m_lensOn = on; ++m_lensGen; update(); }
+        /* any=0: no profile for any camera of this phone (absent: an
+         * older CLI, taken as some) */
+        emit lensFixState(state, f.value("any", "1").toInt() != 0);
     } else if (name == "stack_start") {
         /* The engine says a stack began (the controller issued it): the
          * overlay, the lock-out and the screen kept on start here. */
@@ -1230,6 +1252,8 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         if (m_shotPending) m_procTimer->start(600);
     } else if (name == "caps") {
         updateFreeSpace();
+        /* a new session: the lens fix's model comes again ("lensfix") */
+        if (m_lensOn) { m_lensOn = false; ++m_lensGen; }
         /* The engine gives n/d for the EV step; the UI wants EV per step. */
         const QList<QByteArray> step = f.value("ev_step", "0/1").split('/');
         const double num = step.value(0).toDouble();
@@ -2457,6 +2481,86 @@ static QSGTextureMaterial *textureMaterial(QSGTexture *texture, bool linear)
     return mat;
 }
 
+/* The lens distortion fix's correction of the frames of frameSize now
+ * shown (lensdist.h), or nullptr when off: the frame's field from its crop
+ * ("fcrop", fractions of the band), cached until the size, the crop or the
+ * model changes. Render thread (the GUI thread is blocked meanwhile). */
+const ld_view_t *IndrawPreview::lensViewFor(const QSize &frameSize)
+{
+    if (!m_lensOn || frameSize.width() < 2 || frameSize.height() < 2) return nullptr;
+    if (m_lensViewGen != m_lensGen || m_lensViewSize != frameSize || m_lensViewCrop != m_frameCrop) {
+        const vf_rect_t band = vf_band(m_lensModel.aw, m_lensModel.ah, frameSize.width(), frameSize.height());
+        vf_rect_t fc;
+        fc.x = m_frameCrop.x(); fc.y = m_frameCrop.y(); fc.w = m_frameCrop.width(); fc.h = m_frameCrop.height();
+        const vf_rect_t sf = vf_to_sensor(band, fc);
+        const double field[4] = { sf.x * m_lensModel.aw, sf.y * m_lensModel.ah, sf.w * m_lensModel.aw, sf.h * m_lensModel.ah };
+        m_lensViewOk = ld_view_init(&m_lensView, &m_lensModel, frameSize.width(), frameSize.height(),
+                                    fc.w > 0 && fc.h > 0 ? field : nullptr) == 0;
+        m_lensViewGen = m_lensGen; m_lensViewSize = frameSize; m_lensViewCrop = m_frameCrop;
+    }
+    return m_lensViewOk ? &m_lensView : nullptr;
+}
+
+/* Where the lens drew point p of the corrected frame (frame pixels,
+ * continuous): p itself without the fix. */
+static QPointF lensSource(const ld_view_t *lens, const QPointF &p)
+{
+    double su, sv;
+    if (!lens) return p;
+    ld_src(lens, p.x() - 0.5, p.y() - 0.5, &su, &sv);
+    return QPointF(su + 0.5, sv + 0.5);
+}
+
+/* The geometry of a frame (or of an image over it with the frame's pixels:
+ * the aids) drawn into drawRect, showing sourceRect of a frame of
+ * frameSize; sub: the texture's part holding the image (an atlas), else
+ * 0..1. Without the lens fix, a quad; with it, a grid of 32 x 24 cells
+ * whose texture coordinates are where the lens drew each point -- the
+ * correction done by the GPU, for any transport (zero copy, I420, RGB). */
+static QSGGeometry *frameGeometry(const QRectF &drawRect, const QRectF &sourceRect, const QSizeF &frameSize,
+                                  const ld_view_t *lens, const QRectF &sub = QRectF(0, 0, 1, 1))
+{
+    const qreal fw = frameSize.width(), fh = frameSize.height();
+    if (!lens) {
+        QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+        QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
+                QRectF(sub.x() + sourceRect.x() / fw * sub.width(), sub.y() + sourceRect.y() / fh * sub.height(),
+                       sourceRect.width() / fw * sub.width(), sourceRect.height() / fh * sub.height()));
+        return geo;
+    }
+    const int nx = 32, ny = 24;
+    QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(),
+                                       (nx + 1) * (ny + 1), nx * ny * 6, GL_UNSIGNED_SHORT);
+    geo->setDrawingMode(GL_TRIANGLES);
+    QSGGeometry::TexturedPoint2D *v = geo->vertexDataAsTexturedPoint2D();
+    quint16 *ix = geo->indexDataAsUShort();
+    for (int j = 0; j <= ny; ++j)
+        for (int i = 0; i <= nx; ++i) {
+            const qreal tx = qreal(i) / nx, ty = qreal(j) / ny;
+            const QPointF s = lensSource(lens, QPointF(sourceRect.x() + tx * sourceRect.width(),
+                                                       sourceRect.y() + ty * sourceRect.height()));
+            const qreal u = qBound<qreal>(0, s.x() / fw, 1), w = qBound<qreal>(0, s.y() / fh, 1);
+            v[j * (nx + 1) + i].set(float(drawRect.x() + tx * drawRect.width()), float(drawRect.y() + ty * drawRect.height()),
+                                    float(sub.x() + u * sub.width()), float(sub.y() + w * sub.height()));
+        }
+    for (int j = 0; j < ny; ++j)
+        for (int i = 0; i < nx; ++i) {
+            const quint16 a = quint16(j * (nx + 1) + i), b = quint16(a + 1), c = quint16(a + nx + 1), d = quint16(c + 1);
+            *ix++ = a; *ix++ = b; *ix++ = c;
+            *ix++ = b; *ix++ = d; *ix++ = c;
+        }
+    return geo;
+}
+
+/* A geometry node owning its texture (the RGB frame's, the aids overlay's)
+ * besides its geometry and material. */
+class OwnedTextureNode : public QSGGeometryNode
+{
+public:
+    QSGTexture *texture = nullptr;
+    ~OwnedTextureNode() override { delete texture; }
+};
+
 /* A disc of an image (a triangle fan) drawn with `mat`: centred on `centre`
  * with `radius` (item pixels), showing the image around the point
  * `texCentre` (image pixels of a `texSize` image, which fills `sub` of the
@@ -2563,12 +2667,10 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                           target.center().y() - drawSize.height() / 2,
                           drawSize.width(), drawSize.height());
 
+    const ld_view_t *lens = lensViewFor(frameSize);     /* the lens fix: drawn corrected */
     if (oesTex) {
         QSGGeometryNode *frame = new QSGGeometryNode;
-        QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
-        QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
-                QRectF(sourceRect.x() / frameSize.width(), sourceRect.y() / frameSize.height(),
-                       sourceRect.width() / frameSize.width(), sourceRect.height() / frameSize.height()));
+        QSGGeometry *geo = frameGeometry(drawRect, sourceRect, frameSize, lens);
         frame->setGeometry(geo);
         frame->setFlag(QSGNode::OwnsGeometry);
         frame->setMaterial(new OesMaterial(oesTex));
@@ -2576,13 +2678,18 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         root->appendChildNode(frame);
     } else if (yuv) {
         QSGGeometryNode *frame = new QSGGeometryNode;
-        QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
-        QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
-                QRectF(sourceRect.x() / frameSize.width(), sourceRect.y() / frameSize.height(),
-                       sourceRect.width() / frameSize.width(), sourceRect.height() / frameSize.height()));
+        QSGGeometry *geo = frameGeometry(drawRect, sourceRect, frameSize, lens);
         frame->setGeometry(geo);
         frame->setFlag(QSGNode::OwnsGeometry);
         frame->setMaterial(new YuvMaterial(root->planes));
+        frame->setFlag(QSGNode::OwnsMaterial);
+        root->appendChildNode(frame);
+    } else if (lens) {                                   /* RGB, corrected: a grid */
+        OwnedTextureNode *frame = new OwnedTextureNode;
+        frame->texture = texture;
+        frame->setGeometry(frameGeometry(drawRect, sourceRect, frameSize, lens, texture->normalizedTextureSubRect()));
+        frame->setFlag(QSGNode::OwnsGeometry);
+        frame->setMaterial(textureMaterial(texture, true));
         frame->setFlag(QSGNode::OwnsMaterial);
         root->appendChildNode(frame);
     } else {
@@ -2622,10 +2729,7 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         aidsDraw.cells = m_aidCells;
         if (aidsDraw.peak || aidsDraw.zebra) {
             QSGGeometryNode *ov = new QSGGeometryNode;
-            QSGGeometry *geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
-            QSGGeometry::updateTexturedRectGeometry(geo, drawRect,
-                    QRectF(sourceRect.x() / frameSize.width(), sourceRect.y() / frameSize.height(),
-                           sourceRect.width() / frameSize.width(), sourceRect.height() / frameSize.height()));
+            QSGGeometry *geo = frameGeometry(drawRect, sourceRect, frameSize, lens);   /* the frame's mapping */
             ov->setGeometry(geo);
             ov->setFlag(QSGNode::OwnsGeometry);
             ov->setMaterial(new AidsMaterial(root->aids, aidsDraw));
@@ -2638,7 +2742,16 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     QSGTexture *ovTexShown = nullptr;                    /* for the magnifier below */
     if (!m_overlay.isNull()) {
         QSGTexture *ovTex = window()->createTextureFromImage(m_overlay);
-        if (ovTex) {
+        if (ovTex && lens) {                             /* corrected: the frame's grid */
+            OwnedTextureNode *ov = new OwnedTextureNode;
+            ov->texture = ovTex;
+            ov->setGeometry(frameGeometry(drawRect, sourceRect, frameSize, lens, ovTex->normalizedTextureSubRect()));
+            ov->setFlag(QSGNode::OwnsGeometry);
+            ov->setMaterial(textureMaterial(ovTex, false));
+            ov->setFlag(QSGNode::OwnsMaterial);
+            root->appendChildNode(ov);
+            ovTexShown = ovTex;
+        } else if (ovTex) {
             ovTex->setFiltering(QSGTexture::Nearest);
             QSGSimpleTextureNode *ov = new QSGSimpleTextureNode;
             ov->setOwnsTexture(true);
@@ -2657,8 +2770,9 @@ QSGNode *IndrawPreview::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
      * view (a loupe's edge) it shows what the frame holds there. */
     if (m_bubbleRadius > 0) {
         const qreal mag = 2.0;
-        const QPointF tc(sourceRect.x() + (m_bubbleCentre.x() - drawRect.x()) / scale,
-                         sourceRect.y() + (m_bubbleCentre.y() - drawRect.y()) / scale);
+        /* the point under the disc, where the lens drew it (the lens fix) */
+        const QPointF tc = lensSource(lens, QPointF(sourceRect.x() + (m_bubbleCentre.x() - drawRect.x()) / scale,
+                                                    sourceRect.y() + (m_bubbleCentre.y() - drawRect.y()) / scale));
         if (oesTex)
             root->appendChildNode(discNode(new OesMaterial(oesTex), QRectF(0, 0, 1, 1), frameSize,
                                            m_bubbleCentre, m_bubbleRadius, tc, scale * mag));

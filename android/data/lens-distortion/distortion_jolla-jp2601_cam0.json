@@ -1,0 +1,56 @@
+{
+  "format": "rawfish-ir lens distortion 1",
+  "_comment": "Lens distortion of one camera (OpenCV model, its matrix for the frame width x height, the camera's full frame). Written by scripts/lens-calibrate.py; read by the engine (android/lensdist.h). See docs/LENS-DISTORTION.md.",
+  "make": "Jolla",
+  "model": "JP2601",
+  "camera_id": "0",
+  "name": "std",
+  "width": 8192,
+  "height": 6144,
+  "fx": 6191.931,
+  "fy": 6183.9856,
+  "cx": 4105.8511,
+  "cy": 3017.8353,
+  "dist": [
+    -3.4141669,
+    23.195052,
+    -0.0011606533,
+    0.00041336895,
+    0.0,
+    -3.5380085,
+    23.483315,
+    0.0
+  ],
+  "fit": {
+    "model": "rational k1,k2,k4,k5",
+    "rms_px": 5.0552,
+    "images": 29,
+    "coverage_pct": 94,
+    "samples": [
+      {
+        "size": [
+          8192,
+          6144
+        ],
+        "images": 10,
+        "rms_px": 6.345
+      },
+      {
+        "size": [
+          4096,
+          2304
+        ],
+        "images": 19,
+        "rms_px": 2.144
+      }
+    ],
+    "board": {
+      "squares": [
+        7,
+        10
+      ],
+      "square_mm": 23.0
+    }
+  },
+  "generated": "2026-11-25"
+}

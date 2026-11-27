@@ -76,11 +76,11 @@ else
 fi
 # Same flags as sailfish/Makefile (no -D_GNU_SOURCE: the file must declare
 # what it needs itself, as on the build engine), warnings as errors.
-gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/rawfish-ir.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-host "$root/sailfish/rawfish-ir.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/sailfish/lensfix.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
 echo "sailfish/rawfish-ir.c + controller: OK"
 # The device-profile readers (override-hal.json over the shipped profile):
 # integer keys, the focus calibration, vendor_request and session_request.
-gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-profile-test "$root/sailfish/tests/profile_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
+gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-profile-test "$root/sailfish/tests/profile_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" "$root/sailfish/yuvjpeg.c" "$root/sailfish/yuvproc.c" "$root/sailfish/lensfix.c" "$root/android/exifwrite.c" -ldl -lpthread -lm -ljpeg
 run_test /tmp/indraw-profile-test
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/rawfish-ir.c" -o /dev/null
 gcc -std=c11 -O2 -Wall -Wextra -Werror -c "$root/sailfish/controller.c" -o /dev/null
@@ -259,6 +259,25 @@ run_test /tmp/indraw-rawcheck-test
 # against the Xperia 10 III's four cameras.
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-focal35-test "$root/android/tests/focal35_test.c" -lm
 run_test /tmp/indraw-focal35-test
+
+# The lens distortion model and its remap (android/lensdist.h, pure C), with
+# every shipped file; then the CLI's correction of the photos (lensfix.c:
+# a JPEG corrected in place, its Exif kept, a new thumbnail); then the
+# controller's hold of the "written" events of the files it corrects (two
+# threads: also under ThreadSanitizer).
+gcc -std=c11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall -Wextra -Werror \
+    -o /tmp/indraw-lensdist-test "$root/android/tests/lensdist_test.c" -lm
+(cd "$root" && run_test /tmp/indraw-lensdist-test android/data/lens-distortion/*.json)
+gcc -std=c11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall -Wextra -Werror -I "$root/sailfish" \
+    -o /tmp/indraw-lensfix-test "$root/sailfish/tests/lensfix_test.c" "$root/sailfish/lensfix.c" "$root/sailfish/yuvjpeg.c" \
+    "$root/android/exifwrite.c" -ljpeg -lpthread -lm
+run_test /tmp/indraw-lensfix-test
+for san in address,undefined thread; do
+    gcc -std=c11 -O1 -g -fsanitize=$san -fno-sanitize-recover=all -Wall -Wextra -Werror -o /tmp/indraw-written-test \
+        "$root/sailfish/tests/written_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" \
+        "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
+    run_test /tmp/indraw-written-test
+done
 
 # The measured lens-shading calibration (android/shading.h, pure C): the
 # JP2's own file, parsing, interpolation, dosing.

@@ -31,3 +31,5 @@ app/*.qm
 app/translations/*.qm
 app/rpm/*.release-orig
 rpm/*.release-orig
+# the lens calibration guide's example photos (docs/LENS-CALIBRATION.md)
+!docs/calibration/examples/*.jpg
