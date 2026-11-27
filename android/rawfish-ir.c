@@ -49,6 +49,7 @@
 #include <fcntl.h>    /* open() flags                             */
 #include <pthread.h>  /* mutex + condition variable               */
 #include <dlfcn.h>    /* dlsym: NDK functions newer than the base   */
+#include <dirent.h>   /* the lens profiles of this phone (lensdist_any) */
 #include <poll.h>     /* waiting for room on the event pipe       */
 #include <sys/socket.h> /* hwprobe: buffer handles to the interface  */
 #include <sys/un.h>
@@ -9726,6 +9727,44 @@ IR_API int indraw_lensdist_load(const char *user_dir, const char *sys_dir, const
         jw_add(&w, "}");
     }
     return IR_OK;
+}
+
+/* Whether this phone has a lens distortion profile for any of its cameras
+ * (the interface shows the Lens fix column only then): a file
+ * distortion_<manufacturer>-<model>_cam*.json in either folder, or one of
+ * `names` (the device profile's distortion_file of each camera, one per
+ * line). 1 or 0. */
+IR_API int indraw_lensdist_any(const char *user_dir, const char *sys_dir, const char *names)
+{
+    char mk[64], md[64], prefix[160], path[600], one[200];
+    const char *dirs[2], *p;
+    int d, any = 0;
+    dirs[0] = user_dir; dirs[1] = sys_dir;
+    slug_into(g.make, mk, sizeof mk);
+    slug_into(g.model, md, sizeof md);
+    snprintf(prefix, sizeof prefix, "distortion_%s-%s_cam", mk, md);
+    for (d = 0; d < 2 && !any; ++d) {
+        DIR *dir;
+        struct dirent *e;
+        if (!dirs[d] || !dirs[d][0] || !(dir = opendir(dirs[d]))) continue;
+        while (!any && (e = readdir(dir)) != NULL) {
+            size_t n = strlen(e->d_name);
+            if (!strncmp(e->d_name, prefix, strlen(prefix)) && n > 5 && !strcmp(e->d_name + n - 5, ".json")) any = 1;
+        }
+        closedir(dir);
+        for (p = names; !any && p && *p; ) {
+            size_t n = strcspn(p, "\n");
+            if (n > 0 && n < sizeof one) {
+                FILE *f;
+                snprintf(one, sizeof one, "%.*s", (int)n, p);
+                snprintf(path, sizeof path, "%s/%s", dirs[d], one);
+                if ((f = fopen(path, "rb")) != NULL) { fclose(f); any = 1; }
+            }
+            p += n;
+            if (*p) ++p;
+        }
+    }
+    return any;
 }
 
 /* The correction on (1) or off (0): the taps follow it. Returns 1 if a

@@ -59,6 +59,11 @@ static void *remap_job(void *arg)
 
 int lensfix_yuv(const ld_model_t *m, const double *field, const ir_yuv_t *in, ir_yuv_t *out)
 {
+    return lensfix_yuv_turned(m, field, 0, in, out);
+}
+
+int lensfix_yuv_turned(const ld_model_t *m, const double *field, int rot, const ir_yuv_t *in, ir_yuv_t *out)
+{
     ld_view_t v;
     ld_grid_t g;
     job_t jobs[8];
@@ -70,8 +75,11 @@ int lensfix_yuv(const ld_model_t *m, const double *field, const ir_yuv_t *in, ir
     if (!in || !out || !in->y || !in->u || !in->v || (in->w & 1) || (in->h & 1)) return -1;
     *out = *in;
     out->y = out->u = out->v = NULL;
-    if (ld_view_init(&v, m, in->w, in->h, field)) return -2;
-    if (ld_grid_build(&v, 16, &g)) return -1;
+    rot = ((rot % 360) + 360) % 360;
+    if (rot % 90) return -1;
+    /* the view in the sensor's frame; the grid in the picture's, turned */
+    if (ld_view_init(&v, m, rot == 90 || rot == 270 ? in->h : in->w, rot == 90 || rot == 270 ? in->w : in->h, field)) return -2;
+    if (ld_grid_build_turned(&v, 16, rot, &g)) return -1;
     ny = (size_t)in->w * in->h; nc = ny / 4;
     out->y = malloc(ny); out->u = malloc(nc); out->v = malloc(nc);
     if (!out->y || !out->u || !out->v) { free(out->y); free(out->u); free(out->v); out->y = out->u = out->v = NULL; ld_grid_free(&g); return -1; }
@@ -268,9 +276,9 @@ int lensfix_jpeg_file(const ld_model_t *m, lensfix_field_fn field_for, int rot_d
     size_t olen = 0;
     uint8_t *orig = read_all(in_path, &olen), *jpg = NULL, *thumb = NULL;
     unsigned long jlen = 0, tlen = 0;
-    ir_yuv_t src, fixed, t;
+    ir_yuv_t src, fixed;
     exif_info_t ex;
-    int rc, turned = 0, landscape_model;
+    int rc, turned = 0, landscape_model, sw, sh;
     memset(&fixed, 0, sizeof fixed);
     if (!orig) { snprintf(msg, msgn, "cannot read %s", in_path); return -1; }
     if ((rc = lensfix_decode(orig, olen, &src)) != 0) {
@@ -281,30 +289,25 @@ int lensfix_jpeg_file(const ld_model_t *m, lensfix_field_fn field_for, int rot_d
     /* The model is the sensor's. A JPEG with an Exif orientation has the
      * sensor's pixels; one without may have had them turned upright by the
      * camera driver (the JP2's does), by the rotation the photo was asked
-     * to carry: turned back here, and upright again after. */
+     * to carry: corrected as it is, upright, the grid turned with it
+     * (ld_grid_build_turned: no copy turned back and forth). */
     landscape_model = m->aw >= m->ah;
     if (rot_deg > 0 && exif_read_orientation(orig, olen) <= 1) turned = ((rot_deg % 360) + 360) % 360;
     if ((turned == 90 || turned == 270) && (src.w > src.h) == landscape_model && src.w != src.h) turned = 0;   /* not turned after all */
-    if (turned) {
-        if (lensfix_rotate(&src, 360 - turned, &t)) { free(orig); yuv_free3(&src); snprintf(msg, msgn, "out of memory"); return -1; }
-        yuv_free3(&src); src = t;
-    }
-    if ((src.w > src.h) != landscape_model && src.w != src.h) {
+    sw = turned == 90 || turned == 270 ? src.h : src.w;     /* the sensor's frame */
+    sh = turned == 90 || turned == 270 ? src.w : src.h;
+    if ((sw > sh) != landscape_model && sw != sh) {
         free(orig); yuv_free3(&src);
         snprintf(msg, msgn, "the JPEG's pixels are turned (%dx%d) against the sensor, by an unknown rotation: not corrected", src.w, src.h);
         return -1;
     }
-    if (field_for && field_for(src.w, src.h, fi) == 0 && fi[2] > 0 && fi[3] > 0) {
+    if (field_for && field_for(sw, sh, fi) == 0 && fi[2] > 0 && fi[3] > 0) {
         fbuf[0] = fi[0]; fbuf[1] = fi[1]; fbuf[2] = fi[2]; fbuf[3] = fi[3];
         field = fbuf;
     }
-    rc = lensfix_yuv(m, field, &src, &fixed);
+    rc = lensfix_yuv_turned(m, field, turned, &src, &fixed);
     yuv_free3(&src);
     if (rc) { free(orig); snprintf(msg, msgn, rc == -2 ? "the lens model cannot correct this frame" : "out of memory"); return -1; }
-    if (turned) {
-        if (lensfix_rotate(&fixed, turned, &t)) { free(orig); yuv_free3(&fixed); snprintf(msg, msgn, "out of memory"); return -1; }
-        yuv_free3(&fixed); fixed = t;
-    }
     rc = yuv_encode_jpeg(&fixed, quality, &jpg, &jlen);
     if (rc == 0 && lensfix_thumbnail(&fixed, 320, &thumb, &tlen)) { thumb = NULL; tlen = 0; }
     yuv_free3(&fixed);

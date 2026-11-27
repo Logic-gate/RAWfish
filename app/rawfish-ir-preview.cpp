@@ -1220,7 +1220,9 @@ void IndrawPreview::parseEvent(const QByteArray &line)
             if (on) { m.r_fold = ld_fold_radius(&m); m.ok = 1; m_lensModel = m; }
         }
         if (on || on != m_lensOn) { m_lensOn = on; ++m_lensGen; update(); }
-        emit lensFixState(state);
+        /* any=0: no profile for any camera of this phone (absent: an
+         * older CLI, taken as some) */
+        emit lensFixState(state, f.value("any", "1").toInt() != 0);
     } else if (name == "stack_start") {
         /* The engine says a stack began (the controller issued it): the
          * overlay, the lock-out and the screen kept on start here. */

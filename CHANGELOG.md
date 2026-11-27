@@ -20,8 +20,9 @@ repository). Newest first.
   distortion in the viewfinder and in every JPG, with the camera's measured
   lens profile. It shows most on the JP2's 18 mm, whose edges and corners
   bend strongly; the 26 mm and the front camera bend less. The three
-  cameras of the JP2 are measured; on a phone or a camera without a
-  profile nothing is corrected, and the menu says so. DNGs are never
+  cameras of the JP2 are measured; on a camera without a profile nothing
+  is corrected, and the menu says so; on a phone with none (the Xperia
+  XA2 and 10 III today) the column is not shown. DNGs are never
   touched. The picture is cropped by 1 to 2 % (no empty corners), the
   viewfinder showing exactly what the photo will; a touch on the corrected
   viewfinder focuses where the finger is.
@@ -30,7 +31,11 @@ repository). Newest first.
   "lens corrected"); the camera's JPEG (bursts, brackets, the camera's JPG)
   decoded after it was written, corrected and compressed again, its Exif
   kept and a new thumbnail made -- the gallery sees the file once it is
-  final. The viewfinder is drawn corrected by the GPU (a grid of 32 x 24
+  final. In a series (a bracket, JPG + DNG above all) the camera's JPEGs
+  are corrected after the last shot, so the shots stay as close together
+  as without the fix; a JPEG the driver turned upright is corrected as it
+  is (the remap turned along, no rotated copies: some five times faster
+  on 50 MP). The viewfinder is drawn corrected by the GPU (a grid of 32 x 24
   cells, the zebra, the peaking and the magnifier along), with the zero
   copy kept.
 - One profile per camera serves every format and size (4:3, 16:9, 12 and

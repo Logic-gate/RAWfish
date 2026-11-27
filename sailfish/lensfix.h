@@ -23,6 +23,11 @@ int lensfix_load(const char *path, ld_model_t *m, char *err, size_t errn);
  * 0, -1 (memory) or -2 (the model cannot correct this frame). */
 int lensfix_yuv(const ld_model_t *m, const double *field, const ir_yuv_t *in, ir_yuv_t *out);
 
+/* The same for a frame whose pixels were turned clockwise by rot (0, 90,
+ * 180, 270) from the sensor's: corrected as it is, the result turned the
+ * same (field: still in the sensor's active array). */
+int lensfix_yuv_turned(const ld_model_t *m, const double *field, int rot, const ir_yuv_t *in, ir_yuv_t *out);
+
 /* A small JPEG of the frame (about max_w pixels wide) for the Exif. */
 int lensfix_thumbnail(const ir_yuv_t *f, int max_w, uint8_t **jpg, unsigned long *len);
 
@@ -38,7 +43,7 @@ typedef int (*lensfix_field_fn)(int w, int h, int32_t out[4]);
  * atomically), at JPEG quality q; field_for may be NULL. rot_deg: the
  * rotation (clockwise) the photo was asked to carry: a JPEG with no Exif
  * orientation had its pixels turned by it (the camera driver did), and is
- * turned back to the sensor's frame for the correction, then upright again;
+ * corrected as it is, upright (lensfix_yuv_turned);
  * -1: unknown (a JPEG whose pixels do not have the sensor's shape is then
  * refused). 0, or -1 with the reason in msg. */
 int lensfix_jpeg_file(const ld_model_t *m, lensfix_field_fn field_for, int rot_deg, const char *in_path,

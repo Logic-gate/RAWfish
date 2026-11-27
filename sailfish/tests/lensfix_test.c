@@ -139,7 +139,7 @@ int main(void)
         free(jpg); free(t.y); free(t.u); free(t.v);
     }
     /* turned upright by the driver (90 clockwise, no Exif orientation, as
-     * the JP2's camera JPEG): turned back, corrected, turned upright again */
+     * the JP2's camera JPEG): corrected as it is, upright */
     {
         ir_yuv_t r;
         double ex_x = 480 - 1 - vv, ex_y = u;            /* the corrected dot, turned 90 clockwise */
@@ -159,6 +159,27 @@ int main(void)
             free(back.y); free(back.u); free(back.v);
         } else CHECK(0, "read back");
         free(file);
+    }
+    {   /* a turned frame corrected as it is = corrected, then turned (the
+         * grid turned with the picture: no copy turned back and forth) */
+        int d, worst = 0, off = 0;
+        double mean = 0;
+        ir_yuv_t c, ct, t, tc;
+        lensfix_yuv(&m, NULL, &f, &c);
+        for (d = 90; d < 360; d += 90) {
+            size_t i, ny = (size_t)f.w * f.h;
+            lensfix_rotate(&c, d, &ct);
+            lensfix_rotate(&f, d, &t);
+            if (lensfix_yuv_turned(&m, NULL, d, &t, &tc) || tc.w != ct.w || tc.h != ct.h) { worst = 999; continue; }
+            for (i = 0; i < ny; ++i) { int e = abs(tc.y[i] - ct.y[i]); if (e > worst) worst = e; mean += e; if (e > 2) ++off; }
+            for (i = 0; i < ny / 4; ++i) { int e = abs(tc.u[i] - ct.u[i]); if (e > worst) worst = e; e = abs(tc.v[i] - ct.v[i]); if (e > worst) worst = e; }
+            free(ct.y); free(ct.u); free(ct.v); free(t.y); free(t.u); free(t.v); free(tc.y); free(tc.u); free(tc.v);
+        }
+        mean /= 3.0 * f.w * f.h;
+        /* the grid's nodes fall elsewhere on the lens (well under 0.05 px
+         * apart): a few levels only on the dot's hard edge */
+        CHECK(worst <= 8 && off < 40 && mean < 0.05, "turned 90, 180, 270 and corrected as it is: the corrected frame, turned (worst %d levels on %d edge pixels, mean %.3f)", worst, off, mean);
+        free(c.y); free(c.u); free(c.v);
     }
     {   /* the rotations are each other's inverse */
         ir_yuv_t a1, a2;

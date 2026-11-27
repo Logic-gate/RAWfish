@@ -290,25 +290,55 @@ typedef struct { int gw, gh, step; float *x, *y; } ld_grid_t;
 
 static inline void ld_grid_free(ld_grid_t *g) { free(g->x); free(g->y); memset(g, 0, sizeof *g); }
 
-static inline int ld_grid_build(const ld_view_t *v, int step, ld_grid_t *g)
+/* The grid of a frame turned clockwise by rot (0, 90, 180, 270) from the
+ * sensor's: its nodes and the source points they read are both in the
+ * turned frame (v->h x v->w for 90 and 270), so a picture whose pixels were
+ * turned upright is corrected as it is, upright, without turning it to the
+ * sensor's frame and back. Pixel centres at integers; the 4:2:0 chroma, its
+ * samples centred between the luma pairs, follows the same turn. */
+static inline void ld_turn(int rot, int w, int h, double x, double y, double *tx, double *ty)
 {
-    int i, j;
+    if (rot == 90) { *tx = h - 1 - y; *ty = x; }
+    else if (rot == 180) { *tx = w - 1 - x; *ty = h - 1 - y; }
+    else if (rot == 270) { *tx = y; *ty = w - 1 - x; }
+    else { *tx = x; *ty = y; }
+}
+static inline void ld_unturn(int rot, int w, int h, double tx, double ty, double *x, double *y)
+{
+    if (rot == 90) { *x = ty; *y = h - 1 - tx; }
+    else if (rot == 180) { *x = w - 1 - tx; *y = h - 1 - ty; }
+    else if (rot == 270) { *x = w - 1 - ty; *y = tx; }
+    else { *x = tx; *y = ty; }
+}
+
+static inline int ld_grid_build_turned(const ld_view_t *v, int step, int rot, ld_grid_t *g)
+{
+    int i, j, tw, th;
     memset(g, 0, sizeof *g);
-    if (!v->ok || step < 1) return -1;
+    if (!v->ok || step < 1 || (rot != 0 && rot != 90 && rot != 180 && rot != 270)) return -1;
+    tw = rot == 90 || rot == 270 ? v->h : v->w;
+    th = rot == 90 || rot == 270 ? v->w : v->h;
     g->step = step;
-    g->gw = (v->w - 1 + step - 1) / step + 2;
-    g->gh = (v->h - 1 + step - 1) / step + 2;
+    g->gw = (tw - 1 + step - 1) / step + 2;
+    g->gh = (th - 1 + step - 1) / step + 2;
     g->x = (float *)malloc(sizeof(float) * (size_t)g->gw * g->gh);
     g->y = (float *)malloc(sizeof(float) * (size_t)g->gw * g->gh);
     if (!g->x || !g->y) { ld_grid_free(g); return -1; }
     for (j = 0; j < g->gh; ++j)
         for (i = 0; i < g->gw; ++i) {
-            double su, sv;
-            ld_src(v, (double)i * step, (double)j * step, &su, &sv);
-            g->x[(size_t)j * g->gw + i] = (float)su;
-            g->y[(size_t)j * g->gw + i] = (float)sv;
+            double u, vv, su, sv, tu, tv;
+            ld_unturn(rot, v->w, v->h, (double)i * step, (double)j * step, &u, &vv);
+            ld_src(v, u, vv, &su, &sv);
+            ld_turn(rot, v->w, v->h, su, sv, &tu, &tv);
+            g->x[(size_t)j * g->gw + i] = (float)tu;
+            g->y[(size_t)j * g->gw + i] = (float)tv;
         }
     return 0;
+}
+
+static inline int ld_grid_build(const ld_view_t *v, int step, ld_grid_t *g)
+{
+    return ld_grid_build_turned(v, step, 0, g);
 }
 
 /* One row of the grid's map at luma row coordinate gv: rx, ry hold gw nodes. */

@@ -29,8 +29,11 @@ Item {
     // the JPEGs corrected with the camera's measured lens profile (DNGs
     // never). lensFixState: the engine's word, "unavailable" when this
     // camera has no profile.
+    // lensFixAny: this phone has a profile for some camera (the CLI says;
+    // false on the phones without any: the column is hidden there).
     property bool lensFix: false
     property string lensFixState: ""
+    property bool lensFixAny: true
     // The level's zero (ui 175): the roll and pitch the sensor reports when
     // the phone is truly upright, recorded by a long press on "level" with
     // the phone held straight; subtracted from every reading.
@@ -559,7 +562,7 @@ Item {
     }
     onAdvancedChanged: applyLive()
     Connections { target: viewfinder; onRunningChanged: if (viewfinder.running) menu.applyLive() }
-    Connections { target: viewfinder; onLensFixState: menu.lensFixState = state }
+    Connections { target: viewfinder; onLensFixState: { menu.lensFixState = state; menu.lensFixAny = anyProfile } }
 
     function mp(sz) { if (sz === "") return qsTr("max"); var p = sz.split("x"); return qsTr("%1 MP").arg(Math.round(p[0] * p[1] / 1e5) / 10) }
     // Listed JPEG sizes of a ratio, largest first.
@@ -753,8 +756,9 @@ Item {
             // Lens distortion fix: straight lines stay straight (the wide
             // camera above all), in the viewfinder and the JPEGs; DNGs are
             // never touched. A camera without a lens profile is not corrected
-            // (the header says so).
-            MenuColumn { colW: band.colW; maxRows: band.maxRows; header: header
+            // (the header says so); a phone with none for any camera does not
+            // show the column.
+            MenuColumn { visible: menu.lensFixAny; colW: band.colW; maxRows: band.maxRows; header: header
                 caption: qsTr("Lens fix"); values: [false, true]; current: menu.lensFix
                 labelFor: function(v) { return !v ? qsTr("Lens distortion fix off")
                                               : menu.lensFixState === "unavailable" ? qsTr("Lens distortion fix on (no lens profile for this camera)")

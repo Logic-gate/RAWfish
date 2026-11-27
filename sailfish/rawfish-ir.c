@@ -1990,6 +1990,7 @@ static char g_lensfix_file[1024];            /* a file given: it, not the phone'
 static ld_model_t g_ldm;                     /* the model, from the engine     */
 static int g_ldm_have;
 static char g_ldm_looked[300];               /* what was looked for (the warning) */
+static int g_ldm_any = 1;                    /* a profile for some camera of this phone (the menu shows the column) */
 static char g_lensfix_cam[16];               /* the open camera's id (its device profile's distortion_file) */
 
 static int lensfix_active(void) { return g_lensfix && g_ldm_have; }
@@ -2040,6 +2041,23 @@ static void lensfix_load_model(void)
     lf(udir, "/usr/share/rawfish-ir/lens-distortion", g_lensfix_file, rep, sizeof rep);
     log_line("# lensfix: ", rep);
     g_ldm_have = gf(&g_ldm) == 0;
+    {   /* a profile for any camera of this phone: the built names in either
+         * folder, or a distortion_file of any camera in the device profiles */
+        typedef int (*any_fn)(const char *, const char *, const char *);
+        any_fn af = (any_fn)a_dlsym(g_bridge_for_vendor, "indraw_lensdist_any");
+        char names[1024] = "";
+        int which;
+        for (which = 0; which < 2; ++which) {
+            const char *t = ov_source(which), *p = t;
+            while (p && (p = strstr(p, "\"distortion_file\"")) != NULL) {
+                const char *a = strchr(p + 17, ':'), *q1 = a ? strchr(a, '"') : NULL, *q2 = q1 ? strchr(q1 + 1, '"') : NULL;
+                p += 17;
+                if (q2 && q2 - q1 - 1 > 0 && q2 - q1 < 200 && strlen(names) + (size_t)(q2 - q1) + 1 < sizeof names)
+                    snprintf(names + strlen(names), sizeof names - strlen(names), "%.*s\n", (int)(q2 - q1 - 1), q1 + 1);
+            }
+        }
+        g_ldm_any = g_ldm_have || g_lensfix_file[0] || !af || af(udir, "/usr/share/rawfish-ir/lens-distortion", names);
+    }
     if ((lk = strstr(rep, "\"looked_for\":\"")) != NULL) {
         snprintf(g_ldm_looked, sizeof g_ldm_looked, "%s", lk + 14);
         g_ldm_looked[strcspn(g_ldm_looked, "\"")] = '\0';
@@ -2057,10 +2075,10 @@ static void lensfix_apply(char *out)
                  * the model bound to the active array (lensdist.h's ld_model_t) */
         char ev[512];
         if (g_lensfix && g_ldm_have)
-            snprintf(ev, sizeof ev, "lensfix state=on aw=%d ah=%d fx=%.6f fy=%.6f cx=%.6f cy=%.6f k=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
+            snprintf(ev, sizeof ev, "lensfix state=on any=1 aw=%d ah=%d fx=%.6f fy=%.6f cx=%.6f cy=%.6f k=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
                      g_ldm.aw, g_ldm.ah, g_ldm.fx, g_ldm.fy, g_ldm.cx, g_ldm.cy,
                      g_ldm.k[0], g_ldm.k[1], g_ldm.k[2], g_ldm.k[3], g_ldm.k[4], g_ldm.k[5], g_ldm.k[6], g_ldm.k[7]);
-        else snprintf(ev, sizeof ev, "lensfix state=%s\n", g_lensfix ? "unavailable" : "off");
+        else snprintf(ev, sizeof ev, "lensfix state=%s any=%d\n", g_lensfix ? "unavailable" : "off", g_ldm_any);
         em(ev);
     }
     if (g_lensfix && !g_ldm_have) {
@@ -2098,7 +2116,7 @@ static int cmd_lensfix(char **save, char *out)
 
 /* After the engine wrote a camera JPEG: corrected in place, when on. Adds
  * "lensfix" to the reply in out; the file's "written" event, held, goes. */
-static void lensfix_camera_jpeg(const char *path, int quality, char *out, int ok)
+static void lensfix_camera_jpeg_now(const char *path, int quality, char *out, int ok)
 {
     char msg[300];
     if (ok && lensfix_active()) {
@@ -2118,6 +2136,40 @@ static void lensfix_camera_jpeg(const char *path, int quality, char *out, int ok
         }
     }
     ctl_release_written(path);
+}
+
+/* A series from one shutter press (a bracket, JPG + DNG above all): its
+ * camera JPEGs corrected once the whole series is taken, not between the
+ * shots (about 0.2 s to 1 s each, which spaced the shots and delayed the
+ * DNG series). Their "written" events stay held until then. */
+#define LF_LATER_MAX 8
+static struct { char path[1200]; int quality; } g_lf_later[LF_LATER_MAX];
+static int g_lf_defer, g_lf_nlater;
+
+static void lensfix_camera_jpeg(const char *path, int quality, char *out, int ok)
+{
+    if (ok && lensfix_active() && g_lf_defer && g_lf_nlater < LF_LATER_MAX && strlen(path) < sizeof g_lf_later[0].path) {
+        snprintf(g_lf_later[g_lf_nlater].path, sizeof g_lf_later[0].path, "%s", path);
+        g_lf_later[g_lf_nlater++].quality = quality;
+        if (out) json_append(out, OUT_SIZE, "lensfix", "{\"later\":true}");
+        return;
+    }
+    lensfix_camera_jpeg_now(path, quality, out, ok);
+}
+
+/* The series' JPEGs, corrected now (the end of the series). */
+static void lensfix_later_flush(void)
+{
+    int k, n = g_lf_nlater;
+    double t0 = mono_ms();
+    g_lf_defer = 0;
+    g_lf_nlater = 0;
+    for (k = 0; k < n; ++k) lensfix_camera_jpeg_now(g_lf_later[k].path, g_lf_later[k].quality, NULL, access(g_lf_later[k].path, F_OK) == 0);
+    if (n) {
+        char line[96];
+        snprintf(line, sizeof line, "%d JPEG(s) of the series corrected after it, %.0f ms", n, mono_ms() - t0);
+        log_line("# lensfix: ", line);
+    }
 }
 
 /* Handles one "jpeg ..." line (tokens after "jpeg" come from strtok_r). */
@@ -3430,6 +3482,8 @@ int main(int argc, char **argv)
                 !strncmp(line, "sh ", 3)) {       /* the controller's own commands */
                 char cap[256];
                 ctl_lock(); ctl_command(line); ctl_unlock();
+                /* a series: its camera JPEGs lens-corrected after it */
+                g_lf_defer = ctl_capture_count() > 1;
                 /* a shutter press: the capture lines the controller decided, run
                  * here like typed ones (long: without the lock) */
                 while (ctl_pop_capture(cap, sizeof cap)) {
@@ -3449,6 +3503,8 @@ int main(int argc, char **argv)
                     if (failed) shot_failed_event(bridge);   /* said on the screen, not only in the log */
                     ctl_engine_busy(0);
                 }
+                if (g_lf_nlater) { ctl_engine_busy(1); lensfix_later_flush(); ctl_engine_busy(0); }
+                g_lf_defer = 0;
                 continue;
             }
             cmd = strtok_r(line, " \t", &save); /* first word                    */

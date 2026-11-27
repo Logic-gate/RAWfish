@@ -626,6 +626,7 @@ static int shoot_command(const char *line)
     }
     return 1;
 }
+int ctl_capture_count(void) { return c.capture_n; }
 int ctl_pop_capture(char *buf, size_t n)
 {
     if (c.capture_i >= c.capture_n) return 0;
