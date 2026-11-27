@@ -2941,14 +2941,14 @@ int main(int argc, char **argv)
         indraw_wb_fixed_fn wbo = (indraw_wb_fixed_fn)a_dlsym(bridge, "indraw_wb_offset");   /* same shape: floats or NULL */
         indraw_loupe_fn lf = (indraw_loupe_fn)a_dlsym(bridge, "indraw_loupe");
         indraw_set_focus_cal_fn setcal_cmd = (indraw_set_focus_cal_fn)a_dlsym(bridge, "indraw_set_focus_calibration");
-        {   /* abort paths: SIGUSR1 from the app, stdin hang-up (app gone) */
+        {   /* abort paths: SIGUSR1 from the app, stdin hang-up (app gone).
+             * The hang-up watcher (eof_watch) is started only once the
+             * session is open, below: a start that fails leaves no thread. */
             struct sigaction sa;
-            pthread_t t;
             g_abort_fn = (indraw_request_abort_fn)a_dlsym(bridge, "indraw_request_abort");
             memset(&sa, 0, sizeof sa);
             sa.sa_handler = on_sigusr1;
             sigaction(SIGUSR1, &sa, NULL);
-            if (g_abort_fn && pthread_create(&t, NULL, eof_watch, NULL) == 0) pthread_detach(t);
         }
         char *line = NULL;                      /* getline() buffer              */
         size_t cap = 0;
@@ -3022,7 +3022,28 @@ int main(int argc, char **argv)
         }
         rc = op(argv[2], jw, jh, pw, ph, rw, rh, out, sizeof out);
         emit(out);
-        if (rc) return EXIT_FAILED;
+        if (rc) {
+            /* The session did not start (e.g. a RAW size the camera does
+             * not list): the engine has closed what it opened, or never
+             * opened the camera. Leave at once with _exit(), as
+             * close_watchdog does. A normal exit() first runs the clean-up
+             * of every library loaded, the Android ones (libhybris) among
+             * them, and a failed start with --log was seen to crash there
+             * or around it (exit 139, 27 Nov 2026; the cause not found).
+             * Either way the system frees all of the process: its memory,
+             * threads and libraries. _exit() does not flush the buffered
+             * output: the reply and the log are flushed first. */
+            log_line("# ", "the session did not start: the engine exits");
+            fflush(NULL);
+            _exit(EXIT_FAILED);
+        }
+        /* The stdin hang-up watcher (eof_watch), now that the session is
+         * open: from here on a command can run long (a stack), and the app
+         * gone must stop it. */
+        if (g_abort_fn) {
+            pthread_t t;
+            if (pthread_create(&t, NULL, eof_watch, NULL) == 0) pthread_detach(t);
+        }
 
         /* Apply device corrections (nature 2): read override-hal.json for this
          * camera and pass the typed values to the bridge. Today: the real

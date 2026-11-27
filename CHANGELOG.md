@@ -14,6 +14,12 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
+## Since 0.3.11-557 (patches 0559–)
+- A session that fails to start (e.g. a RAW size the camera does not list)
+  ends the engine at once, with no thread left running: the stdin watcher
+  now starts only once the camera is open. Such a failed start with --log
+  was seen to crash on the way out (exit 139; patch 0559).
+
 ## 0.3.11 (beta) — a lighter viewfinder (patches 0431–0557)
 - The version 0.3.11 (patch 0557), the release of the builds that followed
   0.3.10-520, the last one published: 0.3.10-524 to 0.3.10-555, listed
