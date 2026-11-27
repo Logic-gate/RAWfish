@@ -9,7 +9,8 @@ Transitional version meant to be reviewed and merged with some RAWfish parts, on
 Coded by AI under the supervision of and at the request of the creators.\
 Supervision and all the tests made by humans.\
 No human code review yet. Audits by other sessions and other AI models.\
-Beta since 0.3.0: used daily on the Jolla Phone 2 and the Xperia XA2; other phones need testers.
+Tested on: JP2, Xperia XA2, 10iii, 10 iv, 10 v.
+Needs testers on the 10ii.
 
 ### Architecture
 
@@ -24,22 +25,23 @@ Built on Android's Camera2 through libhybris.
 
 ### Features
 
-- JPG
-- RAW (DNG)
+- JPG from YUV, with own noise and sharpening treatment
+- RAW (DNG), with custom shading map in the EXIF metadata
 - Long exposure up to 8 minutes (stacking, experimental)
 - Manual controls (focus, exposure, white balance, noise, sharpening...)
 - Histogram, spot measurement
 - Loupe for exposure and focus
-- Bracketing (3x same EV, +1, +2, +3)
+- Bracketing (3x, 5x, 7x same EV, and 3x at: +/-1 stop, +/-2 stops, +3 stops)
 - User lens shading calibration tool: colour, luminance, focus adapted (DNG Exif)
 - User focus calibration tool (factory uncalibrated)
-- User click-to-WB (HAL)
+- Lens barrel distortion correction (JPGs)
+- User white balance (on a gray/white reference surface)
 - Zoom (digital)
 - Flash
 - Peaking
 - Zebra
 - Spirit level
-- Gallery DNG previews
+- Gallery DNG previews linked to real DNGs, also for the deletion
 - Sailjailed
 
 No GPS.\
