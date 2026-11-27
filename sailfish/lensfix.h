@@ -1,6 +1,6 @@
 /* lensfix.h -- lens distortion correction of the photos, in the CLI
- * (android/lensdist.h holds the model and the remap; the engine applies the
- * same to the viewfinder). Two kinds of photo:
+ * (android/lensdist.h holds the model and the remap; the interface's GPU
+ * draws the viewfinder corrected with the same model). Two kinds of photo:
  *   - our JPG from the YUV stream: the frame is corrected before it is
  *     compressed (lensfix_yuv), so it is compressed once;
  *   - a JPEG written by the camera driver (HAL) or any JPEG file: decoded,

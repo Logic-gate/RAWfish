@@ -100,15 +100,17 @@ blur) are dropped and the fit repeated.
 
 | What | Where | How |
 |---|---|---|
-| the viewfinder | engine (`android/rawfish-ir.c`, `lens_fix_view`) | each frame SENT is remapped through a per-pixel table (bilinear), rebuilt when its crop changes (zoom, loupe). The viewfinder meter and the white pick measure the frame as taken, before the remap (their boxes map from the sensor into it); a tap on the corrected picture is mapped back to the lens' point (`indraw_tap`) |
+| the viewfinder | interface's GPU (`app/rawfish-ir-preview.cpp`, `frameGeometry`) | every transport (SF2H zero copy, SF2Y, SF2P) drawn as a grid of 32 x 24 cells whose texture coordinates are where the lens drew each point (`ld_src`), from the model the CLI sends with `lensfix state=on`; the correction cached per frame size, crop (`fcrop`: zoom, loupe) and model. The zebra and the peaking (GPU or CPU) and the focus magnifier follow the same mapping. The frames leave the engine as the camera made them: the viewfinder meter and the white pick measure them so |
+| a tap | engine (`indraw_tap`) | a point of the corrected picture is mapped back to where the lens drew it, before it becomes the AF and AE regions and the spot |
 | our JPG (from the YUV stream) | CLI (`cmd_yuv`) | the frame is corrected after the merge and the noise filters, before the sharpening (which then works on the final geometry; the noise it must exceed is measured on the frame as taken): Y bicubic, U and V bilinear, on every core; compressed once. Exif Software says "lens corrected" |
-| the camera's JPEG (HAL: `jpeg`, `burst`) | CLI (`lensfix_camera_jpeg`) | after the engine wrote it: decoded (4:2:0 as it is), corrected, compressed again at the photo's quality; its Exif (every tag) and other metadata segments kept, a new Exif thumbnail made from the corrected picture. Its `written` event is held by the controller until the file is final, so the gallery never shows the uncorrected one |
+| the camera's JPEG (HAL: `jpeg`, `burst`, a bracket) | CLI (`lensfix_camera_jpeg`) | after the engine wrote it: decoded (4:2:0 as it is), corrected, compressed again at the photo's quality; its Exif (every tag) and other metadata segments kept, a new Exif thumbnail made from the corrected picture. A JPEG whose pixels the driver turned upright, with no Exif orientation (the JP2's), is turned back to the sensor's frame by the rotation the engine asked for (`indraw_photo_rotation`), corrected, and turned upright again. Its `written` event is held by the controller until the file is final, so the gallery never shows the uncorrected one |
 | DNG | -- | never: the developer has the RAW as the sensor gave it |
 
 The model is loaded by the engine at each camera start
 (`indraw_lensdist_load`, bound to the active array) and handed to the CLI
-(`indraw_lensdist_get`); the photo's field comes with the YUV frame
-(`ir_yuv_t.field`) or from `indraw_photo_field` for the camera's JPEG.
+(`indraw_lensdist_get`), which sends it to the interface (the `lensfix`
+event); the photo's field comes with the YUV frame (`ir_yuv_t.field`) or
+from `indraw_photo_field` for the camera's JPEG.
 
 Timings on the JP2 (aarch64, all cores): a 12 MP camera JPEG decoded,
 corrected, compressed and written in 0.2 s, a 50 MP one in 1.3 s; our JPG
@@ -122,22 +124,25 @@ saves the decode.
 | `lensfix on\|off` | the setting, at any time (the app sends it at every start and from the menu) |
 | `lensfix file=PATH` | load another file now (and turn the fix on); `file=` back to the phone's |
 | `lensfix status` | `{"lensfix":"on\|off\|unavailable","profile":true\|false}` |
-| event `lensfix state=on\|off\|unavailable` | after each change; `unavailable`: asked, but no profile for this camera |
+| event `lensfix state=on\|off\|unavailable` | after each change; `unavailable`: asked, but no profile for this camera. With `on`, the model bound to the active array, for the interface's GPU: `aw= ah= fx= fy= cx= cy= k=k1,...,k6` (the eight OpenCV coefficients) |
 | `rawfish-ir-cli lensfix PROFILE IN.jpg OUT.jpg [q=95] [rot=0\|90\|180\|270]` | a JPEG corrected offline, no camera, also on a PC (the JPEG taken as the camera's full frame or a centred crop of it). `rot=`: the pixels were turned clockwise by it and carry no Exif orientation -- a camera driver's JPEG, or a photo whose Exif was stripped (sent through a forum): `rot=90` for a back camera held upright |
 
 ## Tests
 
 `android/tests/lensdist_test.c` (the file, the binding, no empty corner,
-the inverse, 16:9 and zoom, the viewfinder table, every shipped file) and
+the inverse, 16:9 and zoom, the plane remap, every shipped file),
 `sailfish/tests/lensfix_test.c` (a dot lands where the model says, in a
-YUV frame and through a JPEG; the Exif, its orientation and manual tags
-kept; a new thumbnail; turned pixels refused) run in `scripts/check-host.sh`,
+YUV frame and through a JPEG, also one the driver turned upright; the
+Exif, its orientation and manual tags kept; a new thumbnail; a JPEG turned
+by an unknown rotation refused) and `sailfish/tests/written_test.c` (the
+controller's hold of the `written` events) run in `scripts/check-host.sh`,
 under AddressSanitizer and UBSan.
 
 ## Limits
 
-- A camera JPEG whose pixels the driver turned upright (instead of an Exif
-  orientation) is not corrected: the model is the sensor's (logged).
+- A JPEG turned upright with no Exif orientation and no known rotation
+  (a photo whose Exif was stripped) is refused by the offline command
+  until `rot=` is given.
 - The camera JPEG is compressed twice (decode, correct, encode at the
   photo's quality); our JPG, the app's default, once.
 - The correction is the one at the lens' focus when the samples were

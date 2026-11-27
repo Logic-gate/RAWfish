@@ -260,10 +260,11 @@ run_test /tmp/indraw-rawcheck-test
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/indraw-focal35-test "$root/android/tests/focal35_test.c" -lm
 run_test /tmp/indraw-focal35-test
 
-# The measured lens-shading calibration (android/shading.h, pure C): the
 # The lens distortion model and its remap (android/lensdist.h, pure C), with
 # every shipped file; then the CLI's correction of the photos (lensfix.c:
-# a JPEG corrected in place, its Exif kept, a new thumbnail).
+# a JPEG corrected in place, its Exif kept, a new thumbnail); then the
+# controller's hold of the "written" events of the files it corrects (two
+# threads: also under ThreadSanitizer).
 gcc -std=c11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall -Wextra -Werror \
     -o /tmp/indraw-lensdist-test "$root/android/tests/lensdist_test.c" -lm
 (cd "$root" && run_test /tmp/indraw-lensdist-test android/data/lens-distortion/*.json)
@@ -271,7 +272,14 @@ gcc -std=c11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall
     -o /tmp/indraw-lensfix-test "$root/sailfish/tests/lensfix_test.c" "$root/sailfish/lensfix.c" "$root/sailfish/yuvjpeg.c" \
     "$root/android/exifwrite.c" -ljpeg -lpthread -lm
 run_test /tmp/indraw-lensfix-test
+for san in address,undefined thread; do
+    gcc -std=c11 -O1 -g -fsanitize=$san -fno-sanitize-recover=all -Wall -Wextra -Werror -o /tmp/indraw-written-test \
+        "$root/sailfish/tests/written_test.c" "$root/sailfish/controller.c" "$root/sailfish/ctl_exposure.c" \
+        "$root/sailfish/ctl_focus.c" "$root/sailfish/ctl_view.c" "$root/sailfish/ctl_shoot.c" -lpthread -lm
+    run_test /tmp/indraw-written-test
+done
 
+# The measured lens-shading calibration (android/shading.h, pure C): the
 # JP2's own file, parsing, interpolation, dosing.
 gcc -std=c11 -Wall -Wextra -Werror -o /tmp/indraw-shading-test "$root/android/tests/shading_test.c" -lm
 (cd "$root" && run_test /tmp/indraw-shading-test)

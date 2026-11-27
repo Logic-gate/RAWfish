@@ -1,6 +1,6 @@
 /* Host test of android/lensdist.h: the file, the binding to the active
  * array, the corrected camera (no empty corner), the map and its inverse,
- * the viewfinder table and the plane remap; and, when given, a shipped
+ * and the plane remap (the photos'); and, when given, a shipped
  * file (argv[1]...). Run by check-host.sh. */
 #include "../lensdist.h"
 #include <stdio.h>
@@ -168,24 +168,17 @@ int main(int argc, char **argv)
               "a model folding at r %.2f, inside the frame: refused (it would crop most of it)", bad.r_fold);
     }
 
-    /* --- the remaps --- */
+    /* --- the plane remap (the photos') --- */
     {
         const int w = 64, h = 48;
-        static uint8_t rgb[64 * 48 * 3], out[64 * 48 * 3], pl[64 * 48], po[64 * 48];
+        static uint8_t pl[64 * 48], po[64 * 48];
         ld_view_t s;
-        ld_lut_t t;
         ld_grid_t g;
         float rx[64], ry[64];
-        int same = 1, k;
-        memset(&t, 0, sizeof t);
-        for (i = 0; i < w * h * 3; ++i) rgb[i] = (uint8_t)(i * 7 + (i / 3) % 13);
+        int same, k;
         for (i = 0; i < w * h; ++i) pl[i] = (uint8_t)((i % w) * 3 + (i / w) * 2);
         ld_view_init(&s, &id, w, h, NULL);
-        CHECK(ld_lut_build(&s, &t) == 0, "the viewfinder table builds");
-        ld_lut_rgb(&t, rgb, out);
-        for (i = 0; i < w * h * 3; ++i) if (out[i] != rgb[i]) same = 0;
-        CHECK(same, "no distortion: the viewfinder frame unchanged");
-        ld_grid_build(&s, 16, &g);
+        CHECK(ld_grid_build(&s, 16, &g) == 0, "the grid builds");
         for (k = 0; k < 2; ++k) {
             same = 1;
             ld_remap_plane(&g, pl, w, h, po, w, 0, h, 0, k, rx, ry);
@@ -193,24 +186,25 @@ int main(int argc, char **argv)
             CHECK(same, "no distortion: a plane unchanged (%s)", k ? "cubic" : "bilinear");
         }
         ld_grid_free(&g);
-        ld_lut_free(&t);
-        /* the wide lens on a viewfinder frame: a pixel lands where ld_src says */
+        /* the wide lens: each pixel of a ramp (x in one plane, y in another)
+         * shows the lens' point that ld_src gives, through the coarse grid */
         {
-            static uint8_t img[200 * 150 * 3], res[200 * 150 * 3];
+            static uint8_t px[200 * 150], py[200 * 150], qx[200 * 150], qy[200 * 150];
             ld_view_t vf;
+            float rx2[64], ry2[64];                    /* the grid's columns: 200 / 8 + 2 */
             double su, sv;
             int x, y, ok = 1;
-            for (y = 0; y < 150; ++y) for (x = 0; x < 200; ++x) { img[(y * 200 + x) * 3] = (uint8_t)x; img[(y * 200 + x) * 3 + 1] = (uint8_t)y; }
+            for (y = 0; y < 150; ++y) for (x = 0; x < 200; ++x) { px[y * 200 + x] = (uint8_t)x; py[y * 200 + x] = (uint8_t)y; }
             ld_view_init(&vf, &m, 200, 150, NULL);
-            memset(&t, 0, sizeof t);
-            ld_lut_build(&vf, &t);
-            ld_lut_rgb(&t, img, res);
+            ld_grid_build(&vf, 8, &g);                 /* 8 of 200 px: about the photos' 16 of 4096 and more */
+            ld_remap_plane(&g, px, 200, 150, qx, 200, 0, 150, 0, 0, rx2, ry2);
+            ld_remap_plane(&g, py, 200, 150, qy, 200, 0, 150, 0, 0, rx2, ry2);
             for (y = 5; y < 150; y += 37) for (x = 3; x < 200; x += 41) {
                 ld_src(&vf, x, y, &su, &sv);
-                if (fabs(res[(y * 200 + x) * 3] - su) > 0.6 || fabs(res[(y * 200 + x) * 3 + 1] - sv) > 0.6) ok = 0;
+                if (fabs(qx[y * 200 + x] - su) > 0.6 || fabs(qy[y * 200 + x] - sv) > 0.6) ok = 0;
             }
-            CHECK(ok, "the wide lens: each viewfinder pixel shows the lens' point (within the rounding)");
-            ld_lut_free(&t);
+            CHECK(ok, "the wide lens: each pixel shows the lens' point (within the rounding)");
+            ld_grid_free(&g);
         }
     }
 

@@ -1449,16 +1449,17 @@ static void usage(void)
     fprintf(stderr,
             "usage: rawfish-ir-cli [--log FILE] [--jpgdir DIR] [--dngdir DIR] caps ID\n"
             "       rawfish-ir-cli [--log FILE] cameras\n"
-            "       rawfish-ir-cli lensfix PROFILE.json IN.jpg OUT.jpg [q=95] [rot=0|90|180|270]   (a JPEG lens-corrected; no camera needed;\n"
-            "         rot=: the pixels were turned clockwise by it, without an Exif orientation)\n"
-            "  --lensfix on|off|FILE: the lens distortion correction (viewfinder and JPEGs), with the phone's profile or FILE\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       rawfish-ir-cli [--log FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
+            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; jpeg+largest: and, where no stream is a multiple of it, the largest stream averaged down; streams=: only these beside the viewfinder)\n"
-            "       rawfish-ir-cli [--log FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
+            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
+            "       rawfish-ir-cli lensfix PROFILE.json IN.jpg OUT.jpg [q=95] [rot=0|90|180|270]   (a JPEG lens-corrected, no camera:\n"
+            "         also on a PC; rot=: its pixels were turned clockwise by that, with no Exif orientation)\n"
+            "  --lensfix on|off|FILE: the lens distortion correction of the viewfinder and the JPEGs, with this phone's\n"
+            "  profile (/usr/share/rawfish-ir/lens-distortion/) or FILE; default off (the app sends \"lensfix on|off\")\n"
             "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS.EXT\n"
             "  (NAME: letters, digits, - and _; NAME + = no prefix: YYYYMMDD_HHMMSS.EXT; _mmm, the milliseconds,\n"
             "  added when another shot already has that name, a second photo in the same second; always for a\n"
@@ -1973,7 +1974,8 @@ static int cmd_raw(void *bridge, indraw_raw_fn raw, char **save, char *out)
 
 /* --- Lens distortion correction ("lensfix", docs/LENS-DISTORTION.md) -----
  * The setting (--lensfix on|off|FILE, the "lensfix" command) corrects the
- * viewfinder (in the engine) and every JPEG: ours from the YUV stream
+ * viewfinder (drawn by the interface's GPU, from the model sent with the
+ * "lensfix" event; the engine maps the taps back) and every JPEG: ours from the YUV stream
  * before it is compressed, the camera's after the engine wrote it
  * (decoded, corrected, compressed again, its metadata kept and a new Exif
  * thumbnail). The model is the phone's and camera's own file

@@ -97,38 +97,6 @@ def load_sensor_image(filename, flags=cv2.IMREAD_COLOR):
     return image
 
 
-_ORIENTATIONS = [
-    lambda im: im,
-    lambda im: cv2.rotate(im, cv2.ROTATE_90_CLOCKWISE),
-    lambda im: cv2.rotate(im, cv2.ROTATE_180),
-    lambda im: cv2.rotate(im, cv2.ROTATE_90_COUNTERCLOCKWISE),
-    lambda im: cv2.flip(im, 1),
-    lambda im: cv2.flip(cv2.rotate(im, cv2.ROTATE_90_CLOCKWISE), 1),
-    lambda im: cv2.flip(im, 0),
-    lambda im: cv2.flip(cv2.rotate(im, cv2.ROTATE_90_COUNTERCLOCKWISE), 1),
-]
-
-
-def exif_orientation(filename):
-    """Return a function that turns a sensor-frame image into the image as
-    the phone meant it to be displayed (EXIF orientation applied).
-
-    Found by comparing small previews, so no EXIF library is needed.
-    """
-    raw = cv2.imread(filename, cv2.IMREAD_REDUCED_GRAYSCALE_8
-                     | cv2.IMREAD_IGNORE_ORIENTATION).astype(np.float32)
-    shown = cv2.imread(filename, cv2.IMREAD_REDUCED_GRAYSCALE_8).astype(np.float32)
-    best, best_err = _ORIENTATIONS[0], np.inf
-    for transform in _ORIENTATIONS:
-        candidate = transform(raw)
-        if candidate.shape != shown.shape:
-            continue
-        err = np.mean(np.abs(candidate - shown))
-        if err < best_err:
-            best, best_err = transform, err
-    return best
-
-
 # --------------------------------------------------------------------------
 # Corner detection
 # --------------------------------------------------------------------------
@@ -291,6 +259,28 @@ def save_debug_image(out_dir, image_file, gray, points, valid):
 # One model on all the folders
 # --------------------------------------------------------------------------
 
+def corner_precision(points):
+    """How precisely a photo's corners were found, whatever the lens: each
+    inner corner predicted from its 8 neighbours by a homography (over two
+    squares the lens' distortion is negligible), the median distance in
+    pixels. Sharp photos in good light give well under 1 px; noise, blur
+    and a high ISO show here first (25 Nov 2026, the JP2's wide camera:
+    1.2-1.4 px at ISO 2000-3800, 1/24 s, hand-held, and with it a fit's
+    RMS of 3-4 px whatever the model)."""
+    ny, nx = points.shape[:2]
+    src = np.array([[b, a] for a in (-1, 0, 1) for b in (-1, 0, 1) if (a, b) != (0, 0)], np.float64)
+    errs = []
+    for j in range(2, ny - 2):
+        for i in range(2, nx - 2):
+            dst = np.array([points[j + a, i + b] for a in (-1, 0, 1) for b in (-1, 0, 1) if (a, b) != (0, 0)], np.float64)
+            h, _ = cv2.findHomography(src, dst, 0)
+            if h is None:
+                continue
+            pred = cv2.perspectiveTransform(np.array([[[0.0, 0.0]]]), h)[0, 0]
+            errs.append(np.linalg.norm(pred - points[j, i]))
+    return float(np.median(errs)) if errs else float('nan')
+
+
 def field_in(ref_size, size):
     """Where a frame of `size` lies in the reference frame: the largest
     rectangle of its shape centred in it (x, y, scale)."""
@@ -338,7 +328,8 @@ def detect_folder(folder, debug_dir=None):
             save_debug_image(os.path.join(debug_dir, os.path.basename(os.path.normpath(folder))),
                              image_file, gray, points, valid)
         g['views'].append({'name': name, 'object': object_grid[valid],
-                           'image': points[valid].astype(np.float32).reshape(-1, 1, 2)})
+                           'image': points[valid].astype(np.float32).reshape(-1, 1, 2),
+                           'precision': corner_precision(points)})
     if not groups:
         print(f"    {folder}: no photos")
     out = []
@@ -429,6 +420,15 @@ def calibrate(folders, ref=None, debug_dir=None):
     print(f"    fx {mtx[0, 0]:.1f}  fy {mtx[1, 1]:.1f}  cx {mtx[0, 2]:.1f}  cy {mtx[1, 2]:.1f}")
     print(f"    dist {np.array2string(dist[:8], precision=5, suppress_small=True)}")
     print(f"    RMS reprojection error: {rms:.3f} px of {W}x{H}")
+    prec = np.array([v['precision'] for v in views])
+    print(f"    corner precision (each corner against its neighbours, no model): median {np.nanmedian(prec):.2f} px")
+    blurred = sorted(((p, v) for p, v in zip(prec, views) if p > 2.0), key=lambda t: -t[0])
+    if blurred:
+        print("    blurred or noisy photos (precision over 2 px): " +
+              ", ".join(f"{v['name']} ({p:.1f} px)" for p, v in blurred[:8]) + (" ..." if len(blurred) > 8 else ""))
+    if np.nanmedian(prec) > 1.0:
+        print("    WARNING: the corners are found imprecisely (over 1 px): the photos are blurred or noisy. "
+              "Retake them in good light (ISO 400 or less), the phone still (a fast shutter, or a support)")
     report = []
     for s in sets:
         e = [pv / s['scale'] for pv, v in zip(per_view, views) if v['set'] is s]
@@ -455,6 +455,7 @@ def calibrate(folders, ref=None, debug_dir=None):
         print("    WARNING: the samples don't reach the frame's corners; take more "
               "photos with the board in the corners and along the edges")
     return {'ref': ref, 'mtx': mtx, 'dist': dist, 'rms': rms, 'model': model_name,
+            'precision': float(np.nanmedian([v['precision'] for v in views])),
             'images': len(views), 'coverage': covered, 'sets': report}
 
 
@@ -535,6 +536,7 @@ def main():
         'cx': round(float(r['mtx'][0, 2]), 4), 'cy': round(float(r['mtx'][1, 2]), 4),
         'dist': [float(f'{v:.8g}') for v in k],
         'fit': {'model': r['model'], 'rms_px': round(float(r['rms']), 4), 'images': r['images'],
+                'corner_precision_px': round(r['precision'], 3),
                 'coverage_pct': round(100 * float(r['coverage'])), 'samples': r['sets'],
                 'board': {'squares': [bx, by], 'square_mm': a.square_mm}},
         'generated': datetime.date.today().isoformat(),

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int fails;
 #define CHECK(c, ...) do { if (c) printf("  ok: "); else { printf("  FAIL: "); ++fails; } printf(__VA_ARGS__); printf("\n"); } while (0)
@@ -53,7 +54,7 @@ static uint8_t *read_all(const char *path, size_t *len)
 
 int main(void)
 {
-    const char *path = "/tmp/indraw_lensfix_test.jpg";
+    char path[] = "/tmp/indraw_lensfix_test_XXXXXX";   /* our own file: two runs at once do not collide */
     ld_model_t m;
     ld_view_t v;
     char err[300];
@@ -65,6 +66,11 @@ int main(void)
     double su, sv, u, vv, cx, cy;
     const int dx = 40, dy = 40;                       /* the dot near a corner: where the lens bends most */
 
+    {
+        int fd = mkstemp(path);
+        if (fd < 0) { perror("mkstemp"); return 1; }
+        close(fd);
+    }
     printf("lensfix:\n");
     CHECK(ld_parse(k_model, &m, err, sizeof err) == 0, "the model parses");
     ld_bind(&m, 0, 0);

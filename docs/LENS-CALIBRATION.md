@@ -25,10 +25,10 @@ What matters most:
 - **Cover the corners and the edges of the frame.** The distortion is strongest there, and a model that never saw them is guessed there. Take photos where the board fills the frame, and photos with the board pushed into each corner and along each edge.
 - Vary the angle (tilt the phone up to 30-45 degrees against the sheet) and the distance.
 - The whole board does not need to be in the frame, but **at least the inner 9 x 6 corners must be visible**, otherwise the photo is skipped.
-- Sharp photos only: good light, the board in focus, the phone held still. Avoid reflections on the paper.
+- **Sharp photos only**: this matters more than the number of photos. Good light (daylight by a window, or bright lamps) so that the camera picks **ISO 400 or less** and a fast shutter; the phone held still, or resting on something; the board in focus. Avoid reflections on the paper. The script measures how precisely each photo's corners were found and names the blurred ones (see step 4).
 - Portrait or landscape does not matter: the pixels are read as the sensor gave them.
 
-Example photos of the Jolla Phone 2026 wide camera (`samples/wide/43`, shrunk):
+Example photos of the Jolla Phone 2 (JP2) wide camera (`samples/wide/43`, shrunk):
 
 | | | |
 |---|---|---|
@@ -40,7 +40,8 @@ Example photos of the Jolla Phone 2026 wide camera (`samples/wide/43`, shrunk):
 For best results take the photos **with RAWfish itself** (the photo's Exif tells the script the phone's maker and model, and RAWfish's JPG keeps the sensor's pixels as they are), with these settings:
 
 - **Lens fix off** (otherwise you calibrate an already corrected picture);
-- image type **jpg** (RAWfish's own JPG). Not a bracket or burst: on some phones (the Jolla Phone 2026 among them) those are the camera driver's JPEGs, whose pixels are turned upright; the script skips them;
+- image type **jpg** (RAWfish's own JPG). Not a bracket or burst: on some phones (the JP2 among them) those are the camera driver's JPEGs, whose pixels are turned upright; the script skips them;
+- JPG processing: **Denoise classic, Frames 1**, and a moderate sharpening (the default 2 or 3). The merge of several frames (by tiles, the default of the JP2's 26 mm and 18 mm) keeps its reference frame's geometry, so it would not bias the model, but a single frame gives the crispest corners;
 - the **4:3 aspect ratio**, at the camera's default size. 16:9 is just a crop of the 4:3 image: one profile serves both, as well as every resolution and the viewfinder. (Photos in 16:9 or at another resolution may be added as extra folders; they are mapped onto the 4:3 frame, but they are not needed.)
 
 ### 2. Copy the photos to the PC
@@ -92,14 +93,17 @@ The script finds the chessboard in every photo (a few minutes for 25 photos), fi
 
 ```
 [Jolla JP2601, camera 2 (wide)]
-    samples/wide/43: 24/24 photos usable, size 4096x3072
+    samples/wide/43: 30/30 photos usable, size 4096x3072
     reference frame: 4096x3072
-    dropping outlier samples/wide/43/photo_20261125_071318.jpg (9.60 px, median 3.63 px of the reference)
+    dropping outlier samples/wide/43/photo_20261125_071318.jpg (9.62 px, median 3.82 px of the reference)
     model: rational k1,k2,k4,k5
-    fx 1738.1  fy 1735.9  cx 2050.2  cy 1515.5
-    dist [-0.63654  0.18024 -0.00057  0.00006  0.      -0.66537  0.20196  0.     ]
-    RMS reprojection error: 3.759 px of 4096x3072
-    samples/wide/43: 23 photos, RMS 3.79 px of its own 4096x3072, reaches 96% of the centre-to-corner distance
+    fx 1737.8  fy 1735.1  cx 2049.8  cy 1516.1
+    dist [-0.63853  0.18221 -0.00048  0.00002  0.      -0.66802  0.20421  0.     ]
+    RMS reprojection error: 3.924 px of 4096x3072
+    corner precision (each corner against its neighbours, no model): median 1.40 px
+    blurred or noisy photos (precision over 2 px): photo_20261125_071124.jpg (3.2 px), photo_20261126_173229.jpg (3.2 px), photo_20261125_071121.jpg (2.4 px), photo_20261125_071140.jpg (2.2 px)
+    WARNING: the corners are found imprecisely (over 1 px): the photos are blurred or noisy. Retake them in good light (ISO 400 or less), the phone still (a fast shutter, or a support)
+    samples/wide/43: 29 photos, RMS 3.95 px of its own 4096x3072, reaches 96% of the centre-to-corner distance
     all together reach 96% of the centre-to-corner distance
     written: android/data/lens-distortion/distortion_jolla-jp2601_cam2.json
     check it on a photo:  rawfish-ir-cli lensfix android/data/lens-distortion/distortion_jolla-jp2601_cam2.json IN.jpg OUT.jpg
@@ -109,7 +113,10 @@ How to read it:
 
 - **photos usable**: photos where the chessboard was found. If many are missing, they are blurred, too dark, or the inner corners were not all in the frame.
 - **dropping outlier**: a photo that fits more than twice as badly as the median (a lifted sheet, motion blur) is left out automatically. One or two are normal; many mean the board is not flat.
-- **RMS reprojection error**: how far, on average, the model puts the corners from where they were found, in pixels. A few pixels at 12 MP is normal for a phone (it is about the sharpness of the photos); more than ~10 px means bad photos.
+- **RMS reprojection error**: how far, on average, the model puts the corners from where they were found, in pixels. With sharp photos expect **around 1 px or less** (the sharpest of the example's photos found their corners to 0.75 px). It is only as good as the corners themselves: read it with the next line.
+- **corner precision**: how precisely the corners were found, measured without any lens model (each corner against the position its 8 neighbours predict; over two squares the distortion is negligible). Sharp photos in good light give well under 1 px. Photos over 2 px are listed; above 1 px overall the script warns: retake them, they limit the fit more than anything else.
+
+  What was measured on the example above (the JP2's 18 mm, 27 Nov 2026), to show where the error comes from: the samples were taken hand-held in dim light, at ISO 2000 to 3850 and 1/24 s; the corners were found with a precision of 1.4 px (median, a few photos 2-3 px), and the fit's RMS is 3.9 px. The model is not what limits it: the inner corners alone give 3.3 px, a richer model (all the rational terms free, thin prism, a tilted sensor) at most 0.1 px less, and the residuals show no pattern across the frame (random, not systematic). The outer corners (measured by another method, intersecting the squares' sides) are only a little less precise than the inner ones (4.5 against 3.6 px of the fit), and they are what reaches the corners of the frame. The model is good enough for the correction (lines straight to the eye), but these photos should be retaken in good light for a fit of a pixel.
 - **reaches N % of the centre-to-corner distance**: how far into the corners the photos go. **Aim at 90 % or more**; below 85 % the script warns: take more photos with the board in the corners.
 - With several folders (e.g. 4:3 and 16:9), each one is also fitted **alone**: its focal length should agree with the joint model within a few tenths of a per cent; more than 2 % is flagged.
 - **WARNING: every model folds back inside the frame**: the photos do not cover the corners well enough to model them. Take more corner photos.
@@ -164,7 +171,7 @@ and in `android/data/device-profiles/sony-xperia-xa2.json`, in that camera's blo
 { "camera_id": "0", ..., "distortion_file": "distortion_sony-xperia-xa2_cam0.json" }
 ```
 
-A phone with a single model name (the Jolla Phone 2026) needs nothing in its device profile.
+A phone with a single model name (the JP2) needs nothing in its device profile.
 
 ### 7. Commit
 

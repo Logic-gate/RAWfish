@@ -14,6 +14,39 @@ repository). Newest first.
 - The Xperia XA2 runs indRAW as a proof of concept (32-bit, 16:9
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
+## 0.3.12 (beta, in progress) — the lens distortion fix
+- Straight lines stay straight (docs/LENS-DISTORTION.md): a new column of
+  the pull-down menu, "Lens fix" (off by default), corrects the lens
+  distortion in the viewfinder and in every JPG, with the camera's measured
+  lens profile. It shows most on the JP2's 18 mm, whose edges and corners
+  bend strongly; the 26 mm and the front camera bend less. The three
+  cameras of the JP2 are measured; on a phone or a camera without a
+  profile nothing is corrected, and the menu says so. DNGs are never
+  touched. The picture is cropped by 1 to 2 % (no empty corners), the
+  viewfinder showing exactly what the photo will; a touch on the corrected
+  viewfinder focuses where the finger is.
+- How each photo is corrected: our JPG after the merge and the noise
+  filters, before the sharpening, compressed once (its Exif Software says
+  "lens corrected"); the camera's JPEG (bursts, brackets, the camera's JPG)
+  decoded after it was written, corrected and compressed again, its Exif
+  kept and a new thumbnail made -- the gallery sees the file once it is
+  final. The viewfinder is drawn corrected by the GPU (a grid of 32 x 24
+  cells, the zebra, the peaking and the magnifier along), with the zero
+  copy kept.
+- One profile per camera serves every format and size (4:3, 16:9, 12 and
+  50 MP, the viewfinder at any zoom): distortion_<maker>-<model>_cam<ID>.json,
+  shipped in /usr/share/rawfish-ir/lens-distortion/, a user's own in
+  device-profiles/lens-distortion/; a device profile may name one file for
+  every model name of a camera module ("distortion_file", as
+  "shading_file").
+- For maintainers: `scripts/lens-calibrate.py` measures a camera from
+  photos of a printed chessboard (OpenCV, on a PC) and writes its profile,
+  with the error of the fit and how precisely the corners were found;
+  docs/LENS-CALIBRATION.md says how, step by step. `rawfish-ir-cli lensfix
+  PROFILE IN.jpg OUT.jpg [rot=..]` corrects a JPEG without a camera, on the
+  phone or a PC. The CLI takes `--lensfix on|off|FILE` and the `lensfix`
+  command.
+
 ## 0.3.11 (beta) — a lighter viewfinder (patches 0431–0557)
 - The version 0.3.11 (patch 0557), the release of the builds that followed
   0.3.10-520, the last one published: 0.3.10-524 to 0.3.10-555, listed
@@ -453,20 +486,6 @@ repository). Newest first.
   New frame type SF2Y (docs/ENGINE.md); docs/ARCHITECTURE.md rule 5 and the
   ROADMAP's viewfinder transport updated; android/tests/yuv_test.c checks
   the I420 packing.
-
-## Unreleased -- lens distortion fix (branch lens-distortion-fix)
-- The lens distortion fix (docs/LENS-DISTORTION.md): a new menu column,
-  "Lens fix", corrects the viewfinder and every JPEG (ours before it is
-  compressed; the camera's after, its Exif kept and a new thumbnail) with
-  the camera's measured lens profile; DNGs are never touched. One file per
-  phone model and camera (`distortion_<maker>-<model>_cam<ID>.json`, shipped
-  in /usr/share/rawfish-ir/lens-distortion/, the user's in
-  device-profiles/lens-distortion/) serves every size and format. The JP2's
-  three cameras are measured. No profile: nothing corrected, a warning.
-- `scripts/lens-calibrate.py` measures a camera from chessboard photos
-  (OpenCV, on a PC) and writes that file; `rawfish-ir-cli lensfix PROFILE
-  IN OUT` corrects a JPEG offline to check it. The CLI takes `--lensfix
-  on|off|FILE` and the `lensfix` command.
 
 ## 0.3.10 (beta) — the Xperia 10 III at the sensor's full size, with its three back cameras and our JPEG; one package with everything; a black top band (patches 0448–0516)
 - The version 0.3.10 (patch 0516), the release of the builds 0.3.9-448 to
