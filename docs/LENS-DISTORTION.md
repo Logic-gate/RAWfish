@@ -11,6 +11,13 @@ distortion: a slight pincushion in the middle, a strong barrel in the
 corners); the main and front cameras bend much less. DNGs are never
 touched: RAW stays the sensor's.
 
+The setting is kept per camera (`lensFix` in the camera's `[camera_N]`
+section of `rawfish-ir.conf`, 0.3.11, patch 0563). Until the user picks on
+or off for a camera it is at that camera's default (`lensFix=default`, the
+menu's green ring): its device profile's `"lens_fix_default"`, on for the
+JP2's 18 mm, else off. The app sends `lensfix default` and the CLI, which
+knows the open camera, resolves it.
+
 The corrected picture is a pinhole camera with square pixels and the same
 optical centre, at the narrowest focal length that leaves no empty corner
 (OpenCV's `alpha = 0`): it crops 1 to 2 % on the JP2's cameras. The crop
@@ -126,11 +133,11 @@ and the two JPEG files.
 
 | | |
 |---|---|
-| `--lensfix on\|off\|FILE` | the setting at start; FILE: this file instead of the phone's (testing a new calibration) |
-| `lensfix on\|off` | the setting, at any time (the app sends it at every start and from the menu) |
+| `--lensfix on\|off\|default\|FILE` | the setting at start (without it: off); `default`: the camera's own (its device profile's `lens_fix_default`, else off); FILE: this file instead of the phone's (testing a new calibration) |
+| `lensfix on\|off\|default` | the setting, at any time (the app sends it at every start and from the menu: `default` while the user has not chosen for this camera) |
 | `lensfix file=PATH` | load another file now (and turn the fix on); `file=` back to the phone's |
-| `lensfix status` | `{"lensfix":"on\|off\|unavailable","profile":true\|false}` |
-| event `lensfix state=on\|off\|unavailable any=0\|1` | after each change; `unavailable`: asked, but no profile for this camera; `any`: this phone has a profile for some camera (0: the menu hides the column). With `on`, the model bound to the active array, for the interface's GPU: `aw= ah= fx= fy= cx= cy= k=k1,...,k6` (the eight OpenCV coefficients) |
+| `lensfix status` | `{"lensfix":"on\|off\|unavailable","profile":true\|false,"default":true\|false,"by_default":true\|false}` (`default`: the camera's default; `by_default`: the setting follows it) |
+| event `lensfix state=on\|off\|unavailable any=0\|1 default=0\|1` | after each change; `unavailable`: asked, but no profile for this camera; `any`: this phone has a profile for some camera (0: the menu hides the column); `default`: the camera's default (the menu's green ring). With `on`, the model bound to the active array, for the interface's GPU: `aw= ah= fx= fy= cx= cy= k=k1,...,k6` (the eight OpenCV coefficients) |
 | `rawfish-ir-cli lensfix PROFILE IN.jpg OUT.jpg [q=95] [rot=0\|90\|180\|270]` | a JPEG corrected offline, no camera, also on a PC (the JPEG taken as the camera's full frame or a centred crop of it). `rot=`: the pixels were turned clockwise by it and carry no Exif orientation -- a camera driver's JPEG, or a photo whose Exif was stripped (sent through a forum): `rot=90` for a back camera held upright |
 
 ## Tests

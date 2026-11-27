@@ -443,8 +443,10 @@ signals:
     /* The lens distortion fix (SF2M "lensfix state="): "on", "off", or
      * "unavailable" (asked, but this camera has no lens profile).
      * anyProfile: this phone has a lens profile for some camera (false:
-     * none, the menu hides the column). */
-    void lensFixState(const QString &state, bool anyProfile);
+     * none, the menu hides the column). defaultOn: this camera's default
+     * (its device profile's lens_fix_default; the menu's green ring, and
+     * what "default" in its [camera_N] section means). */
+    void lensFixState(const QString &state, bool anyProfile, bool defaultOn);
     void stackProgress(int frame, int n, int elapsedMs);
     /* A stack ended: frames added of n, aborted, total ms (SF2M "stack_done"). */
     void stackDone(int frames, int n, bool aborted, int ms);

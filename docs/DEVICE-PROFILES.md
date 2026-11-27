@@ -328,6 +328,10 @@ cause can be looked for and a shipped profile written.
   - `"jpg_sharpen": 0..5` -- the sharpening (3).
   The log says the defaults in force at each start ("jpg defaults for
   camera N").
+- `"lens_fix_default": 0 | 1` (0.3.11, patch 0563): the menu's Lens fix on
+  (1) or off (0, also when absent) on this camera while the user has not
+  chosen for it (`lensFix=default` in its `[camera_N]`;
+  `docs/LENS-DISTORTION.md`). 1 on the JP2's 18 mm.
 
 The shipped profile of the Xperia 10 III used `"streams": "exclusive"` on
 both cameras until 0.3.9-495: the driver's deaths came from the binned

@@ -15,6 +15,11 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## Since 0.3.11-557 (patches 0559–)
+- Lens fix: kept per camera (its `[camera_N]` section, `lensFix`), on by
+  default on the JP2's 18 mm and off on its other cameras (the device
+  profile's `lens_fix_default`; the menu's green ring). A new version keeps
+  it. Its two icons in the menu no longer stay blank now and then (patch
+  0563).
 - The lens distortion fix, by Matko Jun (GitHub PR #43, patch 0561).
   Straight lines stay straight (docs/LENS-DISTORTION.md): a new column of
   the pull-down menu, "Lens fix" (off by default), corrects the lens

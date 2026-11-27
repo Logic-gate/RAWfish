@@ -47,8 +47,8 @@ static const char *const k_conf_head =
         "  the app carries your values into a new file (keys it no longer has are left\n"
         "  out, a value no longer allowed takes its default) and keeps the earlier\n"
         "  file in ~/.config/com.rawfish/rawfish-ir/backup-<earlier version>-<date>/;\n"
-        "  only our JPG's processing of each camera ([camera_N]) starts again at\n"
-        "  \"default\", the new version's defaults.\n"
+        "  only our JPG's processing of each camera ([camera_N], its jpg* keys)\n"
+        "  starts again at \"default\", the new version's defaults.\n"
         "- To edit it: CLOSE the app first (it rewrites the file when a setting\n"
         "  changes), edit, reopen. A value out of its range is clamped, a value not in\n"
         "  its list takes the default: a typo never stops the app. A key must stay in\n"
@@ -62,7 +62,7 @@ static const char *const k_conf_head =
         "choices, [shooting] how a photo is taken, [viewfinder], [white_balance],\n"
         "[lens_shading], [kept] the values kept for a manual start, [advanced] tests\n"
         "and diagnostics, [internal] the app's own bookkeeping, and one [camera_N] per\n"
-        "camera for our JPG's processing (see the end).\n"
+        "camera for our JPG's processing and the lens fix (see the end).\n"
         "\n"
         "Settings NOT in this file (dconf, from Settings > Apps > RAWfish-ir):\n"
         "  /apps/rawfish-ir/menu/startMode     last | simple | advanced   mode at start\n"
@@ -94,13 +94,13 @@ static const conf_section_t k_conf_sections[] = {
     { "internal",
         "--- The app's own bookkeeping: not to edit -------------------------------------\n" },
     { "camera",
-        "--- Our JPG's processing: one section per camera, [camera_N] ---------------\n"
+        "--- Per camera: our JPG's processing, the lens fix, [camera_N] --------------\n"
         "JPG is RAWfish-ir's JPEG: the camera's image before its own noise reduction\n"
         "and sharpening (its YUV stream), processed by RAWfish-ir, then compressed.\n"
         "The menu shows these with Settings > \"JPG processing in the camera menu\".\n"
         "Each camera has its own section, [camera_0], [camera_2], ..., written with\n"
-        "its seven keys the first time the camera is used. \"default\" is the\n"
-        "camera's own default: its device profile's (jpg_* keys,\n"
+        "its keys the first time the camera is used. \"default\" is the camera's\n"
+        "own default: its device profile's (jpg_* keys and lens_fix_default,\n"
         "docs/DEVICE-PROFILES.md), else the app's, given below. A value is your\n"
         "choice for that camera (the menu writes it; choosing the default in the\n"
         "menu writes \"default\" again). For example, a camera whose sharpening was\n"
@@ -137,11 +137,6 @@ static const conf_key_t k_conf_keys[] = {
         "                                    values: off, 0x3, 0x5, 0x7, 1, 2, 3   default off\n" },
     { "menu", "gridOn", "0", "list:0,1",
         "Rule-of-thirds grid.                          values: 0, 1            default 0\n" },
-    { "menu", "lensFix", "0", "list:0,1",
-        "Lens distortion fix: the viewfinder and the JPGs corrected with the\n"
-        "camera's measured lens profile (straight lines stay straight); DNGs are\n"
-        "never touched. A camera without a profile is not corrected.\n"
-        "                                              values: 0, 1            default 0\n" },
     { "menu", "flash", "off", "list:off,auto,on,torch",
         "Flash.                                        values: off, auto, on, torch   default off\n" },
     { "menu", "sceneMode", "0", "range:0..18",
@@ -389,6 +384,13 @@ static const conf_key_t k_conf_keys[] = {
     { "camera", "jpgSharpen", "default", "list:default,0,1,2,3,4,5",
         "RAWfish-ir's sharpening of the fine detail above the noise: 0 off, 1..5 =\n"
         "0.5, 1, 1.5, 2.5, 4 times the detail.        values: default, 0..5             app's default 3\n" },
+    /* not a JPG setting: kept by a new version (confRebuild) */
+    { "camera", "lensFix", "default", "list:default,0,1",
+        "Lens distortion fix (the menu's Lens fix): the viewfinder and the JPGs\n"
+        "corrected with the camera's measured lens profile (straight lines stay\n"
+        "straight); DNGs are never touched. A camera without a profile is not\n"
+        "corrected. A new version keeps it.\n"
+        "                     values: default, 0, 1   default: the device profile's (1 on the JP2's 18 mm), else 0\n" },
     /* The one-for-all JPG keys of before 0.3.11-551, at the top of the file:
      * carried as they are into a new file, until the menu has given each
      * camera its own (SettingsMenu jpgEnsureKeys) and removed them. Not in
@@ -487,7 +489,7 @@ static inline int conf_write_readme(FILE *f)
             else fprintf(f, "%s=...   (written by the app; absent until then)\n", k->key);
         }
         if (cam) {
-            fputs("\nThe seven keys:\n", f);
+            fputs("\nIts keys:\n", f);
             for (i = 0; k_conf_keys[i].key; ++i)
                 if (!strcmp(k_conf_keys[i].section, "camera")) {
                     fprintf(f, "\n%s\n", k_conf_keys[i].key);

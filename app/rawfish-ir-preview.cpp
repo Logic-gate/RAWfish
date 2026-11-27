@@ -710,8 +710,9 @@ static const conf_key_t *confKnown(const QString &full)
  * in the table is left out, a value no longer allowed takes the default.
  * The [camera_N] sections are carried the same way ("auto" becomes
  * "default") -- except for a new version (newVersion; 0.3.11, patch 0555):
- * there our JPG's processing of each camera (the [camera_N] keys: denoise,
- * frames, colour NR, moire, Luma NR, sharpen) starts again at "default", and
+ * there our JPG's processing of each camera (its jpg* keys in [camera_N]:
+ * denoise, frames, colour NR, moire, Luma NR, sharpen; not the lens fix,
+ * lensFix, kept as every other value) starts again at "default", and
  * the one-for-all JPG keys of before the sections are not carried, so that
  * the new version's defaults (its device profiles' jpg_* keys) apply; every
  * other value is carried. Written to a new file, then put in place. Returns
@@ -752,7 +753,9 @@ static QString confRebuild(const QString &path, const QString &oldPath, bool new
                     const QString full = g + QLatin1Char('/') + QLatin1String(k.key);
                     QString v = old->contains(full) ? confText(old->value(full)) : QString::fromUtf8(k.def);
                     if (v == QLatin1String("auto")) v = QStringLiteral("default");   /* the luma's word until 0.3.11-550 */
-                    if (newVersion && v != QLatin1String("default")) {   /* a new version: its own JPG defaults */
+                    /* a new version: its own JPG defaults (the jpg* keys only:
+                     * the lens fix, lensFix, is the user's choice, kept) */
+                    if (newVersion && !strncmp(k.key, "jpg", 3) && v != QLatin1String("default")) {
                         ++jpgBack;
                         s.setValue(full, QStringLiteral("default"));
                         continue;
@@ -1221,8 +1224,9 @@ void IndrawPreview::parseEvent(const QByteArray &line)
         }
         if (on || on != m_lensOn) { m_lensOn = on; ++m_lensGen; update(); }
         /* any=0: no profile for any camera of this phone (absent: an
-         * older CLI, taken as some) */
-        emit lensFixState(state, f.value("any", "1").toInt() != 0);
+         * older CLI, taken as some); default=1: on by default on this
+         * camera (absent: off) */
+        emit lensFixState(state, f.value("any", "1").toInt() != 0, f.value("default", "0").toInt() != 0);
     } else if (name == "stack_start") {
         /* The engine says a stack began (the controller issued it): the
          * overlay, the lock-out and the screen kept on start here. */

@@ -17,7 +17,13 @@ Canvas {
     onTintChanged: requestPaint()
     onStraightChanged: requestPaint()
     onWidthChanged: requestPaint()
-    renderStrategy: Canvas.Immediate
+    // A Canvas created hidden is not always painted when it is first shown
+    // (the two icons sometimes stayed blank when the menu came down, as the
+    // focus sun did, FocusCircle.qml, 0345): asked to paint each time it
+    // becomes visible or available. The default render strategy, as our
+    // other canvases (Canvas.Immediate until 0563).
+    onVisibleChanged: if (visible) requestPaint()
+    onAvailableChanged: if (available) requestPaint()
 
     // A point of the board (-1..1 both ways) -> the icon's pixels: as drawn
     // by a barrel-distorted lens (the corners pulled in most, the edges bow

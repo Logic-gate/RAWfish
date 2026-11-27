@@ -461,6 +461,7 @@ static const ov_field_t k_ov_fields[] = {
     { "touch_focus_off",         0, 1 },                        /* 1: no focus by touch on this camera */
     { "focus_max_diopters",      1, 100 },                      /* the lens' real closest stop (HAL units), below the declared one */
     { "focus_step_percent",      1, 49 },                       /* manual steps above 1 D as a % of the value */
+    { "lens_fix_default",        0, 1 },                        /* the lens fix on by default on this camera (0.3.11-563) */
     /* our JPG's processing by default on this camera (jpg_default_csv;
      * jpg_method is a word, below; luma_nr is jpg_luma_nr's name until 0.3.11-550) */
     { "jpg_frames",              1, 8 },                        /* 1, 2, 4, 8 */
@@ -1451,15 +1452,16 @@ static void usage(void)
             "       rawfish-ir-cli [--log FILE] cameras\n"
             "       rawfish-ir-cli [--log FILE] probe          (write generated-hal.json)\n"
             "       rawfish-ir-cli [--log FILE] streamtest ID  (which streams this camera survives, five combinations; the override to use)\n"
-            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
+            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|default|FILE] run ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [yuv=WxH|max|jpeg|jpeg+largest] [type=raw|jpeg] [streams=jpeg,raw,yuv]\n"
             "         (default preview 1280x960; yuv=jpeg: at the JPEG size; jpeg+largest: and, where no stream is a multiple of it, the largest stream averaged down; streams=: only these beside the viewfinder)\n"
-            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
+            "       rawfish-ir-cli [--log FILE] [--lensfix on|off|default|FILE] stream ID JPEG_WxH [PREVIEW_WxH] [raw=WxH] [type=raw|jpeg]   (SF2P frames on stdout)\n"
             "         type=raw|jpeg: the session's type on a phone whose profile says \"streams\": \"exclusive\"\n"
             "         any size may be 'max' (largest listed; preview: widest <= 1280)\n"
             "       rawfish-ir-cli lensfix PROFILE.json IN.jpg OUT.jpg [q=95] [rot=0|90|180|270]   (a JPEG lens-corrected, no camera:\n"
             "         also on a PC; rot=: its pixels were turned clockwise by that, with no Exif orientation)\n"
-            "  --lensfix on|off|FILE: the lens distortion correction of the viewfinder and the JPEGs, with this phone's\n"
-            "  profile (/usr/share/rawfish-ir/lens-distortion/) or FILE; default off (the app sends \"lensfix on|off\")\n"
+            "  --lensfix on|off|default|FILE: the lens distortion correction of the viewfinder and the JPEGs, with this\n"
+            "  phone's profile (/usr/share/rawfish-ir/lens-distortion/) or FILE; default: the camera's own (its device\n"
+            "  profile's lens_fix_default, else off); without the option off (the app sends \"lensfix on|off|default\")\n"
             "  files are written to ~/Pictures/RAWfish-ir/ (or --jpgdir / --dngdir) as NAME_YYYYMMDD_HHMMSS.EXT\n"
             "  (NAME: letters, digits, - and _; NAME + = no prefix: YYYYMMDD_HHMMSS.EXT; _mmm, the milliseconds,\n"
             "  added when another shot already has that name, a second photo in the same second; always for a\n"
@@ -1471,7 +1473,8 @@ static void usage(void)
             "         raw NAME|- [focus=auto|continuous|...|inf|<m>m] [exp=SEC] [iso=N] [ms=1]   (- = measure only)\n"
             "                [vres=KEY,...]   (diagnosis: up to 8 vendor keys of the photo's result in the reply,\n"
             "                 \"vendor_results\"; e.g. the sensor gain the HAL applied)\n"
-            "         lensfix on|off|status|file=PATH   (lens distortion correction of the viewfinder and the JPEGs)\n"
+            "         lensfix on|off|default|status|file=PATH   (lens distortion correction of the viewfinder and the JPEGs;\n"
+            "                     default: the camera's own, see --lensfix)\n"
             "         yuv NAME [q=Q] [n=N] [ev=E1,E2,..] [exp=SEC iso=N] [focus=..] [save=yuv] [denoise=on]\n"
             "                                [colour=0..5] [median=0..4] [luma=0..3] [sharpen=0..5]\n"
             "                                (colour: our colour filter, 1, 2, 3, 5, 8 x the noise (denoise=on = 2); median:\n"
@@ -1973,7 +1976,7 @@ static int cmd_raw(void *bridge, indraw_raw_fn raw, char **save, char *out)
 }
 
 /* --- Lens distortion correction ("lensfix", docs/LENS-DISTORTION.md) -----
- * The setting (--lensfix on|off|FILE, the "lensfix" command) corrects the
+ * The setting (--lensfix on|off|default|FILE, the "lensfix" command) corrects the
  * viewfinder (drawn by the interface's GPU, from the model sent with the
  * "lensfix" event; the engine maps the taps back) and every JPEG: ours from the YUV stream
  * before it is compressed, the camera's after the engine wrote it
@@ -1982,10 +1985,18 @@ static int cmd_raw(void *bridge, indraw_raw_fn raw, char **save, char *out)
  * (distortion_<maker>-<model>_cam<ID>.json: the user's device-profiles/
  * lens-distortion/, then /usr/share/rawfish-ir/lens-distortion/), or the
  * file given. None: nothing is corrected, and a warning says so. DNGs are
- * never touched. */
+ * never touched.
+ * "default" (the app's setting until the user picks on or off for this
+ * camera, 0.3.11-563): the camera's own default, its device profile's
+ * "lens_fix_default" (1 on the JP2's 18 mm), else off. The CLI resolves it
+ * once the camera is known (lensfix_load_model), so the app needs no
+ * knowledge of it before the session; the event's default= tells it, for
+ * the menu's green ring. */
 static double mono_ms(void);
 static void jw_quote_into(char *buf, size_t n, const char *s);
-static int g_lensfix;                        /* the setting: 1 on              */
+static int g_lensfix;                        /* the setting in force: 1 on     */
+static int g_lensfix_by_default;             /* the setting is "default": g_lensfix follows the camera's */
+static int g_lensfix_default;                /* the open camera's default (its device profile's lens_fix_default) */
 static char g_lensfix_file[1024];            /* a file given: it, not the phone's */
 static ld_model_t g_ldm;                     /* the model, from the engine     */
 static int g_ldm_have;
@@ -2025,6 +2036,12 @@ static void lensfix_load_model(void)
     const char *lk;
     g_ldm_have = 0;
     g_ldm_looked[0] = '\0';
+    {   /* this camera's default (lens_fix_default in its device profile; 0 if absent) */
+        int d = 0;
+        if (g_lensfix_cam[0]) ov_int(g_lensfix_cam, "lens_fix_default", &d);
+        g_lensfix_default = d == 1;
+        if (g_lensfix_by_default) g_lensfix = g_lensfix_default;
+    }
     if (!lf || !gf) { snprintf(g_ldm_looked, sizeof g_ldm_looked, "(this engine has no lens correction)"); return; }
     if (profile_dir(pdir, sizeof pdir) == 0) {
         snprintf(udir, sizeof udir, "%s/lens-distortion", pdir);
@@ -2075,10 +2092,10 @@ static void lensfix_apply(char *out)
                  * the model bound to the active array (lensdist.h's ld_model_t) */
         char ev[512];
         if (g_lensfix && g_ldm_have)
-            snprintf(ev, sizeof ev, "lensfix state=on any=1 aw=%d ah=%d fx=%.6f fy=%.6f cx=%.6f cy=%.6f k=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
-                     g_ldm.aw, g_ldm.ah, g_ldm.fx, g_ldm.fy, g_ldm.cx, g_ldm.cy,
+            snprintf(ev, sizeof ev, "lensfix state=on any=1 default=%d aw=%d ah=%d fx=%.6f fy=%.6f cx=%.6f cy=%.6f k=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
+                     g_lensfix_default, g_ldm.aw, g_ldm.ah, g_ldm.fx, g_ldm.fy, g_ldm.cx, g_ldm.cy,
                      g_ldm.k[0], g_ldm.k[1], g_ldm.k[2], g_ldm.k[3], g_ldm.k[4], g_ldm.k[5], g_ldm.k[6], g_ldm.k[7]);
-        else snprintf(ev, sizeof ev, "lensfix state=%s any=%d\n", g_lensfix ? "unavailable" : "off", g_ldm_any);
+        else snprintf(ev, sizeof ev, "lensfix state=%s any=%d default=%d\n", g_lensfix ? "unavailable" : "off", g_ldm_any, g_lensfix_default);
         em(ev);
     }
     if (g_lensfix && !g_ldm_have) {
@@ -2093,22 +2110,25 @@ static void lensfix_apply(char *out)
         snprintf(out, OUT_SIZE, "{\"ok\":true,\"lensfix\":\"%s\"}", g_lensfix ? "on" : "off");
 }
 
-/* "lensfix on|off|status|file=PATH|file=" */
+/* "lensfix on|off|default|status|file=PATH|file=" (default: the camera's
+ * own, see g_lensfix_by_default) */
 static int cmd_lensfix(char **save, char *out)
 {
     char *a = strtok_r(NULL, " \t\r\n", save);
     if (!a || !strcmp(a, "status")) {
-        snprintf(out, OUT_SIZE, "{\"ok\":true,\"lensfix\":\"%s\",\"profile\":%s}", g_lensfix ? (g_ldm_have ? "on" : "unavailable") : "off",
-                 g_ldm_have ? "true" : "false");
+        snprintf(out, OUT_SIZE, "{\"ok\":true,\"lensfix\":\"%s\",\"profile\":%s,\"default\":%s,\"by_default\":%s}",
+                 g_lensfix ? (g_ldm_have ? "on" : "unavailable") : "off", g_ldm_have ? "true" : "false",
+                 g_lensfix_default ? "true" : "false", g_lensfix_by_default ? "true" : "false");
         emit(out);
         return 0;
     }
-    if (!strcmp(a, "on") || !strcmp(a, "off")) g_lensfix = !strcmp(a, "on");
+    if (!strcmp(a, "on") || !strcmp(a, "off")) { g_lensfix = !strcmp(a, "on"); g_lensfix_by_default = 0; }
+    else if (!strcmp(a, "default")) { g_lensfix_by_default = 1; g_lensfix = g_lensfix_default; }
     else if (!strncmp(a, "file=", 5)) {
         snprintf(g_lensfix_file, sizeof g_lensfix_file, "%s", a + 5);
+        if (a[5]) { g_lensfix = 1; g_lensfix_by_default = 0; }
         lensfix_load_model();
-        if (a[5]) g_lensfix = 1;
-    } else { emit("{\"ok\":false,\"error\":\"lensfix: on, off, status or file=PATH\"}"); return 1; }
+    } else { emit("{\"ok\":false,\"error\":\"lensfix: on, off, default, status or file=PATH\"}"); return 1; }
     lensfix_apply(out);
     emit(out);
     return 0;
@@ -2537,11 +2557,12 @@ static int cmd_yuv(void *bridge, char **save, char *out)
             for (k = 0; k < nm && el + 8 < sizeof evs; ++k)
                 el += (size_t)snprintf(evs + el, sizeof evs - el, "%s%+g", k ? "," : " at EV ", ev[k]);
         }
-        snprintf(desc, sizeof desc, "RAWfish-ir %s from YUV: %d frame%s of %s at ISO %d%s%s%s; colour NR %d, moire %d, luma NR %d, sharpen %d",
+        snprintf(desc, sizeof desc, "RAWfish-ir %s from YUV: %d frame%s of %s at ISO %d%s%s%s; colour NR %d, moire %d, luma NR %d, sharpen %d%s",
                  light ? "snap" : "JPG", nm, nm > 1 ? "s" : "", et, f.iso, evs,
                  nm > 1 ? (method == YUV_MERGE_TILES ? ", merged by tiles" : ", merged whole") : "",
                  nm > 1 && nev > 0 ? " (the first frame's exposure)" : "",
-                 denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma, sharpen);
+                 denoise == 1 ? colour : 0, denoise == 1 ? median : 0, luma, sharpen,
+                 lensfixed ? "; lens distortion corrected" : "");   /* as the Software tag (0563) */
         ex.description = desc;
         ex.datetime = dt;
         ex.exposure_ns = f.exposure_ns; ex.iso = f.iso;
@@ -2892,8 +2913,9 @@ int main(int argc, char **argv)
         if (!strcmp(argv[1], "--log")) {
             g_log = fopen(argv[2], "a");
             if (!g_log) { perror(argv[2]); return EXIT_USAGE; }
-        } else if (!strcmp(argv[1], "--lensfix")) {     /* on | off | a lens distortion file */
+        } else if (!strcmp(argv[1], "--lensfix")) {     /* on | off | default | a lens distortion file */
             if (!strcmp(argv[2], "on") || !strcmp(argv[2], "off")) g_lensfix = !strcmp(argv[2], "on");
+            else if (!strcmp(argv[2], "default")) g_lensfix_by_default = 1;   /* resolved once the camera is known */
             else { snprintf(g_lensfix_file, sizeof g_lensfix_file, "%s", argv[2]); g_lensfix = 1; }
         } else if (!strcmp(argv[1], "--jpgdir") || !strcmp(argv[1], "--dngdir")) {
             char *dst = argv[1][2] == 'j' ? g_jpgdir : g_dngdir;

@@ -31,9 +31,27 @@ Item {
     // camera has no profile.
     // lensFixAny: this phone has a profile for some camera (the CLI says;
     // false on the phones without any: the column is hidden there).
-    property bool lensFix: false
+    // Per camera (0.3.11, patch 0563): the key lensFix of its section
+    // [camera_<ID>] in rawfish-ir.conf, "1" on, "0" off, or "default" --
+    // the camera's own default, its device profile's lens_fix_default (on
+    // for the JP2's 18 mm), which the CLI resolves and tells back
+    // (lensFixDefault, the green ring). lensFixChoice: this camera's
+    // choice, "" at its default.
+    property string lensFixChoice: ""
+    property bool lensFixDefault: false
+    readonly property bool lensFix: lensFixChoice !== "" ? lensFixChoice === "1" : lensFixDefault
     property string lensFixState: ""
     property bool lensFixAny: true
+    // The command for the CLI: this camera's choice, or "default" (the CLI
+    // knows the camera's default before the app does).
+    function lensFixCommand() { return "lensfix " + (lensFixChoice === "1" ? "on" : lensFixChoice === "0" ? "off" : "default") }
+    // Its place in the file for camera `cam` (as jpgConfKey).
+    function lensFixConfKey(cam) { return "camera_" + cam + "/lensFix" }
+    // This camera's choice, from the file (anything but 0 or 1: its default).
+    function lensFixLoad() {
+        var v = currentCamera !== "" ? String(viewfinder.setting(lensFixConfKey(currentCamera), "default")).trim() : "default"
+        lensFixChoice = v === "0" || v === "1" ? v : ""
+    }
     // The level's zero (ui 175): the roll and pitch the sensor reports when
     // the phone is truly upright, recorded by a long press on "level" with
     // the phone held straight; subtracted from every reading.
@@ -148,7 +166,7 @@ Item {
     property bool logChecks: false                 // the reports carry the viewfinder-vs-photo histograms (a check)
     property string zebraJpegMode: "luma"          // JPEG zebra: luma (a pixel that comes out white) or channel (any one)
     // ---- RAWfish-ir's JPG processing, per camera (0.3.11, patch 0551) ----
-    // Eight settings, each kept for each camera in rawfish-ir.conf, in its
+    // Seven settings, each kept for each camera in rawfish-ir.conf, in its
     // section [camera_<ID>] (camera_2/jpgSharpen=1): a value is the user's
     // choice on that camera (the menu writes it), "default" the camera's
     // default -- its device profile's (jpg_* keys), else the app's
@@ -232,9 +250,14 @@ Item {
             // the old key goes once the cameras have theirs (the caps list them all)
             if (old !== "" && ids.length > 0) viewfinder.removeSetting(s.key)
         }
+        // The lens fix's key too (patch 0563), at "default": the file shows
+        // it for each camera. The one-for-all key of 0561 (menu/lensFix,
+        // never released) is dropped by the file's rebuild at the next start.
+        for (j = 0; j < all.length; ++j)
+            if (String(viewfinder.setting(lensFixConfKey(all[j]), "")).trim() === "") save(lensFixConfKey(all[j]), "default")
         jpgLoad()
     }
-    onCurrentCameraChanged: jpgLoad()
+    onCurrentCameraChanged: { jpgLoad(); lensFixLoad() }
     Connections { target: viewfinder; onCapsChanged: menu.jpgEnsureKeys() }
     // The settings in force on this camera (read by the page's shoot command).
     readonly property bool yuvNrTiles: jpgValue("method") === "tiles"   // the denoise method: classic (one shift per frame) or by tiles
@@ -384,7 +407,7 @@ Item {
         stackDenoise = pick("stackDenoise", "1", ["1", "2", "4"]) * 1
         menuDiscovered = num("menuDiscovered", 0, 0, 1) === 1
         gridOn = num("gridOn", 0, 0, 1) === 1
-        lensFix = num("lensFix", 0, 0, 1) === 1
+        lensFixLoad()                              // the lens fix: this camera's (per camera)
         levelRoll0 = num("levelRoll0", 0, -45, 45)
         levelPitch0 = num("levelPitch0", 0, -45, 45)
         advanced = startMode === "simple" ? false : startMode === "advanced" ? true : num("advanced", 0, 0, 1) === 1   /* a new install opens in simple mode */
@@ -544,7 +567,7 @@ Item {
         // photoProcessing()).
         viewfinder.sendCommand("preview " + noiseModes[previewNoiseIndex] + " " + edgeModes[previewEdgeIndex])
         viewfinder.sendCommand("shading balance=" + shadingPivot + " strength=" + shadingStrength + " maxgain=" + shadingMaxGain)
-        viewfinder.sendCommand("lensfix " + (lensFix ? "on" : "off"))
+        viewfinder.sendCommand(lensFixCommand())
         // A measured white first: it is the base the mode and the shifts keep.
         // This camera's own if it has one, else the offset of a white measured
         // on another camera (see wbFixedMap). A new session starts with
@@ -562,7 +585,7 @@ Item {
     }
     onAdvancedChanged: applyLive()
     Connections { target: viewfinder; onRunningChanged: if (viewfinder.running) menu.applyLive() }
-    Connections { target: viewfinder; onLensFixState: { menu.lensFixState = state; menu.lensFixAny = anyProfile } }
+    Connections { target: viewfinder; onLensFixState: { menu.lensFixState = state; menu.lensFixAny = anyProfile; menu.lensFixDefault = defaultOn } }
 
     function mp(sz) { if (sz === "") return qsTr("max"); var p = sz.split("x"); return qsTr("%1 MP").arg(Math.round(p[0] * p[1] / 1e5) / 10) }
     // Listed JPEG sizes of a ratio, largest first.
@@ -757,17 +780,19 @@ Item {
             // camera above all), in the viewfinder and the JPEGs; DNGs are
             // never touched. A camera without a lens profile is not corrected
             // (the header says so); a phone with none for any camera does not
-            // show the column.
+            // show the column. Kept per camera; the green ring is the
+            // camera's default (picking it writes "default" again).
             MenuColumn { visible: menu.lensFixAny; colW: band.colW; maxRows: band.maxRows; header: header
-                caption: qsTr("Lens fix"); values: [false, true]; current: menu.lensFix
+                caption: qsTr("Lens fix"); values: [false, true]; current: menu.lensFix; defaultValue: menu.lensFixDefault
                 labelFor: function(v) { return !v ? qsTr("Lens distortion fix off")
                                               : menu.lensFixState === "unavailable" ? qsTr("Lens distortion fix on (no lens profile for this camera)")
                                               : qsTr("Lens distortion fix on: viewfinder and JPEG") }
                 shortFor: function(v) { return v ? qsTr("on") : qsTr("off") }
                 iconComponent: Component { LensFixIcon {} }   // a checkerboard: barrel-bent off, straight on
                 onPicked: {
-                    menu.lensFix = value; menu.save("lensFix", value ? 1 : 0)
-                    if (viewfinder.running) viewfinder.sendCommand("lensfix " + (value ? "on" : "off"))
+                    menu.lensFixChoice = value === menu.lensFixDefault ? "" : (value ? "1" : "0")
+                    if (menu.currentCamera !== "") menu.save(menu.lensFixConfKey(menu.currentCamera), menu.lensFixChoice === "" ? "default" : menu.lensFixChoice)
+                    if (viewfinder.running) viewfinder.sendCommand(menu.lensFixCommand())
                 } }
             // Format, resolution and quality belong to the JPEG: in RAW the DNG
             // is the sensor's, so the three are greyed out (a tap says so).

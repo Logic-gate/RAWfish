@@ -76,6 +76,8 @@
         "touch_focus_off": 1,
         "focus_max_diopters": 9,
         "focus_step_percent": 8,
+        "_lens_fix_note": "The lens fix on by default on the 18 mm, whose edges and corners bend strongly (the user's choice, 27 Nov 2026); off on the 26 mm and the front camera.",
+        "lens_fix_default": 1,
         "_jpg_note": "Our JPG's defaults on the 18 mm (the user's choice for now, 26 Nov 2026, to be measured on a series at low and high ISO): 4 frames merged by tiles (classic at first; tiles, the user's choice, 26 Nov 2026), colour NR 2, no moire filter, the luminance filter at 2, sharpening 3.",
         "jpg_method": "tiles",
         "jpg_tile_frames": 4,

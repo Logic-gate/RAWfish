@@ -20,7 +20,7 @@ read (`> ...`) and every result are appended to FILE with a timestamp.
 | `--log FILE` | append a timestamped transcript to FILE | none |
 | `--jpgdir DIR` | where JPEGs go (`~/` = home); created if needed, refused at start if impossible | `~/Pictures/RAWfish-ir` |
 | `--dngdir DIR` | where DNGs (and their `.previews/`) go | `~/Pictures/RAWfish-ir` |
-| `--lensfix on\|off\|FILE` | the lens distortion correction of the viewfinder and the JPEGs, with the phone's profile or FILE (`LENS-DISTORTION.md`) | off |
+| `--lensfix on\|off\|default\|FILE` | the lens distortion correction of the viewfinder and the JPEGs, with the phone's profile or FILE; `default`: the camera's own (its device profile's `lens_fix_default`, else off) (`LENS-DISTORTION.md`) | off |
 
 The options may come in any order, before the command.
 
@@ -129,7 +129,7 @@ AF caught searching until its search ends (at most `focusScanWait`, then a
 | `shading calibrate full cct=K lens=D1,D2,...` | measure a whole calibration: a flat field through a diffuser, RAW at each HAL lens value D (K = the light's colour temperature); progress as `cal_progress done= total=`; the file goes to device-profiles/lens-shading/ |
 | `shading calibrate light cct=K` | add a light (colour at temperature K, one position) to the existing calibration |
 | `shading balance=B strength=S maxgain=M` | the measured map's dosing (pivot, strength, maximum gain) |
-| `lensfix on\|off\|status\|file=PATH` | the lens distortion correction (viewfinder and JPEGs; never DNGs); without a profile for this camera: not corrected, a warning, event `lensfix state=unavailable` (`any=0`: no profile for any camera of the phone, the menu hides the column; `LENS-DISTORTION.md`) |
+| `lensfix on\|off\|default\|status\|file=PATH` | the lens distortion correction (viewfinder and JPEGs; never DNGs; `default`: the camera's own, its device profile's `lens_fix_default`, else off); without a profile for this camera: not corrected, a warning, event `lensfix state=unavailable` (`any=0`: no profile for any camera of the phone, the menu hides the column; `LENS-DISTORTION.md`) |
 | `wb fixed R,GE,GO,B` / `wb fixed off` | keep a white measured before (restored by the interface after a restart) / back to the AWB as the base |
 | `wb offset R,B` / `wb offset off` | a white measured on another camera, carried as red and blue factors on this camera's automatic white (the AWB's gains, red x R, blue x B); a `wb fixed` of this camera takes precedence |
 | `viewwin X Y W H` | the window the interface shows, normalised in the band (see below; the whole active array when the viewfinder has the sensor's shape) (the controller sends it with every view change): the histograms and the viewfinder's centre-weighted mean cover it, whatever the HAL's own frame |
@@ -157,7 +157,12 @@ since 0.47.15); an interface built against another version can tell. Since
 0.3.8 it also gives `raw_cams=` (for each camera of `cameras=`, 1 if it gives
 RAW), `yuv_stream=WxH/k` (the YUV stream our JPG is averaged from, and by
 how much) and `min_focus_real=` (the closest focus in the diopters manual
-focus works in: the HAL's through the calibration table). The meter lines
+focus works in: the HAL's through the calibration table). Since 0.3.11,
+`jpg_default=method,frames,tile_frames,colour,moire,luma,sharpen`: our
+JPG's processing by default on this camera (its device profile's `jpg_*`
+keys, else the app's `classic,1,4,2,0,0,3`), what the menu's green rings
+and "default" in `rawfish-ir.conf` mean (`luma_nr=` until 0.3.11-550,
+the luminance filter alone). The meter lines
 (`meter`, `vfmeter`) carry `mclip_lo=` / `mclip_hi=`, the metered area's
 crushed and clipped shares in percent. `meter` also carries `zclip=`: the
 share (percent) of the displayed window whose RAW photosites reach the RAW
@@ -174,7 +179,9 @@ then I420: Y, U, V, the chroma at half resolution, (w+1)/2 by (h+1)/2;
 mean -- centre-weighted, or the tap's spot --, clipping percentages, the
 pair the frame was exposed with when known (`iso=`, `exp_ns=`, else 0) and
 a 64-bin RGB histogram of the frame just sent, at most every 100 ms),
-`captured`, `written`, `stack_start n=` (a stack began), `progress`, `stack_done`,
+`captured`, `written` (with the lens fix on, a camera JPEG's only once the
+CLI has corrected it), `lensfix state=... any= default=` (the lens fix,
+`LENS-DISTORTION.md`), `stack_start n=` (a stack began), `progress`, `stack_done`,
 with the detailed log (`checks on`) `vfpace fps= lat_ms= ours_ms=` (every
 2 s: frames per second, a frame's age when received, our time per frame) --
 written to the log by the controller, not passed on --, and `fcrop
