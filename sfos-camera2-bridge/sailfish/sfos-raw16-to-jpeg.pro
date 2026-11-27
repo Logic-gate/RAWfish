@@ -14,7 +14,7 @@ PKGCONFIG += libjpeg
 
 SOURCES += raw16-to-jpeg.c
 
-LIBS += -lm
+LIBS += -lm -lpthread
 
 target.path = /usr/libexec/rawfish
 INSTALLS += target

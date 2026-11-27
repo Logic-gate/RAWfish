@@ -283,7 +283,14 @@ static void append_lens_capabilities(struct json_writer *writer,
     float focal_length = sfos_camera2_first_float(
         metadata, ACAMERA_LENS_INFO_AVAILABLE_FOCAL_LENGTHS, 0.0f);
 
-    json_appendf(writer, "{\"focal_length_mm\":%.9g}", focal_length);
+    float sensor_size[2] = { 0.0f, 0.0f };
+    sfos_camera2_copy_float_array(
+        metadata, ACAMERA_SENSOR_INFO_PHYSICAL_SIZE, sensor_size, 2);
+
+    json_appendf(writer,
+                 "{\"focal_length_mm\":%.9g,\"sensor_width_mm\":%.9g,"
+                 "\"sensor_height_mm\":%.9g}",
+                 focal_length, sensor_size[0], sensor_size[1]);
 }
 
 static void append_zoom_capabilities(struct json_writer *writer,

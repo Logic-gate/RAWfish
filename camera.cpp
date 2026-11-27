@@ -29,15 +29,33 @@ static bool cameraStartupLoggingEnabled()
 #include <QQuickView>
 #include <QQmlComponent>
 
+#include "src/startuplog.h"
+
 #ifdef HAS_BOOSTER
 #include <MDeclarativeCache>
 #endif
 
+static QtMessageHandler previousMessageHandler = nullptr;
+
+// Capture timing lines go to the journal, which an unprivileged shell cannot
+// read; copy them into the startup log next to the other timing markers.
+static void captureTimingHandler(QtMsgType type, const QMessageLogContext &context,
+                                 const QString &message)
+{
+    if (message.contains(QLatin1String("capture-timing"))
+            || message.contains(QLatin1String("capture-rotation")))
+        StartupLog::mark(message);
+    if (previousMessageHandler)
+        previousMessageHandler(type, context, message);
+}
+
 Q_DECL_EXPORT int main(int argc, char *argv[])
 {
+    previousMessageHandler = qInstallMessageHandler(captureTimingHandler);
     QElapsedTimer startupTimer;
     startupTimer.start();
     CAMERA_STARTUP_MARK("app", startupTimer, "main entered");
+    StartupLog::mark(QStringLiteral("main entered"));
 
     QQuickWindow::setDefaultAlphaBuffer(true);
 
@@ -56,6 +74,7 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     view->engine()->setBaseUrl(QUrl::fromLocalFile(path));
     view->setSource(path + QLatin1String("camera.qml"));
     CAMERA_STARTUP_MARK("app", startupTimer, "camera.qml loaded status=%d", view->status());
+    StartupLog::mark(QStringLiteral("camera.qml loaded status=%1").arg(view->status()));
     view->setTitle(QStringLiteral("RAWfish"));
 
     if (app->arguments().contains("-desktop")) {
@@ -66,6 +85,7 @@ Q_DECL_EXPORT int main(int argc, char *argv[])
     } else {
         view->showFullScreen();
         CAMERA_STARTUP_MARK("app", startupTimer, "fullscreen window shown");
+        StartupLog::mark(QStringLiteral("fullscreen window shown"));
     }
     return app->exec();
 }

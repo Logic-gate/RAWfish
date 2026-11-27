@@ -12,10 +12,13 @@
 #include <qqml.h>
 
 #include "capturemodel.h"
+#include "latestcapture.h"
+#include "startuplog.h"
 #include "camera2preview.h"
 #include "declarativecameraextensions.h"
 #include "declarativesettings.h"
 #include "cameraconfigs.h"
+#include "looksmodel.h"
 
 template <typename T> static QObject *singletonFactory(QQmlEngine *, QJSEngine *)
 {
@@ -52,6 +55,8 @@ public:
         Q_UNUSED(engine)
         Q_ASSERT(QLatin1String(uri) == QLatin1String("com.vivid.camera"));
 
+        engine->addImageProvider(QStringLiteral("looks"), new LookThumbnailProvider);
+
         AppTranslator *engineeringEnglish = new AppTranslator(engine);
         AppTranslator *translator = new AppTranslator(engine);
         engineeringEnglish->load("rawfish_eng_en", "/usr/share/translations");
@@ -62,9 +67,12 @@ public:
     {
         Q_UNUSED(uri)
         Q_ASSERT(QLatin1String(uri) == QLatin1String("com.vivid.camera"));
+        StartupLog::mark(QStringLiteral("plugin registerTypes"));
 
         qmlRegisterType<CaptureModel>("com.vivid.camera", 1, 0, "CaptureModel");
+        qmlRegisterType<LatestCapture>("com.vivid.camera", 1, 0, "LatestCapture");
         qmlRegisterType<Camera2Preview>("com.vivid.camera", 1, 0, "Camera2Preview");
+        qmlRegisterType<LooksModel>("com.vivid.camera", 1, 0, "LooksModel");
         qmlRegisterType<DeclarativeCameraExtensions>("com.vivid.camera", 1, 0, "CameraExtensions");
         qmlRegisterType<DeclarativeSettings>("com.vivid.camera", 1, 0, "SettingsBase");
         qmlRegisterSingletonType<DeclarativeSettings>("com.vivid.camera", 1, 0, "Settings", DeclarativeSettings::factory);

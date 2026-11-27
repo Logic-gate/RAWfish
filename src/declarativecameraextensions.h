@@ -34,6 +34,7 @@ public:
     Q_INVOKABLE void disableNotifications(QQuickItem *item, bool disable);
     Q_INVOKABLE QString camera2DeviceConfigDir() const;
     Q_INVOKABLE QString ensureCamera2GeneratedHalConfig(const QString &cameraId);
+    Q_INVOKABLE void startupLog(const QString &event);
     Q_INVOKABLE QStringList camera2RawSizeModel(const QString &cameraId,
                                                 const QString &rawFormat);
     Q_INVOKABLE QStringList camera2JpegSizeModel(const QString &cameraId);
@@ -56,6 +57,9 @@ public:
     Q_INVOKABLE QStringList camera2ShutterModel(const QString &cameraId);
     Q_INVOKABLE QStringList camera2FocusDistanceModel(const QString &cameraId);
     Q_INVOKABLE qreal camera2MaximumZoom(const QString &cameraId);
+    Q_INVOKABLE bool camera2HardwareZoom(const QString &cameraId);
+    // 35 mm equivalent focal length at 1x, or 0 when the sensor size is unknown.
+    Q_INVOKABLE qreal camera2EquivalentFocalLength(const QString &cameraId);
     Q_INVOKABLE QStringList rawCaptureExposureModel(const QString &cameraId);
     Q_INVOKABLE QVariantList rawCaptureRotationModel(const QString &cameraId,
                                                      const QString &mode);
@@ -144,6 +148,18 @@ private:
         RawCaptureCapturing,
         RawCaptureJpegCapturing
     };
+
+    // A warm RAW capture that arrived while an earlier one was still rendering.
+    struct PendingRawJob {
+        QString targetPath, rawPath, metadataPath, exposure, saveFormat, engine;
+        int jpegQuality = 92;
+        int rotationDegrees = 0;
+        int colorTemperature = 0;
+        int colorTint = 0;
+        bool progressiveJpeg = false;
+    };
+    QList<PendingRawJob> m_pendingRawJobs;
+    void startNextPendingRawJob();
 
     QJsonObject m_captureMetadata;
     QScopedPointer<QProcess> m_rawCaptureProcess;

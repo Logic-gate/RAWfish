@@ -125,6 +125,7 @@ struct preview_context {
     int raw_height;
     pthread_mutex_t output_lock;
     float zoom_ratio;
+    int flash_mode; // 0 = off, 1 = torch (always lit), 2 = flash with the shot
     float focal_length;
     float focus_x;
     float focus_y;
@@ -133,6 +134,11 @@ struct preview_context {
     int focus_hold_active;
     float focus_hold_distance;
     atomic_int live_af_state;
+    atomic_int live_ae_state; // newest AE state from any preview-target result
+    atomic_int live_iso;      // newest sensor sensitivity from a preview result
+    atomic_int live_flash_state; // newest FLASH_STATE / FLASH_MODE / AE_MODE results
+    atomic_int live_flash_mode;
+    atomic_int live_ae_mode;
     atomic_int live_focus_distance_micros;
     int exposure_compensation;
     int original_scene_mode;
@@ -499,6 +505,14 @@ static void preview_configure_focus_request(ACaptureRequest *request,
 /**
  * Applies controls that must track live preview state.
  */
+/* `still` argument of preview_configure_request(): 0 for the live preview,
+ * non-zero for a still capture. JPEG stills are told apart so they can run the
+ * HAL's noise reduction; RAW stills must not. */
+#define PREVIEW_REQUEST_JPEG 2
+
+/* Above this sensor sensitivity a JPEG still runs without the HDR scene. */
+#define PREVIEW_HDR_MAX_ISO 400
+
 static void preview_configure_request(ACaptureRequest *request,
                                       const struct preview_context *context,
                                       const ACameraMetadata *metadata,
@@ -506,6 +520,23 @@ static void preview_configure_request(ACaptureRequest *request,
 {
     if (!request || !context) {
         return;
+    }
+
+    // Vendor scene modes (HDR) make the HAL ignore aeMode, so the shot would never
+    // flash. Use plain auto control for flash stills.
+    //
+    // The same goes for dim light: at high ISO the vendor HDR scene gives JPEGs a
+    // strong blue-violet cast, which the preview and plain auto control do not
+    // have. HDR only helps where there is light, so dim stills skip it.
+    struct preview_context flash_context;
+    if (still && context->scene_mode != SFOS_CAMERA2_SCENE_MANUAL &&
+            (context->flash_mode == 2 ||
+             (still == PREVIEW_REQUEST_JPEG &&
+              atomic_load_explicit((atomic_int *)&context->live_iso,
+                                   memory_order_acquire) >= PREVIEW_HDR_MAX_ISO))) {
+        flash_context = *context;
+        flash_context.scene_mode = SFOS_CAMERA2_SCENE_MANUAL;
+        context = &flash_context;
     }
 
     if (context->focus_hold_active) {
@@ -538,8 +569,22 @@ static void preview_configure_request(ACaptureRequest *request,
             still ? ACAMERA_CONTROL_CAPTURE_INTENT_STILL_CAPTURE : ACAMERA_CONTROL_CAPTURE_INTENT_PREVIEW);
     }
     sfos_camera2_set_aperture(metadata, request, context->aperture);
-    sfos_camera2_set_noise_reduction(metadata, request,
-                                     context->noise_reduction);
+    /* The setting defaults to "off", which suits RAW capture but leaves the
+     * picture grainy at the high ISOs a dim scene needs. The live preview runs
+     * the HAL's noise reduction (the higher-quality one when zoomed in, where
+     * sensor noise is magnified); JPEG stills run high quality. RAW stills, and
+     * any mode chosen explicitly, are left exactly as requested. */
+    int noise_reduction = context->noise_reduction;
+    if (noise_reduction == SFOS_CAMERA2_NOISE_REDUCTION_NONE) {
+        if (still == PREVIEW_REQUEST_JPEG) {
+            noise_reduction = SFOS_CAMERA2_NOISE_REDUCTION_HIGH_QUALITY;
+        } else if (!still) {
+            noise_reduction = context->zoom_ratio >= 2.0f
+                ? SFOS_CAMERA2_NOISE_REDUCTION_HIGH_QUALITY
+                : SFOS_CAMERA2_NOISE_REDUCTION_FAST;
+        }
+    }
+    sfos_camera2_set_noise_reduction(metadata, request, noise_reduction);
 
     if (!context->focus_hold_active &&
             (context->focus_mode == SFOS_CAMERA2_FOCUS_MANUAL ||
@@ -601,6 +646,18 @@ static void preview_configure_request(ACaptureRequest *request,
                                      context->jpeg_orientation);
     }
     sfos_camera2_set_zoom_ratio(metadata, request, context->zoom_ratio);
+    if (sfos_camera2_metadata_has_i32(metadata, ACAMERA_REQUEST_AVAILABLE_REQUEST_KEYS,
+                                      ACAMERA_FLASH_MODE)) {
+        uint8_t flash = ACAMERA_FLASH_MODE_OFF;
+        if (context->flash_mode == 1) {
+            flash = ACAMERA_FLASH_MODE_TORCH;          // flashlight, always lit
+        } else if (context->flash_mode == 2 && still) {
+            // This HAL ignores the always/auto-flash AE modes (flash state stays "ready")
+            // but fires the LED for flash.mode=SINGLE with normal AE, so use that.
+            flash = ACAMERA_FLASH_MODE_SINGLE;
+        }
+        sfos_camera2_set_request_u8(request, ACAMERA_FLASH_MODE, flash);
+    }
 }
 
 static void preview_configure_raw_bracket_request(
@@ -655,6 +712,14 @@ static bool preview_parse_command_line(const char *line,
             zoom_ratio >= 1.0f && zoom_ratio <= 100.0f) {
         command->type = PREVIEW_COMMAND_ZOOM;
         command->zoom_ratio = zoom_ratio;
+        return true;
+    }
+
+    int flash_mode = 0;
+    if (sscanf(line, "flash %d", &flash_mode) == 1 &&
+            (flash_mode >= 0 && flash_mode <= 2)) {
+        command->type = PREVIEW_COMMAND_FLASH;
+        command->flash_mode = flash_mode;
         return true;
     }
 
@@ -1204,12 +1269,40 @@ static void preview_capture_completed(void *opaque,
         sample->iso = sfos_camera2_first_i32(result, ACAMERA_SENSOR_SENSITIVITY, 0);
         sample->shutter = sfos_camera2_first_i64(result, ACAMERA_SENSOR_EXPOSURE_TIME, 0);
         sample->ae = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_STATE, -1);
+        atomic_store_explicit(&context->live_ae_state, sample->ae, memory_order_release);
+        atomic_store_explicit(&context->live_flash_state,
+                             sfos_camera2_first_u8(result, ACAMERA_FLASH_STATE, -1),
+                             memory_order_release);
+        atomic_store_explicit(&context->live_flash_mode,
+                             sfos_camera2_first_u8(result, ACAMERA_FLASH_MODE, -1),
+                             memory_order_release);
+        atomic_store_explicit(&context->live_ae_mode, sample->ae_mode,
+                             memory_order_release);
         sample->ae_mode = sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_MODE, -1);
         sample->compensation = sfos_camera2_first_i32(result, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION, 0);
         sample->flicker = sfos_camera2_first_u8(result, ACAMERA_STATISTICS_SCENE_FLICKER, 0);
         sample->have_result = 1;
+        atomic_store_explicit(&context->live_iso, sample->iso, memory_order_release);
         meter_emit(context, sample);
         pthread_mutex_unlock(&context->output_lock);
+    }
+
+    {
+        /* Log when the zoom the HAL applied changes, to tell whether the
+         * preview frame arrives already cropped. */
+        static float last_ratio = -1.0f;
+        static int32_t last_crop[4] = { -1, -1, -1, -1 };
+        int32_t crop[4] = { 0, 0, 0, 0 };
+        sfos_camera2_copy_i32_array(result, ACAMERA_SCALER_CROP_REGION, crop, 4);
+        float ratio = sfos_camera2_first_float(result, ACAMERA_CONTROL_ZOOM_RATIO, -1.0f);
+        if (ratio != last_ratio || crop[2] != last_crop[2] || crop[3] != last_crop[3]) {
+            last_ratio = ratio;
+            memcpy(last_crop, crop, sizeof(crop));
+            fprintf(stderr,
+                    "capture-exposure preview-zoom requested=%.3f result_ratio=%.3f "
+                    "crop=%d,%d,%d,%d\n",
+                    context->zoom_ratio, ratio, crop[0], crop[1], crop[2], crop[3]);
+        }
     }
 
     int32_t sensitivity = sfos_camera2_first_i32(
@@ -1253,6 +1346,23 @@ static void preview_jpeg_capture_completed(void *opaque,
         result, ACAMERA_CONTROL_MODE, -1);
     context->jpeg_scene_mode = sfos_camera2_first_u8(
         result, ACAMERA_CONTROL_SCENE_MODE, -1);
+    fprintf(stderr,
+            "capture-exposure flash warm-jpeg requested=%d result_flash_mode=%d flash_state=%d "
+            "ae_mode=%d ae_state=%d control_mode=%d\n",
+            context->flash_mode,
+            sfos_camera2_first_u8(result, ACAMERA_FLASH_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_FLASH_STATE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_AE_STATE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_MODE, -1));
+    fprintf(stderr,
+            "capture-exposure jpeg-result nr_mode=%d awb_mode=%d awb_state=%d "
+            "scene_mode=%d edge_mode=%d\n",
+            sfos_camera2_first_u8(result, ACAMERA_NOISE_REDUCTION_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_AWB_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_AWB_STATE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_CONTROL_SCENE_MODE, -1),
+            sfos_camera2_first_u8(result, ACAMERA_EDGE_MODE, -1));
     fprintf(stderr,
             "capture-exposure warm-jpeg requested_iso=%d "
             "requested_shutter=%lld actual_iso=%d actual_shutter=%lld "
@@ -1849,6 +1959,10 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     struct preview_context context;
     memset(&context, 0, sizeof(context));
     sfos_camera2_status_init(&context.status);
+    atomic_init(&context.live_ae_state, -1);
+    atomic_init(&context.live_flash_state, -1);
+    atomic_init(&context.live_flash_mode, -1);
+    atomic_init(&context.live_ae_mode, -1);
     atomic_init(&context.frames_written, 0);
     atomic_init(&context.jpeg_status, -1);
     atomic_init(&context.raw_status, -1);
@@ -2115,7 +2229,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
     preview_configure_focus_request(focus_request, &context, context.focus_x,
                                     context.focus_y, 1);
     if (jpeg_request) {
-        preview_configure_request(jpeg_request, &context, characteristics, 1);
+        preview_configure_request(jpeg_request, &context, characteristics, PREVIEW_REQUEST_JPEG);
     }
     if (raw_request) {
         preview_configure_request(raw_request, &context, characteristics, 1);
@@ -2208,7 +2322,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                     1);
                 if (jpeg_request) {
                     preview_configure_request(jpeg_request, &context,
-                                              characteristics, 1);
+                                              characteristics, PREVIEW_REQUEST_JPEG);
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
@@ -2228,7 +2342,24 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                           characteristics, 0);
                 if (jpeg_request) {
                     preview_configure_request(jpeg_request, &context,
+                                              characteristics, PREVIEW_REQUEST_JPEG);
+                }
+                if (raw_request) {
+                    preview_configure_request(raw_request, &context,
                                               characteristics, 1);
+                }
+                ACaptureRequest *requests[] = { request };
+                ACameraCaptureSession_setRepeatingRequest(
+                    session, &preview_callbacks, 1, requests, NULL);
+            } else if (command.type == PREVIEW_COMMAND_FLASH) {
+                context.flash_mode = command.flash_mode;
+                preview_configure_request(request, &context, characteristics,
+                                          0);
+                preview_configure_request(focus_request, &context,
+                                          characteristics, 0);
+                if (jpeg_request) {
+                    preview_configure_request(jpeg_request, &context,
+                                              characteristics, PREVIEW_REQUEST_JPEG);
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
@@ -2261,7 +2392,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                           characteristics, 0);
                 if (jpeg_request) {
                     preview_configure_request(jpeg_request, &context,
-                                              characteristics, 1);
+                                              characteristics, PREVIEW_REQUEST_JPEG);
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
@@ -2280,7 +2411,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                           0);
                 if (jpeg_request) {
                     preview_configure_request(jpeg_request, &context,
-                                              characteristics, 1);
+                                              characteristics, PREVIEW_REQUEST_JPEG);
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
@@ -2311,7 +2442,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                           0);
                 if (jpeg_request) {
                     preview_configure_request(jpeg_request, &context,
-                                              characteristics, 1);
+                                              characteristics, PREVIEW_REQUEST_JPEG);
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,
@@ -2326,7 +2457,7 @@ SFOS_CAMERA2_EXPORT int sfos_camera2_preview_ppm(
                                           0);
                 if (jpeg_request) {
                     preview_configure_request(jpeg_request, &context,
-                                              characteristics, 1);
+                                              characteristics, PREVIEW_REQUEST_JPEG);
                 }
                 if (raw_request) {
                     preview_configure_request(raw_request, &context,

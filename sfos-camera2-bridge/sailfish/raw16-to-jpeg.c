@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include <jpeglib.h>
 
@@ -350,11 +352,88 @@ static float corrected_sample(const struct conversion_config *config,
 }
 
 /**
+ * @brief Run fn over [0, total) in chunks, spread across the online cores.
+ *
+ * Chunks are handed out dynamically so the slower cores of a big.LITTLE SoC do
+ * not hold the others up. RAW16_JPEG_THREADS overrides the thread count.
+ */
+typedef void (*chunk_fn)(void *context, int start, int end);
+
+struct parallel_job {
+    chunk_fn fn;
+    void *context;
+    int total;
+    int chunk;
+    int next;
+};
+
+static void *parallel_worker(void *argument)
+{
+    struct parallel_job *job = argument;
+    for (;;) {
+        int start = __atomic_fetch_add(&job->next, job->chunk,
+                                       __ATOMIC_RELAXED);
+        if (start >= job->total) {
+            break;
+        }
+        int end = start + job->chunk;
+        if (end > job->total) {
+            end = job->total;
+        }
+        job->fn(job->context, start, end);
+    }
+    return NULL;
+}
+
+static void run_parallel(chunk_fn fn, void *context, int total, int chunk)
+{
+    long threads = sysconf(_SC_NPROCESSORS_ONLN);
+    const char *override = getenv("RAW16_JPEG_THREADS");
+    if (override && atoi(override) > 0) {
+        threads = atoi(override);
+    }
+    if (threads < 1) {
+        threads = 1;
+    } else if (threads > 8) {
+        threads = 8;
+    }
+    struct parallel_job job = { fn, context, total, chunk, 0 };
+    pthread_t workers[7];
+    int started = 0;
+    for (int index = 0; index < threads - 1; ++index) {
+        if (pthread_create(&workers[started], NULL, parallel_worker, &job) == 0) {
+            ++started;
+        }
+    }
+    parallel_worker(&job);
+    for (int index = 0; index < started; ++index) {
+        pthread_join(workers[index], NULL);
+    }
+}
+
+struct mosaic_job {
+    const struct conversion_config *config;
+    const uint16_t *pixels;
+    float *corrected;
+};
+
+static void build_mosaic_rows(void *context, int start, int end)
+{
+    struct mosaic_job *job = context;
+    for (int y = start; y < end; ++y) {
+        for (int x = 0; x < job->config->width; ++x) {
+            job->corrected[(size_t)y * (size_t)job->config->width + (size_t)x] =
+                corrected_sample(job->config, job->pixels, x, y);
+        }
+    }
+}
+
+/**
  * @brief Precompute black-level corrected and white-balanced mosaic samples.
  *
- * Fast JPEG may visit the same Bayer samples several times while demosaicing.
- * Keeping the corrected mosaic separate preserves the render math while avoiding
- * repeated raw normalization in the hot loop.
+ * Fast JPEG visits each Bayer sample several times while demosaicing. Keeping
+ * the corrected mosaic separate avoids repeated raw normalization in the hot
+ * loop.
  */
 static float *build_corrected_mosaic(const struct conversion_config *config,
                                      const uint16_t *pixels)
@@ -364,12 +443,8 @@ static float *build_corrected_mosaic(const struct conversion_config *config,
     if (!corrected) {
         return NULL;
     }
-    for (int y = 0; y < config->height; ++y) {
-        for (int x = 0; x < config->width; ++x) {
-            corrected[(size_t)y * (size_t)config->width + (size_t)x] =
-                corrected_sample(config, pixels, x, y);
-        }
-    }
+    struct mosaic_job job = { config, pixels, corrected };
+    run_parallel(build_mosaic_rows, &job, config->height, 16);
     return corrected;
 }
 
@@ -457,21 +532,26 @@ static uint16_t *read_raw(const struct conversion_config *config)
             fclose(file);
             return NULL;
         }
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        memcpy(pixels + (size_t)y * (size_t)config->width, row,
+               (size_t)config->width * 2);
+#else
         for (int x = 0; x < config->width; ++x) {
             pixels[(size_t)y * (size_t)config->width + (size_t)x] =
                 (uint16_t)row[x * 2] | (uint16_t)((uint16_t)row[x * 2 + 1] << 8);
         }
+#endif
     }
     free(row);
     fclose(file);
     return pixels;
 }
 
-static void render_rgb_row_fast(const struct conversion_config *config,
-                                const float *corrected, int y,
-                                unsigned char *row)
+static void render_rgb_row_generic(const struct conversion_config *config,
+                                   const float *corrected, int y,
+                                   unsigned char *row, int x_start, int x_end)
 {
-    for (int x = 0; x < config->width; ++x) {
+    for (int x = x_start; x < x_end; ++x) {
         float sensor[3] = {
             demosaic_corrected_channel(config, corrected, x, y, PIXEL_RED),
             demosaic_corrected_channel(config, corrected, x, y, PIXEL_GREEN),
@@ -487,6 +567,134 @@ static void render_rgb_row_fast(const struct conversion_config *config,
     }
 }
 
+static inline void store_pixel(const struct conversion_config *config,
+                               unsigned char *out, float red, float green,
+                               float blue)
+{
+    for (int channel = 0; channel < 3; ++channel) {
+        float output = config->exposure *
+            (config->matrix[channel * 3] * red +
+             config->matrix[channel * 3 + 1] * green +
+             config->matrix[channel * 3 + 2] * blue);
+        out[channel] = srgb_byte(output);
+    }
+}
+
+/*
+ * Interior pixels have all eight neighbours, and a Bayer pattern fixes which of
+ * them carry the missing colours: a red or blue site takes green from the four
+ * edge neighbours and the opposite colour from the four diagonals; a green site
+ * takes red and blue from its two horizontal and two vertical neighbours. The
+ * additions keep the order of the generic 3x3 walk, so the result is identical.
+ */
+static void render_rgb_row_fast(const struct conversion_config *config,
+                                const float *corrected, int y,
+                                unsigned char *row)
+{
+    const int width = config->width;
+    if (y == 0 || y == config->height - 1 || width < 3) {
+        render_rgb_row_generic(config, corrected, y, row, 0, width);
+        return;
+    }
+    render_rgb_row_generic(config, corrected, y, row, 0, 1);
+    render_rgb_row_generic(config, corrected, y, row, width - 1, width);
+
+    const enum pixel_color even = pixel_color_at(config, 0, y);
+    const enum pixel_color odd = pixel_color_at(config, 1, y);
+    const float *up = corrected + (size_t)(y - 1) * (size_t)width;
+    const float *mid = corrected + (size_t)y * (size_t)width;
+    const float *down = corrected + (size_t)(y + 1) * (size_t)width;
+
+    for (int x = 1; x < width - 1; ++x) {
+        const enum pixel_color color = (x & 1) ? odd : even;
+        const float value = mid[x];
+        unsigned char *out = row + x * 3;
+        if (color == PIXEL_GREEN) {
+            const float horizontal = (mid[x - 1] + mid[x + 1]) / 2.0f;
+            const float vertical = (up[x] + down[x]) / 2.0f;
+            const enum pixel_color side = (x & 1) ? even : odd;
+            if (side == PIXEL_RED) {
+                store_pixel(config, out, horizontal, value, vertical);
+            } else {
+                store_pixel(config, out, vertical, value, horizontal);
+            }
+            continue;
+        }
+        const float cross = (((up[x] + mid[x - 1]) + mid[x + 1]) + down[x]) / 4.0f;
+        const float diagonal = (((up[x - 1] + up[x + 1]) + down[x - 1]) +
+                                down[x + 1]) / 4.0f;
+        if (color == PIXEL_RED) {
+            store_pixel(config, out, value, cross, diagonal);
+        } else {
+            store_pixel(config, out, diagonal, cross, value);
+        }
+    }
+}
+
+struct render_job {
+    const struct conversion_config *config;
+    const float *corrected;
+    unsigned char *image;
+};
+
+static void render_rows(void *context, int start, int end)
+{
+    struct render_job *job = context;
+    for (int y = start; y < end; ++y) {
+        render_rgb_row_fast(job->config, job->corrected, y,
+                            job->image + (size_t)y * (size_t)job->config->width * 3);
+    }
+}
+
+struct rotate_job {
+    const struct conversion_config *config;
+    const unsigned char *image;
+    unsigned char *rotated;
+    int rotation;
+    int output_width;
+    int output_height;
+};
+
+/* Rotate a block of output rows; the inner loop walks the source in short
+ * contiguous runs so a 90/270 degree turn does not miss the cache per pixel. */
+static void rotate_rows(void *context, int start, int end)
+{
+    struct rotate_job *job = context;
+    const int width = job->config->width;
+    const int height = job->config->height;
+    for (int output_x = 0; output_x < job->output_width; ++output_x) {
+        for (int output_y = start; output_y < end; ++output_y) {
+            int source_x = output_x;
+            int source_y = output_y;
+            switch (job->rotation) {
+            case 90:
+                source_x = output_y;
+                source_y = height - 1 - output_x;
+                break;
+            case 180:
+                source_x = width - 1 - output_x;
+                source_y = height - 1 - output_y;
+                break;
+            case 270:
+                source_x = width - 1 - output_y;
+                source_y = output_x;
+                break;
+            default:
+                break;
+            }
+            const unsigned char *source =
+                job->image + ((size_t)source_y * (size_t)width +
+                              (size_t)source_x) * 3;
+            unsigned char *target = job->rotated +
+                ((size_t)output_y * (size_t)job->output_width +
+                 (size_t)output_x) * 3;
+            target[0] = source[0];
+            target[1] = source[1];
+            target[2] = source[2];
+        }
+    }
+}
+
 /**
  * @brief Convert RAW16 pixels directly to a JPEG file.
  *
@@ -496,7 +704,7 @@ static int write_jpeg(const struct conversion_config *config,
                       const uint16_t *pixels, const char *output_path,
                       int quality, int progressive, int rotation_degrees,
                       int64_t *prepare_ms, int64_t *render_ms,
-                      int64_t *encode_ms)
+                      int64_t *encode_ms, int64_t *rotate_ms)
 {
     const int rotation = ((rotation_degrees % 360) + 360) % 360;
     const int rotated = rotation == 90 || rotation == 270;
@@ -509,14 +717,47 @@ static int write_jpeg(const struct conversion_config *config,
         fprintf(stderr, "Not enough memory for corrected RAW16 image\n");
         return -1;
     }
+    initialize_srgb_lut();
     if (prepare_ms) {
         *prepare_ms = monotonic_ms() - prepare_start;
+    }
+
+    unsigned char *image = malloc((size_t)config->width *
+                                  (size_t)config->height * 3);
+    if (!image) {
+        free(corrected);
+        return -1;
+    }
+    const int64_t render_start = monotonic_ms();
+    struct render_job render = { config, corrected, image };
+    run_parallel(render_rows, &render, config->height, 16);
+    free(corrected);
+    if (render_ms) {
+        *render_ms = monotonic_ms() - render_start;
+    }
+
+    unsigned char *output = image;
+    if (rotation != 0) {
+        const int64_t rotate_start = monotonic_ms();
+        output = malloc((size_t)output_width * (size_t)output_height * 3);
+        if (!output) {
+            free(image);
+            return -1;
+        }
+        struct rotate_job turn = { config, image, output, rotation,
+                                   output_width, output_height };
+        run_parallel(rotate_rows, &turn, output_height, 16);
+        free(image);
+        image = output;
+        if (rotate_ms) {
+            *rotate_ms = monotonic_ms() - rotate_start;
+        }
     }
 
     FILE *file = fopen(output_path, "wb");
     if (!file) {
         fprintf(stderr, "Cannot create JPEG: %s\n", output_path);
-        free(corrected);
+        free(image);
         return -1;
     }
 
@@ -535,100 +776,24 @@ static int write_jpeg(const struct conversion_config *config,
     if (progressive) {
         jpeg_simple_progression(&jpeg);
     }
-    initialize_srgb_lut();
-    const int row_width = output_width > config->width
-            ? output_width : config->width;
-    unsigned char *row = malloc((size_t)row_width * 3);
-    if (!row) {
-        free(corrected);
-        jpeg_destroy_compress(&jpeg);
-        fclose(file);
-        return -1;
-    }
 
-    unsigned char *image = NULL;
-    if (rotation != 0) {
-        const int64_t render_start = monotonic_ms();
-        image = malloc((size_t)config->width * (size_t)config->height * 3);
-        if (!image) {
-            free(row);
-            free(corrected);
-            jpeg_destroy_compress(&jpeg);
-            fclose(file);
-            return -1;
-        }
-        for (int y = 0; y < config->height; ++y) {
-            render_rgb_row_fast(config, corrected, y,
-                                image + (size_t)y * (size_t)config->width * 3);
-        }
-        if (render_ms) {
-            *render_ms = monotonic_ms() - render_start;
-        }
-    }
-
-    int64_t render_accumulated_ms = 0;
-    int64_t encode_accumulated_ms = 0;
+    const int64_t encode_start = monotonic_ms();
     jpeg_start_compress(&jpeg, TRUE);
-
     while (jpeg.next_scanline < jpeg.image_height) {
         JSAMPROW row_pointer[1];
-        if (rotation == 0) {
-            const int64_t row_render_start = monotonic_ms();
-            render_rgb_row_fast(config, corrected, (int)jpeg.next_scanline,
-                                row);
-            render_accumulated_ms += monotonic_ms() - row_render_start;
-            row_pointer[0] = row;
-        } else {
-            int output_y = (int)jpeg.next_scanline;
-            for (int output_x = 0; output_x < output_width; ++output_x) {
-                int source_x = output_x;
-                int source_y = output_y;
-                switch (rotation) {
-                case 90:
-                    source_x = output_y;
-                    source_y = config->height - 1 - output_x;
-                    break;
-                case 180:
-                    source_x = config->width - 1 - output_x;
-                    source_y = config->height - 1 - output_y;
-                    break;
-                case 270:
-                    source_x = config->width - 1 - output_y;
-                    source_y = output_x;
-                    break;
-                default:
-                    break;
-                }
-                const unsigned char *source =
-                    image + ((size_t)source_y * (size_t)config->width +
-                             (size_t)source_x) * 3;
-                row[output_x * 3] = source[0];
-                row[output_x * 3 + 1] = source[1];
-                row[output_x * 3 + 2] = source[2];
-            }
-            row_pointer[0] = row;
-        }
-        const int64_t row_encode_start = monotonic_ms();
+        row_pointer[0] = output + (size_t)jpeg.next_scanline *
+                                  (size_t)output_width * 3;
         if (jpeg_write_scanlines(&jpeg, row_pointer, 1) != 1) {
             free(image);
-            free(row);
-            free(corrected);
             jpeg_destroy_compress(&jpeg);
             fclose(file);
             return -1;
         }
-        encode_accumulated_ms += monotonic_ms() - row_encode_start;
     }
-
     if (encode_ms) {
-        *encode_ms = encode_accumulated_ms;
-    }
-    if (rotation == 0 && render_ms) {
-        *render_ms = render_accumulated_ms;
+        *encode_ms = monotonic_ms() - encode_start;
     }
     free(image);
-    free(row);
-    free(corrected);
     jpeg_finish_compress(&jpeg);
     jpeg_destroy_compress(&jpeg);
     return fclose(file) == 0 ? 0 : -1;
@@ -701,9 +866,10 @@ int main(int argc, char **argv)
     int64_t prepare_ms = 0;
     int64_t render_ms = 0;
     int64_t encode_ms = 0;
+    int64_t rotate_ms = 0;
     int result = write_jpeg(&config, pixels, argv[2], quality, progressive,
                             rotation_degrees, &prepare_ms, &render_ms,
-                            &encode_ms);
+                            &encode_ms, &rotate_ms);
     const int64_t total_ms = monotonic_ms() - total_start;
     free(pixels);
     if (result != 0) {
@@ -711,10 +877,10 @@ int main(int argc, char **argv)
         return 5;
     }
     fprintf(stderr,
-            "capture-timing rawjpeg metadata=%lld read=%lld prepare=%lld render=%lld encode=%lld total=%lld rotation=%d progressive=%d\n",
+            "capture-timing rawjpeg metadata=%lld read=%lld prepare=%lld render=%lld rotate=%lld encode=%lld total=%lld rotation=%d progressive=%d\n",
             (long long)metadata_ms, (long long)read_ms,
             (long long)prepare_ms, (long long)render_ms,
-            (long long)encode_ms, (long long)total_ms, rotation_degrees,
+            (long long)rotate_ms, (long long)encode_ms, (long long)total_ms, rotation_degrees,
             progressive);
     return 0;
 }

@@ -150,6 +150,8 @@ Page {
 
                 visible: switcherView.moving || captureView.active
 
+                onGalleryRequested: switcherView.currentIndex = 0
+
                 onLoaded: {
                     if (galleryLoader.source == "") {
                         galleryLoader.setSource(galleryView, { page: page })

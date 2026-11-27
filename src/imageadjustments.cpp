@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "imageadjustments.h"
+#include "colorlut.h"
 
 #include <QColor>
 #include <QtGlobal>
@@ -24,7 +25,8 @@ bool requested(qreal exposure, int colorTemperature, int colorTint)
 {
     return !qFuzzyCompare(exposure, 1.0) ||
            (colorTemperature > 0 && colorTemperature != 5500) ||
-           colorTint != 0;
+           colorTint != 0 ||
+           ColorLut::hasActive();
 }
 
 void apply(QImage *image, qreal exposure, int colorTemperature, int colorTint)
@@ -57,12 +59,26 @@ void apply(QImage *image, qreal exposure, int colorTemperature, int colorTint)
         green *= 1.0 - magenta * 0.18;
     }
 
-    for (int y = 0; y < image->height(); ++y) {
-        QRgb *line = reinterpret_cast<QRgb *>(image->scanLine(y));
-        for (int x = 0; x < image->width(); ++x) {
-            line[x] = qRgb(adjustedByte(qRed(line[x]), red),
-                           adjustedByte(qGreen(line[x]), green),
-                           adjustedByte(qBlue(line[x]), blue));
+    const bool scaled = !qFuzzyCompare(red, 1.0) || !qFuzzyCompare(green, 1.0) ||
+                        !qFuzzyCompare(blue, 1.0);
+    if (scaled) {
+        for (int y = 0; y < image->height(); ++y) {
+            QRgb *line = reinterpret_cast<QRgb *>(image->scanLine(y));
+            for (int x = 0; x < image->width(); ++x) {
+                line[x] = qRgb(adjustedByte(qRed(line[x]), red),
+                               adjustedByte(qGreen(line[x]), green),
+                               adjustedByte(qBlue(line[x]), blue));
+            }
+        }
+    }
+
+    // The colour look runs last, on the already exposure/white-balance adjusted pixels.
+    float lutStrength = 1.0f;
+    const std::shared_ptr<const ColorLut> lut = ColorLut::active(&lutStrength);
+    if (lut) {
+        for (int y = 0; y < image->height(); ++y) {
+            lut->apply(reinterpret_cast<uint32_t *>(image->scanLine(y)),
+                       size_t(image->width()), lutStrength);
         }
     }
 }
