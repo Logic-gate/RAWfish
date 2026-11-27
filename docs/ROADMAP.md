@@ -16,9 +16,6 @@ Each item says why, so it can be picked up later without re-deriving it.
   lines, the display kept on), then the ports of main's patches; the
   comments that say "branch zero_copy" date from then. The release before
   it is the tag of 0.3.10.
-- **`longexp`** (personal use, not published): main plus the long
-  exposures on the JP2 (the sensor's registers through I2C, the patched
-  camera HAL), unsandboxed.
 
 ### Before a first public release
 - **Publication**: a fresh snapshot as the public repository's first commit

@@ -15,6 +15,7 @@ repository). Newest first.
   sensor); RAW and Σ work there (tried 24 Nov 2026).
 
 ## Since 0.3.11-557 (patches 0559–)
+- Docs: the roadmap's notes on the branches trimmed (patch 0565).
 - Lens fix: kept per camera (its `[camera_N]` section, `lensFix`), on by
   default on the JP2's 18 mm and off on its other cameras (the device
   profile's `lens_fix_default`; the menu's green ring). A new version keeps
