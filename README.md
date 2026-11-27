@@ -49,9 +49,6 @@ No network/radio access.
 
 ### Actual stage
 
-Currently tested on the JP2 (more) and the XA2 (less).\
-Tests are also being conducted on the Xperia 10 IV community port.
-
 Beta version. We still have some bug hunting work + UI/functions improvements to do.
 
 RAWfish-ir is a rebuild based on RAWfish, itself a fork of Jolla Camera.\
