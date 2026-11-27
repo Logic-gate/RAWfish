@@ -1,6 +1,6 @@
 ## RAWfish-ir
-Thanks to [A.Madani] (https://github.com/Logic-gate) for RAWfish
-Thanks to [Matko Jun](https://github.com/mjun) for the contribution on the lens barrel distortion fix (PR #43)
+Thanks to [A.Madani] (https://github.com/Logic-gate) for RAWfish.\
+Thanks to [Matko Jun](https://github.com/mjun) for the contribution on the lens barrel distortion fix (PR #43).\
 
 ### Human description
 
