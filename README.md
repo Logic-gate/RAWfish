@@ -34,7 +34,7 @@ Built on Android's Camera2 through libhybris.
 - Bracketing (3x, 5x, 7x same EV, and 3x at: +/-1 stop, +/-2 stops, +/-3 stops)
 - User lens shading calibration tool: colour, luminance, focus adapted (DNG Exif)
 - User focus calibration tool (factory uncalibrated)
-- Lens barrel distortion correction (JPGs + vierwfinder)
+- Lens barrel distortion correction (JPGs + viewfinder)
 - User white balance (on a gray/white reference surface)
 - Zoom (digital)
 - Flash
